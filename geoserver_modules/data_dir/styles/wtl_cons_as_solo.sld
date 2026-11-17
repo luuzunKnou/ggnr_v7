@@ -1,4 +1,5 @@
-<?xml version="1.0" encoding="UTF-8"?><sld:StyledLayerDescriptor xmlns="http://www.opengis.net/sld" xmlns:sld="http://www.opengis.net/sld" xmlns:gml="http://www.opengis.net/gml" xmlns:ogc="http://www.opengis.net/ogc" version="1.0.0">
+<?xml version="1.0" encoding="UTF-8"?>
+<sld:StyledLayerDescriptor xmlns="http://www.opengis.net/sld" xmlns:sld="http://www.opengis.net/sld" xmlns:gml="http://www.opengis.net/gml" xmlns:ogc="http://www.opengis.net/ogc" version="1.0.0">
   <sld:NamedLayer>
     <sld:Name>Default Styler</sld:Name>
     <sld:UserStyle>
@@ -11,7 +12,24 @@
           <sld:Name>Name</sld:Name>
           <sld:Title>wtl_cons_as_solo</sld:Title>
           <sld:Abstract>Abstract</sld:Abstract>
-          <sld:MaxScaleDenominator>3000</sld:MaxScaleDenominator>
+          <ogc:Filter>
+            <ogc:Or>
+              <ogc:PropertyIsEqualTo>
+                <ogc:Function name="env">
+                  <ogc:Literal>ignore_scale</ogc:Literal>
+                  <ogc:Literal>0</ogc:Literal>
+                </ogc:Function>
+                <ogc:Literal>1</ogc:Literal>
+              </ogc:PropertyIsEqualTo>
+              <ogc:PropertyIsLessThan>
+                <ogc:Function name="env">
+                  <ogc:Literal>wms_scale_denominator</ogc:Literal>
+                  <ogc:Literal>999999999</ogc:Literal>
+                </ogc:Function>
+                <ogc:Literal>3000</ogc:Literal>
+              </ogc:PropertyIsLessThan>
+            </ogc:Or>
+          </ogc:Filter>
           <sld:PointSymbolizer>
             <sld:Graphic>
               <sld:Mark>
@@ -56,7 +74,7 @@
                   </sld:CssParameter>
                 </sld:Stroke>
               </sld:Mark>
-              <sld:Size><ogc:Function name="if_then_else"><ogc:Function name="greaterThan"><ogc:Function name="env"><ogc:Literal>ignore_scale</ogc:Literal><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>18</ogc:Literal>
+              <sld:Size>
                 <ogc:Function name="if_then_else">
                   <ogc:Function name="greaterThan">
                     <ogc:Function name="env">
@@ -80,7 +98,7 @@
                     <ogc:Literal>8</ogc:Literal>
                   </ogc:Function>
                 </ogc:Function>
-              </ogc:Function></sld:Size>
+              </sld:Size>
             </sld:Graphic>
           </sld:PointSymbolizer>
         </sld:Rule>
@@ -89,17 +107,34 @@
           <sld:Title>wtl_cons_as_solo_label</sld:Title>
           <sld:Abstract>Abstract</sld:Abstract>
           <ogc:Filter>
-            <ogc:PropertyIsGreaterThan>
-              <ogc:Function name="strLength">
-                <ogc:Function name="env">
-                  <ogc:Literal>wtl_cons_as_solo_label_property_name</ogc:Literal>
-                  <ogc:Literal></ogc:Literal>
+            <ogc:And>
+              <ogc:PropertyIsGreaterThan>
+                <ogc:Function name="strLength">
+                  <ogc:Function name="env">
+                    <ogc:Literal>wtl_cons_as_solo_label_property_name</ogc:Literal>
+                    <ogc:Literal></ogc:Literal>
+                  </ogc:Function>
                 </ogc:Function>
-              </ogc:Function>
-              <ogc:Literal>0</ogc:Literal>
-            </ogc:PropertyIsGreaterThan>
+                <ogc:Literal>0</ogc:Literal>
+              </ogc:PropertyIsGreaterThan>
+              <ogc:Or>
+                <ogc:PropertyIsEqualTo>
+                  <ogc:Function name="env">
+                    <ogc:Literal>ignore_scale</ogc:Literal>
+                    <ogc:Literal>0</ogc:Literal>
+                  </ogc:Function>
+                  <ogc:Literal>1</ogc:Literal>
+                </ogc:PropertyIsEqualTo>
+                <ogc:PropertyIsLessThan>
+                  <ogc:Function name="env">
+                    <ogc:Literal>wms_scale_denominator</ogc:Literal>
+                    <ogc:Literal>999999999</ogc:Literal>
+                  </ogc:Function>
+                  <ogc:Literal>3000</ogc:Literal>
+                </ogc:PropertyIsLessThan>
+              </ogc:Or>
+            </ogc:And>
           </ogc:Filter>
-          <sld:MaxScaleDenominator>3000</sld:MaxScaleDenominator>
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="property">

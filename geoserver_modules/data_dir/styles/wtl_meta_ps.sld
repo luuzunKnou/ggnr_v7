@@ -12,7 +12,24 @@
           <sld:Name>Name</sld:Name>
           <sld:Title>wtl_meta_ps</sld:Title>
           <sld:Abstract>Abstract</sld:Abstract>
-          <sld:MaxScaleDenominator>3000.0</sld:MaxScaleDenominator>
+          <ogc:Filter>
+            <ogc:Or>
+              <ogc:PropertyIsEqualTo>
+                <ogc:Function name="env">
+                  <ogc:Literal>ignore_scale</ogc:Literal>
+                  <ogc:Literal>0</ogc:Literal>
+                </ogc:Function>
+                <ogc:Literal>1</ogc:Literal>
+              </ogc:PropertyIsEqualTo>
+              <ogc:PropertyIsLessThan>
+                <ogc:Function name="env">
+                  <ogc:Literal>wms_scale_denominator</ogc:Literal>
+                  <ogc:Literal>9999999</ogc:Literal>
+                </ogc:Function>
+                <ogc:Literal>3000</ogc:Literal>
+              </ogc:PropertyIsLessThan>
+            </ogc:Or>
+          </ogc:Filter>
           <sld:PointSymbolizer>
             <sld:Graphic>
               <sld:Mark>
@@ -57,7 +74,7 @@
                   </sld:CssParameter>
                 </sld:Stroke>
               </sld:Mark>
-              <sld:Size><ogc:Function name="if_then_else"><ogc:Function name="greaterThan"><ogc:Function name="env"><ogc:Literal>ignore_scale</ogc:Literal><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>18</ogc:Literal>
+              <sld:Size>
                 <ogc:Function name="if_then_else">
                   <ogc:Function name="greaterThan">
                     <ogc:Function name="env">
@@ -82,10 +99,14 @@
                     <ogc:Literal>1500</ogc:Literal>
                     <ogc:Literal>14</ogc:Literal>
                     <ogc:Literal>3000</ogc:Literal>
-                    <ogc:Literal>0</ogc:Literal>
+                    <ogc:Literal>12</ogc:Literal>
+                    <ogc:Literal>6000</ogc:Literal>
+                    <ogc:Literal>10</ogc:Literal>
+                    <ogc:Literal>12000</ogc:Literal>
+                    <ogc:Literal>8</ogc:Literal>
                   </ogc:Function>
                 </ogc:Function>
-              </ogc:Function></sld:Size>
+              </sld:Size>
             </sld:Graphic>
           </sld:PointSymbolizer>
         </sld:Rule>
@@ -94,25 +115,49 @@
           <sld:Title>wtl_meta_ps_label</sld:Title>
           <sld:Abstract>Abstract</sld:Abstract>
           <ogc:Filter>
-            <ogc:PropertyIsEqualTo>
-              <ogc:Function name="env">
-                <ogc:Literal>wtl_meta_ps_show_label</ogc:Literal>
+            <ogc:And>
+              <ogc:PropertyIsGreaterThan>
+                <ogc:Function name="strLength">
+                  <ogc:Function name="env">
+                    <ogc:Literal>wtl_meta_ps_label_property_name</ogc:Literal>
+                    <ogc:Literal></ogc:Literal>
+                  </ogc:Function>
+                </ogc:Function>
                 <ogc:Literal>0</ogc:Literal>
-              </ogc:Function>
-              <ogc:Literal>1</ogc:Literal>
-            </ogc:PropertyIsEqualTo>
+              </ogc:PropertyIsGreaterThan>
+              <ogc:Or>
+                <ogc:PropertyIsEqualTo>
+                  <ogc:Function name="env">
+                    <ogc:Literal>ignore_scale</ogc:Literal>
+                    <ogc:Literal>0</ogc:Literal>
+                  </ogc:Function>
+                  <ogc:Literal>1</ogc:Literal>
+                </ogc:PropertyIsEqualTo>
+                <ogc:PropertyIsLessThan>
+                  <ogc:Function name="env">
+                    <ogc:Literal>wms_scale_denominator</ogc:Literal>
+                    <ogc:Literal>999999999</ogc:Literal>
+                  </ogc:Function>
+                  <ogc:Literal>3000</ogc:Literal>
+                </ogc:PropertyIsLessThan>
+              </ogc:Or>
+            </ogc:And>
           </ogc:Filter>
-          <sld:MaxScaleDenominator>3000.0</sld:MaxScaleDenominator>
           <sld:TextSymbolizer>
             <sld:Label>
-              <ogc:PropertyName>met_num</ogc:PropertyName>
+              <ogc:Function name="property">
+                <ogc:Function name="env">
+                  <ogc:Literal>wtl_meta_ps_label_property_name</ogc:Literal>
+                  <ogc:Literal></ogc:Literal>
+                </ogc:Function>
+              </ogc:Function>
             </sld:Label>
             <sld:Font>
               <sld:CssParameter name="font-family">Gulim</sld:CssParameter>
               <sld:CssParameter name="font-size">
                 <ogc:Function name="env">
                   <ogc:Literal>wtl_meta_ps_label_size</ogc:Literal>
-                  <ogc:Literal>12</ogc:Literal>
+                  <ogc:Literal>0</ogc:Literal>
                 </ogc:Function>
               </sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
@@ -160,7 +205,7 @@
                   <ogc:Literal>#</ogc:Literal>
                   <ogc:Function name="env">
                     <ogc:Literal>wtl_meta_ps_label_color</ogc:Literal>
-                    <ogc:Literal>1a1a1a</ogc:Literal>
+                    <ogc:Literal>ffffff</ogc:Literal>
                   </ogc:Function>
                 </ogc:Function>
               </sld:CssParameter>
