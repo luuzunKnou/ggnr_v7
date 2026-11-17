@@ -11,10 +11,10 @@
     <entry key="Estimated extends">false</entry>
     <entry key="preparedStatements">false</entry>
     <entry key="database">ggnr_sy</entry>
-    <entry key="port">5433</entry>
-    <entry key="passwd">crypt1:Gip73z56XyhzgB31V25m0GUaoC6KmvmZ</entry>
+    <entry key="port">5432</entry>
+    <entry key="passwd">crypt1:6kno5VKG6r59fqTmtv6EaQ==</entry>
     <entry key="validate connections">true</entry>
-    <entry key="host">localhost</entry>
+    <entry key="host">192.168.126.65</entry>
     <entry key="dbtype">postgis</entry>
     <entry key="namespace">http://ggnr</entry>
     <entry key="Loose bbox">true</entry>
@@ -22,6 +22,6 @@
   </connectionParameters>
   <__default>false</__default>
   <dateCreated>2026-02-11 16:00:05.307 UTC</dateCreated>
-  <dateModified>2026-08-06 07:29:56.316 UTC</dateModified>
+  <dateModified>2026-11-11 01:21:07.257 UTC</dateModified>
   <disableOnConnFailure>false</disableOnConnFailure>
 </dataStore>

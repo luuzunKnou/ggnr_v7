@@ -8,6 +8,8 @@ export type OdorAlertGrade = 3 | 4 | 5
 export type OdorAlertViewTab = 'all' | 'unacked' | 'unrecovered'
 export type OdorAlertGradeFilter = 'all' | 'caution' | 'serious'
 export type OdorAlertKindFilter = 'all' | 'odor' | 'fault'
+/** 'all' 또는 목업 agency(업체)명 */
+export type OdorAlertAgencyFilter = 'all' | string
 export type OdorAckMode = 'single' | 'bulk'
 
 export const ODOR_ALERT_KIND_LABEL: Record<OdorAlertKind, string> = {

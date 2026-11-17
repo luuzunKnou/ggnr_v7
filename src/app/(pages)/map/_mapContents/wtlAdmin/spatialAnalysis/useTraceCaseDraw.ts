@@ -337,9 +337,10 @@ export function useTraceCaseDraw(
       setPan(true)
     }
 
-    const downKey = map.on('pointerdown', onDown as never)
+    // OL Map 타입에 pointerdown/up 미포함 — 브라우저 포인터 이벤트로 사용
+    const downKey = map.on('pointerdown' as 'pointermove', onDown as never)
     const moveKey = map.on('pointermove', onMove as never)
-    const upKey = map.on('pointerup', onUp as never)
+    const upKey = map.on('pointerup' as 'pointermove', onUp as never)
     const moveEndKey = map.on('moveend', () => {
       void load()
     })

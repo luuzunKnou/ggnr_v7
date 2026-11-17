@@ -1707,8 +1707,12 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
     return {
       yearFrom: year.from,
       yearTo: year.to,
+      yearMin: meta.yearMin,
+      yearMax: meta.yearMax,
       diameterFrom: diameter.from,
       diameterTo: diameter.to,
+      diameterMin: meta.diameterMin,
+      diameterMax: meta.diameterMax,
       materials: [...materials],
       materialLabelToCodes: meta.materialLabelToCodes,
       materialTopCodes: meta.materialTopCodes,
@@ -2389,11 +2393,11 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
   const searchToolsBar = (
     <div className="flex shrink-0 gap-1 border-t border-border bg-background p-2">
       {SEARCH_TOOLS.map((label) => {
-        if (label === '다운로드') {
+        if (label === 'SHP 다운로드') {
           return (
             <WtlNetworkExportMenu
               key={label}
-              label="다운로드"
+              label="SHP 다운로드"
               title="SHP 다운로드"
               busy={shpExporting}
               busyLabel="SHP…"

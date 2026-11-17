@@ -246,9 +246,29 @@ export async function getGnmsBaseDataExportParams(p: Params): Promise<GnmsBaseDa
     throw new Error(SGG_MISSING_FOR_GEOM_EXPORT_MSG);
   }
 
-  const { admSectC, bjdCde, sggNm } = await resolveAdmSectCodeFromSgg(
-    normalizeAdmSectCode(p.admSectC ?? p.sggCode)
-  );
+  let admSectC = '';
+  let bjdCde = '';
+  let sggNm = '';
+  try {
+    const resolved = await resolveAdmSectCodeFromSgg(
+      normalizeAdmSectCode(p.admSectC ?? p.sggCode)
+    );
+    admSectC = resolved.admSectC;
+    bjdCde = resolved.bjdCde;
+    sggNm = resolved.sggNm;
+  } catch (e) {
+    // 시군구(sgg) 폴더는 코드 없이도 keyword 검색으로 받을 수 있음
+    if (folder === 'sgg') {
+      return {
+        folder,
+        bjd_cde: '',
+        adm_sect_c: '',
+        sgg_nm: '',
+        sggExists,
+      };
+    }
+    throw e;
+  }
 
   if (isGnmsBaseDataGeomFolder(folder)) {
     const geom = await resolveSggGeomWkt5181(admSectC);

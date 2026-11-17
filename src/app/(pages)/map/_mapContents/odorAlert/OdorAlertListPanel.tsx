@@ -9,6 +9,7 @@ import {
   ODOR_ALERT_SER_ENG,
   odorAlertBtnGhost,
   odorAlertBtnPrimary,
+  type OdorAlertAgencyFilter,
   type OdorAlertGradeFilter,
   type OdorAlertKindFilter,
   type OdorAlertViewTab,
@@ -21,6 +22,8 @@ type Props = {
   onClose: () => void
   onOpenHistory: () => void
   historyOpen: boolean
+  /** true면 업체(agency) 필터 UI 표시 — odor-index 전용 */
+  showAgencyFilter?: boolean
 }
 
 function gradeBadgeClass(grade: number | null): string {
@@ -33,7 +36,8 @@ function filterAlerts(
   alerts: OdorAlertRow[],
   tab: OdorAlertViewTab,
   gradeFilter: OdorAlertGradeFilter,
-  kindFilter: OdorAlertKindFilter
+  kindFilter: OdorAlertKindFilter,
+  agencyFilter: OdorAlertAgencyFilter
 ): OdorAlertRow[] {
   return alerts
     .filter((a) => {
@@ -47,6 +51,7 @@ function filterAlerts(
       if (gradeFilter === 'serious') {
         if (a.kind !== 'odor' || a.grade == null || a.grade < 4) return false
       }
+      if (agencyFilter !== 'all' && a.agency !== agencyFilter) return false
       return true
     })
     .sort((a, b) => {
@@ -55,20 +60,34 @@ function filterAlerts(
     })
 }
 
-export function OdorAlertListPanel({ onClose, onOpenHistory, historyOpen }: Props) {
+export function OdorAlertListPanel({
+  onClose,
+  onOpenHistory,
+  historyOpen,
+  showAgencyFilter = false,
+}: Props) {
   const { alerts } = useOdorAlertStore()
   const canWrite = useSerWriteAccess(ODOR_ALERT_SER_ENG)
   const [tab, setTab] = useState<OdorAlertViewTab>('all')
   const [gradeFilter, setGradeFilter] = useState<OdorAlertGradeFilter>('all')
   const [kindFilter, setKindFilter] = useState<OdorAlertKindFilter>('all')
+  const [agencyFilter, setAgencyFilter] = useState<OdorAlertAgencyFilter>('all')
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [ackTarget, setAckTarget] = useState<{ mode: 'single' | 'bulk'; ids: string[] } | null>(
     null
   )
 
+  const agencyOptions = useMemo(() => {
+    const set = new Set<string>()
+    for (const a of alerts) {
+      if (a.agency) set.add(a.agency)
+    }
+    return [...set].sort((a, b) => a.localeCompare(b, 'ko'))
+  }, [alerts])
+
   const rows = useMemo(
-    () => filterAlerts(alerts, tab, gradeFilter, kindFilter),
-    [alerts, tab, gradeFilter, kindFilter]
+    () => filterAlerts(alerts, tab, gradeFilter, kindFilter, agencyFilter),
+    [alerts, tab, gradeFilter, kindFilter, agencyFilter]
   )
 
   const unackedVisible = rows.filter((r) => !r.acked)
@@ -189,6 +208,39 @@ export function OdorAlertListPanel({ onClose, onOpenHistory, historyOpen }: Prop
             {label}
           </button>
         ))}
+        {showAgencyFilter ? (
+          <>
+            <span className="mx-1 text-border">|</span>
+            <span className="text-muted-foreground">업체</span>
+            <button
+              type="button"
+              title="전체"
+              className={`cursor-pointer rounded px-1.5 py-0.5 ${
+                agencyFilter === 'all'
+                  ? 'bg-violet-500/20 font-semibold text-violet-800 dark:text-violet-300'
+                  : 'text-muted-foreground hover:bg-muted/50'
+              }`}
+              onClick={() => setAgencyFilter('all')}
+            >
+              전체
+            </button>
+            {agencyOptions.map((agency) => (
+              <button
+                key={agency}
+                type="button"
+                title={agency}
+                className={`cursor-pointer rounded px-1.5 py-0.5 ${
+                  agencyFilter === agency
+                    ? 'bg-violet-500/20 font-semibold text-violet-800 dark:text-violet-300'
+                    : 'text-muted-foreground hover:bg-muted/50'
+                }`}
+                onClick={() => setAgencyFilter(agency)}
+              >
+                {agency}
+              </button>
+            ))}
+          </>
+        ) : null}
       </div>
 
       <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-border px-2 py-1.5">
