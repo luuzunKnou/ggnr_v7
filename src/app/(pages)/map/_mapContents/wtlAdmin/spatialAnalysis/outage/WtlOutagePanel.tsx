@@ -25,8 +25,6 @@ import { WtlOutageGeomEdit } from './WtlOutageGeomEdit'
 import { WtlOutageResultEdit, type OutageEditMode } from './WtlOutageResultEdit'
 import { WtlOutageSmsModal } from './WtlOutageSmsModal'
 import { WtlOutageHwpxModal } from './WtlOutageHwpxModal'
-import { exportWtlOutageMeterExcel } from './exportWtlOutageMeterExcel'
-import type { WtlOutageMeterRowDto } from '@/service/wtlOutageService'
 import {
   isOutageOverlayScaleVisible,
   OUTAGE_OVERLAY_MAX_SCALE_M,
@@ -96,8 +94,6 @@ export function WtlOutagePanel({
   const targetFetchSeqRef = useRef(0)
   const [smsOpen, setSmsOpen] = useState(false)
   const [hwpxOpen, setHwpxOpen] = useState(false)
-  /** 계량기 목록 엑셀 만드는 중 */
-  const [meterExporting, setMeterExporting] = useState(false)
   /** 제수변 번호(ogc_fid) 찾기 */
   const [gateQuery, setGateQuery] = useState('')
   const [gateSearching, setGateSearching] = useState(false)
@@ -680,41 +676,6 @@ export function WtlOutagePanel({
     historySafePage * ANALYSIS_HISTORY_PAGE_SIZE
   )
 
-  /** 단수 계량기(수용가 목록의 wtl_meta_ps) 속성을 조회해 엑셀로 저장 */
-  const downloadMeterExcel = async () => {
-    if (!result || meterExporting) return
-    const fids = result.customers
-      .map((c) => c.ogcFid)
-      .filter((n): n is number => typeof n === 'number' && Number.isFinite(n))
-    if (fids.length === 0) {
-      setNotice('내보낼 계량기가 없습니다.')
-      return
-    }
-    setMeterExporting(true)
-    try {
-      const res = await call('', 'POST', {
-        service: 'wtlOutageService',
-        action: 'listWtlOutageMeters',
-        params: { fids },
-      })
-      const body = (res?.data ?? res) as { rows?: WtlOutageMeterRowDto[]; truncated?: boolean; error?: string }
-      if (body?.error) {
-        setNotice(`계량기 목록 실패 · ${body.error}`)
-        return
-      }
-      const rows = body?.rows ?? []
-      const fileName = exportWtlOutageMeterExcel(rows, currentHistory?.gateName)
-      if (!fileName) {
-        setNotice('내보낼 계량기가 없습니다.')
-        return
-      }
-      setNotice(`계량기 목록 다운로드 · ${rows.length}건${body.truncated ? ' (상한까지만)' : ''} · ${fileName}`)
-    } catch (e) {
-      setNotice(`계량기 목록 실패 · ${e instanceof Error ? e.message : '알 수 없는 오류'}`)
-    } finally {
-      setMeterExporting(false)
-    }
-  }
   const nextStatus = currentHistory ? nextOutageStatus(currentHistory.status) : null
 
   const patchHistoryLocal = (id: string | null, patch: Partial<WtlOutageHistory>) => {
@@ -1175,17 +1136,8 @@ export function WtlOutagePanel({
           )}
           <button
             type="button"
-            disabled={!result || analyzing || meterExporting || customers.length === 0}
-            className="ml-auto rounded border border-border inline-flex h-7 items-center px-2.5 text-[11px] font-medium text-foreground hover:bg-muted disabled:opacity-40"
-            onClick={() => void downloadMeterExcel()}
-            title="단수 대상 계량기 목록(엑셀) 다운로드"
-          >
-            {meterExporting ? '계량기 목록…' : '계량기 목록'}
-          </button>
-          <button
-            type="button"
             disabled={!result || analyzing}
-            className="rounded border border-border inline-flex h-7 items-center px-2.5 text-[11px] font-medium text-foreground hover:bg-muted disabled:opacity-40"
+            className="ml-auto rounded border border-border inline-flex h-7 items-center px-2.5 text-[11px] font-medium text-foreground hover:bg-muted disabled:opacity-40"
             onClick={() => setHwpxOpen(true)}
             title="단수 알림문(HWPX) 다운로드"
           >
