@@ -2344,14 +2344,6 @@ function MapLayoutContent({
   }, [worksRegisterOpen])
 
   useEffect(() => {
-    if (!odorAlertOpen) setOdorAlertTotalWidth(0)
-  }, [odorAlertOpen])
-
-  useEffect(() => {
-    if (!wtlAdminEmptyOpen) setWtlAdminEmptyTotalWidth(0)
-  }, [wtlAdminEmptyOpen])
-
-  useEffect(() => {
     if (!cadastralResurveyOpen) setCadastralResurveyDistrictId(null)
   }, [cadastralResurveyOpen])
 
