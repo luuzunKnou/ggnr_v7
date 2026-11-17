@@ -5,8 +5,8 @@ import Feature from 'ol/Feature'
 import GeoJSON from 'ol/format/GeoJSON'
 import VectorLayer from 'ol/layer/Vector'
 import VectorSource from 'ol/source/Vector'
-import { Circle as CircleStyle, Fill, Stroke, Style } from 'ol/style'
-import type { StyleFunction } from 'ol/style/Style'
+import { Fill, Icon, Stroke, Style } from 'ol/style'
+import type { StyleFunction, StyleLike } from 'ol/style/Style'
 import '../../../_mapComponents/config/projections'
 import { MAP_AUTO_NAV_MAX_ZOOM } from '../../../_mapComponents/config/mapDefaults'
 import { scheduleFitMapToExtent3857 } from '../../../_mapComponents/config/mapAutoNavigation'
@@ -17,6 +17,11 @@ import {
 } from '@/lib/mapDataQueryMapHighlight'
 import { LAYER_GEOM_STACK_SKIP_KEY } from '@/lib/mapLayerGeometryOrder'
 import type { WtlConsGeom4326 } from './wtlConsLedgerApi'
+import {
+  peekRelatedFacilityIcon,
+  prefetchRelatedFacilityStyles,
+  resolveRelatedFacilityOlStyle,
+} from './wtlConsRelatedStyle'
 
 /** 관련시설 강조 깜빡임 — 데이터조회·시설목록과 동일 속도 */
 const FOCUS_PULSE_STEP = DATA_QUERY_SELECTION_PULSE_STEP
@@ -30,9 +35,6 @@ const RELATED_LAYER_Z = 892
 /** 관련시설 선택 시 공사·구역 면이 강조를 가리지 않도록 */
 const WORK_DIM_OPACITY = 0.38
 const ZONE_DIM_OPACITY = 0.45
-const RELATED_STROKE = '#0f766e'
-const RELATED_FILL = 'rgba(13, 148, 136, 0.22)'
-
 function pulseFeatureId(id: string) {
   return `pulse:${id}`
 }
@@ -113,41 +115,52 @@ function midSparkleStyle(feature: Feature, phase: number, zIndex = 20): Style | 
   })
 }
 
-/** 관련시설 목록 전체 — 지하시설물 WMS 없이 공사대장 전용 표시 */
-function relatedFacilityStyle(feature: Feature): Style | Style[] {
-  const geomType = feature.getGeometry()?.getType()
-  if (geomType === 'Point' || geomType === 'MultiPoint') {
-    return new Style({
-      image: new CircleStyle({
-        radius: 6,
-        fill: new Fill({ color: RELATED_FILL }),
-        stroke: new Stroke({ color: RELATED_STROKE, width: 2 }),
-      }),
-      zIndex: 2,
-    })
+/** 관련시설 — GeoServer 레이어 심볼(조건 ftr_cde 포함). 없으면 모듈 폴백 */
+function relatedFacilityStyle(feature: Feature, onStyleReady: () => void): StyleLike {
+  const styleName = String(feature.get('styleName') ?? '').trim()
+  const styleCode = String(feature.get('styleCode') ?? '').trim() || null
+  if (!styleName) {
+    return resolveRelatedFacilityOlStyle('', null, feature.getGeometry()?.getType(), onStyleReady)
   }
-  if (geomType === 'LineString' || geomType === 'MultiLineString') {
-    return [
-      new Style({
-        stroke: new Stroke({ color: 'rgba(255, 255, 255, 0.85)', width: 5 }),
-        zIndex: 1,
-      }),
-      new Style({
-        stroke: new Stroke({ color: RELATED_STROKE, width: 2.5 }),
-        zIndex: 2,
-      }),
-    ]
-  }
-  return new Style({
-    fill: new Fill({ color: RELATED_FILL }),
-    stroke: new Stroke({ color: RELATED_STROKE, width: 1.5 }),
-    zIndex: 1,
-  })
+  return resolveRelatedFacilityOlStyle(
+    styleName,
+    styleCode,
+    feature.getGeometry()?.getType(),
+    onStyleReady
+  )
 }
 
-/** 관련시설 강조. 공통 선택 스타일보다 굵게, 스타일 z도 최상단. */
+/** 관련시설 강조. 점+심볼이면 아이콘 유지 + 레이더, 선은 굵게. */
 function focusFeatureStyle(feature: Feature, selectionStyle: StyleFunction): Style | Style[] | undefined {
   const geomType = feature.getGeometry()?.getType()
+  const styleName = String(feature.get('styleName') ?? '').trim()
+  const styleCode = String(feature.get('styleCode') ?? '').trim() || null
+  if (
+    (geomType === 'Point' || geomType === 'MultiPoint') &&
+    styleName
+  ) {
+    const icon = peekRelatedFacilityIcon(styleName, styleCode)
+    const pulse = selectionStyle(feature, 1) as Style | Style[] | undefined
+    const pulseList = pulse ? (Array.isArray(pulse) ? pulse : [pulse]) : []
+    for (const style of pulseList) style.setZIndex(FOCUS_LAYER_Z)
+    if (icon) {
+      const focusPx = Math.min(24, icon.size + 2)
+      return [
+        new Style({
+          zIndex: FOCUS_LAYER_Z + 1,
+          image: new Icon({
+            src: icon.src,
+            width: focusPx,
+            height: focusPx,
+            anchor: [0.5, 0.5],
+            opacity: 1,
+          }),
+        }),
+        ...pulseList,
+      ]
+    }
+    return withZIndex(pulse, FOCUS_LAYER_Z)
+  }
   const styled = selectionStyle(feature, 1) as Style | Style[] | undefined
   if (!styled) return undefined
   const list = Array.isArray(styled) ? styled : [styled]
@@ -185,6 +198,9 @@ function readGeom(
 export type WtlConsMapFocus = {
   geom: Record<string, unknown>
   projection: 'EPSG:4326' | 'EPSG:3857'
+  /** 관련시설 선택 시 심볼 유지용 */
+  styleName?: string
+  styleCode?: string | null
 }
 
 /** 관련시설 목록 도형 — 지하시설물 패널과 무관하게 벡터로만 그림 */
@@ -192,6 +208,10 @@ export type WtlConsRelatedFacility = {
   id: string
   geom: Record<string, unknown>
   projection: 'EPSG:4326' | 'EPSG:3857'
+  /** getGeoServerStyle name — 보통 관망 layerKey */
+  styleName: string
+  /** SLD 조건 심볼 키 (ftr_cde 등) */
+  styleCode?: string | null
 }
 
 export type WtlConsProjectGeom = {
@@ -262,7 +282,10 @@ export function useWtlConsMapLayer(input: WtlConsMapInput) {
   const zoneKey = `${input.zoneId ?? ''}|${input.zones.map((zone) => `${zone.id}:${zone.geometry3857 ? 1 : 0}`).join(',')}`
   const focusKey = input.focus ? `${input.focus.projection}:${JSON.stringify(input.focus.geom).slice(0, 180)}` : ''
   const relatedKey = (input.relatedFacilities ?? [])
-    .map((item) => `${item.id}:${item.projection}:${JSON.stringify(item.geom).slice(0, 80)}`)
+    .map(
+      (item) =>
+        `${item.id}:${item.styleName}:${item.styleCode ?? ''}:${item.projection}:${JSON.stringify(item.geom).slice(0, 80)}`
+    )
     .join('|')
 
   useEffect(() => {
@@ -293,7 +316,10 @@ export function useWtlConsMapLayer(input: WtlConsMapInput) {
     relatedSourceRef.current = relatedSource
     const relatedLayer = new VectorLayer({
       source: relatedSource,
-      style: (feature) => relatedFacilityStyle(feature as Feature),
+      style: (feature) =>
+        relatedFacilityStyle(feature as Feature, () => {
+          relatedLayerRef.current?.changed()
+        }),
       zIndex: RELATED_LAYER_Z,
     })
     relatedLayer.set('wtlConsRelated', true)
@@ -415,11 +441,17 @@ export function useWtlConsMapLayer(input: WtlConsMapInput) {
         const feature = new Feature(readGeom(format, item.geom, item.projection))
         feature.setId(`related:${item.id}`)
         feature.set('related', true)
+        feature.set('styleName', item.styleName)
+        feature.set('styleCode', item.styleCode ?? '')
         relatedSource.addFeature(feature)
       }
       if (current.focus?.geom) {
         focusFeature = new Feature(readGeom(format, current.focus.geom, current.focus.projection))
         focusFeature.set('focus', true)
+        if (current.focus.styleName) {
+          focusFeature.set('styleName', current.focus.styleName)
+          focusFeature.set('styleCode', current.focus.styleCode ?? '')
+        }
         const focusGeomType = focusFeature.getGeometry()?.getType()
         if (focusGeomType === 'Point' || focusGeomType === 'MultiPoint') {
           focusFeature.set('isRadarPoint', true)
@@ -476,4 +508,22 @@ export function useWtlConsMapLayer(input: WtlConsMapInput) {
     mapContext?.mapInstanceRef,
     mapContext?.mapReady,
   ])
+
+  /** 관련시설 목록이 바뀔 때만 SLD·심볼 재조회 (선택 토글 등과 분리) */
+  useEffect(() => {
+    const entries = (inputRef.current.relatedFacilities ?? []).map((item) => ({
+      styleName: item.styleName,
+      styleCode: item.styleCode,
+    }))
+    if (entries.length === 0) return
+    let cancelled = false
+    void prefetchRelatedFacilityStyles(entries, { refresh: true }).then(() => {
+      if (cancelled) return
+      relatedLayerRef.current?.changed()
+      focusLayerRef.current?.changed()
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [relatedKey])
 }
