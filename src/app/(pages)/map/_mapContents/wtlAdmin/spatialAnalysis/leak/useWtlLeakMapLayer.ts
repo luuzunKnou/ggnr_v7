@@ -12,6 +12,7 @@ import ImageWMS from 'ol/source/ImageWMS'
 import VectorSource from 'ol/source/Vector'
 import { Circle, Fill, Icon, Stroke, Style, Text } from 'ol/style'
 import { call } from '@/lib/api'
+import { geoserverWmsImageLoadFunction } from '@/lib/geoserverWmsImageLoad'
 import { getGeoServerBase, getGeoServerPublicBase } from '@/lib/geoserverUrl'
 import { resolveSymbolPreviewUrl } from '@/lib/geoserverStyleUtils'
 import {
@@ -157,6 +158,8 @@ export function useWtlLeakMapLayer({
         },
         serverType: 'geoserver',
         ratio: 1.5,
+        // 분할 관로 라벨 제거 SLD_BODY는 POST
+        imageLoadFunction: geoserverWmsImageLoadFunction,
       }),
       zIndex: 880,
     })
@@ -172,7 +175,13 @@ export function useWtlLeakMapLayer({
       if (pipeWmsCancelled) return
       const source = wms.getSource()
       if (!source) return
-      source.updateParams({ ...source.getParams(), ...pipeParams })
+      const next = { ...source.getParams(), ...pipeParams }
+      if (pipeParams.SLD_BODY) {
+        next.STYLES = ''
+      } else {
+        delete next.SLD_BODY
+      }
+      source.updateParams(next)
     })
 
     // vector fallback — WMS 미가용 시 DB에서 직접 관로 표시
@@ -364,6 +373,10 @@ export function useWtlLeakMapLayer({
 
     const onClick = async (evt: MapBrowserEvent<PointerEvent>) => {
       if (!pickRef.current || busyRef.current) return
+      // Ctrl/Meta+클릭은 속성조회 우선 — 누수 선택·분석을 가로채지 않음
+      const oe = evt.originalEvent as MouseEvent | PointerEvent | undefined
+      if (oe?.ctrlKey || oe?.metaKey) return
+
       // 제수변 피처 클릭이면 선택만
       const hit = map.forEachFeatureAtPixel(evt.pixel, (f) => (f.get('role') === 'pipe-all' ? undefined : f), {
         layerFilter: (l) => l === layer,
@@ -373,7 +386,7 @@ export function useWtlLeakMapLayer({
         const gate = (hit.get('gate') as WtlLeakGate | undefined) ?? null
         if (gate) onSelectRef.current(gate)
         else if (gateId) onSelectRef.current({ id: gateId, name: gateId, diameter: '—', address: '—', point: [0, 0] })
-        evt.stopPropagation()
+        // stopPropagation 하지 않음 — 제수변 선택과 속성조회가 같이 동작
         return
       }
 
@@ -386,16 +399,18 @@ export function useWtlLeakMapLayer({
       }
 
       if (!analyzeRef.current) return
+      // 관로 스냅이 있을 때만 분석 — 빈 곳·다른 레이어 클릭은 속성조회로 넘김
+      if (!snapPoint) return
+      evt.stopPropagation()
       busyRef.current = true
       onBusyRef.current?.(true)
       // 서버는 3857 클릭 좌표를 받는다
-      const [clickX, clickY] = viewToMercator(snapPoint ?? evt.coordinate, viewProj)
+      const [clickX, clickY] = viewToMercator(snapPoint, viewProj)
       try {
         const res = await call('', 'POST', {
           service: 'wtlLeakService',
           action: 'analyzeWtlLeak',
           params: {
-            // 스냅 표시 중이면 그 점(관로 위), 아니면 클릭 지점
             x: clickX,
             y: clickY,
             tolerance: 30,
@@ -410,7 +425,6 @@ export function useWtlLeakMapLayer({
           return
         }
         onSnapRef.current(body.result.snap, body.result)
-        evt.stopPropagation()
       } catch {
         onErrRef.current('누수 분석 요청에 실패했습니다.')
       } finally {

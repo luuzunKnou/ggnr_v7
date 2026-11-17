@@ -97,6 +97,18 @@ export type MapContextValue = {
   setIconScaleSizeOn: Dispatch<SetStateAction<boolean>>;
   visibleLayerNames: Set<string>;
   setVisibleLayerNames: Dispatch<SetStateAction<Set<string>>>;
+  /**
+   * 공간분석 탭이 켠 레이어 — 지하시설물 범례와 무관하게 속성조회(identify) tables에 합침.
+   * 셸이 탭 전환 시 갱신, 닫으면 비움.
+   */
+  spatialIdentifyTableNames: Set<string>;
+  setSpatialIdentifyTableNames: Dispatch<SetStateAction<Set<string>>>;
+  /**
+   * true면 지도 클릭 속성조회(identify) 비활성.
+   * 예: 누수분석에서 누수지점·분석결과 나오기 전.
+   */
+  mapFeatureIdentifyDisabled: boolean;
+  setMapFeatureIdentifyDisabled: Dispatch<SetStateAction<boolean>>;
   selectedDetail: SelectedDetail;
   setSelectedDetail: Dispatch<SetStateAction<SelectedDetail>>;
   identifyResultList: IdentifyPopupState | null;
@@ -717,6 +729,10 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
   const [showDebugUi, setShowDebugUi] = useState(false);
   const [iconScaleSizeOn, setIconScaleSizeOn] = useState(false);
   const [visibleLayerNames, setVisibleLayerNames] = useState<Set<string>>(() => new Set());
+  const [spatialIdentifyTableNames, setSpatialIdentifyTableNames] = useState<Set<string>>(
+    () => new Set()
+  );
+  const [mapFeatureIdentifyDisabled, setMapFeatureIdentifyDisabled] = useState(false);
   const [selectedDetail, setSelectedDetail] = useState<SelectedDetail>(null);
   const [identifyResultList, setIdentifyResultList] = useState<IdentifyPopupState | null>(null);
   const [identifySelectedRow, setIdentifySelectedRow] = useState<Record<string, unknown> | null>(null);
@@ -1008,6 +1024,10 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
         setIconScaleSizeOn,
         visibleLayerNames,
         setVisibleLayerNames,
+        spatialIdentifyTableNames,
+        setSpatialIdentifyTableNames,
+        mapFeatureIdentifyDisabled,
+        setMapFeatureIdentifyDisabled,
         selectedDetail,
         setSelectedDetail,
         identifyResultList,

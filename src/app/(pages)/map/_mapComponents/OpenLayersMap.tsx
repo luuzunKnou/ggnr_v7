@@ -1753,11 +1753,24 @@ export default function OpenLayersMap({
     roadNetworkPointPickActive ||
     roadFrontageMarkerPointPickActive ||
     (mapContext?.mapDrawInputSuspended ?? false) ||
+    (mapContext?.mapFeatureIdentifyDisabled ?? false) ||
     activeControls.some((id) => MEASUREMENT_IDS.includes(id));
+  /** 범례 visible + 공간분석 탭이 켠 레이어(범례 미체크여도 속성조회) */
+  const identifyLayerNames = useMemo(() => {
+    const extra = mapContext?.spatialIdentifyTableNames;
+    if (!extra || extra.size === 0) return visibleLayerNames;
+    const next = new Set(visibleLayerNames);
+    for (const name of extra) {
+      const t = String(name ?? '').trim();
+      if (t) next.add(t);
+    }
+    return next;
+  }, [visibleLayerNames, mapContext?.spatialIdentifyTableNames]);
+
   const { popupState, popupElRef, closePopup } = useFeatureIdentify(
     mapInstanceRef.current,
     mapReady,
-    visibleLayerNames,
+    identifyLayerNames,
     identifyDisabled,
     serviceWmsCqlByLayer,
     mapContext?.suppressMapIdentifyUntilRef ?? null,

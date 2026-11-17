@@ -6,6 +6,11 @@ import { transform } from 'ol/proj'
 import { call } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { useMapContext } from '../../../../_mapComponents/MapContext'
+import type {
+  IdentifyLayerResult,
+  IdentifyPopupState,
+} from '../../../../_mapComponents/hooks/useFeatureIdentify'
+import { clearMapLayerClickDetailHighlight } from '@/lib/mapLayerClickDetailHighlight'
 import {
   getViewProjectionCode,
   lonLatToView,
@@ -34,6 +39,7 @@ import {
   fitOutageGeometry4326,
   fitOutageResult,
   flyToOutageLonLat,
+  OUTAGE_FLY_MS,
   type WtlOutageSelectionHighlight,
 } from './wtlOutageMapFly'
 import {
@@ -141,13 +147,109 @@ export function WtlOutagePanel({
     setSelectionHighlight(null)
   }
 
-  /** 수용가·도로명: wtl_meta_ps 점 + 강조. 필지: 선택 시 면 조회 후 강조 */
+  /**
+   * 수용가 목록 → 위치 이동 후 속성조회(레이어 클릭 상세).
+   * 단수 전용 펄스 대신 공통 속성조회 펄스/패널을 쓴다.
+   */
+  const openCustomerAttributeIdentify = (
+    point: [number, number],
+    meta?: { ogcFid?: number; meterNo?: string }
+  ) => {
+    const map = mapContext?.mapInstanceRef?.current
+    const setIdentifyPopup = mapContext?.setMapSplitIdentifyPopup
+    if (!map || !setIdentifyPopup) {
+      setNotice('지도를 준비 중입니다. 잠시 후 다시 선택하세요.')
+      return
+    }
+    setNotice('')
+    /** 대기 중 식별·공통 펄스만 정리(속성조회 공통 닫기 API는 건드리지 않음). 이동 후 새 식별로 연다 */
+    setIdentifyPopup(null)
+    clearMapLayerClickDetailHighlight(map, 'layerClickDetail')
+    flyToPoint(point)
+    /** flyToOutageLonLat 시작 지연(80) + 애니메이션 + 여유 — 이동 끝난 뒤 식별·패널 앵커 */
+    const seq = ++targetFetchSeqRef.current
+    window.setTimeout(() => {
+      if (seq !== targetFetchSeqRef.current) return
+      const mapNow = mapContext?.mapInstanceRef?.current
+      if (!mapNow || !setIdentifyPopup) return
+      const viewProj = getViewProjectionCode(mapNow)
+      const coord = transform(point, 'EPSG:4326', viewProj) as [number, number]
+      const zoom = mapNow.getView().getZoom() ?? 16
+      const buffer = 300_000 * Math.pow(0.54, zoom)
+      void call('', 'POST', {
+        service: 'standardService',
+        action: 'identifyFeatures',
+        params: {
+          x: coord[0],
+          y: coord[1],
+          buffer,
+          tables: ['wtl_meta_ps'],
+          schema: 'layer',
+        },
+      })
+        .then((res: unknown) => {
+          if (seq !== targetFetchSeqRef.current) return
+          const data = (res as { data?: { results?: IdentifyLayerResult[] } })?.data ?? res
+          let results: IdentifyLayerResult[] = Array.isArray(
+            (data as { results?: IdentifyLayerResult[] })?.results
+          )
+            ? ((data as { results: IdentifyLayerResult[] }).results ?? [])
+            : []
+          if (results.length === 0) {
+            setNotice('계량기 속성을 찾지 못했습니다.')
+            return
+          }
+          const wantFid =
+            meta?.ogcFid != null && Number.isFinite(meta.ogcFid) ? Math.trunc(meta.ogcFid) : null
+          const wantMeter = meta?.meterNo?.trim()
+          if (wantFid != null || wantMeter) {
+            results = results.map((layer) => {
+              const physical = String(layer.physicalTable ?? layer.tableName ?? '')
+                .trim()
+                .toLowerCase()
+              if (
+                physical !== 'wtl_meta_ps' &&
+                String(layer.tableName).toLowerCase() !== 'wtl_meta_ps'
+              ) {
+                return layer
+              }
+              const matched = layer.features.filter((f) => {
+                const d = f.data ?? {}
+                if (wantFid != null) {
+                  const fid = Number(d.ogc_fid ?? d.ogcFid)
+                  if (Number.isFinite(fid) && Math.trunc(fid) === wantFid) return true
+                }
+                if (wantMeter) {
+                  const m = String(d.met_num ?? d.meterNo ?? '').trim()
+                  if (m && m === wantMeter) return true
+                }
+                return false
+              })
+              return matched.length > 0 ? { ...layer, features: matched } : layer
+            })
+            results = results.filter((l) => l.features.length > 0)
+            if (results.length === 0) {
+              setNotice('계량기 속성을 찾지 못했습니다.')
+              return
+            }
+          }
+          const popup: IdentifyPopupState = { coordinate: coord, results }
+          setIdentifyPopup(popup)
+        })
+        .catch(() => {
+          if (seq !== targetFetchSeqRef.current) return
+          setNotice('계량기 속성 조회에 실패했습니다.')
+        })
+    }, 80 + OUTAGE_FLY_MS + 80)
+  }
+
+  /** 도로명: wtl_meta_ps 점 + 강조. 필지: 면 조회 후 강조. 수용가: 속성조회로 대체 */
   const toggleTargetRow = (
     id: string,
     point: [number, number] | null | undefined,
-    kind: 'point' | 'parcel',
+    kind: 'customer' | 'point' | 'parcel',
     meta?: { ogcFid?: number; meterNo?: string },
-    /** 지도에서 직접 고른 경우 — 이미 보고 있는 위치라 이동하지 않음 */
+    /** 지도에서 직접 고른 경우 — 이미 보고 있는 위치라 이동·식별 재요청 없음 */
     fromMap = false
   ) => {
     if (selectedTargetId === id) {
@@ -155,6 +257,16 @@ export function WtlOutagePanel({
       return
     }
     setSelectedTargetId(id)
+    if (kind === 'customer') {
+      // 단수 전용 펄스 없음 — 지도 클릭은 속성조회만, 목록은 이동 후 속성조회
+      setSelectionHighlight(null)
+      if (!point || !Number.isFinite(point[0]) || !Number.isFinite(point[1])) {
+        setNotice('위치 정보가 없어 속성을 열 수 없습니다. 다시 분석·저장하면 위치가 포함됩니다.')
+        return
+      }
+      if (!fromMap) openCustomerAttributeIdentify(point, meta)
+      return
+    }
     if (kind === 'point') {
       if (!point || !Number.isFinite(point[0]) || !Number.isFinite(point[1])) {
         setSelectionHighlight(null)
@@ -523,7 +635,7 @@ export function WtlOutagePanel({
       toggleTargetRow(
         row.id,
         row.point,
-        'point',
+        'customer',
         { ogcFid: row.ogcFid, meterNo: row.meterNo !== '—' ? row.meterNo : undefined },
         true
       )
@@ -1004,7 +1116,7 @@ export function WtlOutagePanel({
                     selectedTargetId === row.id && 'bg-primary/[0.12] ring-1 ring-inset ring-primary/25'
                   )}
                   onClick={() =>
-                    toggleTargetRow(row.id, row.point, 'point', {
+                    toggleTargetRow(row.id, row.point, 'customer', {
                       ogcFid: row.ogcFid,
                       meterNo: row.meterNo !== '—' ? row.meterNo : undefined,
                     })

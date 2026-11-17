@@ -148,21 +148,52 @@ export function bindMapGeometryStackOrder(
 }
 
 /**
- * 지도 식별(클릭) 결과 정렬 — 점 → 선 → 면 (작을수록 목록 상단·우선).
- * `geometry_columns.type` 또는 PostGIS OGC 타입 코드(숫자)에 대응.
+ * geometry_columns.type → 점(0)·선(1)·면(2). 제네릭 Geometry·미지이면 null.
  */
-export function identifyHitPriorityRank(geometryColumnsType: string | number | undefined | null): number {
-  if (geometryColumnsType == null) return 1;
+function identifyGeomRankFromColumnsType(
+  geometryColumnsType: string | number | undefined | null,
+): number | null {
+  if (geometryColumnsType == null) return null;
   if (typeof geometryColumnsType === 'number') {
     if (geometryColumnsType === 1 || geometryColumnsType === 4) return 0;
     if (geometryColumnsType === 2 || geometryColumnsType === 5) return 1;
     if (geometryColumnsType === 3 || geometryColumnsType === 6) return 2;
-    return 1;
+    return null;
   }
-  const t = String(geometryColumnsType).toUpperCase().replace(/^ST_/, '');
+  const t = String(geometryColumnsType).toUpperCase().replace(/^ST_/, '').trim();
+  if (!t || t === 'GEOMETRY' || t === 'GEOGRAPHY') return null;
   if (/POINT|MULTIPOINT/.test(t)) return 0;
   if (/LINESTRING|MULTILINESTRING|CIRCULARSTRING|COMPOUNDCURVE|CURVE/.test(t)) return 1;
   if (/POLYGON|MULTIPOLYGON|TRIANGLE|TIN/.test(t)) return 2;
+  return null;
+}
+
+/**
+ * 테이블명 접미사 → 점·선·면. `_ps` 점, `_ls`/`_lm` 선, `_as` 면.
+ */
+function identifyGeomRankFromTableSuffix(tableName?: string | null): number | null {
+  const raw = String(tableName ?? '').trim().toLowerCase();
+  if (!raw) return null;
+  const base = raw.includes('.') ? (raw.split('.').pop() ?? raw) : raw;
+  if (base.endsWith('_ps')) return 0;
+  if (base.endsWith('_ls') || base.endsWith('_lm')) return 1;
+  if (base.endsWith('_as')) return 2;
+  return null;
+}
+
+/**
+ * 지도 식별(클릭) 결과 정렬 — 점 → 선 → 면 (작을수록 목록 상단·우선).
+ * 1순위: `geometry_columns.type`(또는 OGC 숫자 코드).
+ * 2순위: 테이블 접미사 `_ps`/`_ls`/`_lm`/`_as` (제네릭 Geometry 등).
+ */
+export function identifyHitPriorityRank(
+  geometryColumnsType: string | number | undefined | null,
+  tableName?: string | null,
+): number {
+  const fromType = identifyGeomRankFromColumnsType(geometryColumnsType);
+  if (fromType != null) return fromType;
+  const fromSuffix = identifyGeomRankFromTableSuffix(tableName);
+  if (fromSuffix != null) return fromSuffix;
   return 1;
 }
 

@@ -1057,7 +1057,7 @@ export async function identifyFeatures(params: {
             titleField,
             isSplitLayer,
             features,
-            identifyGeomRank: identifyHitPriorityRank(geomTypeRaw),
+            identifyGeomRank: identifyHitPriorityRank(geomTypeRaw, physicalTable),
           });
         }
       } catch (e) {
@@ -1742,7 +1742,7 @@ export async function searchDefineLayersByGeometry(params: {
           titleField,
           isSplitLayer,
           features,
-          identifyGeomRank: identifyHitPriorityRank(geomTypeRaw),
+          identifyGeomRank: identifyHitPriorityRank(geomTypeRaw, physicalTable),
         });
       } catch {
         /* skip */
@@ -1916,7 +1916,7 @@ export async function searchDefineLayersByKeyword(params: {
           titleField,
           isSplitLayer,
           features,
-          identifyGeomRank: identifyHitPriorityRank(geomTypeRaw),
+          identifyGeomRank: identifyHitPriorityRank(geomTypeRaw, physicalTable),
         });
       } catch {
         /* skip */

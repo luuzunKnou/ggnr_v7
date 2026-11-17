@@ -278,6 +278,8 @@ export function useWtlOutageMapLayer({
         },
         serverType: 'geoserver',
         ratio: 1.5,
+        // 분할 관로 라벨 제거 SLD_BODY는 POST
+        imageLoadFunction: geoserverWmsImageLoadFunction,
       }),
       zIndex: 880,
     })
@@ -290,7 +292,13 @@ export function useWtlOutageMapLayer({
       if (pipeWmsCancelled) return
       const source = wms.getSource()
       if (!source) return
-      source.updateParams({ ...source.getParams(), ...pipeParams })
+      const next = { ...source.getParams(), ...pipeParams }
+      if (pipeParams.SLD_BODY) {
+        next.STYLES = ''
+      } else {
+        delete next.SLD_BODY
+      }
+      source.updateParams(next)
     })
 
     // 제수변(SA200)은 관로·단수 면·관로 펄스(벡터 920)보다 항상 위에 그리도록 별도 레이어(925)로 분리
@@ -495,31 +503,38 @@ export function useWtlOutageMapLayer({
       root.setAttribute('role', 'radiogroup')
       root.setAttribute('aria-label', `${gate.name} 개폐`)
       root.className = 'flex overflow-hidden rounded shadow-md'
-      root.style.pointerEvents = 'auto'
+      // 루트는 클릭 통과 → 아래 제수변 WMS 속성조회. 버튼만 잠금 UI.
+      root.style.pointerEvents = 'none'
       root.style.userSelect = 'none'
-      // pointerdown만 막아 오버레이에서 팬이 시작되지 않게 함.
-      // pointerup까지 막으면 지도에서 시작한 드래그를 오버레이 위에서 뗄 때
-      // DragPan이 풀리지 않아 지도가 마우스에 붙은 채로 움직인다.
-      root.addEventListener('pointerdown', (event) => event.stopPropagation())
-      root.addEventListener('dblclick', (event) => event.stopPropagation())
-      root.addEventListener('selectstart', (event) => event.preventDefault())
-      const releaseStuckPan = () => {
-        setPanActive(map, false)
-        setPanActive(map, true)
-      }
-      root.addEventListener('pointerup', releaseStuckPan)
-      root.addEventListener('pointercancel', releaseStuckPan)
-      root.addEventListener('lostpointercapture', releaseStuckPan)
 
       const openBtn = document.createElement('button')
       openBtn.type = 'button'
       openBtn.setAttribute('role', 'radio')
       openBtn.textContent = '열림'
+      openBtn.style.pointerEvents = 'auto'
 
       const lockBtn = document.createElement('button')
       lockBtn.type = 'button'
       lockBtn.setAttribute('role', 'radio')
       lockBtn.textContent = '잠금'
+      lockBtn.style.pointerEvents = 'auto'
+
+      // pointerdown만 막아 버튼에서 팬이 시작되지 않게 함.
+      // pointerup까지 막으면 지도에서 시작한 드래그를 버튼 위에서 뗄 때
+      // DragPan이 풀리지 않아 지도가 마우스에 붙은 채로 움직인다.
+      const stopDown = (event: Event) => event.stopPropagation()
+      const releaseStuckPan = () => {
+        setPanActive(map, false)
+        setPanActive(map, true)
+      }
+      for (const btn of [openBtn, lockBtn]) {
+        btn.addEventListener('pointerdown', stopDown)
+        btn.addEventListener('dblclick', stopDown)
+        btn.addEventListener('selectstart', (event) => event.preventDefault())
+        btn.addEventListener('pointerup', releaseStuckPan)
+        btn.addEventListener('pointercancel', releaseStuckPan)
+        btn.addEventListener('lostpointercapture', releaseStuckPan)
+      }
 
       // 열림·잠금 어느 쪽을 눌러도 현재 상태를 반전(토글)
       const toggle = (event: Event) => {
@@ -705,14 +720,13 @@ export function useWtlOutageMapLayer({
 
     const onClick = (evt: MapBrowserEvent<PointerEvent>) => {
       if (!pickRef.current) return
-      // 결과 수용가 점이 먼저 — 목록에서 해당 행 선택
+      // 결과 수용가 점 — 목록 선택. stopPropagation 하지 않아 계량기 속성조회도 가능
       const customerId = onSelectCustomerRef.current ? customerAt(evt) : null
       if (customerId) {
         onSelectCustomerRef.current?.(customerId)
-        evt.stopPropagation()
         return
       }
-      // 제수변은 지도 클릭으로 선택하지 않는다. 열림/잠금 버튼으로만 잠그고, 잠긴 제수변만 표시한다.
+      // 제수변은 열림/잠금 버튼으로만 잠그고, 본체 클릭은 속성조회(식별)로 넘긴다.
     }
 
     const moveKey = map.on('moveend', onMoveEnd)

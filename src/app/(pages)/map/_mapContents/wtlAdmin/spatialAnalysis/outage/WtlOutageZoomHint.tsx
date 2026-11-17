@@ -37,6 +37,11 @@ export function WtlOutageZoomHint({
   const { leftPx } = useSearchBarOffset()
   const [scaleOk, setScaleOk] = useState(false)
   const [centerX, setCenterX] = useState(0)
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   useEffect(() => {
     const map = mapContext?.mapInstanceRef?.current
@@ -78,7 +83,8 @@ export function WtlOutageZoomHint({
     return () => window.removeEventListener('resize', update)
   }, [text, leftPx])
 
-  if (!text || typeof document === 'undefined') return null
+  // SSR·하이드레이션 첫 패스는 null — document 분기는 서버/클라 불일치 유발
+  if (!mounted || !text) return null
 
   return createPortal(
     <div

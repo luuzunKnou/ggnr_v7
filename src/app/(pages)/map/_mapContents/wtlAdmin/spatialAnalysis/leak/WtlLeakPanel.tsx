@@ -1,7 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { cn } from '@/lib/utils'
+import { useMapContext } from '../../../../_mapComponents/MapContext'
 import {
   ANALYSIS_HISTORY_PAGE_SIZE,
   AnalysisHistoryPager,
@@ -27,6 +28,8 @@ type Props = {
 }
 
 export function WtlLeakPanel({ active = true, mapLeftPx = 0, onHandoffToOutage }: Props) {
+  const mapContext = useMapContext()
+  const setMapFeatureIdentifyDisabled = mapContext?.setMapFeatureIdentifyDisabled
   const [history, setHistory] = useState<WtlLeakHistory[]>([])
   const [historyPage, setHistoryPage] = useState(1)
   const [historyId, setHistoryId] = useState<string | null>(null)
@@ -41,6 +44,17 @@ export function WtlLeakPanel({ active = true, mapLeftPx = 0, onHandoffToOutage }
   const [notice, setNotice] = useState('해당 위치에서 가까운 관로에 맞춰 분석합니다.')
   const [hiddenPipeIndexes, setHiddenPipeIndexes] = useState<number[]>([])
   const [editMode, setEditMode] = useState<LeakEditMode>(null)
+
+  /** 누수지점·분석결과 나오기 전에는 속성조회 끔 — 관로 클릭은 분석만 */
+  useEffect(() => {
+    if (!setMapFeatureIdentifyDisabled) return
+    if (!active) {
+      setMapFeatureIdentifyDisabled(false)
+      return
+    }
+    setMapFeatureIdentifyDisabled(result == null)
+    return () => setMapFeatureIdentifyDisabled(false)
+  }, [active, result, setMapFeatureIdentifyDisabled])
 
   // 다른 탭으로 나가면 분석 상태를 비워 다시 들어오면 새 분석 (분석 이력 목록은 유지)
   // — effect 대신 이전 값 비교로 렌더 중 초기화(React 권장 패턴)
