@@ -9,6 +9,7 @@ import {
   formatAlertTime,
   type OdorAlertItem,
 } from '@/app/(pages)/(index)/odorPh/odorPhDashboardMock'
+import { OdorAlertDetailPanel } from '@/app/(pages)/(index)/odorPh/OdorAlertDetailPanel'
 import { getOdorIndexMenuDescription } from '@/app/(pages)/(index)/odorPh/odorIndexMenus'
 import {
   ODOR_ALERT_GRADE_LABEL,
@@ -23,6 +24,7 @@ import { cn } from '@/lib/utils'
 
 type ConfirmFilter = 'all' | 'confirmed' | 'unconfirmed'
 type AgencyFilter = 'all' | '가람환경기술' | '디오솔류션'
+type RightPanel = 'closed' | 'history' | 'detail'
 type SortDir = 'asc' | 'desc'
 type AlertSortKey =
   | 'sensorKorNm'
@@ -72,6 +74,29 @@ const HISTORY_COLUMNS: Array<{ key: HistorySortKey; label: string; className: st
 
 const SEARCH_INPUT_CLASS =
   'standard-search-input focus:border-primary focus:ring-0 focus:ring-offset-0'
+
+const DATE_INPUT_CLASS =
+  'h-8 min-w-0 flex-1 rounded-md border border-border bg-background px-2 text-[11px] text-foreground outline-none focus:border-primary scheme-light dark:scheme-dark'
+
+/** Asia/Seoul 기준 YYYY-MM-DD */
+function toYmdSeoul(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  return new Intl.DateTimeFormat('sv-SE', {
+    timeZone: 'Asia/Seoul',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(d)
+}
+
+function inDateRange(iso: string, from: string, to: string): boolean {
+  const day = toYmdSeoul(iso)
+  if (!day) return false
+  if (from && day < from) return false
+  if (to && day > to) return false
+  return true
+}
 
 function buildAlertPool(): OdorAlertItem[] {
   const map = new Map<string, OdorAlertItem>()
@@ -248,17 +273,52 @@ function UnifiedSearchField({ value, onChange }: SearchFieldProps) {
   )
 }
 
-/** Index 콘솔 — 경보목록 / 사용자이력 동일 구조의 형제 div (3:1) */
+type DateRangeFieldProps = {
+  from: string
+  to: string
+  onFromChange: (value: string) => void
+  onToChange: (value: string) => void
+}
+
+function DateRangeField({ from, to, onFromChange, onToChange }: DateRangeFieldProps) {
+  return (
+    <div className="flex min-w-[14rem] items-center gap-1.5">
+      <span className="shrink-0 text-[11px] font-medium text-muted-foreground">기간</span>
+      <input
+        type="date"
+        value={from}
+        onChange={(e) => onFromChange(e.target.value)}
+        title="시작일"
+        className={DATE_INPUT_CLASS}
+      />
+      <span className="shrink-0 text-[11px] text-muted-foreground">~</span>
+      <input
+        type="date"
+        value={to}
+        onChange={(e) => onToChange(e.target.value)}
+        title="종료일"
+        className={DATE_INPUT_CLASS}
+      />
+    </div>
+  )
+}
+
+/** Index 콘솔 — 경보목록 / 우측(이력·상세) 형제 div (3:2) */
 export function OdorIndexAlertContent() {
   const { data: session, status } = useSession()
   const { history } = useOdorAlertStore()
   const displayName = resolveDisplayName(status, session?.user)
 
-  const [historyOpen, setHistoryOpen] = useState(false)
+  const [rightPanel, setRightPanel] = useState<RightPanel>('closed')
+  const [selectedAlert, setSelectedAlert] = useState<OdorAlertItem | null>(null)
   const [confirmFilter, setConfirmFilter] = useState<ConfirmFilter>('all')
   const [agencyFilter, setAgencyFilter] = useState<AgencyFilter>('all')
   const [keyword, setKeyword] = useState('')
   const [historyKeyword, setHistoryKeyword] = useState('')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
+  const [historyDateFrom, setHistoryDateFrom] = useState('')
+  const [historyDateTo, setHistoryDateTo] = useState('')
   const [listPage, setListPage] = useState(1)
   const [historyPage, setHistoryPage] = useState(1)
   const [alertSort, setAlertSort] = useState<{ key: AlertSortKey; dir: SortDir }>({
@@ -270,36 +330,65 @@ export function OdorIndexAlertContent() {
     dir: 'desc',
   })
 
+  const rightOpen = rightPanel !== 'closed'
+  const historyOpen = rightPanel === 'history'
+  const detailOpen = rightPanel === 'detail' && selectedAlert != null
+
+  const openHistory = () => {
+    setSelectedAlert(null)
+    setRightPanel('history')
+  }
+
+  const openDetail = (row: OdorAlertItem) => {
+    setSelectedAlert(row)
+    setRightPanel('detail')
+  }
+
+  const closeRight = () => {
+    setSelectedAlert(null)
+    setRightPanel('closed')
+  }
+
   const filteredAlerts = useMemo(() => {
     const kw = keyword.trim().toLowerCase()
     let list = buildAlertPool()
     if (confirmFilter === 'confirmed') list = list.filter((r) => r.confirmed)
     if (confirmFilter === 'unconfirmed') list = list.filter((r) => !r.confirmed)
     if (agencyFilter !== 'all') list = list.filter((r) => r.agency === agencyFilter)
+    if (dateFrom || dateTo) {
+      list = list.filter((r) => inDateRange(r.occurredAt, dateFrom, dateTo))
+    }
     if (kw) list = list.filter((r) => alertSearchBlob(r).includes(kw))
     const sign = alertSort.dir === 'asc' ? 1 : -1
     return [...list].sort((a, b) => sign * compareAlert(a, b, alertSort.key))
-  }, [confirmFilter, agencyFilter, keyword, alertSort])
+  }, [confirmFilter, agencyFilter, keyword, dateFrom, dateTo, alertSort])
 
   const myHistory = useMemo(() => {
     if (!displayName) return []
     const kw = historyKeyword.trim().toLowerCase()
     let list = history.filter((h) => h.actor === displayName)
+    if (historyDateFrom || historyDateTo) {
+      list = list.filter((r) => inDateRange(r.at, historyDateFrom, historyDateTo))
+    }
     if (kw) list = list.filter((r) => historySearchBlob(r).includes(kw))
     const sign = historySort.dir === 'asc' ? 1 : -1
     return [...list].sort((a, b) => sign * compareHistory(a, b, historySort.key))
-  }, [history, displayName, historyKeyword, historySort])
+  }, [history, displayName, historyKeyword, historyDateFrom, historyDateTo, historySort])
 
   const listPageCount = pageMeta(filteredAlerts.length, listPage, PAGE_SIZE).pageCount
   const historyPageCount = pageMeta(myHistory.length, historyPage, PAGE_SIZE).pageCount
 
   useEffect(() => {
     setListPage(1)
-  }, [confirmFilter, agencyFilter, keyword, alertSort])
+  }, [confirmFilter, agencyFilter, keyword, dateFrom, dateTo, alertSort])
 
   useEffect(() => {
     setHistoryPage(1)
-  }, [historyKeyword, historySort, historyOpen])
+  }, [historyKeyword, historyDateFrom, historyDateTo, historySort, historyOpen])
+
+  useEffect(() => {
+    if (rightPanel === 'detail' && !selectedAlert) setRightPanel('closed')
+  }, [rightPanel, selectedAlert])
 
   useEffect(() => {
     if (listPage > listPageCount) setListPage(listPageCount)
@@ -332,16 +421,9 @@ export function OdorIndexAlertContent() {
   }
 
   return (
-    <div
-      className={cn(
-        'grid h-full min-h-0 flex-1 overflow-hidden transition-[grid-template-columns,gap] duration-300 ease-in-out',
-        historyOpen
-          ? 'grid-cols-1 gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,1fr)]'
-          : 'grid-cols-[minmax(0,1fr)_0fr] gap-0'
-      )}
-    >
+    <div className="flex h-full min-h-0 flex-1 overflow-hidden">
       {/* 경보 목록 */}
-      <div className="flex min-h-0 min-w-0 flex-col gap-2 overflow-hidden">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-hidden">
         <PanelHeader
           title="경보 목록"
           description={getOdorIndexMenuDescription('alertList')}
@@ -349,7 +431,7 @@ export function OdorIndexAlertContent() {
             <button
               type="button"
               title={historyOpen ? '사용자 이력 접기' : '사용자 이력'}
-              onClick={() => setHistoryOpen((v) => !v)}
+              onClick={() => (historyOpen ? closeRight() : openHistory())}
               className={cn(
                 'inline-flex h-7 cursor-pointer items-center gap-1 rounded border px-2 text-[11px] font-medium transition-colors',
                 historyOpen
@@ -363,44 +445,52 @@ export function OdorIndexAlertContent() {
           }
         />
 
-        <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2">
-          <div className="flex min-w-0 items-center gap-2">
-            <span className="shrink-0 text-[11px] font-medium text-muted-foreground">확인</span>
-            <div className="standard-filter-chips">
-              {CONFIRM_OPTIONS.map((opt) => (
-                <button
-                  key={opt.key}
-                  type="button"
-                  title={opt.label}
-                  onClick={() => setConfirmFilter(opt.key)}
-                  className={cn(
-                    'standard-filter-chip cursor-pointer',
-                    confirmFilter === opt.key && 'standard-filter-chip-active'
-                  )}
-                >
-                  {opt.label}
-                </button>
-              ))}
+        <div className="flex shrink-0 flex-col gap-2">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="shrink-0 text-[11px] font-medium text-muted-foreground">확인</span>
+              <div className="standard-filter-chips">
+                {CONFIRM_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.key}
+                    type="button"
+                    title={opt.label}
+                    onClick={() => setConfirmFilter(opt.key)}
+                    className={cn(
+                      'standard-filter-chip cursor-pointer',
+                      confirmFilter === opt.key && 'standard-filter-chip-active'
+                    )}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
-          <div className="flex min-w-0 items-center gap-2">
-            <span className="shrink-0 text-[11px] font-medium text-muted-foreground">업체</span>
-            <div className="standard-filter-chips">
-              {AGENCY_OPTIONS.map((opt) => (
-                <button
-                  key={opt.key}
-                  type="button"
-                  title={opt.label}
-                  onClick={() => setAgencyFilter(opt.key)}
-                  className={cn(
-                    'standard-filter-chip cursor-pointer',
-                    agencyFilter === opt.key && 'standard-filter-chip-active'
-                  )}
-                >
-                  {opt.label}
-                </button>
-              ))}
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="shrink-0 text-[11px] font-medium text-muted-foreground">업체</span>
+              <div className="standard-filter-chips">
+                {AGENCY_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.key}
+                    type="button"
+                    title={opt.label}
+                    onClick={() => setAgencyFilter(opt.key)}
+                    className={cn(
+                      'standard-filter-chip cursor-pointer',
+                      agencyFilter === opt.key && 'standard-filter-chip-active'
+                    )}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
             </div>
+            <DateRangeField
+              from={dateFrom}
+              to={dateTo}
+              onFromChange={setDateFrom}
+              onToChange={setDateTo}
+            />
           </div>
           <UnifiedSearchField value={keyword} onChange={setKeyword} />
         </div>
@@ -451,7 +541,15 @@ export function OdorIndexAlertContent() {
                   </tr>
                 ) : (
                   pagedAlerts.map((row) => (
-                    <tr key={row.id} className="standard-list-row">
+                    <tr
+                      key={row.id}
+                      title={`${row.sensorKorNm} 상세보기`}
+                      onClick={() => openDetail(row)}
+                      className={cn(
+                        'standard-list-row cursor-pointer',
+                        selectedAlert?.id === row.id && 'bg-primary/10'
+                      )}
+                    >
                       <td
                         className="standard-table-td-compact border-r border-border/60"
                         title={row.sensorKorNm}
@@ -527,127 +625,152 @@ export function OdorIndexAlertContent() {
         </div>
       </div>
 
-      {/* 사용자 이력 — 동일 HTML 구조 · 접기/펼치기 애니메이션 */}
+      {/* 우측 — 이력/상세 배타 · transition-[width] duration-300 · 3:2(40%) */}
       <div
         className={cn(
-          'flex min-h-0 min-w-0 flex-col gap-2 overflow-hidden transition-opacity duration-300 ease-in-out',
-          historyOpen ? 'opacity-100' : 'pointer-events-none opacity-0'
+          'flex min-h-0 shrink-0 flex-col overflow-hidden transition-[width] duration-300 ease-in-out',
+          rightOpen ? 'w-2/5 pl-4' : 'w-0 pl-0'
         )}
-        aria-hidden={!historyOpen}
-        inert={!historyOpen ? true : undefined}
+        aria-hidden={!rightOpen}
+        inert={!rightOpen ? true : undefined}
       >
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-hidden">
-          <PanelHeader
-            title="사용자 이력"
-            description="본인이 해제(인지)한 이력만 조회합니다"
-            action={
-              <button
-                type="button"
-                title="닫기"
-                onClick={() => setHistoryOpen(false)}
-                className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded border border-border text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
-              >
-                <X className="h-3.5 w-3.5" aria-hidden />
-              </button>
-            }
-          />
+        <div
+          className={cn(
+            'flex h-full min-h-0 w-[max(18rem,100%)] flex-col gap-2 overflow-hidden transition-opacity duration-300 ease-in-out',
+            rightOpen ? 'opacity-100' : 'pointer-events-none opacity-0'
+          )}
+        >
+          {detailOpen && selectedAlert ? (
+            <>
+              <PanelHeader
+                title={selectedAlert.sensorKorNm}
+                description={selectedAlert.agency}
+                action={
+                  <button
+                    type="button"
+                    title="닫기"
+                    onClick={closeRight}
+                    className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded border border-border text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+                  >
+                    <X className="h-3.5 w-3.5" aria-hidden />
+                  </button>
+                }
+              />
+              <OdorAlertDetailPanel alert={selectedAlert} />
+            </>
+          ) : (
+            <>
+              <PanelHeader
+                title="사용자 이력"
+                description="사용자가 조회한 경보 목록 이력입니다."
+                action={
+                  <button
+                    type="button"
+                    title="닫기"
+                    onClick={closeRight}
+                    className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded border border-border text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+                  >
+                    <X className="h-3.5 w-3.5" aria-hidden />
+                  </button>
+                }
+              />
 
-          <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2">
-            <div className="flex min-w-0 items-center gap-2">
-              <span className="shrink-0 text-[11px] font-medium text-muted-foreground">처리자</span>
-              <div className="standard-filter-chips">
-                <span className="standard-filter-chip standard-filter-chip-active">
-                  {displayName || '…'}
-                </span>
+              <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2">
+                <DateRangeField
+                  from={historyDateFrom}
+                  to={historyDateTo}
+                  onFromChange={setHistoryDateFrom}
+                  onToChange={setHistoryDateTo}
+                />
+                <UnifiedSearchField value={historyKeyword} onChange={setHistoryKeyword} />
               </div>
-            </div>
-            <UnifiedSearchField value={historyKeyword} onChange={setHistoryKeyword} />
-          </div>
 
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded border border-border">
-            <div className="standard-list-scroll">
-              <table className="standard-list-table">
-                <thead className="standard-table-thead">
-                  <tr>
-                    {HISTORY_COLUMNS.map((col) => {
-                      const active = historySort.key === col.key
-                      const Icon = !active
-                        ? ArrowUpDown
-                        : historySort.dir === 'asc'
-                          ? ArrowUp
-                          : ArrowDown
-                      return (
-                        <th
-                          key={col.key}
-                          className={cn(
-                            'standard-table-th standard-table-th-left border-r border-border last:border-r-0',
-                            col.className
-                          )}
-                        >
-                          <button
-                            type="button"
-                            title={`${col.label} 정렬`}
-                            onClick={() => toggleHistorySort(col.key)}
-                            className={cn(
-                              'standard-sort-button standard-sort-button-left cursor-pointer',
-                              active && 'standard-sort-button-active'
-                            )}
-                          >
-                            <span className="truncate">{col.label}</span>
-                            <Icon className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
-                          </button>
-                        </th>
-                      )
-                    })}
-                  </tr>
-                </thead>
-                <tbody>
-                  {pagedHistory.length === 0 ? (
-                    <tr>
-                      <td colSpan={HISTORY_COLUMNS.length} className="standard-table-empty">
-                        {displayName
-                          ? '본인 해제(인지) 이력이 없습니다.'
-                          : '로그인 정보를 확인하는 중…'}
-                      </td>
-                    </tr>
-                  ) : (
-                    pagedHistory.map((row) => (
-                      <tr key={row.id} className="standard-list-row">
-                        <td
-                          className="standard-table-td-compact border-r border-border/60"
-                          title={row.sensorLabel}
-                        >
-                          {row.sensorLabel}
-                        </td>
-                        <td className="standard-table-td-compact border-r border-border/60">
-                          {row.mode === 'bulk' ? '일괄' : '단건'}
-                        </td>
-                        <td className="standard-table-td-compact border-r border-border/60">
-                          {row.grade != null
-                            ? ODOR_ALERT_GRADE_LABEL[row.grade as OdorAlertGrade]
-                            : '—'}
-                        </td>
-                        <td
-                          className="standard-table-td-compact border-r border-border/60 tabular-nums"
-                          title={formatOdorAlertTime(row.at)}
-                        >
-                          {formatOdorAlertTime(row.at)}
-                        </td>
-                        <td className="standard-table-td-compact" title={row.reason}>
-                          {row.reason}
-                        </td>
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded border border-border">
+                <div className="standard-list-scroll">
+                  <table className="standard-list-table">
+                    <thead className="standard-table-thead">
+                      <tr>
+                        {HISTORY_COLUMNS.map((col) => {
+                          const active = historySort.key === col.key
+                          const Icon = !active
+                            ? ArrowUpDown
+                            : historySort.dir === 'asc'
+                              ? ArrowUp
+                              : ArrowDown
+                          return (
+                            <th
+                              key={col.key}
+                              className={cn(
+                                'standard-table-th standard-table-th-left border-r border-border last:border-r-0',
+                                col.className
+                              )}
+                            >
+                              <button
+                                type="button"
+                                title={`${col.label} 정렬`}
+                                onClick={() => toggleHistorySort(col.key)}
+                                className={cn(
+                                  'standard-sort-button standard-sort-button-left cursor-pointer',
+                                  active && 'standard-sort-button-active'
+                                )}
+                              >
+                                <span className="truncate">{col.label}</span>
+                                <Icon className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
+                              </button>
+                            </th>
+                          )
+                        })}
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-            <NetworkStylePager
-              total={myHistory.length}
-              page={historyPage}
-              onPageChange={setHistoryPage}
-            />
-          </div>
+                    </thead>
+                    <tbody>
+                      {pagedHistory.length === 0 ? (
+                        <tr>
+                          <td colSpan={HISTORY_COLUMNS.length} className="standard-table-empty">
+                            {displayName
+                              ? '본인 해제(인지) 이력이 없습니다.'
+                              : '로그인 정보를 확인하는 중…'}
+                          </td>
+                        </tr>
+                      ) : (
+                        pagedHistory.map((row) => (
+                          <tr key={row.id} className="standard-list-row">
+                            <td
+                              className="standard-table-td-compact border-r border-border/60"
+                              title={row.sensorLabel}
+                            >
+                              {row.sensorLabel}
+                            </td>
+                            <td className="standard-table-td-compact border-r border-border/60">
+                              {row.mode === 'bulk' ? '일괄' : '단건'}
+                            </td>
+                            <td className="standard-table-td-compact border-r border-border/60">
+                              {row.grade != null
+                                ? ODOR_ALERT_GRADE_LABEL[row.grade as OdorAlertGrade]
+                                : '—'}
+                            </td>
+                            <td
+                              className="standard-table-td-compact border-r border-border/60 tabular-nums"
+                              title={formatOdorAlertTime(row.at)}
+                            >
+                              {formatOdorAlertTime(row.at)}
+                            </td>
+                            <td className="standard-table-td-compact" title={row.reason}>
+                              {row.reason}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+                <NetworkStylePager
+                  total={myHistory.length}
+                  page={historyPage}
+                  onPageChange={setHistoryPage}
+                />
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>

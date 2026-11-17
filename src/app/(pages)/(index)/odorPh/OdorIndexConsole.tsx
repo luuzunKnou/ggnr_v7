@@ -17,8 +17,10 @@ import {
   type OdorIndexMenuId,
 } from '@/app/(pages)/(index)/odorPh/odorIndexMenus'
 import { DevModeFooterTrigger } from '@/app/(pages)/(index)/dev-mode-footer-trigger'
+import { OdorIndexAlertModal } from '@/app/(pages)/(index)/odorPh/OdorIndexAlertModal'
 import { OdorSidebarUserAccount } from '@/app/(pages)/(index)/odorPh/OdorSidebarUserAccount'
 import { seedOdorIndexAlertNotifs } from '@/app/(pages)/(index)/odorPh/odorIndexAlertNotifSeed'
+import { cn } from '@/lib/utils'
 
 type Props = {
   title: string
@@ -50,6 +52,7 @@ export function OdorIndexConsole({ title, sensors, footerAddr, footerRss, querie
     null
   )
   const [refreshing, setRefreshing] = useState(false)
+  const [alertModalOpen, setAlertModalOpen] = useState(false)
 
   useEffect(() => {
     seedOdorIndexAlertNotifs()
@@ -82,11 +85,33 @@ export function OdorIndexConsole({ title, sensors, footerAddr, footerRss, querie
           defaultMenuId="home"
           getDescription={getOdorIndexMenuDescription}
           selectMenuSignal={selectMenuSignal}
-          renderSidebarBottom={({ collapsed }) => (
-            <OdorSidebarUserAccount
-              collapsed={collapsed}
-              onOpenAlertNotif={() => goMenu('alertList')}
+          renderBodyOverlay={
+            <OdorIndexAlertModal
+              open={alertModalOpen}
+              onClose={() => setAlertModalOpen(false)}
+              onGoAlertList={() => goMenu('alertList')}
             />
+          }
+          renderSidebarBottom={({ collapsed }) => (
+            <div className="flex w-full flex-col">
+              <div className={cn('shrink-0 border-b px-2 py-1.5', collapsed && 'px-1')}>
+                <button
+                  type="button"
+                  title="경보 모달 보기"
+                  onClick={() => setAlertModalOpen(true)}
+                  className={cn(
+                    'inline-flex w-full cursor-pointer items-center justify-center rounded border border-red-500/40 bg-red-500/10 text-[11px] font-medium text-red-700 hover:bg-red-500/20 dark:text-red-300',
+                    collapsed ? 'h-8 px-0.5' : 'h-7 px-2'
+                  )}
+                >
+                  {collapsed ? '경보' : '경보 모달 보기'}
+                </button>
+              </div>
+              <OdorSidebarUserAccount
+                collapsed={collapsed}
+                onOpenAlertNotif={() => goMenu('alertList')}
+              />
+            </div>
           )}
           renderContent={(menuId) => {
             const id = menuId as OdorIndexMenuId
@@ -136,25 +161,28 @@ export function OdorIndexConsole({ title, sensors, footerAddr, footerRss, querie
               default:
                 body = null
             }
+            const showQueryTime = id !== 'alertList'
             return (
               <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
-                <div className="mb-1.5 flex shrink-0 items-center justify-end gap-1.5">
-                  <p className="text-xs text-muted-foreground tabular-nums">
-                    조회 기준 시간: {formatQueryBaseTime(queriedAt)}
-                  </p>
-                  <button
-                    type="button"
-                    title="새로고침"
-                    onClick={handleRefresh}
-                    disabled={refreshing}
-                    className="inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50"
-                  >
-                    <RefreshCw
-                      className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`}
-                      aria-hidden
-                    />
-                  </button>
-                </div>
+                {showQueryTime ? (
+                  <div className="mb-1.5 flex shrink-0 items-center justify-end gap-1.5">
+                    <p className="text-xs text-muted-foreground tabular-nums">
+                      조회 기준 시간: {formatQueryBaseTime(queriedAt)}
+                    </p>
+                    <button
+                      type="button"
+                      title="새로고침"
+                      onClick={handleRefresh}
+                      disabled={refreshing}
+                      className="inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50"
+                    >
+                      <RefreshCw
+                        className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`}
+                        aria-hidden
+                      />
+                    </button>
+                  </div>
+                ) : null}
                 <div className="min-h-0 flex-1 overflow-hidden">{body}</div>
               </div>
             )

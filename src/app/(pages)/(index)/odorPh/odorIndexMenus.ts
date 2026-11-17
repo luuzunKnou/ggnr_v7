@@ -47,7 +47,7 @@ export function getOdorIndexMenuDescription(menuId: string): string {
     case 'controlMap':
       return '관제 지도로 이동해 센서·경계·경보를 확인합니다'
     case 'alertList':
-      return '악취·장애 경보를 목록으로 보고 인지(해제)합니다'
+      return '악취, 장애 경보 목록입니다'
     case 'complaintManage':
       return '악취 관련 민원을 조회·관리합니다 (목업)'
     case 'actionHistory':

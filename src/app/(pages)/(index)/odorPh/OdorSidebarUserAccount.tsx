@@ -23,6 +23,7 @@ type Props = {
 
 /**
  * 지도 좌측 사이드바 하단 «내 정보»와 동일 — 로그인 상태·패널·알림 버블
+ * 접힘(w-12): 아바타 h-8 + px-2 로 48px 안에 들어가 잘림 방지
  */
 export function OdorSidebarUserAccount({ collapsed, onOpenAlertNotif }: Props) {
   const { data: session, status } = useSession()
@@ -63,7 +64,7 @@ export function OdorSidebarUserAccount({ collapsed, onOpenAlertNotif }: Props) {
 
   return (
     <>
-      <div className={cn('relative w-full', collapsed ? 'px-1 py-1.5' : 'px-2 py-2')}>
+      <div className="relative w-full px-2 py-2">
         <div ref={myInfoAnchorRef} className="w-full">
           <button
             type="button"
@@ -72,34 +73,35 @@ export function OdorSidebarUserAccount({ collapsed, onOpenAlertNotif }: Props) {
             onClick={() => {
               window.dispatchEvent(new CustomEvent('ggnr-proto-user-account-toggle'))
             }}
-            className={cn(
-              'flex w-full cursor-pointer items-center gap-2 rounded-md text-left transition-colors hover:bg-muted/70',
-              collapsed ? 'justify-center px-0 py-1.5' : 'px-2 py-1.5'
-            )}
+            className="flex w-full cursor-pointer items-center gap-2 rounded-md text-left transition-colors hover:bg-muted/70"
           >
             <span
-              className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm"
+              className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm"
               aria-hidden
             >
-              <User className="h-4 w-4" strokeWidth={2} />
+              <User className="h-3.5 w-3.5" strokeWidth={2} />
               <span
-                className="absolute -bottom-0.5 -right-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full border border-background bg-primary text-primary-foreground"
+                className="absolute bottom-0 right-0 flex h-3 w-3 items-center justify-center rounded-full border border-background bg-primary text-primary-foreground"
                 aria-hidden
               >
-                <Ellipsis className="h-2 w-2" strokeWidth={2.5} />
+                <Ellipsis className="h-1.5 w-1.5" strokeWidth={2.5} />
               </span>
               {protoNotifUnread ? (
-                <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-red-500" />
+                <span className="absolute right-0 top-0 h-1.5 w-1.5 rounded-full bg-red-500" />
               ) : null}
             </span>
-            {!collapsed ? (
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-[12px] font-medium text-foreground">
-                  {displayName}
-                </span>
-                <span className="block text-[10px] text-muted-foreground">내 정보</span>
+            <span
+              className={cn(
+                'min-w-0 flex-1 overflow-hidden whitespace-nowrap transition-opacity duration-300 ease-in-out',
+                collapsed ? 'pointer-events-none opacity-0' : 'opacity-100'
+              )}
+              aria-hidden={collapsed}
+            >
+              <span className="block truncate text-[12px] font-medium text-foreground">
+                {displayName}
               </span>
-            ) : null}
+              <span className="block text-[10px] text-muted-foreground">내 정보</span>
+            </span>
           </button>
         </div>
         <ImportantNotifSidebarBubble anchorRef={myInfoAnchorRef} />
