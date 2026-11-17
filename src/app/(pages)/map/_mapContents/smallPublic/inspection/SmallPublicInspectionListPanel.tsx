@@ -1,153 +1,133 @@
 'use client'
 
 import { useMemo, useRef } from 'react'
-import { Plus, Search } from 'lucide-react'
+import { Search } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { LayerRowPanelButton } from '../../../_mapComponents/layerRowEdit/LayerRowPanelButton'
-import { SMALL_PUBLIC_GRADES, type SmallPublicFacType, type SmallPublicGrade } from '../smallPublicConfig'
-import type { SmallPublicFacility, SmallPublicInspection } from '../smallPublicMock'
 import {
-  SmallPublicChips,
-  SmallPublicGradeBadge,
-  SmallPublicPanelHeader,
   SmallPublicSortTh,
-  SmallPublicTypeTabs,
   smallPublicSelectedRowClass,
   smallPublicSortRows,
   useSmallPublicScrollSelectedIntoView,
   useSmallPublicSort,
 } from '../smallPublicUi'
+import type { SmallPublicInspectionReport } from './smallPublicInspectionReport'
 
-type SortKey = 'name' | 'emd' | 'date' | 'grade'
-const initialSortDir = (key: SortKey) => (key === 'date' ? 'desc' : 'asc')
+/** 보고서 목록 한 줄 — 그해 점검을 마친 대상 수 */
+export type SmallPublicReportListRow = { report: SmallPublicInspectionReport; inspected: number }
 
-export type SmallPublicGradeFilter = SmallPublicGrade | ''
-
-export type SmallPublicInspectionListRow = {
-  facility: SmallPublicFacility
-  latest: SmallPublicInspection | null
-}
+type SortKey = 'year' | 'title' | 'targets' | 'inspected'
+const initialSortDir = (key: SortKey) => (key === 'title' ? 'asc' : 'desc')
 
 type Props = {
-  type: SmallPublicFacType
-  onTypeChange: (type: SmallPublicFacType) => void
-  grade: SmallPublicGradeFilter
-  onGradeChange: (grade: SmallPublicGradeFilter) => void
   keyword: string
   onKeywordChange: (keyword: string) => void
-  rows: SmallPublicInspectionListRow[]
+  /** '' = 전체 연도 */
+  year: string
+  onYearChange: (year: string) => void
+  yearOptions: number[]
+  rows: SmallPublicReportListRow[]
   selectedId: string | null
+  /** 같은 보고서 재선택 시 닫기(토글)는 셸에서 처리 */
   onSelect: (id: string) => void
-  /** 후보지에서 점검 대상 시설 골라 넣기 */
-  onRegisterFacility: () => void
+  onAdd: () => void
   onClose: () => void
+  /** 상세와 위·아래 배치 — 헤더·푸터 생략, 높이만 채움 */
+  embedded?: boolean
 }
 
+/** 안전점검 보고서 목록 — 연도 필터·검색·표 형식 */
 export function SmallPublicInspectionListPanel({
-  type,
-  onTypeChange,
-  grade,
-  onGradeChange,
   keyword,
   onKeywordChange,
+  year,
+  onYearChange,
+  yearOptions,
   rows,
   selectedId,
   onSelect,
-  onRegisterFacility,
-  onClose,
+  embedded = false,
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null)
   useSmallPublicScrollSelectedIntoView(scrollRef, selectedId)
   const sort = useSmallPublicSort<SortKey>(initialSortDir)
   const sortedRows = useMemo(
     () =>
-      smallPublicSortRows(rows, sort.sorts, ({ facility: f, latest }, key) => {
-        if (key === 'name') return f.name
-        if (key === 'emd') return f.emd
-        if (key === 'date') return latest?.date
-        return latest ? SMALL_PUBLIC_GRADES.indexOf(latest.grade) : null
+      smallPublicSortRows(rows, sort.sorts, ({ report: r, inspected }, key) => {
+        if (key === 'year') return r.year
+        if (key === 'title') return r.title
+        if (key === 'targets') return r.rows.length
+        return inspected
       }),
     [rows, sort.sorts]
   )
-  const thisYear = String(new Date().getFullYear())
-  const inspectedThisYear = rows.filter((r) => r.latest?.date.startsWith(thisYear)).length
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-background">
-      <SmallPublicPanelHeader
-        title="안전점검"
-        onClose={onClose}
-        actions={
-          <LayerRowPanelButton onClick={onRegisterFacility}>
-            <Plus className="h-3 w-3 shrink-0" aria-hidden />
-            시설 등록
-          </LayerRowPanelButton>
-        }
-      />
-      <SmallPublicTypeTabs value={type} onChange={onTypeChange} />
-
-      <div className="shrink-0 space-y-1.5 border-b border-border px-3 py-2">
-        <SmallPublicChips
-          ariaLabel="최근 등급"
-          value={grade}
-          onChange={onGradeChange}
-          options={[
-            { value: '', label: '전체' },
-            { value: '양호', label: '양호' },
-            { value: '보통', label: '보통' },
-            { value: '불량', label: '불량' },
-          ]}
-        />
-        <div className="relative">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+    <div className="flex h-full min-h-0 flex-col bg-background text-[12px]">
+      <div className="flex shrink-0 items-center gap-1.5 border-b border-border px-3 py-1.5">
+        <select
+          className="standard-filter-select h-7 w-[6rem] max-w-none text-[11px]"
+          value={year}
+          onChange={(e) => onYearChange(e.target.value)}
+          aria-label="연도"
+        >
+          <option value="">전체 연도</option>
+          {yearOptions.map((y) => (
+            <option key={y} value={String(y)}>
+              {y}년
+            </option>
+          ))}
+        </select>
+        <div className="relative min-w-0 flex-1">
+          <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
           <input
             type="search"
             value={keyword}
             onChange={(e) => onKeywordChange(e.target.value)}
-            placeholder="시설명·리명·점검일 검색"
-            className="h-8 w-full rounded-md border border-border bg-background pl-8 pr-3 text-xs outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-ring"
+            placeholder="보고서명·작성자 검색"
+            className="h-7 w-full rounded-md border border-border bg-background pl-7 pr-2 text-[12px] outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-ring"
           />
         </div>
       </div>
 
       <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto scrollbar-thin">
-        <table className="w-full table-fixed border-collapse text-left text-xs">
+        <table className="w-full table-fixed border-collapse text-left text-[12px] leading-snug">
           <colgroup>
+            <col className="w-[52px]" />
             <col />
             <col className="w-[64px]" />
-            <col className="w-[84px]" />
-            <col className="w-[52px]" />
+            <col className="w-[80px]" />
           </colgroup>
           <thead className="sticky top-0 z-[1] bg-muted">
-            <tr className="[&>th]:whitespace-nowrap [&>th]:px-1.5 [&>th]:py-1 [&>th]:text-[11px] [&>th]:font-semibold [&>th]:text-foreground/90 [&>th]:[box-shadow:inset_0_-2px_0_0_var(--border)]">
-              <SmallPublicSortTh sort={sort} sortKey="name" label="시설명" className="pl-3" />
-              <SmallPublicSortTh sort={sort} sortKey="emd" label="읍면" />
-              <SmallPublicSortTh sort={sort} sortKey="date" label="최근 점검일" />
-              <SmallPublicSortTh sort={sort} sortKey="grade" label="등급" align="center" />
+            <tr className="[&>th]:whitespace-nowrap [&>th]:px-1.5 [&>th]:py-1.5 [&>th]:font-semibold [&>th]:text-foreground/90 [&>th]:[box-shadow:inset_0_-2px_0_0_var(--border)]">
+              <SmallPublicSortTh sort={sort} sortKey="year" label="연도" className="px-1.5 py-1.5 pl-3" />
+              <SmallPublicSortTh sort={sort} sortKey="title" label="보고서명" className="px-1.5 py-1.5" />
+              <SmallPublicSortTh sort={sort} sortKey="targets" label="대상" align="center" className="px-1.5 py-1.5" />
+              <SmallPublicSortTh sort={sort} sortKey="inspected" label="점검" align="center" className="px-1.5 py-1.5" />
             </tr>
           </thead>
           <tbody>
-            {rows.length === 0 ? (
+            {sortedRows.length === 0 ? (
               <tr>
                 <td colSpan={4} className="px-3 py-8 text-center text-muted-foreground">
-                  조건에 맞는 시설이 없습니다.
+                  보고서가 없습니다. «보고서 추가»로 만드세요.
                 </td>
               </tr>
             ) : (
-              sortedRows.map(({ facility: f, latest }) => {
-                const active = selectedId === f.id
+              sortedRows.map(({ report: r, inspected }) => {
+                const active = selectedId === r.id
                 return (
                   <tr
-                    key={f.id}
-                    data-row-id={f.id}
+                    key={r.id}
+                    data-row-id={r.id}
                     role="button"
                     tabIndex={0}
                     aria-pressed={active}
-                    onClick={() => onSelect(f.id)}
+                    title={active ? '다시 누르면 닫힙니다' : r.title}
+                    onClick={() => onSelect(r.id)}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' || e.key === ' ') {
                         e.preventDefault()
-                        onSelect(f.id)
+                        onSelect(r.id)
                       }
                     }}
                     className={cn(
@@ -155,18 +135,20 @@ export function SmallPublicInspectionListPanel({
                       active ? smallPublicSelectedRowClass : 'hover:bg-muted/50'
                     )}
                   >
+                    <td className="px-1.5 py-1.5 pl-3 tabular-nums">{r.year}</td>
                     <td
-                      className={cn('truncate py-1.5 pl-3 pr-1.5 font-medium', active ? 'text-primary' : 'text-foreground')}
-                      title={f.name}
+                      className={cn('truncate px-1.5 py-1.5', active ? 'text-primary' : 'text-foreground')}
+                      title={r.title}
                     >
-                      {f.name}
+                      {r.title}
                     </td>
-                    <td className="truncate px-1.5 py-1.5 text-[11px] text-muted-foreground">{f.emd}</td>
-                    <td className="truncate px-1.5 py-1.5 text-[11px] tabular-nums text-muted-foreground">
-                      {latest?.date ?? '—'}
-                    </td>
-                    <td className="px-1.5 py-1.5 text-center">
-                      <SmallPublicGradeBadge grade={latest?.grade} />
+                    <td className="px-1.5 py-1.5 text-center tabular-nums">{r.rows.length}</td>
+                    <td className="px-1.5 py-1.5 text-center tabular-nums">
+                      {inspected}
+                      <span className="text-muted-foreground">
+                        {' '}
+                        ({r.rows.length ? Math.round((inspected / r.rows.length) * 100) : 0}%)
+                      </span>
                     </td>
                   </tr>
                 )
@@ -175,9 +157,7 @@ export function SmallPublicInspectionListPanel({
           </tbody>
         </table>
       </div>
-      <div className="standard-list-footer">
-        총 {rows.length}건 · 올해 점검 {inspectedThisYear}건
-      </div>
+      {embedded ? null : <div className="standard-list-footer">총 {rows.length}건</div>}
     </div>
   )
 }
