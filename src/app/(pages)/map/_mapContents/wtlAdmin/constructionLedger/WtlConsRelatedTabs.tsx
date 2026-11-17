@@ -17,7 +17,7 @@ import type { WtlNetworkRow } from '../networkMap/wtlNetworkTypes'
 import { wkt5181ToRing4326 } from '../spatialAnalysis/outage/wtlOutageGeom'
 import { geom4326ToWkt5181, loadWtlConsIntersecting, type WtlConsGeom4326 } from './wtlConsLedgerApi'
 import { shortYearDate, workAmountLabel, type WtlConsWork } from './wtlConsSample'
-import type { WtlConsMapFocus } from './useWtlConsMapLayer'
+import type { WtlConsMapFocus, WtlConsRelatedFacility } from './useWtlConsMapLayer'
 
 export type ZoneMock = {
   id: string
@@ -80,6 +80,20 @@ const FACILITY_LAYER_SKIP = new Set<string>([
 const FACILITY_LAYER_KEYS = WTL_NET_LAYER_DEFS.filter(
   (d) => d.table && !FACILITY_LAYER_SKIP.has(d.key)
 ).map((d) => d.key)
+
+function facilitiesToMapItems(rows: WtlNetworkRow[]): WtlConsRelatedFacility[] {
+  const items: WtlConsRelatedFacility[] = []
+  for (const row of rows) {
+    const geom = row.geom
+    if (!geom || typeof geom !== 'object' || !('type' in geom)) continue
+    items.push({
+      id: row.id,
+      geom: geom as Record<string, unknown>,
+      projection: 'EPSG:4326',
+    })
+  }
+  return items
+}
 
 /** 구분 칸은 테이블 키가 아니라 레이어 한글명 */
 function facilityKindLabel(layerKey: string): string {
@@ -191,6 +205,8 @@ type Props = {
   zoneId: string | null
   onSelectZone: (id: string) => void
   onFocus?: (focus: WtlConsMapFocus | null) => void
+  /** 관련시설 도형 → 공사대장 전용 벡터(지하시설물 패널과 무관) */
+  onRelatedFacilities?: (items: WtlConsRelatedFacility[]) => void
   /** 선택한 공사의 본표 도형. 필지·공사대장 겹침은 이 도형 기준 */
   workGeom4326?: WtlConsGeom4326 | null
   kind?: Extract<ConsLedgerKind, 'wtl' | 'swl'>
@@ -204,6 +220,7 @@ export function WtlConsRelatedTabs({
   zoneId,
   onSelectZone,
   onFocus,
+  onRelatedFacilities,
   workGeom4326 = null,
   kind = 'wtl',
   consCode = null,
@@ -227,6 +244,14 @@ export function WtlConsRelatedTabs({
   const workWkt = useMemo(() => geom4326ToWkt5181(workGeom4326), [workGeom4326])
   /** 필지·건물은 공사 도형 기준. 없으면 선택한 공사위치로 넘긴다 */
   const parcelWkt = workWkt || zoneWkt
+
+  useEffect(() => {
+    onRelatedFacilities?.(facilitiesToMapItems(facilities))
+  }, [facilities, onRelatedFacilities])
+
+  useEffect(() => {
+    return () => onRelatedFacilities?.([])
+  }, [onRelatedFacilities])
 
   useEffect(() => {
     if (!parcelWkt) {
