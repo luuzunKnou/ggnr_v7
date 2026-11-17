@@ -45,6 +45,7 @@ import {
 } from '../parcelAnalysis/parcelAnalysis.mapStyle';
 import { buildCompareFeatures, normalizeGeoJsonGeometry } from './changeHistory.compare';
 import {
+  prefetchCompareStyleMeta,
   prefetchCompareStyles,
   resolveCompareFeatureStyle,
 } from './changeHistory.styleCache';
@@ -128,6 +129,9 @@ const OUTSIDE_MASK_STYLE = new Style({
   fill: new Fill({ color: PARCEL_ANALYSIS_OUTSIDE_MASK_FILL }),
 });
 
+/** 피처마다 new 하지 않음 — 대량 변환 시 GC·파싱 비용 감소 */
+const GEOJSON_5181_TO_3857 = new GeoJSON();
+
 function readGeom5181To3857(geom: { type: string; coordinates?: unknown }): Geometry | null {
   try {
     const type = geom.type;
@@ -141,8 +145,7 @@ function readGeom5181To3857(geom: { type: string; coordinates?: unknown }): Geom
     ) {
       return null;
     }
-    const gj = new GeoJSON();
-    const f = gj.readFeature(
+    const f = GEOJSON_5181_TO_3857.readFeature(
       {
         type: 'Feature',
         geometry: { type, coordinates: geom.coordinates },
@@ -568,13 +571,15 @@ export function ChangeHistoryLiveMap({
       setPaintLoading(true);
       const tables = [...new Set(rowsToPaint.map((r) => r.tableName).filter(Boolean))];
 
+      // 색·선 메타만 기다림 → 도형 먼저 표시. 심볼은 뒤에서 로드 후 갱신
       try {
-        await prefetchCompareStyles(tables);
+        await prefetchCompareStyleMeta(tables);
       } catch {
-        /* 스타일 실패해도 emergency 스타일로 일괄 표시 */
+        /* emergency 스타일로 표시 */
       }
       if (cancelled || gen !== paintGenRef.current) return;
 
+      const olFeatures: Feature<Geometry>[] = [];
       for (const row of rowsToPaint) {
         const geom = normalizeGeoJsonGeometry(row.geom) ?? row.geom;
         const g = readGeom5181To3857(geom);
@@ -584,10 +589,20 @@ export function ChangeHistoryLiveMap({
         f.set('compareSide', row.side);
         f.set('tableName', row.tableName);
         if (isAdminSectionTable(row.tableName)) f.set('adminOutline', true);
-        source.addFeature(f);
+        olFeatures.push(f);
       }
+      source.addFeatures(olFeatures);
       featLayerRef.current?.changed();
       if (gen === paintGenRef.current) setPaintLoading(false);
+
+      void prefetchCompareStyles(tables)
+        .then(() => {
+          if (cancelled || gen !== paintGenRef.current) return;
+          featLayerRef.current?.changed();
+        })
+        .catch(() => {
+          /* 아이콘 실패해도 원·선·면은 유지 */
+        });
     })();
 
     return () => {
