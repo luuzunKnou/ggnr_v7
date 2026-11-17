@@ -136,9 +136,9 @@ export function OdorAlertPpmChart({ ppm, grade }: Props) {
   return (
     <div className="w-full">
       <div className="mb-0.5 flex items-baseline justify-between gap-2">
-        <span className="text-[10px] text-muted-foreground">{grade}등급</span>
+        <span className="text-[12px] text-muted-foreground">{grade}등급</span>
         <span
-          className="text-[13px] font-semibold tabular-nums text-amber-700 dark:text-amber-300"
+          className="text-[14px] font-semibold tabular-nums text-amber-700 dark:text-amber-300"
           title={`현재 ${ppm.toFixed(1)} ppm`}
         >
           {ppm.toFixed(1)} ppm
@@ -147,7 +147,7 @@ export function OdorAlertPpmChart({ ppm, grade }: Props) {
       <div className="relative h-5 w-full overflow-hidden rounded-[5px]">
         <Bar data={chartData} options={chartOptions} />
       </div>
-      <div className="mt-0.5 flex justify-between px-0.5 text-[9px] text-muted-foreground">
+      <div className="mt-0.5 flex justify-between px-0.5 text-[11px] text-muted-foreground">
         {GRADES.map((g) => (
           <span key={g}>{g}</span>
         ))}
