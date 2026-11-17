@@ -1,26 +1,42 @@
 'use client'
 
-import { useMemo, useState } from 'react'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/app/shadcnComponents/ui/card'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useSession } from 'next-auth/react'
+import { ArrowDown, ArrowUp, ArrowUpDown, History, Search, X } from 'lucide-react'
 import {
   MOCK_CAUTION_ALERTS,
   MOCK_RECENT_ALERTS,
   formatAlertTime,
-  gradeDotColor,
-  sortCautionAlerts,
   type OdorAlertItem,
 } from '@/app/(pages)/(index)/odorPh/odorPhDashboardMock'
 import { getOdorIndexMenuDescription } from '@/app/(pages)/(index)/odorPh/odorIndexMenus'
+import {
+  ODOR_ALERT_GRADE_LABEL,
+  type OdorAlertGrade,
+} from '@/app/(pages)/map/_mapContents/odorAlert/odorAlertConfig'
+import {
+  formatOdorAlertTime,
+  type OdorAckHistoryRow,
+} from '@/app/(pages)/map/_mapContents/odorAlert/odorAlertMock'
+import { useOdorAlertStore } from '@/app/(pages)/map/_mapContents/odorAlert/odorAlertStore'
 import { cn } from '@/lib/utils'
 
 type ConfirmFilter = 'all' | 'confirmed' | 'unconfirmed'
 type AgencyFilter = 'all' | '가람환경기술' | '디오솔류션'
+type SortDir = 'asc' | 'desc'
+type AlertSortKey =
+  | 'sensorKorNm'
+  | 'sensorNm'
+  | 'agency'
+  | 'grade'
+  | 'occurredAt'
+  | 'ppm'
+  | 'abatement'
+  | 'confirmed'
+  | 'emdNm'
+type HistorySortKey = 'sensorLabel' | 'mode' | 'grade' | 'at' | 'reason'
+
+const PAGE_SIZE = 10
 
 const AGENCY_OPTIONS: Array<{ key: AgencyFilter; label: string }> = [
   { key: 'all', label: '전체' },
@@ -34,6 +50,29 @@ const CONFIRM_OPTIONS: Array<{ key: ConfirmFilter; label: string }> = [
   { key: 'unconfirmed', label: '미확인' },
 ]
 
+const ALERT_COLUMNS: Array<{ key: AlertSortKey; label: string; className: string }> = [
+  { key: 'sensorKorNm', label: '센서', className: 'w-[16%]' },
+  { key: 'sensorNm', label: '센서명', className: 'w-[8%]' },
+  { key: 'agency', label: '업체', className: 'w-[14%]' },
+  { key: 'emdNm', label: '읍면동', className: 'w-[10%]' },
+  { key: 'grade', label: '등급', className: 'w-[7%]' },
+  { key: 'occurredAt', label: '발생시각', className: 'w-[14%]' },
+  { key: 'ppm', label: 'ppm', className: 'w-[8%]' },
+  { key: 'abatement', label: '저감', className: 'w-[10%]' },
+  { key: 'confirmed', label: '확인', className: 'w-[9%]' },
+]
+
+const HISTORY_COLUMNS: Array<{ key: HistorySortKey; label: string; className: string }> = [
+  { key: 'sensorLabel', label: '센서', className: 'w-[22%]' },
+  { key: 'mode', label: '구분', className: 'w-[14%]' },
+  { key: 'grade', label: '등급', className: 'w-[14%]' },
+  { key: 'at', label: '처리시각', className: 'w-[22%]' },
+  { key: 'reason', label: '사유', className: 'w-[28%]' },
+]
+
+const SEARCH_INPUT_CLASS =
+  'standard-search-input focus:border-primary focus:ring-0 focus:ring-offset-0'
+
 function buildAlertPool(): OdorAlertItem[] {
   const map = new Map<string, OdorAlertItem>()
   for (const row of [...MOCK_RECENT_ALERTS, ...MOCK_CAUTION_ALERTS]) {
@@ -42,122 +81,575 @@ function buildAlertPool(): OdorAlertItem[] {
   return [...map.values()]
 }
 
-/** Index 콘솔 경보 목록 — 제목·설명(dev Card) + 확인/업체 칩 + 홈형 목록 */
+function resolveDisplayName(
+  status: string,
+  user: { id?: string | null; name?: string | null } | undefined
+): string {
+  if (status === 'loading') return ''
+  if (user?.id === 'su') return '슈퍼관리자'
+  return String(user?.name ?? user?.id ?? '').trim() || '게스트'
+}
+
+function alertSearchBlob(row: OdorAlertItem): string {
+  return [
+    row.sensorKorNm,
+    row.sensorNm,
+    row.agency,
+    row.emdNm,
+    `${row.grade}등급`,
+    formatAlertTime(row.occurredAt),
+    row.ppm.toFixed(1),
+    row.abatementRunning ? '저감가동' : '미가동',
+    row.confirmed ? '확인' : '미확인',
+  ]
+    .join(' ')
+    .toLowerCase()
+}
+
+function historySearchBlob(row: OdorAckHistoryRow): string {
+  return [
+    row.sensorLabel,
+    row.mode === 'bulk' ? '일괄' : '단건',
+    row.grade != null ? ODOR_ALERT_GRADE_LABEL[row.grade as OdorAlertGrade] : '',
+    formatOdorAlertTime(row.at),
+    row.reason,
+    row.actor,
+  ]
+    .join(' ')
+    .toLowerCase()
+}
+
+function compareAlert(a: OdorAlertItem, b: OdorAlertItem, key: AlertSortKey): number {
+  switch (key) {
+    case 'sensorKorNm':
+      return a.sensorKorNm.localeCompare(b.sensorKorNm, 'ko')
+    case 'sensorNm':
+      return a.sensorNm.localeCompare(b.sensorNm, 'ko', { numeric: true })
+    case 'agency':
+      return a.agency.localeCompare(b.agency, 'ko')
+    case 'emdNm':
+      return a.emdNm.localeCompare(b.emdNm, 'ko')
+    case 'grade':
+      return a.grade - b.grade
+    case 'occurredAt':
+      return new Date(a.occurredAt).getTime() - new Date(b.occurredAt).getTime()
+    case 'ppm':
+      return a.ppm - b.ppm
+    case 'abatement':
+      return Number(a.abatementRunning) - Number(b.abatementRunning)
+    case 'confirmed':
+      return Number(a.confirmed) - Number(b.confirmed)
+  }
+}
+
+function compareHistory(a: OdorAckHistoryRow, b: OdorAckHistoryRow, key: HistorySortKey): number {
+  switch (key) {
+    case 'sensorLabel':
+      return a.sensorLabel.localeCompare(b.sensorLabel, 'ko')
+    case 'mode':
+      return a.mode.localeCompare(b.mode)
+    case 'grade':
+      return (a.grade ?? 0) - (b.grade ?? 0)
+    case 'at':
+      return new Date(a.at).getTime() - new Date(b.at).getTime()
+    case 'reason':
+      return a.reason.localeCompare(b.reason, 'ko')
+  }
+}
+
+function pageMeta(total: number, page: number, pageSize: number) {
+  const pageCount = Math.max(1, Math.ceil(total / pageSize) || 1)
+  const safePage = Math.min(Math.max(1, page), pageCount)
+  const from = total === 0 ? 0 : (safePage - 1) * pageSize + 1
+  const to = Math.min(safePage * pageSize, total)
+  const hasNext = safePage * pageSize < total
+  return { pageCount, safePage, from, to, hasNext }
+}
+
+function NetworkStylePager({
+  total,
+  page,
+  onPageChange,
+}: {
+  total: number
+  page: number
+  onPageChange: (page: number) => void
+}) {
+  const { from, to, hasNext } = pageMeta(total, page, PAGE_SIZE)
+  return (
+    <div className="flex shrink-0 items-center justify-between gap-2 border-t border-border bg-muted/30 px-2 py-1.5">
+      <span className="text-[11px] text-muted-foreground">
+        {total === 0 ? '0건' : `${from}–${to} / ${total.toLocaleString()}건`}
+      </span>
+      <div className="flex items-center gap-1">
+        <button
+          type="button"
+          title="이전"
+          disabled={page <= 1}
+          className="cursor-pointer rounded border border-border bg-background px-2 py-0.5 text-[11px] text-muted-foreground hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-50"
+          onClick={() => onPageChange(Math.max(1, page - 1))}
+        >
+          이전
+        </button>
+        <span className="px-1.5 text-[11px] text-muted-foreground">{page}페이지</span>
+        <button
+          type="button"
+          title="다음"
+          disabled={!hasNext}
+          className="cursor-pointer rounded border border-border bg-background px-2 py-0.5 text-[11px] text-muted-foreground hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-50"
+          onClick={() => onPageChange(page + 1)}
+        >
+          다음
+        </button>
+      </div>
+    </div>
+  )
+}
+
+type PanelHeaderProps = {
+  title: string
+  description: string
+  action?: ReactNode
+}
+
+function PanelHeader({ title, description, action }: PanelHeaderProps) {
+  return (
+    <div className="flex shrink-0 items-start justify-between gap-2">
+      <div className="min-w-0">
+        <h2 className="text-xl font-semibold leading-none text-foreground">{title}</h2>
+        <p className="mt-1 text-xs text-muted-foreground">{description}</p>
+      </div>
+      {action ? <div className="shrink-0">{action}</div> : null}
+    </div>
+  )
+}
+
+type SearchFieldProps = {
+  value: string
+  onChange: (value: string) => void
+}
+
+function UnifiedSearchField({ value, onChange }: SearchFieldProps) {
+  return (
+    <div className="flex min-w-[12rem] flex-1 items-center gap-2">
+      <span className="shrink-0 text-[11px] font-medium text-muted-foreground">통합검색</span>
+      <div className="standard-search-wrap min-w-0 flex-1">
+        <Search className="standard-search-icon" aria-hidden />
+        <input
+          type="search"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="통합검색"
+          title="통합검색"
+          className={SEARCH_INPUT_CLASS}
+        />
+      </div>
+    </div>
+  )
+}
+
+/** Index 콘솔 — 경보목록 / 사용자이력 동일 구조의 형제 div (3:1) */
 export function OdorIndexAlertContent() {
+  const { data: session, status } = useSession()
+  const { history } = useOdorAlertStore()
+  const displayName = resolveDisplayName(status, session?.user)
+
+  const [historyOpen, setHistoryOpen] = useState(false)
   const [confirmFilter, setConfirmFilter] = useState<ConfirmFilter>('all')
   const [agencyFilter, setAgencyFilter] = useState<AgencyFilter>('all')
+  const [keyword, setKeyword] = useState('')
+  const [historyKeyword, setHistoryKeyword] = useState('')
+  const [listPage, setListPage] = useState(1)
+  const [historyPage, setHistoryPage] = useState(1)
+  const [alertSort, setAlertSort] = useState<{ key: AlertSortKey; dir: SortDir }>({
+    key: 'occurredAt',
+    dir: 'desc',
+  })
+  const [historySort, setHistorySort] = useState<{ key: HistorySortKey; dir: SortDir }>({
+    key: 'at',
+    dir: 'desc',
+  })
 
-  const rows = useMemo(() => {
+  const filteredAlerts = useMemo(() => {
+    const kw = keyword.trim().toLowerCase()
     let list = buildAlertPool()
     if (confirmFilter === 'confirmed') list = list.filter((r) => r.confirmed)
     if (confirmFilter === 'unconfirmed') list = list.filter((r) => !r.confirmed)
     if (agencyFilter !== 'all') list = list.filter((r) => r.agency === agencyFilter)
-    return sortCautionAlerts(list)
-  }, [confirmFilter, agencyFilter])
+    if (kw) list = list.filter((r) => alertSearchBlob(r).includes(kw))
+    const sign = alertSort.dir === 'asc' ? 1 : -1
+    return [...list].sort((a, b) => sign * compareAlert(a, b, alertSort.key))
+  }, [confirmFilter, agencyFilter, keyword, alertSort])
+
+  const myHistory = useMemo(() => {
+    if (!displayName) return []
+    const kw = historyKeyword.trim().toLowerCase()
+    let list = history.filter((h) => h.actor === displayName)
+    if (kw) list = list.filter((r) => historySearchBlob(r).includes(kw))
+    const sign = historySort.dir === 'asc' ? 1 : -1
+    return [...list].sort((a, b) => sign * compareHistory(a, b, historySort.key))
+  }, [history, displayName, historyKeyword, historySort])
+
+  const listPageCount = pageMeta(filteredAlerts.length, listPage, PAGE_SIZE).pageCount
+  const historyPageCount = pageMeta(myHistory.length, historyPage, PAGE_SIZE).pageCount
+
+  useEffect(() => {
+    setListPage(1)
+  }, [confirmFilter, agencyFilter, keyword, alertSort])
+
+  useEffect(() => {
+    setHistoryPage(1)
+  }, [historyKeyword, historySort, historyOpen])
+
+  useEffect(() => {
+    if (listPage > listPageCount) setListPage(listPageCount)
+  }, [listPage, listPageCount])
+
+  useEffect(() => {
+    if (historyPage > historyPageCount) setHistoryPage(historyPageCount)
+  }, [historyPage, historyPageCount])
+
+  const pagedAlerts = useMemo(() => {
+    const start = (listPage - 1) * PAGE_SIZE
+    return filteredAlerts.slice(start, start + PAGE_SIZE)
+  }, [filteredAlerts, listPage])
+
+  const pagedHistory = useMemo(() => {
+    const start = (historyPage - 1) * PAGE_SIZE
+    return myHistory.slice(start, start + PAGE_SIZE)
+  }, [myHistory, historyPage])
+
+  const toggleAlertSort = (key: AlertSortKey) => {
+    setAlertSort((prev) =>
+      prev.key === key ? { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' }
+    )
+  }
+
+  const toggleHistorySort = (key: HistorySortKey) => {
+    setHistorySort((prev) =>
+      prev.key === key ? { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' }
+    )
+  }
 
   return (
-    <Card className="flex h-full min-h-0 flex-1 flex-col gap-0 overflow-hidden rounded-none border-0 py-0 shadow-none">
-      <CardHeader className="shrink-0 gap-1 px-4 pb-3 pt-1 sm:px-6">
-        <CardTitle className="text-xl">경보 목록</CardTitle>
-        <CardDescription className="text-xs">
-          {getOdorIndexMenuDescription('alertList')}
-        </CardDescription>
-      </CardHeader>
+    <div
+      className={cn(
+        'grid h-full min-h-0 flex-1 overflow-hidden transition-[grid-template-columns,gap] duration-300 ease-in-out',
+        historyOpen
+          ? 'grid-cols-1 gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,1fr)]'
+          : 'grid-cols-[minmax(0,1fr)_0fr] gap-0'
+      )}
+    >
+      {/* 경보 목록 */}
+      <div className="flex min-h-0 min-w-0 flex-col gap-2 overflow-hidden">
+        <PanelHeader
+          title="경보 목록"
+          description={getOdorIndexMenuDescription('alertList')}
+          action={
+            <button
+              type="button"
+              title={historyOpen ? '사용자 이력 접기' : '사용자 이력'}
+              onClick={() => setHistoryOpen((v) => !v)}
+              className={cn(
+                'inline-flex h-7 cursor-pointer items-center gap-1 rounded border px-2 text-[11px] font-medium transition-colors',
+                historyOpen
+                  ? 'border-primary bg-primary/10 text-foreground'
+                  : 'border-border bg-background text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+              )}
+            >
+              <History className="h-3.5 w-3.5" aria-hidden />
+              사용자 이력
+            </button>
+          }
+        />
 
-      <CardContent className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden px-4 pb-0 sm:px-6">
-        <div className="flex shrink-0 flex-col gap-1.5">
-          <div className="standard-filter-chips">
-            {CONFIRM_OPTIONS.map((opt) => (
-              <button
-                key={opt.key}
-                type="button"
-                title={opt.label}
-                onClick={() => setConfirmFilter(opt.key)}
-                className={cn(
-                  'standard-filter-chip cursor-pointer',
-                  confirmFilter === opt.key && 'standard-filter-chip-active'
-                )}
-              >
-                {opt.label}
-              </button>
-            ))}
+        <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="shrink-0 text-[11px] font-medium text-muted-foreground">확인</span>
+            <div className="standard-filter-chips">
+              {CONFIRM_OPTIONS.map((opt) => (
+                <button
+                  key={opt.key}
+                  type="button"
+                  title={opt.label}
+                  onClick={() => setConfirmFilter(opt.key)}
+                  className={cn(
+                    'standard-filter-chip cursor-pointer',
+                    confirmFilter === opt.key && 'standard-filter-chip-active'
+                  )}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
           </div>
-          <div className="standard-filter-chips">
-            {AGENCY_OPTIONS.map((opt) => (
-              <button
-                key={opt.key}
-                type="button"
-                title={opt.label}
-                onClick={() => setAgencyFilter(opt.key)}
-                className={cn(
-                  'standard-filter-chip cursor-pointer',
-                  agencyFilter === opt.key && 'standard-filter-chip-active'
-                )}
-              >
-                {opt.label}
-              </button>
-            ))}
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="shrink-0 text-[11px] font-medium text-muted-foreground">업체</span>
+            <div className="standard-filter-chips">
+              {AGENCY_OPTIONS.map((opt) => (
+                <button
+                  key={opt.key}
+                  type="button"
+                  title={opt.label}
+                  onClick={() => setAgencyFilter(opt.key)}
+                  className={cn(
+                    'standard-filter-chip cursor-pointer',
+                    agencyFilter === opt.key && 'standard-filter-chip-active'
+                  )}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
           </div>
+          <UnifiedSearchField value={keyword} onChange={setKeyword} />
         </div>
 
-        <ul className="min-h-0 flex-1 space-y-1.5 overflow-y-auto pr-1">
-          {rows.length === 0 ? (
-            <li className="py-10 text-center text-xs text-muted-foreground">
-              조건에 맞는 경보가 없습니다.
-            </li>
-          ) : (
-            rows.map((row) => (
-              <li
-                key={row.id}
-                className="flex cursor-pointer items-center gap-2 rounded-md border border-border/60 bg-muted/20 px-2.5 py-2 transition-colors hover:bg-muted/50"
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded border border-border">
+          <div className="standard-list-scroll">
+            <table className="standard-list-table">
+              <thead className="standard-table-thead">
+                <tr>
+                  {ALERT_COLUMNS.map((col) => {
+                    const active = alertSort.key === col.key
+                    const Icon = !active
+                      ? ArrowUpDown
+                      : alertSort.dir === 'asc'
+                        ? ArrowUp
+                        : ArrowDown
+                    return (
+                      <th
+                        key={col.key}
+                        className={cn(
+                          'standard-table-th standard-table-th-left border-r border-border last:border-r-0',
+                          col.className
+                        )}
+                      >
+                        <button
+                          type="button"
+                          title={`${col.label} 정렬`}
+                          onClick={() => toggleAlertSort(col.key)}
+                          className={cn(
+                            'standard-sort-button standard-sort-button-left cursor-pointer',
+                            active && 'standard-sort-button-active'
+                          )}
+                        >
+                          <span className="truncate">{col.label}</span>
+                          <Icon className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
+                        </button>
+                      </th>
+                    )
+                  })}
+                </tr>
+              </thead>
+              <tbody>
+                {pagedAlerts.length === 0 ? (
+                  <tr>
+                    <td colSpan={ALERT_COLUMNS.length} className="standard-table-empty">
+                      조건에 맞는 경보가 없습니다.
+                    </td>
+                  </tr>
+                ) : (
+                  pagedAlerts.map((row) => (
+                    <tr key={row.id} className="standard-list-row">
+                      <td
+                        className="standard-table-td-compact border-r border-border/60"
+                        title={row.sensorKorNm}
+                      >
+                        {row.sensorKorNm}
+                      </td>
+                      <td
+                        className="standard-table-td-compact border-r border-border/60"
+                        title={row.sensorNm}
+                      >
+                        {row.sensorNm}
+                      </td>
+                      <td
+                        className="standard-table-td-compact border-r border-border/60"
+                        title={row.agency}
+                      >
+                        {row.agency}
+                      </td>
+                      <td
+                        className="standard-table-td-compact border-r border-border/60"
+                        title={row.emdNm}
+                      >
+                        {row.emdNm}
+                      </td>
+                      <td className="standard-table-td-compact border-r border-border/60 tabular-nums">
+                        {row.grade}등급
+                      </td>
+                      <td
+                        className="standard-table-td-compact border-r border-border/60 tabular-nums"
+                        title={formatAlertTime(row.occurredAt)}
+                      >
+                        {formatAlertTime(row.occurredAt)}
+                      </td>
+                      <td className="standard-table-td-compact border-r border-border/60 tabular-nums">
+                        <span className="font-semibold text-amber-700 dark:text-amber-300">
+                          {row.ppm.toFixed(1)}
+                        </span>
+                      </td>
+                      <td className="standard-table-td-compact border-r border-border/60">
+                        <span
+                          className={cn(
+                            row.abatementRunning
+                              ? 'text-blue-600 dark:text-blue-400'
+                              : 'text-muted-foreground'
+                          )}
+                        >
+                          {row.abatementRunning ? '저감가동' : '미가동'}
+                        </span>
+                      </td>
+                      <td className="standard-table-td-compact">
+                        <span
+                          className={cn(
+                            'standard-status-badge',
+                            row.confirmed
+                              ? 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300'
+                              : 'bg-amber-500/20 text-amber-700 dark:text-amber-300'
+                          )}
+                        >
+                          {row.confirmed ? '확인' : '미확인'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+          <NetworkStylePager
+            total={filteredAlerts.length}
+            page={listPage}
+            onPageChange={setListPage}
+          />
+        </div>
+      </div>
+
+      {/* 사용자 이력 — 동일 HTML 구조 · 접기/펼치기 애니메이션 */}
+      <div
+        className={cn(
+          'flex min-h-0 min-w-0 flex-col gap-2 overflow-hidden transition-opacity duration-300 ease-in-out',
+          historyOpen ? 'opacity-100' : 'pointer-events-none opacity-0'
+        )}
+        aria-hidden={!historyOpen}
+        inert={!historyOpen ? true : undefined}
+      >
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-hidden">
+          <PanelHeader
+            title="사용자 이력"
+            description="본인이 해제(인지)한 이력만 조회합니다"
+            action={
+              <button
+                type="button"
+                title="닫기"
+                onClick={() => setHistoryOpen(false)}
+                className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded border border-border text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
               >
-                <span
-                  className="h-2 w-2 shrink-0 rounded-full"
-                  style={{ backgroundColor: gradeDotColor(row.grade) }}
-                  title={`${row.grade}등급`}
-                  aria-label={`${row.grade}등급`}
-                />
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-medium text-foreground">
-                    {row.sensorKorNm}
-                  </div>
-                  <div className="truncate text-[11px] text-muted-foreground">
-                    {row.sensorNm} · {formatAlertTime(row.occurredAt)} ·{' '}
-                    <span
-                      className={cn(
-                        row.abatementRunning
-                          ? 'text-blue-600 dark:text-blue-400'
-                          : 'text-muted-foreground'
-                      )}
-                    >
-                      {row.abatementRunning ? '저감가동' : '미가동'}
-                    </span>
-                    <span className="text-muted-foreground"> · {row.agency}</span>
-                  </div>
-                </div>
-                <div className="flex shrink-0 items-center gap-1.5">
-                  <span className="text-[12px] font-semibold tabular-nums text-foreground">
-                    {row.ppm.toFixed(1)}
-                    <span className="ml-0.5 text-[10px] font-normal text-muted-foreground">
-                      ppm
-                    </span>
-                  </span>
-                  <span
-                    className={cn(
-                      'rounded px-1.5 py-0.5 text-[10px] font-semibold',
-                      row.confirmed
-                        ? 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300'
-                        : 'bg-amber-500/20 text-amber-700 dark:text-amber-300'
-                    )}
-                  >
-                    {row.confirmed ? '확인' : '미확인'}
-                  </span>
-                </div>
-              </li>
-            ))
-          )}
-        </ul>
-      </CardContent>
-    </Card>
+                <X className="h-3.5 w-3.5" aria-hidden />
+              </button>
+            }
+          />
+
+          <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2">
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="shrink-0 text-[11px] font-medium text-muted-foreground">처리자</span>
+              <div className="standard-filter-chips">
+                <span className="standard-filter-chip standard-filter-chip-active">
+                  {displayName || '…'}
+                </span>
+              </div>
+            </div>
+            <UnifiedSearchField value={historyKeyword} onChange={setHistoryKeyword} />
+          </div>
+
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded border border-border">
+            <div className="standard-list-scroll">
+              <table className="standard-list-table">
+                <thead className="standard-table-thead">
+                  <tr>
+                    {HISTORY_COLUMNS.map((col) => {
+                      const active = historySort.key === col.key
+                      const Icon = !active
+                        ? ArrowUpDown
+                        : historySort.dir === 'asc'
+                          ? ArrowUp
+                          : ArrowDown
+                      return (
+                        <th
+                          key={col.key}
+                          className={cn(
+                            'standard-table-th standard-table-th-left border-r border-border last:border-r-0',
+                            col.className
+                          )}
+                        >
+                          <button
+                            type="button"
+                            title={`${col.label} 정렬`}
+                            onClick={() => toggleHistorySort(col.key)}
+                            className={cn(
+                              'standard-sort-button standard-sort-button-left cursor-pointer',
+                              active && 'standard-sort-button-active'
+                            )}
+                          >
+                            <span className="truncate">{col.label}</span>
+                            <Icon className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
+                          </button>
+                        </th>
+                      )
+                    })}
+                  </tr>
+                </thead>
+                <tbody>
+                  {pagedHistory.length === 0 ? (
+                    <tr>
+                      <td colSpan={HISTORY_COLUMNS.length} className="standard-table-empty">
+                        {displayName
+                          ? '본인 해제(인지) 이력이 없습니다.'
+                          : '로그인 정보를 확인하는 중…'}
+                      </td>
+                    </tr>
+                  ) : (
+                    pagedHistory.map((row) => (
+                      <tr key={row.id} className="standard-list-row">
+                        <td
+                          className="standard-table-td-compact border-r border-border/60"
+                          title={row.sensorLabel}
+                        >
+                          {row.sensorLabel}
+                        </td>
+                        <td className="standard-table-td-compact border-r border-border/60">
+                          {row.mode === 'bulk' ? '일괄' : '단건'}
+                        </td>
+                        <td className="standard-table-td-compact border-r border-border/60">
+                          {row.grade != null
+                            ? ODOR_ALERT_GRADE_LABEL[row.grade as OdorAlertGrade]
+                            : '—'}
+                        </td>
+                        <td
+                          className="standard-table-td-compact border-r border-border/60 tabular-nums"
+                          title={formatOdorAlertTime(row.at)}
+                        >
+                          {formatOdorAlertTime(row.at)}
+                        </td>
+                        <td className="standard-table-td-compact" title={row.reason}>
+                          {row.reason}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+            <NetworkStylePager
+              total={myHistory.length}
+              page={historyPage}
+              onPageChange={setHistoryPage}
+            />
+          </div>
+        </div>
+      </div>
+    </div>
   )
 }

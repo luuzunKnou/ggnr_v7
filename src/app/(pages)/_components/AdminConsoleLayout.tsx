@@ -669,7 +669,7 @@ export function AdminConsoleLayout({
         <main
           className={cn(
             "flex h-full min-h-0 flex-1 flex-col overflow-hidden",
-            contentChrome === "plain" ? "p-2" : "p-4"
+            contentChrome === "plain" ? "px-4 py-8" : "p-4"
           )}
         >
           {contentChrome === "plain" ? (
