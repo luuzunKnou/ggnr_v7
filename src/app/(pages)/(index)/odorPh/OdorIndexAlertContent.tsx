@@ -8,8 +8,10 @@ import {
   MOCK_RECENT_ALERTS,
   formatAlertTime,
   type OdorAlertItem,
+  type OdorGrade,
 } from '@/app/(pages)/(index)/odorPh/odorPhDashboardMock'
 import { OdorAlertDetailPanel } from '@/app/(pages)/(index)/odorPh/OdorAlertDetailPanel'
+import type { OdorAlertModalFocus } from '@/app/(pages)/(index)/odorPh/OdorIndexAlertModal'
 import { getOdorIndexMenuDescription } from '@/app/(pages)/(index)/odorPh/odorIndexMenus'
 import {
   ODOR_ALERT_GRADE_LABEL,
@@ -104,6 +106,51 @@ function buildAlertPool(): OdorAlertItem[] {
     map.set(row.id, row)
   }
   return [...map.values()]
+}
+
+/** 모달 경보 → 목록 행 매칭 (센서명·업체·읍면동), 없으면 합성 */
+export function resolveAlertFromModalFocus(focus: OdorAlertModalFocus): OdorAlertItem {
+  const pool = buildAlertPool()
+  const label = focus.sensorLabel.trim()
+  const hit =
+    pool.find(
+      (a) =>
+        a.sensorKorNm === label &&
+        a.agency === focus.agency &&
+        a.emdNm === focus.emdNm
+    ) ??
+    pool.find((a) => a.sensorKorNm === label && a.agency === focus.agency) ??
+    pool.find((a) => a.sensorKorNm === label) ??
+    pool.find((a) => label.includes(a.sensorKorNm) || a.sensorKorNm.includes(label))
+
+  if (hit) {
+    return {
+      ...hit,
+      confirmed: focus.acked,
+      abatementRunning: focus.scrubberAutoOn ?? hit.abatementRunning,
+      occurredAt: focus.occurredAt || hit.occurredAt,
+      grade: (focus.grade ?? hit.grade) as OdorGrade,
+    }
+  }
+
+  const grade = (focus.grade ?? 3) as OdorGrade
+  return {
+    id: `modal-${focus.storeAlertId}`,
+    sensorKorNm: focus.sensorLabel,
+    sensorNm: '—',
+    agency: focus.agency,
+    grade,
+    occurredAt: focus.occurredAt,
+    confirmed: focus.acked,
+    ppm: grade <= 2 ? 1.5 : grade === 3 ? 3.5 : grade === 4 ? 6.5 : 9.5,
+    abatementRunning: focus.scrubberAutoOn ?? false,
+    emdNm: focus.emdNm,
+  }
+}
+
+export type AlertDetailOpenSignal = {
+  focus: OdorAlertModalFocus
+  nonce: number
 }
 
 function resolveDisplayName(
@@ -303,8 +350,13 @@ function DateRangeField({ from, to, onFromChange, onToChange }: DateRangeFieldPr
   )
 }
 
+type AlertContentProps = {
+  /** 모달 «경보 목록 이동» 시 상세까지 열기 */
+  openDetailSignal?: AlertDetailOpenSignal | null
+}
+
 /** Index 콘솔 — 경보목록 / 우측(이력·상세) 형제 div (3:2) */
-export function OdorIndexAlertContent() {
+export function OdorIndexAlertContent({ openDetailSignal = null }: AlertContentProps) {
   const { data: session, status } = useSession()
   const { history } = useOdorAlertStore()
   const displayName = resolveDisplayName(status, session?.user)
@@ -340,6 +392,11 @@ export function OdorIndexAlertContent() {
   }
 
   const openDetail = (row: OdorAlertItem) => {
+    if (rightPanel === 'detail' && selectedAlert?.id === row.id) {
+      setSelectedAlert(null)
+      setRightPanel('closed')
+      return
+    }
     setSelectedAlert(row)
     setRightPanel('detail')
   }
@@ -348,6 +405,11 @@ export function OdorIndexAlertContent() {
     setSelectedAlert(null)
     setRightPanel('closed')
   }
+
+  useEffect(() => {
+    if (!openDetailSignal) return
+    openDetail(resolveAlertFromModalFocus(openDetailSignal.focus))
+  }, [openDetailSignal])
 
   const filteredAlerts = useMemo(() => {
     const kw = keyword.trim().toLowerCase()

@@ -15,10 +15,22 @@ import {
 } from '@/app/(pages)/map/_mapContents/odorAlert/odorAlertStore'
 import { cn } from '@/lib/utils'
 
+/** 목록·상세 연동용 — 모달에서 보고 있던 경보 */
+export type OdorAlertModalFocus = {
+  storeAlertId: string
+  sensorLabel: string
+  agency: string
+  emdNm: string
+  occurredAt: string
+  grade: OdorAlertGrade | null
+  acked: boolean
+  scrubberAutoOn: boolean | null
+}
+
 type Props = {
   open: boolean
   onClose: () => void
-  onGoAlertList: () => void
+  onGoAlertList: (focus: OdorAlertModalFocus | null) => void
 }
 
 /** Index 콘솔 — 악취 경보 플로팅 모달 (aside 포함 영역 우측 하단) */
@@ -38,6 +50,20 @@ export function OdorIndexAlertModal({ open, onClose, onGoAlertList }: Props) {
       ? '슈퍼관리자'
       : String(session?.user?.name ?? session?.user?.id ?? '').trim() || '게스트'
 
+  const toFocus = (): OdorAlertModalFocus | null => {
+    if (!focus) return null
+    return {
+      storeAlertId: focus.id,
+      sensorLabel: focus.sensorLabel,
+      agency: focus.agency,
+      emdNm: focus.emdNm,
+      occurredAt: focus.occurredAt,
+      grade: focus.grade,
+      acked: focus.acked,
+      scrubberAutoOn: focus.scrubberAutoOn,
+    }
+  }
+
   const handleAck = () => {
     if (focus && !focus.acked) {
       acknowledgeOdorAlerts({
@@ -51,7 +77,7 @@ export function OdorIndexAlertModal({ open, onClose, onGoAlertList }: Props) {
   }
 
   const handleGoList = () => {
-    onGoAlertList()
+    onGoAlertList(toFocus())
     onClose()
   }
 
@@ -102,7 +128,15 @@ export function OdorIndexAlertModal({ open, onClose, onGoAlertList }: Props) {
           )}
         </div>
 
-        <div className="flex items-center gap-1.5 border-t border-border bg-muted/20 px-2 py-2">
+        <div className="flex flex-wrap items-center gap-1.5 border-t border-border bg-muted/20 px-2 py-2">
+          <button
+            type="button"
+            title="나중에 보기"
+            onClick={onClose}
+            className="inline-flex h-7 flex-1 cursor-pointer items-center justify-center rounded border border-border bg-background px-2 text-[11px] font-medium text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+          >
+            나중에 보기
+          </button>
           <button
             type="button"
             title="경보 목록 이동"

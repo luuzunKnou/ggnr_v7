@@ -6,7 +6,10 @@ import { RefreshCw } from 'lucide-react'
 import { AdminConsoleLayout } from '@/app/(pages)/_components/AdminConsoleLayout'
 import type { OdorSensorListItem } from '@/service/odorSensorService'
 import { IndexPageOdorPh } from '@/app/(pages)/(index)/odorPh/IndexPageOdorPh'
-import { OdorIndexAlertContent } from '@/app/(pages)/(index)/odorPh/OdorIndexAlertContent'
+import {
+  OdorIndexAlertContent,
+  type AlertDetailOpenSignal,
+} from '@/app/(pages)/(index)/odorPh/OdorIndexAlertContent'
 import { OdorIndexControlMapContent } from '@/app/(pages)/(index)/odorPh/OdorIndexControlMapContent'
 import { OdorIndexPlaceholderPanel } from '@/app/(pages)/(index)/odorPh/OdorIndexPlaceholderPanel'
 import {
@@ -17,7 +20,10 @@ import {
   type OdorIndexMenuId,
 } from '@/app/(pages)/(index)/odorPh/odorIndexMenus'
 import { DevModeFooterTrigger } from '@/app/(pages)/(index)/dev-mode-footer-trigger'
-import { OdorIndexAlertModal } from '@/app/(pages)/(index)/odorPh/OdorIndexAlertModal'
+import {
+  OdorIndexAlertModal,
+  type OdorAlertModalFocus,
+} from '@/app/(pages)/(index)/odorPh/OdorIndexAlertModal'
 import { OdorSidebarUserAccount } from '@/app/(pages)/(index)/odorPh/OdorSidebarUserAccount'
 import { seedOdorIndexAlertNotifs } from '@/app/(pages)/(index)/odorPh/odorIndexAlertNotifSeed'
 import { cn } from '@/lib/utils'
@@ -53,6 +59,7 @@ export function OdorIndexConsole({ title, sensors, footerAddr, footerRss, querie
   )
   const [refreshing, setRefreshing] = useState(false)
   const [alertModalOpen, setAlertModalOpen] = useState(false)
+  const [alertDetailSignal, setAlertDetailSignal] = useState<AlertDetailOpenSignal | null>(null)
 
   useEffect(() => {
     seedOdorIndexAlertNotifs()
@@ -60,6 +67,13 @@ export function OdorIndexConsole({ title, sensors, footerAddr, footerRss, querie
 
   const goMenu = (menuId: OdorIndexMenuId) => {
     setSelectMenuSignal((prev) => ({ menuId, nonce: (prev?.nonce ?? 0) + 1 }))
+  }
+
+  const goAlertListWithDetail = (focus: OdorAlertModalFocus | null) => {
+    goMenu('alertList')
+    if (focus) {
+      setAlertDetailSignal((prev) => ({ focus, nonce: (prev?.nonce ?? 0) + 1 }))
+    }
   }
 
   const handleRefresh = () => {
@@ -89,7 +103,7 @@ export function OdorIndexConsole({ title, sensors, footerAddr, footerRss, querie
             <OdorIndexAlertModal
               open={alertModalOpen}
               onClose={() => setAlertModalOpen(false)}
-              onGoAlertList={() => goMenu('alertList')}
+              onGoAlertList={goAlertListWithDetail}
             />
           }
           renderSidebarBottom={({ collapsed }) => (
@@ -124,7 +138,7 @@ export function OdorIndexConsole({ title, sensors, footerAddr, footerRss, querie
                 body = <OdorIndexControlMapContent />
                 break
               case 'alertList':
-                body = <OdorIndexAlertContent />
+                body = <OdorIndexAlertContent openDetailSignal={alertDetailSignal} />
                 break
               case 'complaintManage':
                 body = (

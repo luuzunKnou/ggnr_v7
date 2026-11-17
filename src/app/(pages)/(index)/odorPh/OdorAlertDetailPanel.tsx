@@ -2,10 +2,11 @@
 
 import dynamic from 'next/dynamic'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { ArrowDown, ArrowUp, ArrowUpDown, Search } from 'lucide-react'
+import { ArrowDown, ArrowUp, ArrowUpDown, Download, Search } from 'lucide-react'
 import {
   buildOdorAlertDetailMock,
   type MaintenanceRow,
+  type TrendPoint,
   type TrendRange,
 } from '@/app/(pages)/(index)/odorPh/odorAlertDetailMock'
 import type { OdorAlertItem } from '@/app/(pages)/(index)/odorPh/odorPhDashboardMock'
@@ -30,6 +31,54 @@ const TREND_TABS: Array<{ key: TrendRange; label: string }> = [
   { key: 'week', label: '주간' },
   { key: 'month', label: '월간' },
 ]
+
+const TREND_RANGE_FILE: Record<TrendRange, string> = {
+  '24h': '24h',
+  week: 'week',
+  month: 'month',
+}
+
+function escapeCsvCell(v: string): string {
+  if (/[",\n\r]/.test(v)) return `"${v.replace(/"/g, '""')}"`
+  return v
+}
+
+/** 경향 그래프 포인트 → CSV 다운로드 (UTF-8 BOM) */
+function downloadTrendCsv(opts: {
+  sensorKorNm: string
+  sensorNm: string
+  agency: string
+  range: TrendRange
+  thresholdPpm: number
+  points: TrendPoint[]
+}) {
+  const rangeLabel = TREND_TABS.find((t) => t.key === opts.range)?.label ?? opts.range
+  const lines = [
+    `# 센서,${escapeCsvCell(opts.sensorKorNm)}`,
+    `# 센서명,${escapeCsvCell(opts.sensorNm)}`,
+    `# 업체,${escapeCsvCell(opts.agency)}`,
+    `# 기간,${escapeCsvCell(rangeLabel)}`,
+    `# 자동가동기준ppm,${opts.thresholdPpm.toFixed(1)}`,
+    '시각,ppm,저감가동',
+    ...opts.points.map(
+      (p) =>
+        `${escapeCsvCell(p.label)},${p.ppm.toFixed(1)},${p.running ? '가동' : '정지'}`
+    ),
+  ]
+  const blob = new Blob(['\uFEFF' + lines.join('\r\n')], {
+    type: 'text/csv;charset=utf-8',
+  })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  const safeName = opts.sensorKorNm.replace(/[\\/:*?"<>|]/g, '_').slice(0, 40)
+  a.href = url
+  a.download = `악취경향_${safeName}_${TREND_RANGE_FILE[opts.range]}.csv`
+  a.rel = 'noopener'
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  URL.revokeObjectURL(url)
+}
 
 const MAINT_PAGE_SIZE = 5
 
@@ -74,7 +123,7 @@ function Section({
       )}
     >
       <div className="mb-1 flex shrink-0 items-center justify-between gap-1">
-        <h3 className="text-[11px] font-semibold text-foreground">{title}</h3>
+        <h3 className="text-[13px] font-semibold text-foreground">{title}</h3>
         {action}
       </div>
       <div className={cn('min-h-0', bodyClassName)}>{children}</div>
@@ -84,7 +133,7 @@ function Section({
 
 function TrendLegend({ running }: { running: boolean }) {
   return (
-    <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[9px] text-muted-foreground">
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
       <span className="inline-flex items-center gap-1">
         <span className="h-2 w-3 rounded-sm bg-emerald-500/30" aria-hidden />
         정상
@@ -117,7 +166,7 @@ function TrendLegend({ running }: { running: boolean }) {
 
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center justify-between gap-2 text-[10px] leading-tight">
+    <div className="flex items-center justify-between gap-2 text-[12px] leading-snug">
       <span className="shrink-0 text-muted-foreground">{label}</span>
       <span className="min-w-0 truncate font-medium text-foreground" title={value}>
         {value}
@@ -232,7 +281,7 @@ export function OdorAlertDetailPanel({ alert }: Props) {
 
         <Section title="측정 기기">
           <div className="space-y-1">
-            <div className="flex items-center justify-between gap-2 border-b border-border/50 pb-1 text-[10px]">
+            <div className="flex items-center justify-between gap-2 border-b border-border/50 pb-1 text-[12px]">
               <div className="flex min-w-0 items-center gap-1.5">
                 <span
                   className={cn('h-1.5 w-1.5 shrink-0 rounded-full', commDot)}
@@ -258,23 +307,43 @@ export function OdorAlertDetailPanel({ alert }: Props) {
           title="경향"
           bodyClassName="flex flex-col gap-1"
           action={
-            <div className="flex gap-0.5">
-              {TREND_TABS.map((tab) => (
-                <button
-                  key={tab.key}
-                  type="button"
-                  title={tab.label}
-                  onClick={() => setTrendRange(tab.key)}
-                  className={cn(
-                    'inline-flex h-5 cursor-pointer items-center rounded border px-1 text-[9px] font-medium transition-colors',
-                    trendRange === tab.key
-                      ? 'border-primary bg-primary/10 text-foreground'
-                      : 'border-border bg-background text-muted-foreground hover:bg-muted/50 hover:text-foreground'
-                  )}
-                >
-                  {tab.label}
-                </button>
-              ))}
+            <div className="flex items-center gap-1">
+              <div className="flex gap-0.5">
+                {TREND_TABS.map((tab) => (
+                  <button
+                    key={tab.key}
+                    type="button"
+                    title={tab.label}
+                    onClick={() => setTrendRange(tab.key)}
+                    className={cn(
+                      'inline-flex h-7 cursor-pointer items-center rounded border px-1.5 text-[11px] font-medium transition-colors',
+                      trendRange === tab.key
+                        ? 'border-primary bg-primary/10 text-foreground'
+                        : 'border-border bg-background text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+                    )}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+              <button
+                type="button"
+                title="CSV 내보내기 — 그래프 데이터를 파일로 저장합니다"
+                onClick={() =>
+                  downloadTrendCsv({
+                    sensorKorNm: detail.alert.sensorKorNm,
+                    sensorNm: detail.alert.sensorNm,
+                    agency: detail.alert.agency,
+                    range: trendRange,
+                    thresholdPpm: detail.abatement.thresholdPpm,
+                    points: detail.trends[trendRange],
+                  })
+                }
+                className="inline-flex h-7 cursor-pointer items-center gap-0.5 rounded border border-border bg-background px-1.5 text-[11px] font-medium text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+              >
+                <Download className="h-3 w-3 shrink-0" aria-hidden />
+                CSV
+              </button>
             </div>
           }
         >
