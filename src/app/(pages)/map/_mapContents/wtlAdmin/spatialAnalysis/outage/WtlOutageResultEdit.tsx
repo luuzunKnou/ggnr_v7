@@ -7,6 +7,7 @@ import { call } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import '../../../../_mapComponents/config/projections'
 import { useMapContext } from '../../../../_mapComponents/MapContext'
+import { mapToolbarTopPx } from '../../../../_mapComponents/mapTopHintLayout'
 import { useMapToolbarDrag } from '../useMapToolbarDrag'
 import { outagePolygonsOf, type WtlOutageResult } from './wtlOutageSample'
 import type { OutageEditMode, ZoneBody } from './wtlOutageEditShared'
@@ -294,7 +295,7 @@ export function WtlOutageResultEdit({
   const host = map?.getViewport()
   // 패널(메뉴+목록) 오른쪽 끝 — 도구모음이 패널 뒤로 숨지 않게
   const dragMinX = host ? Math.max(0, mapLeftPx - host.getBoundingClientRect().left) : 0
-  const { handleRef: dragHandleRef, barStyle } = useMapToolbarDrag(
+  const { handleRef: dragHandleRef, barStyle, moved } = useMapToolbarDrag(
     host,
     barRef,
     Boolean(active && result && host),
@@ -304,10 +305,11 @@ export function WtlOutageResultEdit({
   const hostLeft = host.getBoundingClientRect().left
   const menuRight = Math.max(0, mapLeftPx - hostLeft)
   const center = menuRight + Math.max(0, host.clientWidth - menuRight) / 2
+  const toolbarTopPx = mapToolbarTopPx(Boolean(mapContext?.cadastralZoomHintVisible))
 
   const editHint = mode === 'draw' || mode === 'erase' || mode === 'building'
   const pillShell =
-    'pointer-events-auto absolute top-20 z-30 flex -translate-x-1/2 flex-col overflow-hidden rounded-full border border-border bg-background/95 text-foreground shadow-lg backdrop-blur'
+    'pointer-events-auto absolute z-30 flex -translate-x-1/2 flex-col overflow-hidden rounded-full border border-border bg-background/95 text-foreground shadow-lg backdrop-blur'
 
   const toggleBtn = (id: 'draw' | 'erase' | 'building', label: string, Icon: LucideIcon) => (
     <button
@@ -351,7 +353,14 @@ export function WtlOutageResultEdit({
           : null
 
   return createPortal(
-    <div ref={barRef} className={pillShell} style={barStyle(center)}>
+    <div
+      ref={barRef}
+      className={pillShell}
+      style={{
+        ...barStyle(center),
+        ...(moved ? {} : { top: toolbarTopPx }),
+      }}
+    >
       {/* 위쪽 손잡이 띠 — 폭 전체를 잡고 끌어 이동, 더블클릭하면 원위치 */}
       <span
         ref={dragHandleRef}

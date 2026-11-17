@@ -2,10 +2,19 @@
 
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { ZoomIn } from 'lucide-react'
 import { unByKey } from 'ol/Observable'
 import { useMapContext } from '../../../../_mapComponents/MapContext'
+import { zoomFromScaleMeters } from '../../../../_mapComponents/hooks/mapScale'
+import { mapTopHintPx } from '../../../../_mapComponents/mapTopHintLayout'
 import { useSearchBarOffset } from '../../../../searchBarOffsetContext'
-import { isOutageOverlayScaleVisible } from './useWtlOutageMapLayer'
+import {
+  isOutageOverlayScaleVisible,
+  OUTAGE_OVERLAY_MAX_SCALE_M,
+} from './useWtlOutageMapLayer'
+
+/** 경계에서 깜빡이지 않게 240m보다 살짝 확대 */
+const OVERLAY_ZOOM_SCALE_MARGIN = 0.98
 
 type Props = {
   active: boolean
@@ -38,6 +47,7 @@ export function WtlOutageZoomHint({
   const [scaleOk, setScaleOk] = useState(false)
   const [centerX, setCenterX] = useState(0)
   const [mounted, setMounted] = useState(false)
+  const hintTopPx = mapTopHintPx(Boolean(mapContext?.cadastralZoomHintVisible))
 
   useEffect(() => {
     setMounted(true)
@@ -70,6 +80,21 @@ export function WtlOutageZoomHint({
           ? lockMessage
           : null
   const wrap = Boolean(status && scaleOk && text === status)
+  /** «보이는 축척까지…» 안내일 때만 돋보기 — 잠금·상태 문구에는 없음 */
+  const showZoomAction = Boolean(text && !scaleOk)
+
+  const zoomToOverlayScale = () => {
+    const map = mapContext?.mapInstanceRef?.current
+    if (!map || scaleOk) return
+    const view = map.getView()
+    const targetZoom = zoomFromScaleMeters(
+      OUTAGE_OVERLAY_MAX_SCALE_M * OVERLAY_ZOOM_SCALE_MARGIN
+    )
+    if (!Number.isFinite(targetZoom)) return
+    const current = view.getZoom()
+    if (current != null && current >= targetZoom) return
+    view.animate({ zoom: targetZoom, duration: 400 })
+  }
 
   useEffect(() => {
     if (!text) return
@@ -89,16 +114,27 @@ export function WtlOutageZoomHint({
   return createPortal(
     <div
       className="pointer-events-none fixed z-[45]"
-      style={{ top: 16, left: centerX, transform: 'translateX(-50%)' }}
+      style={{ top: hintTopPx, left: centerX, transform: 'translateX(-50%)' }}
     >
       <div
         className={
           wrap
-            ? 'max-w-[min(560px,calc(100vw-2rem))] text-center whitespace-normal rounded-[5px] border border-amber-200 bg-amber-50/95 px-3 py-1.5 text-[12px] font-medium leading-snug text-amber-900 shadow-md'
-            : 'max-w-[min(420px,calc(100vw-2rem))] whitespace-nowrap rounded-[5px] border border-amber-200 bg-amber-50/95 px-3 py-1.5 text-[12px] font-medium text-amber-900 shadow-md'
+            ? 'flex max-w-[min(560px,calc(100vw-2rem))] items-center gap-1 rounded-[5px] border border-amber-200 bg-amber-50/95 px-3 py-1.5 text-[12px] font-medium leading-snug text-amber-900 shadow-md'
+            : 'flex max-w-[min(420px,calc(100vw-2rem))] items-center gap-1 whitespace-nowrap rounded-[5px] border border-amber-200 bg-amber-50/95 px-3 py-1.5 text-[12px] font-medium text-amber-900 shadow-md'
         }
       >
-        {text}
+        <span className={wrap ? 'text-center' : undefined}>{text}</span>
+        {showZoomAction ? (
+          <button
+            type="button"
+            title="열림·잠금이 보이는 축척으로 확대"
+            aria-label="열림·잠금이 보이는 축척으로 확대"
+            className="pointer-events-auto inline-flex shrink-0 cursor-pointer items-center justify-center rounded p-0.5 text-amber-900 hover:bg-amber-200/50"
+            onClick={zoomToOverlayScale}
+          >
+            <ZoomIn className="h-3.5 w-3.5" aria-hidden />
+          </button>
+        ) : null}
       </div>
     </div>,
     document.body

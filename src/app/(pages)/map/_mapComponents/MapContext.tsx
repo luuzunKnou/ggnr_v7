@@ -109,6 +109,12 @@ export type MapContextValue = {
    */
   mapFeatureIdentifyDisabled: boolean;
   setMapFeatureIdentifyDisabled: Dispatch<SetStateAction<boolean>>;
+  /**
+   * 지적·공시지가 상단 확대 안내가 보이는지.
+   * 공간분석 안내가 겹치지 않게 아래로 내릴 때 사용.
+   */
+  cadastralZoomHintVisible: boolean;
+  setCadastralZoomHintVisible: Dispatch<SetStateAction<boolean>>;
   selectedDetail: SelectedDetail;
   setSelectedDetail: Dispatch<SetStateAction<SelectedDetail>>;
   identifyResultList: IdentifyPopupState | null;
@@ -733,6 +739,7 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
     () => new Set()
   );
   const [mapFeatureIdentifyDisabled, setMapFeatureIdentifyDisabled] = useState(false);
+  const [cadastralZoomHintVisible, setCadastralZoomHintVisible] = useState(false);
   const [selectedDetail, setSelectedDetail] = useState<SelectedDetail>(null);
   const [identifyResultList, setIdentifyResultList] = useState<IdentifyPopupState | null>(null);
   const [identifySelectedRow, setIdentifySelectedRow] = useState<Record<string, unknown> | null>(null);
@@ -1028,6 +1035,8 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
         setSpatialIdentifyTableNames,
         mapFeatureIdentifyDisabled,
         setMapFeatureIdentifyDisabled,
+        cadastralZoomHintVisible,
+        setCadastralZoomHintVisible,
         selectedDetail,
         setSelectedDetail,
         identifyResultList,

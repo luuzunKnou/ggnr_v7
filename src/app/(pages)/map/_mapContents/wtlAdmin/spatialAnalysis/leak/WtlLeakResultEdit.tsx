@@ -14,6 +14,7 @@ import { call } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import '../../../../_mapComponents/config/projections'
 import { useMapContext } from '../../../../_mapComponents/MapContext'
+import { mapToolbarTopPx } from '../../../../_mapComponents/mapTopHintLayout'
 import { useMapToolbarDrag } from '../useMapToolbarDrag'
 import { buildEditNet, lineLen, sliceFrom, sliceTo, type EditNet, type Pt } from '../outage/wtlOutageEditNet'
 import { useLeakLineDragEdit } from './useLeakLineDragEdit'
@@ -1032,13 +1033,14 @@ export function WtlLeakResultEdit({ active, mapLeftPx = 0, result, mode, onMode,
   const hostLeft = host.getBoundingClientRect().left
   const menuRight = Math.max(0, mapLeftPx - hostLeft)
   const center = menuRight + Math.max(0, host.clientWidth - menuRight) / 2
+  const toolbarTopPx = mapToolbarTopPx(Boolean(mapContext?.cadastralZoomHintVisible))
 
   // 필지분석 DrawToolbarActions 와 같은 알약(pill) 톤
   const lineMode = mode === 'line'
   const followMode = mode === 'follow'
   const editHint = lineMode || followMode
   const pillShell =
-    'pointer-events-auto absolute top-20 z-30 flex -translate-x-1/2 flex-col overflow-hidden rounded-full border border-border bg-background/95 text-foreground shadow-lg backdrop-blur'
+    'pointer-events-auto absolute z-30 flex -translate-x-1/2 flex-col overflow-hidden rounded-full border border-border bg-background/95 text-foreground shadow-lg backdrop-blur'
 
   const toggleBtn = (
     id: Exclude<LeakEditMode, null>,
@@ -1079,7 +1081,14 @@ export function WtlLeakResultEdit({ active, mapLeftPx = 0, result, mode, onMode,
   )
 
   return createPortal(
-    <div ref={barRef} className={pillShell} style={toolbarDrag.barStyle(center)}>
+    <div
+      ref={barRef}
+      className={pillShell}
+      style={{
+        ...toolbarDrag.barStyle(center),
+        ...(toolbarDrag.moved ? {} : { top: toolbarTopPx }),
+      }}
+    >
       {/* 위쪽 손잡이 띠 — 폭 전체를 잡고 끌어 이동, 더블클릭하면 원위치 */}
       <span
         ref={toolbarDrag.handleRef}
@@ -1098,7 +1107,7 @@ export function WtlLeakResultEdit({ active, mapLeftPx = 0, result, mode, onMode,
         )}
       >
         {toggleBtn('line', '선 편집', Spline, '선 편집 — 클릭 추가, Alt+클릭 제외')}
-        {toggleBtn('follow', '따라 그리기', Spline, '따라 그리기 — 끝점·분기 드래그')}
+        {/* {toggleBtn('follow', '따라 그리기', Spline, '따라 그리기 — 끝점·분기 드래그')} */}
         <span className="h-5 w-px bg-border" aria-hidden />
         {iconBtn('undo', `되돌리기 (Ctrl+Z)${undoCount > 0 ? ` · ${undoCount}단계` : ''}`, Undo2, undoCount === 0)}
         {iconBtn('reset', '초기화 (분석 직후 상태로)', RotateCcw, !changed)}
@@ -1124,14 +1133,14 @@ export function WtlLeakResultEdit({ active, mapLeftPx = 0, result, mode, onMode,
           {altHeld ? 'Alt+클릭으로 제외' : '클릭 추가 · Alt+클릭 제외'}
         </div>
       )}
-      {followMode && (
+      {/* {followMode && (
         <div
           className="flex items-center justify-center border-t border-border/60 bg-muted/30 px-4 py-1.5 text-[11px] font-medium leading-tight text-muted-foreground"
           role="status"
         >
           끝점 끌기 · 선 중간에서 분기
         </div>
-      )}
+      )} */}
     </div>,
     host
   )
