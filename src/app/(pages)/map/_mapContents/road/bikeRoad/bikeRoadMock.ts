@@ -15,6 +15,9 @@ export type BikeRoadHistoryItem = {
   detail: string;
 };
 
+/** 편측 중앙(C) · 양측 우측(R)/좌측(L) */
+export type BikeRoadSegmentSide = "C" | "R" | "L";
+
 export type BikeRoadSegment = {
   id: string;
   /** 일련번호 예: 1-1 */
@@ -23,8 +26,8 @@ export type BikeRoadSegment = {
   routeName: string;
   startName: string;
   endName: string;
-  /** km */
-  lengthKm: number;
+  /** 총 연장 (자유 입력, km) */
+  totalLength: string;
   roadLink: string;
   pathType: string;
   /** 폭원 */
@@ -37,15 +40,22 @@ export type BikeRoadSegment = {
   sharedNonSepRoad: string;
   sharedNonSepEffective: string;
   note: string;
+  /** 측 — 없으면 표시용으로 C 취급 */
+  side?: BikeRoadSegmentSide;
+  /** 해당 측 폴리라인 [lon, lat] */
+  lineCoords?: [number, number][];
+  /** 양측일 때 오프셋 원본 중심선 */
+  centerLineCoords?: [number, number][];
 };
 
 export type BikeRoadRoute = {
   id: string;
   /** 목록 제목: 시점~종점 */
   title: string;
-  /** 예: 자전거 겸용도로(양측) */
+  /** 예: 겸용도로(양측) */
   kind: string;
-  lengthKm: number;
+  /** 총 연장 (자유 입력) */
+  totalLength: string;
   direction: string;
   startPoint: string;
   endPoint: string;
@@ -57,6 +67,8 @@ export type BikeRoadRoute = {
   attachments: BikeRoadAttachment[];
   segments: BikeRoadSegment[];
   history: BikeRoadHistoryItem[];
+  /** 저장된 위치도 이미지 (data URL 등) */
+  locationMapUrl?: string;
   /** 프로토타입 지도용 — [lon, lat] EPSG:4326 */
   lineCoords: [number, number][];
   startLabel: string;
@@ -65,13 +77,12 @@ export type BikeRoadRoute = {
   pathStyle: "dedicated" | "sharedSep" | "sharedNonSep";
 };
 
-export function formatBikeRoadLengthKm(km: number): string {
-  if (!Number.isFinite(km)) return "—";
-  return `${km.toFixed(2)} km`;
-}
-
 /** 노선 구분 (속성) */
-export const BIKE_ROAD_KIND_OPTIONS = ["전용", "겸용"] as const;
+export const BIKE_ROAD_KIND_OPTIONS = [
+  "전용도로",
+  "겸용도로(양측)",
+  "겸용도로(편측)",
+] as const;
 export type BikeRoadKindOption = (typeof BIKE_ROAD_KIND_OPTIONS)[number];
 
 /** 구간 · 자전거도로 종류 */
@@ -83,7 +94,11 @@ export const BIKE_ROAD_PATH_TYPE_OPTIONS = [
 export type BikeRoadPathTypeOption = (typeof BIKE_ROAD_PATH_TYPE_OPTIONS)[number];
 
 export function normalizeBikeRoadKind(kind: string): BikeRoadKindOption {
-  return kind.includes("전용") ? "전용" : "겸용";
+  const t = kind.trim();
+  if (t === "전용도로" || t === "전용" || t.includes("전용")) return "전용도로";
+  if (t.includes("편측")) return "겸용도로(편측)";
+  if (t.includes("양측") || t.includes("겸용")) return "겸용도로(양측)";
+  return "겸용도로(양측)";
 }
 
 /** 종류에 따라 보여줄 폭원 그룹 */
@@ -109,6 +124,12 @@ export function normalizeBikeRoadPathType(pathType: string): BikeRoadPathTypeOpt
   return "";
 }
 
+export function pathStyleFromKind(
+  kind: string
+): BikeRoadRoute["pathStyle"] {
+  return normalizeBikeRoadKind(kind) === "전용도로" ? "dedicated" : "sharedSep";
+}
+
 export const BIKE_ROAD_NEW_ID_PREFIX = "bike-new-";
 
 export function isNewBikeRoadRouteId(id: string | null | undefined): boolean {
@@ -120,8 +141,8 @@ export function createEmptyBikeRoadRoute(): BikeRoadRoute {
   return {
     id: `${BIKE_ROAD_NEW_ID_PREFIX}${Date.now()}`,
     title: "새 노선",
-    kind: "겸용",
-    lengthKm: 0,
+    kind: "겸용도로(양측)",
+    totalLength: "",
     direction: "",
     startPoint: "",
     endPoint: "",
@@ -155,6 +176,7 @@ const emptyWidth = {
 export function createEmptyBikeRoadSegment(opts?: {
   routePrefix?: string;
   index1?: number;
+  side?: BikeRoadSegmentSide;
 }): BikeRoadSegment {
   const prefix = (opts?.routePrefix ?? "1").trim() || "1";
   const index1 = opts?.index1 ?? 1;
@@ -164,9 +186,11 @@ export function createEmptyBikeRoadSegment(opts?: {
     routeName: "",
     startName: "",
     endName: "",
-    lengthKm: 0,
+    totalLength: "",
     roadLink: "",
     pathType: "겸용(분리)",
+    side: opts?.side ?? "C",
+    lineCoords: [],
     ...emptyWidth,
   };
 }
@@ -195,8 +219,8 @@ export const BIKE_ROAD_MOCK_ROUTES: BikeRoadRoute[] = [
   {
     id: "bike-route-1",
     title: "삼성현로(대구시계) ~ 대학로",
-    kind: "겸용",
-    lengthKm: 17.24,
+    kind: "겸용도로(양측)",
+    totalLength: "17.24",
     direction: "삼성현로(대구시계) → 경안로 → 남매로 → 대학로",
     startPoint: "경산시 옥산동 671-1",
     endPoint: "경산시 압량면 부적리 535-11",
@@ -215,6 +239,11 @@ export const BIKE_ROAD_MOCK_ROUTES: BikeRoadRoute[] = [
         name: "삼성현로_현장_02.png",
         url: "/mock/bikeRoad/samsung_02.png",
       },
+      {
+        id: "att-1-3",
+        name: "삼성현로_현장_03.png",
+        url: "/mock/bikeRoad/samsung_01.png",
+      },
     ],
     history: [
       {
@@ -230,6 +259,13 @@ export const BIKE_ROAD_MOCK_ROUTES: BikeRoadRoute[] = [
         at: "2025-06-18 14:05",
         user: "도로관리",
         detail: "교량·지하철역 정보 보완",
+      },
+      {
+        id: "hist-1-3",
+        action: "정비",
+        at: "2025-09-02 11:30",
+        user: "도로관리",
+        detail: "남매로 구간 노면 보수",
       },
     ],
     startLabel: "모레아장례식장",
@@ -263,9 +299,10 @@ export const BIKE_ROAD_MOCK_ROUTES: BikeRoadRoute[] = [
         routeName: "삼성현로R",
         startName: "모레아 장례식장",
         endName: "백천네거리",
-        lengthKm: 3.6,
+        totalLength: "3.60",
         roadLink: "○",
         pathType: "겸용(분리)",
+        side: "R",
         ...emptyWidth,
         sharedSepBike: "1.8",
         sharedSepWalk: "2.4~2.9",
@@ -277,9 +314,10 @@ export const BIKE_ROAD_MOCK_ROUTES: BikeRoadRoute[] = [
         routeName: "삼성현로L",
         startName: "모레아 장례식장",
         endName: "백천네거리",
-        lengthKm: 3.6,
+        totalLength: "3.60",
         roadLink: "○",
         pathType: "겸용(분리)",
+        side: "L",
         ...emptyWidth,
         sharedSepBike: "1.5~1.8",
         sharedSepWalk: "2.2~2.9",
@@ -291,9 +329,10 @@ export const BIKE_ROAD_MOCK_ROUTES: BikeRoadRoute[] = [
         routeName: "경안로R",
         startName: "백천네거리",
         endName: "상방삼거리",
-        lengthKm: 0.39,
+        totalLength: "0.39",
         roadLink: "○",
         pathType: "겸용(분리)",
+        side: "R",
         ...emptyWidth,
         sharedSepBike: "1.5",
         sharedSepWalk: "3(1.0/2.0)",
@@ -305,9 +344,10 @@ export const BIKE_ROAD_MOCK_ROUTES: BikeRoadRoute[] = [
         routeName: "경안로L",
         startName: "백천네거리",
         endName: "상방삼거리",
-        lengthKm: 0.39,
+        totalLength: "0.39",
         roadLink: "○",
         pathType: "겸용(분리)",
+        side: "L",
         ...emptyWidth,
         sharedSepBike: "1.5",
         sharedSepWalk: "3(1.0/2.0)",
@@ -319,9 +359,10 @@ export const BIKE_ROAD_MOCK_ROUTES: BikeRoadRoute[] = [
         routeName: "남매로R",
         startName: "상방삼거리",
         endName: "임당네거리",
-        lengthKm: 2.57,
+        totalLength: "2.57",
         roadLink: "○",
         pathType: "겸용(분리)",
+        side: "R",
         ...emptyWidth,
         sharedSepBike: "1.6",
         sharedSepWalk: "2.1(1), 1.3(2), /2.7",
@@ -333,9 +374,10 @@ export const BIKE_ROAD_MOCK_ROUTES: BikeRoadRoute[] = [
         routeName: "남매로L",
         startName: "상방삼거리",
         endName: "임당네거리",
-        lengthKm: 2.57,
+        totalLength: "2.57",
         roadLink: "○",
         pathType: "겸용(분리)",
+        side: "L",
         ...emptyWidth,
         sharedSepBike: "1.6",
         sharedSepWalk: "2.1(1), 1.3(2), /2.75(실내체육관4~시청4)",
@@ -347,9 +389,10 @@ export const BIKE_ROAD_MOCK_ROUTES: BikeRoadRoute[] = [
         routeName: "대학로R",
         startName: "임당네거리",
         endName: "압량농협 네거리",
-        lengthKm: 2.06,
+        totalLength: "2.06",
         roadLink: "○",
         pathType: "겸용(분리)",
+        side: "R",
         ...emptyWidth,
         sharedSepBike: "1.8",
         sharedSepWalk: "2.3(1), 2.1(2)",
@@ -361,9 +404,10 @@ export const BIKE_ROAD_MOCK_ROUTES: BikeRoadRoute[] = [
         routeName: "대학로L",
         startName: "임당네거리",
         endName: "압량농협 네거리",
-        lengthKm: 2.06,
+        totalLength: "2.06",
         roadLink: "○",
         pathType: "겸용(분리)",
+        side: "L",
         ...emptyWidth,
         sharedSepBike: "1.7",
         sharedSepWalk: "1.6(1), 2.0(2)",
@@ -374,8 +418,8 @@ export const BIKE_ROAD_MOCK_ROUTES: BikeRoadRoute[] = [
   {
     id: "bike-route-2",
     title: "금호강(대정동) ~ 금호강(와촌면)",
-    kind: "전용",
-    lengthKm: 13.6,
+    kind: "전용도로",
+    totalLength: "13.6",
     direction:
       "금호강(대정동) → 금호강(대구시 동구 금강동) → 금호강(압량면) → 금호강(하양읍) → 금호강(와촌면)",
     startPoint: "금호강(대정동)",
@@ -395,6 +439,11 @@ export const BIKE_ROAD_MOCK_ROUTES: BikeRoadRoute[] = [
         name: "금호강_현장_02.png",
         url: "/mock/bikeRoad/geumho_02.png",
       },
+      {
+        id: "att-2-3",
+        name: "금호강_현장_03.png",
+        url: "/mock/bikeRoad/geumho_01.png",
+      },
     ],
     history: [
       {
@@ -410,6 +459,13 @@ export const BIKE_ROAD_MOCK_ROUTES: BikeRoadRoute[] = [
         at: "2025-01-09 16:22",
         user: "도로관리",
         detail: "하양교 겸용 구간(2-8) 폭원 반영",
+      },
+      {
+        id: "hist-2-3",
+        action: "정비",
+        at: "2025-08-14 13:10",
+        user: "도로관리",
+        detail: "하양교 주변 안내표지 교체",
       },
     ],
     startLabel: "대정동",
@@ -442,7 +498,7 @@ export const BIKE_ROAD_MOCK_ROUTES: BikeRoadRoute[] = [
         routeName: "금호강1",
         startName: "대정동",
         endName: "대정동",
-        lengthKm: 0.96,
+        totalLength: "0.96",
         roadLink: "○",
         pathType: "전용",
         ...emptyWidth,
@@ -454,7 +510,7 @@ export const BIKE_ROAD_MOCK_ROUTES: BikeRoadRoute[] = [
         routeName: "금호강2",
         startName: "압량면 금구리",
         endName: "압량면 금구리",
-        lengthKm: 0.81,
+        totalLength: "0.81",
         roadLink: "○",
         pathType: "전용",
         ...emptyWidth,
@@ -466,7 +522,7 @@ export const BIKE_ROAD_MOCK_ROUTES: BikeRoadRoute[] = [
         routeName: "금호강3",
         startName: "압량면 현흥리",
         endName: "압량면 현흥리",
-        lengthKm: 0.48,
+        totalLength: "0.48",
         roadLink: "○",
         pathType: "전용",
         ...emptyWidth,
@@ -478,7 +534,7 @@ export const BIKE_ROAD_MOCK_ROUTES: BikeRoadRoute[] = [
         routeName: "금호강4",
         startName: "하양읍 환상리",
         endName: "하양읍 환상리",
-        lengthKm: 3.58,
+        totalLength: "3.58",
         roadLink: "○",
         pathType: "전용",
         ...emptyWidth,
@@ -490,7 +546,7 @@ export const BIKE_ROAD_MOCK_ROUTES: BikeRoadRoute[] = [
         routeName: "금호강5",
         startName: "하양읍 대조리",
         endName: "하양읍 대조리",
-        lengthKm: 1.61,
+        totalLength: "1.61",
         roadLink: "○",
         pathType: "전용",
         ...emptyWidth,
@@ -502,7 +558,7 @@ export const BIKE_ROAD_MOCK_ROUTES: BikeRoadRoute[] = [
         routeName: "금호강6",
         startName: "하양읍 금락리",
         endName: "하양읍 금락리",
-        lengthKm: 1.1,
+        totalLength: "1.10",
         roadLink: "○",
         pathType: "전용",
         ...emptyWidth,
@@ -514,7 +570,7 @@ export const BIKE_ROAD_MOCK_ROUTES: BikeRoadRoute[] = [
         routeName: "금호강7",
         startName: "진량읍 부기리",
         endName: "진량읍 부기리",
-        lengthKm: 0.85,
+        totalLength: "0.85",
         roadLink: "○",
         pathType: "전용",
         ...emptyWidth,
@@ -526,7 +582,7 @@ export const BIKE_ROAD_MOCK_ROUTES: BikeRoadRoute[] = [
         routeName: "금호강8",
         startName: "하양교",
         endName: "하양교",
-        lengthKm: 0.27,
+        totalLength: "0.27",
         roadLink: "○",
         pathType: "겸용(비분리)",
         ...emptyWidth,
@@ -539,7 +595,7 @@ export const BIKE_ROAD_MOCK_ROUTES: BikeRoadRoute[] = [
         routeName: "금호강9",
         startName: "하양읍 동서리",
         endName: "하양읍 동서리",
-        lengthKm: 1.62,
+        totalLength: "1.62",
         roadLink: "○",
         pathType: "전용",
         ...emptyWidth,
@@ -551,7 +607,7 @@ export const BIKE_ROAD_MOCK_ROUTES: BikeRoadRoute[] = [
         routeName: "금호강10",
         startName: "와촌면 용천리",
         endName: "와촌면 용천리",
-        lengthKm: 1.23,
+        totalLength: "1.23",
         roadLink: "○",
         pathType: "전용",
         ...emptyWidth,
@@ -563,7 +619,7 @@ export const BIKE_ROAD_MOCK_ROUTES: BikeRoadRoute[] = [
         routeName: "금호강11",
         startName: "와촌면 계당리",
         endName: "와촌면 계당리",
-        lengthKm: 1.09,
+        totalLength: "1.09",
         roadLink: "○",
         pathType: "전용",
         ...emptyWidth,

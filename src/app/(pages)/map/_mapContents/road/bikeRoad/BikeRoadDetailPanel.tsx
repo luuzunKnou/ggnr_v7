@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   ChevronDown,
   ChevronRight,
@@ -11,25 +12,35 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MapSideDetailScroll } from "../../../_mapComponents/MapSideDetailScroll";
+import { useMapContext } from "../../../_mapComponents/MapContext";
 import {
   ServiceFileImagePreview,
   type ServiceFilePreviewItem,
 } from "../../../_mapComponents/standard/ServiceFileImagePreview";
-import { BikeRoadAttrTable, type BikeRoadAttrEntry } from "./BikeRoadAttrTable";
-import { BikeRoadSegmentListSection } from "./BikeRoadSegmentListSection";
-import { BikeRoadSegmentModal } from "./BikeRoadSegmentModal";
 import {
-  BIKE_ROAD_KIND_OPTIONS,
+  GEOM_EDIT_HINT_BELOW_SEARCH_GAP,
+  useSearchBarOffset,
+} from "../../../searchBarOffsetContext";
+import { BikeRoadAttrTable, type BikeRoadAttrDraft } from "./BikeRoadAttrTable";
+import { BikeRoadLocationMap } from "./BikeRoadLocationMap";
+import { BikeRoadSegmentDrawBanner } from "./BikeRoadSegmentDrawBanner";
+import { BikeRoadSegmentListSection } from "./BikeRoadSegmentListSection";
+import { titleFromDirection } from "./bikeRoadDirection";
+import { mergeRouteLineCoords } from "./bikeRoadSegmentGeom";
+import {
   bikeRoadSerialPrefix,
-  createEmptyBikeRoadSegment,
-  formatBikeRoadLengthKm,
   isNewBikeRoadRouteId,
   normalizeBikeRoadKind,
+  pathStyleFromKind,
   renumberBikeRoadSegments,
   type BikeRoadAttachment,
   type BikeRoadRoute,
   type BikeRoadSegment,
 } from "./bikeRoadMock";
+import {
+  useBikeRoadSegmentDraw,
+  type BikeRoadDrawSideMode,
+} from "./useBikeRoadSegmentDraw";
 
 function isBikeRoadImageAttachment(att: BikeRoadAttachment): boolean {
   if (!att.url) return false;
@@ -40,47 +51,25 @@ function isBikeRoadImageAttachment(att: BikeRoadAttachment): boolean {
   );
 }
 
-type SegModalState =
-  | { mode: "view"; segment: BikeRoadSegment }
-  | { mode: "edit"; segment: BikeRoadSegment }
-  | { mode: "new"; segment: BikeRoadSegment };
-
 type Props = {
   route: BikeRoadRoute;
   onClose: () => void;
   onSave: (next: BikeRoadRoute) => void;
   onDelete: (id: string) => void;
-  overlayLeftPx: number;
-  overlayWidthPx: number;
 };
 
-type AttrDraft = {
-  title: string;
-  kind: string;
-  lengthKm: string;
-  direction: string;
-  startPoint: string;
-  endPoint: string;
-  bridges: string;
-  subway: string;
-  remark: string;
-};
+type BottomTab = "history" | "attachments";
 
-/** 조회 행과 비슷한 높이 유지 + 얇은 테두리 */
-const fieldClass =
-  "box-border h-[22px] w-full min-w-0 max-w-full rounded border border-border bg-background px-1 text-[11px] leading-none text-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary/25";
-const btnPrimary =
-  "inline-flex h-7 items-center gap-1 rounded border border-primary bg-primary px-2 text-[11px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50";
-const btnGhost =
-  "inline-flex h-7 items-center gap-1 rounded border border-border bg-background px-2 text-[11px] font-medium text-muted-foreground hover:bg-muted/50 disabled:opacity-50";
-const btnDanger =
-  "inline-flex h-7 items-center gap-1 rounded border border-destructive/30 bg-background px-2 text-[11px] font-medium text-destructive hover:bg-destructive/10 disabled:opacity-50";
+const actionBtn = "standard-detail-action-btn inline-flex h-7 items-center gap-1";
+const actionBtnPrimary =
+  "inline-flex h-7 items-center gap-1 rounded border border-primary bg-primary px-2 text-[11px] font-medium text-white hover:bg-primary/90 disabled:opacity-50";
+const actionBtnDanger = "standard-detail-action-btn-danger inline-flex h-7 items-center gap-1";
 
-function routeToDraft(route: BikeRoadRoute): AttrDraft {
+function routeToDraft(route: BikeRoadRoute): BikeRoadAttrDraft {
   return {
     title: route.title,
     kind: normalizeBikeRoadKind(route.kind),
-    lengthKm: Number.isFinite(route.lengthKm) ? String(route.lengthKm) : "",
+    totalLength: route.totalLength ?? "",
     direction: route.direction,
     startPoint: route.startPoint,
     endPoint: route.endPoint,
@@ -117,11 +106,7 @@ function AttachmentThumb({
       >
         {isImage && att.url ? (
           // eslint-disable-next-line @next/next/no-img-element -- 프로토타입 첨부 미리보기
-          <img
-            src={att.url}
-            alt={att.name}
-            className="h-full w-full object-cover"
-          />
+          <img src={att.url} alt={att.name} className="h-full w-full object-cover" />
         ) : (
           <>
             <FileText className="h-5 w-5" />
@@ -154,23 +139,23 @@ function AttachmentThumb({
   );
 }
 
-export function BikeRoadDetailPanel({
-  route,
-  onClose,
-  onSave,
-  onDelete,
-  overlayLeftPx,
-  overlayWidthPx,
-}: Props) {
+export function BikeRoadDetailPanel({ route, onClose, onSave, onDelete }: Props) {
   const isNew = isNewBikeRoadRouteId(route.id);
+  const mapContext = useMapContext();
+  const map = mapContext?.mapInstanceRef?.current ?? null;
+  const mapPaddingLeft = mapContext?.mapPaddingLeft ?? 0;
+  const mapPaddingRight = mapContext?.mapPaddingRight ?? 0;
+  const { inputBottomPx } = useSearchBarOffset();
+  const geomHintTopPx = inputBottomPx + GEOM_EDIT_HINT_BELOW_SEARCH_GAP;
+
   const [attrsOpen, setAttrsOpen] = useState(true);
   const [attrEditing, setAttrEditing] = useState(isNew);
-  const [draft, setDraft] = useState<AttrDraft>(() => routeToDraft(route));
+  const [draft, setDraft] = useState<BikeRoadAttrDraft>(() => routeToDraft(route));
   const [draftSegments, setDraftSegments] = useState<BikeRoadSegment[]>(() =>
     route.segments.map((s) => ({ ...s }))
   );
-  const [selectedSegId, setSelectedSegId] = useState<string | null>(null);
-  const [segModal, setSegModal] = useState<SegModalState | null>(null);
+  const [drawMode, setDrawMode] = useState<BikeRoadDrawSideMode | null>(null);
+  const [bottomTab, setBottomTab] = useState<BottomTab>("history");
   const [filePreview, setFilePreview] = useState<{
     items: ServiceFilePreviewItem[];
     index: number;
@@ -178,6 +163,37 @@ export function BikeRoadDetailPanel({
   const attachInputRef = useRef<HTMLInputElement>(null);
 
   const displaySegments = attrEditing ? draftSegments : route.segments;
+  const attrValues = attrEditing ? draft : routeToDraft(route);
+  const drawPrefix = bikeRoadSerialPrefix(draftSegments);
+  const drawNextIndex = draftSegments.length + 1;
+
+  const segmentDraw = useBikeRoadSegmentDraw({
+    active: attrEditing && drawMode != null,
+    mode: drawMode,
+    routePrefix: drawPrefix,
+    nextIndex1: drawNextIndex,
+    onComplete: (result) => {
+      setDraftSegments((list) => {
+        const next = [...list, ...result.segments];
+        const merged = mergeRouteLineCoords(next);
+        const first = next[0];
+        const last = next[next.length - 1];
+        // 지도·위치도에 바로 보이게 저장(수정 모드는 유지)
+        onSave({
+          ...route,
+          segments: next,
+          lineCoords: merged.length >= 2 ? merged : route.lineCoords,
+          startLabel:
+            route.startLabel.trim() || first?.startName?.trim() || route.startLabel,
+          endLabel: route.endLabel.trim() || last?.endName?.trim() || route.endLabel,
+          locationMapUrl: undefined,
+        });
+        return next;
+      });
+      setDrawMode(null);
+    },
+    onCancel: () => setDrawMode(null),
+  });
 
   const imagePreviewItems = useMemo<ServiceFilePreviewItem[]>(
     () =>
@@ -191,201 +207,30 @@ export function BikeRoadDetailPanel({
     [route.attachments]
   );
 
+  const historyNewestFirst = useMemo(
+    () =>
+      [...(route.history ?? [])].sort((a, b) =>
+        a.at < b.at ? 1 : a.at > b.at ? -1 : 0
+      ),
+    [route.history]
+  );
+
   useEffect(() => {
     setAttrsOpen(true);
-    setSelectedSegId(null);
-    setSegModal(null);
     setFilePreview(null);
     setDraft(routeToDraft(route));
     setDraftSegments(route.segments.map((s) => ({ ...s })));
     setAttrEditing(isNewBikeRoadRouteId(route.id));
+    setDrawMode(null);
+    setBottomTab("history");
   }, [route.id]);
-
-  const viewEntries = useMemo<BikeRoadAttrEntry[]>(() => {
-    const entries: BikeRoadAttrEntry[] = [
-      {
-        fieldKey: "kind",
-        label: "구분",
-        value: normalizeBikeRoadKind(route.kind),
-      },
-      {
-        fieldKey: "lengthKm",
-        label: "연장",
-        value: formatBikeRoadLengthKm(route.lengthKm),
-      },
-      {
-        fieldKey: "direction",
-        label: "진행방향",
-        value: route.direction || "—",
-        fullWidth: true,
-        multiline: true,
-      },
-      {
-        fieldKey: "startPoint",
-        label: "시점",
-        value: route.startPoint || "—",
-        fullWidth: true,
-      },
-      {
-        fieldKey: "endPoint",
-        label: "종점",
-        value: route.endPoint || "—",
-        fullWidth: true,
-      },
-      {
-        fieldKey: "subway",
-        label: "지하철역",
-        value: route.subway.trim() || "—",
-        fullWidth: true,
-      },
-      {
-        fieldKey: "bridges",
-        label: "교량",
-        value: route.bridges.trim() || "—",
-        fullWidth: true,
-      },
-    ];
-    entries.push({
-      fieldKey: "remark",
-      label: "비고",
-      value: route.remark || "—",
-      fullWidth: true,
-      multiline: true,
-    });
-    return entries;
-  }, [route]);
-
-  const editEntries = useMemo<BikeRoadAttrEntry[]>(() => {
-    const set = <K extends keyof AttrDraft>(key: K, value: AttrDraft[K]) =>
-      setDraft((d) => ({ ...d, [key]: value }));
-
-    return [
-      {
-        fieldKey: "kind",
-        label: "구분",
-        value: (
-          <select
-            className={fieldClass}
-            value={draft.kind}
-            onChange={(e) => set("kind", e.target.value)}
-          >
-            {BIKE_ROAD_KIND_OPTIONS.map((opt) => (
-              <option key={opt} value={opt}>
-                {opt}
-              </option>
-            ))}
-          </select>
-        ),
-      },
-      {
-        fieldKey: "lengthKm",
-        label: "연장(km)",
-        value: (
-          <input
-            className={fieldClass}
-            inputMode="decimal"
-            value={draft.lengthKm}
-            onChange={(e) =>
-              set("lengthKm", e.target.value.replace(/[^\d.-]/g, ""))
-            }
-          />
-        ),
-      },
-      {
-        fieldKey: "direction",
-        label: "진행방향",
-        fullWidth: true,
-        value: (
-          <input
-            className={fieldClass}
-            value={draft.direction}
-            onChange={(e) => set("direction", e.target.value)}
-          />
-        ),
-      },
-      {
-        fieldKey: "startPoint",
-        label: "시점",
-        fullWidth: true,
-        value: (
-          <input
-            className={fieldClass}
-            value={draft.startPoint}
-            onChange={(e) => set("startPoint", e.target.value)}
-          />
-        ),
-      },
-      {
-        fieldKey: "endPoint",
-        label: "종점",
-        fullWidth: true,
-        value: (
-          <input
-            className={fieldClass}
-            value={draft.endPoint}
-            onChange={(e) => set("endPoint", e.target.value)}
-          />
-        ),
-      },
-      {
-        fieldKey: "subway",
-        label: "지하철역",
-        fullWidth: true,
-        value: (
-          <input
-            className={fieldClass}
-            value={draft.subway}
-            onChange={(e) => set("subway", e.target.value)}
-          />
-        ),
-      },
-      {
-        fieldKey: "bridges",
-        label: "교량",
-        fullWidth: true,
-        value: (
-          <input
-            className={fieldClass}
-            value={draft.bridges}
-            onChange={(e) => set("bridges", e.target.value)}
-          />
-        ),
-      },
-      {
-        fieldKey: "title",
-        label: "목록명",
-        fullWidth: true,
-        value: (
-          <input
-            className={fieldClass}
-            value={draft.title}
-            onChange={(e) => set("title", e.target.value)}
-            placeholder="시점 ~ 종점"
-          />
-        ),
-      },
-      {
-        fieldKey: "remark",
-        label: "비고",
-        fullWidth: true,
-        value: (
-          <input
-            className={fieldClass}
-            value={draft.remark}
-            onChange={(e) => set("remark", e.target.value)}
-          />
-        ),
-      },
-    ];
-  }, [draft]);
 
   const beginEdit = () => {
     setDraft(routeToDraft(route));
     setDraftSegments(route.segments.map((s) => ({ ...s })));
-    setSelectedSegId(null);
-    setSegModal(null);
     setAttrEditing(true);
     setAttrsOpen(true);
+    setDrawMode(null);
   };
 
   const cancelEdit = () => {
@@ -395,62 +240,50 @@ export function BikeRoadDetailPanel({
     }
     setDraft(routeToDraft(route));
     setDraftSegments(route.segments.map((s) => ({ ...s })));
-    setSelectedSegId(null);
-    setSegModal(null);
     setAttrEditing(false);
+    setDrawMode(null);
   };
 
   const handleSave = () => {
     const title =
+      titleFromDirection(draft.direction) ||
       draft.title.trim() ||
       [draft.startPoint.trim(), draft.endPoint.trim()].filter(Boolean).join(" ~ ") ||
       "새 노선";
-    const lengthKm = Number(draft.lengthKm);
+    const kind = normalizeBikeRoadKind(draft.kind || route.kind);
     const prefix = bikeRoadSerialPrefix(draftSegments);
     const segments = renumberBikeRoadSegments(draftSegments, prefix);
+    const mergedLine = mergeRouteLineCoords(segments);
+    const firstSeg = segments[0];
+    const lastSeg = segments[segments.length - 1];
     const next: BikeRoadRoute = {
       ...route,
       title,
-      kind: normalizeBikeRoadKind(draft.kind || route.kind),
-      // 선색·경로는 속성 UI에서 다루지 않음 (지도 연동 시 별도)
-      lengthKm: Number.isFinite(lengthKm) ? lengthKm : 0,
+      kind,
+      totalLength: draft.totalLength.trim(),
       direction: draft.direction.trim(),
       startPoint: draft.startPoint.trim(),
       endPoint: draft.endPoint.trim(),
       bridges: draft.bridges.trim(),
       subway: draft.subway.trim(),
       remark: draft.remark.trim(),
-      // 기점·종점 라벨은 속성 UI에서 제외 — 기존값 유지, 없으면 시점·종점
-      startLabel: route.startLabel.trim() || draft.startPoint.trim(),
-      endLabel: route.endLabel.trim() || draft.endPoint.trim(),
+      startLabel:
+        route.startLabel.trim() ||
+        firstSeg?.startName?.trim() ||
+        draft.startPoint.trim(),
+      endLabel:
+        route.endLabel.trim() ||
+        lastSeg?.endName?.trim() ||
+        draft.endPoint.trim(),
+      pathStyle: pathStyleFromKind(kind),
       segments,
-      // 신규 id는 저장 시 확정 id로 바꿈 (프로토타입 로컬)
+      lineCoords: mergedLine.length >= 2 ? mergedLine : route.lineCoords,
       id: isNew ? `bike-route-${Date.now()}` : route.id,
     };
     onSave(next);
     setDraftSegments(segments.map((s) => ({ ...s })));
-    setSelectedSegId(null);
-    setSegModal(null);
     setAttrEditing(false);
-  };
-
-  const handleSelectSegment = (seg: BikeRoadSegment) => {
-    setSelectedSegId(seg.id);
-    if (attrEditing) {
-      setSegModal({ mode: "edit", segment: seg });
-    } else {
-      setSegModal({ mode: "view", segment: seg });
-    }
-  };
-
-  const handleAddSegment = () => {
-    const prefix = bikeRoadSerialPrefix(draftSegments);
-    const seg = createEmptyBikeRoadSegment({
-      routePrefix: prefix,
-      index1: draftSegments.length + 1,
-    });
-    setSelectedSegId(seg.id);
-    setSegModal({ mode: "new", segment: seg });
+    setDrawMode(null);
   };
 
   const handleRemoveSegment = (segmentId: string) => {
@@ -460,24 +293,18 @@ export function BikeRoadDetailPanel({
       : "구간";
     if (!window.confirm(`「${label}」을(를) 목록에서 뺄까요?`)) return;
     setDraftSegments((list) => list.filter((s) => s.id !== segmentId));
-    if (selectedSegId === segmentId) setSelectedSegId(null);
-    setSegModal((m) => (m?.segment.id === segmentId ? null : m));
   };
 
-  const handleConfirmSegment = (next: BikeRoadSegment) => {
-    if (!segModal) return;
-    if (segModal.mode === "new") {
-      setDraftSegments((list) => [...list, next]);
-    } else {
-      setDraftSegments((list) =>
-        list.map((s) => (s.id === next.id ? next : s))
-      );
-    }
-    setSelectedSegId(next.id);
-    setSegModal(null);
+  const handleChangeSegment = (
+    segmentId: string,
+    key: Exclude<keyof BikeRoadSegment, "id">,
+    value: string
+  ) => {
+    setDraftSegments((list) =>
+      list.map((s) => (s.id === segmentId ? { ...s, [key]: value } : s))
+    );
   };
 
-  /** 첨부는 노선 속성 «수정»과 무관 — 즉시 반영 */
   const persistAttachments = (attachments: BikeRoadAttachment[]) => {
     if (isNew) return;
     onSave({ ...route, attachments });
@@ -486,7 +313,8 @@ export function BikeRoadDetailPanel({
   const handleAddAttachments = (files: FileList | null) => {
     if (!files || files.length === 0 || isNew) return;
     const added: BikeRoadAttachment[] = Array.from(files).map((file, i) => {
-      const isImg = /^image\//i.test(file.type) || /\.(png|jpe?g|webp|gif)$/i.test(file.name);
+      const isImg =
+        /^image\//i.test(file.type) || /\.(png|jpe?g|webp|gif)$/i.test(file.name);
       return {
         id: `att-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 6)}`,
         name: file.name,
@@ -500,7 +328,7 @@ export function BikeRoadDetailPanel({
   const handleRemoveAttachment = (id: string) => {
     const target = route.attachments.find((a) => a.id === id);
     const label = target?.name ?? "첨부";
-    if (!window.confirm(`「${label}」을(를) 삭제할까요?`)) return;
+    if (!window.confirm(`«${label}»을(를) 삭제할까요?`)) return;
     const removed = route.attachments.find((a) => a.id === id);
     if (removed?.url?.startsWith("blob:")) {
       try {
@@ -540,26 +368,27 @@ export function BikeRoadDetailPanel({
     if (attrEditing) {
       setDraft(routeToDraft(route));
       setDraftSegments(route.segments.map((s) => ({ ...s })));
-      setSelectedSegId(null);
-      setSegModal(null);
       setAttrEditing(false);
+      setDrawMode(null);
     }
     onClose();
   };
 
+  const title = attrEditing
+    ? titleFromDirection(draft.direction) || draft.title || route.title
+    : route.title;
+  const bannerHost = map?.getTargetElement()?.parentElement ?? null;
+
   return (
-    <div className="relative flex h-full min-h-0 flex-col bg-background">
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-1.5">
-        <h2
-          className="min-w-0 truncate text-sm font-semibold text-foreground"
-          title={attrEditing ? draft.title || route.title : route.title}
-        >
-          {attrEditing ? draft.title || route.title : route.title}
-        </h2>
+    <div className="standard-panel-root relative flex h-full min-h-0 flex-col bg-muted">
+      <div className="standard-panel-header shrink-0 bg-background">
+        <span className="standard-panel-title min-w-0 truncate" title={title}>
+          {title}
+        </span>
         <button
           type="button"
           onClick={handleClose}
-          className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          className="standard-panel-close"
           title="닫기"
           aria-label="닫기"
         >
@@ -567,144 +396,236 @@ export function BikeRoadDetailPanel({
         </button>
       </div>
 
-      <section className="shrink-0 border-b border-border">
-        <div className="flex shrink-0 items-center gap-1 px-2 py-1.5">
-          <button
-            type="button"
-            onClick={() => setAttrsOpen((v) => !v)}
-            className="flex min-w-0 flex-1 items-center gap-1 text-left text-xs font-semibold text-foreground/90"
-          >
-            {attrsOpen ? (
-              <ChevronDown className="h-3.5 w-3.5 shrink-0" />
-            ) : (
-              <ChevronRight className="h-3.5 w-3.5 shrink-0" />
-            )}
-            속성정보
-          </button>
-        </div>
-        {attrsOpen ? (
-          <div className="max-h-[42vh] overflow-y-auto px-3 pb-2.5 scrollbar-hide">
-            <BikeRoadAttrTable entries={attrEditing ? editEntries : viewEntries} />
-            {attrEditing ? (
-              <p className="mt-1.5 text-[10px] text-muted-foreground">
-                노선 속성과 구간 목록을 함께 저장합니다. 지도 도형은 이후 연동 예정입니다.
-              </p>
-            ) : null}
-          </div>
-        ) : null}
-      </section>
-
-      <BikeRoadSegmentListSection
-        segments={displaySegments}
-        activeId={selectedSegId}
-        onSelect={handleSelectSegment}
-        isEditing={attrEditing}
-        onAdd={handleAddSegment}
-        onRemove={handleRemoveSegment}
-      />
-
-      <div className="relative flex min-h-0 flex-1 flex-col">
-        <div
-          className="flex h-10 shrink-0 items-center justify-between gap-2 border-b border-border px-2 pt-1.5"
-          role="tablist"
-          aria-label="첨부"
-        >
-          <div className="flex min-w-0 flex-1 items-stretch gap-0.5 self-stretch overflow-x-auto scrollbar-hide">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <section className="shrink-0 border-b border-border bg-background">
+          <div className="flex shrink-0 items-center gap-1 px-2 py-1.5">
             <button
               type="button"
-              role="tab"
-              aria-selected
-              className="relative flex shrink-0 items-center px-2.5 pb-1.5 text-[11px] font-medium text-primary"
+              onClick={() => setAttrsOpen((v) => !v)}
+              className="flex min-w-0 flex-1 items-center gap-1 text-left text-xs font-semibold text-foreground/90"
             >
-              {`첨부 (${route.attachments.length})`}
-              <span className="absolute inset-x-1 bottom-1 h-0.5 rounded-full bg-primary" />
+              {attrsOpen ? (
+                <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+              ) : (
+                <ChevronRight className="h-3.5 w-3.5 shrink-0" />
+              )}
+              속성정보
             </button>
           </div>
-          <div className="mb-1 mr-1 flex h-7 shrink-0 items-center justify-end">
-            <input
-              ref={attachInputRef}
-              type="file"
-              multiple
-              accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv"
-              className="hidden"
-              onChange={(e) => handleAddAttachments(e.target.files)}
-            />
-            <button
-              type="button"
-              className={cn(btnPrimary, "shrink-0")}
-              disabled={isNew}
-              title={isNew ? "노선 등록 후 첨부할 수 있습니다" : "첨부 추가"}
-              onClick={() => attachInputRef.current?.click()}
-            >
-              <Plus className="h-3 w-3" />
-              첨부
-            </button>
-          </div>
-        </div>
-
-        <MapSideDetailScroll className="min-h-0 flex-1 overflow-auto px-3 py-2 text-xs">
-          {route.attachments.length === 0 ? (
-            <p className="py-6 text-center text-[11px] text-muted-foreground">
-              첨부파일이 없습니다.
-            </p>
-          ) : (
-            <div className="grid grid-cols-3 gap-2">
-              {route.attachments.map((a) => (
-                <AttachmentThumb
-                  key={a.id}
-                  att={a}
-                  onPreview={
-                    isBikeRoadImageAttachment(a)
-                      ? () => handlePreviewAttachment(a)
-                      : undefined
-                  }
-                  onRemove={isNew ? undefined : handleRemoveAttachment}
-                />
-              ))}
+          {attrsOpen ? (
+            <div className="max-h-[30vh] overflow-y-auto px-3 pb-2.5 scrollbar-hide">
+              <BikeRoadAttrTable
+                editing={attrEditing}
+                values={attrValues}
+                onChange={(key, value) =>
+                  setDraft((d) => ({ ...d, [key]: value }))
+                }
+              />
             </div>
-          )}
-        </MapSideDetailScroll>
+          ) : null}
+        </section>
 
-        {segModal ? (
-          <BikeRoadSegmentModal
-            segment={segModal.segment}
-            readOnly={segModal.mode === "view"}
-            isNew={segModal.mode === "new"}
-            onConfirm={
-              segModal.mode === "view" ? undefined : handleConfirmSegment
-            }
-            onClose={() => setSegModal(null)}
-            overlayLeftPx={overlayLeftPx}
-            overlayWidthPx={overlayWidthPx}
+        <div className="shrink-0 bg-background">
+          <BikeRoadSegmentListSection
+            segments={displaySegments}
+            isEditing={attrEditing}
+            drawActive={drawMode != null}
+            onAddPick={(mode) => setDrawMode(mode)}
+            onRemove={handleRemoveSegment}
+            onChange={handleChangeSegment}
           />
-        ) : null}
+        </div>
 
-        {filePreview ? (
-          <ServiceFileImagePreview
-            items={filePreview.items}
-            initialIndex={filePreview.index}
-            onClose={() => setFilePreview(null)}
-          />
-        ) : null}
+        {drawMode && bannerHost
+          ? createPortal(
+              <div
+                className="pointer-events-none absolute z-[15] flex justify-center"
+                style={{
+                  top: geomHintTopPx,
+                  left: mapPaddingLeft,
+                  right: mapPaddingRight,
+                }}
+              >
+                <BikeRoadSegmentDrawBanner
+                  mode={drawMode}
+                  pointCount={segmentDraw.pointCount}
+                  busy={segmentDraw.busy}
+                  notice={segmentDraw.notice}
+                  onFinish={() => void segmentDraw.finish()}
+                  onUndo={segmentDraw.undoLast}
+                  onCancel={segmentDraw.cancel}
+                />
+              </div>,
+              bannerHost
+            )
+          : null}
+
+        <div className="relative flex min-h-0 flex-1 flex-col bg-background">
+          <div className="grid min-h-0 flex-1 grid-cols-2 divide-x divide-border">
+            <div className="flex min-h-0 min-w-0 flex-col">
+              <div className="flex h-9 shrink-0 items-center border-b border-border px-3">
+                <span className="text-xs font-semibold text-foreground/90">위치도</span>
+              </div>
+              <div className="min-h-0 flex-1 p-2">
+                <BikeRoadLocationMap
+                  route={route}
+                  onSaveImage={
+                    isNew
+                      ? undefined
+                      : (dataUrl) => {
+                          onSave({ ...route, locationMapUrl: dataUrl });
+                        }
+                  }
+                />
+              </div>
+            </div>
+
+            <div className="flex min-h-0 min-w-0 flex-col">
+              <div
+                className="flex h-9 shrink-0 items-center justify-between gap-2 border-b border-border px-2"
+                role="tablist"
+                aria-label="정비내역·첨부"
+              >
+                <div className="flex min-w-0 items-stretch gap-0.5 self-stretch">
+                  {(
+                    [
+                      {
+                        id: "history" as const,
+                        label: `정비내역 (${historyNewestFirst.length})`,
+                      },
+                      {
+                        id: "attachments" as const,
+                        label: `첨부 (${route.attachments.length})`,
+                      },
+                    ] as const
+                  ).map((t) => {
+                    const active = bottomTab === t.id;
+                    return (
+                      <button
+                        key={t.id}
+                        type="button"
+                        role="tab"
+                        aria-selected={active}
+                        onClick={() => setBottomTab(t.id)}
+                        className={cn(
+                          "relative flex shrink-0 items-center px-2.5 text-[11px] font-medium transition-colors",
+                          active
+                            ? "text-primary"
+                            : "text-muted-foreground hover:text-foreground"
+                        )}
+                      >
+                        {t.label}
+                        {active ? (
+                          <span className="absolute inset-x-1 bottom-0 h-0.5 rounded-full bg-primary" />
+                        ) : null}
+                      </button>
+                    );
+                  })}
+                </div>
+                {bottomTab === "attachments" ? (
+                  <>
+                    <input
+                      ref={attachInputRef}
+                      type="file"
+                      multiple
+                      accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv"
+                      className="hidden"
+                      onChange={(e) => handleAddAttachments(e.target.files)}
+                    />
+                    <button
+                      type="button"
+                      className={cn(actionBtnPrimary, "shrink-0")}
+                      disabled={isNew}
+                      title={isNew ? "노선 등록 후 첨부할 수 있습니다" : "첨부 추가"}
+                      onClick={() => attachInputRef.current?.click()}
+                    >
+                      <Plus className="h-3 w-3" />
+                      첨부
+                    </button>
+                  </>
+                ) : null}
+              </div>
+
+              <MapSideDetailScroll className="min-h-0 flex-1 overflow-auto px-2 py-2 text-xs">
+                {bottomTab === "history" ? (
+                  historyNewestFirst.length === 0 ? (
+                    <p className="py-6 text-center text-[11px] text-muted-foreground">
+                      정비내역이 없습니다.
+                    </p>
+                  ) : (
+                    <ul className="space-y-1.5">
+                      {historyNewestFirst.map((h) => (
+                        <li
+                          key={h.id}
+                          className="rounded border border-border bg-muted/20 px-2 py-1.5"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-[11px] font-medium text-foreground">
+                              {h.action}
+                            </span>
+                            <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground">
+                              {h.at}
+                            </span>
+                          </div>
+                          <p className="mt-0.5 text-[10px] text-muted-foreground">
+                            {h.user}
+                            {h.detail ? ` · ${h.detail}` : ""}
+                          </p>
+                        </li>
+                      ))}
+                    </ul>
+                  )
+                ) : route.attachments.length === 0 ? (
+                  <p className="py-6 text-center text-[11px] text-muted-foreground">
+                    첨부파일이 없습니다.
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {route.attachments.map((a) => (
+                      <AttachmentThumb
+                        key={a.id}
+                        att={a}
+                        onPreview={
+                          isBikeRoadImageAttachment(a)
+                            ? () => handlePreviewAttachment(a)
+                            : undefined
+                        }
+                        onRemove={isNew ? undefined : handleRemoveAttachment}
+                      />
+                    ))}
+                  </div>
+                )}
+              </MapSideDetailScroll>
+            </div>
+          </div>
+
+          {filePreview ? (
+            <ServiceFileImagePreview
+              items={filePreview.items}
+              initialIndex={filePreview.index}
+              onClose={() => setFilePreview(null)}
+            />
+          ) : null}
+        </div>
       </div>
 
       <div className="flex shrink-0 items-center justify-end gap-1 border-t border-border bg-background px-3 py-2">
         {!attrEditing ? (
           <>
-            <button type="button" className={btnGhost} onClick={beginEdit}>
+            <button type="button" className={actionBtn} onClick={beginEdit}>
               수정
             </button>
-            <button type="button" className={btnDanger} onClick={handleDelete}>
+            <button type="button" className={actionBtnDanger} onClick={handleDelete}>
               <Trash2 className="h-3 w-3" />
               삭제
             </button>
           </>
         ) : (
           <>
-            <button type="button" className={btnPrimary} onClick={handleSave}>
+            <button type="button" className={actionBtnPrimary} onClick={handleSave}>
               {isNew ? "등록" : "저장"}
             </button>
-            <button type="button" className={btnGhost} onClick={cancelEdit}>
+            <button type="button" className={actionBtn} onClick={cancelEdit}>
               취소
             </button>
           </>

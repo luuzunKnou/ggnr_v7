@@ -20,10 +20,7 @@ import {
   RiverBasicPlanDetailPanel,
   type RiverBasicPlanPreferredPlan,
 } from "./_mapContents/river/riverBasicPlan/RiverBasicPlanDetailPanel"
-import {
-  RiverBasicPlanScopeModal,
-  type RiverBasicPlanListAxis,
-} from "./_mapContents/river/riverBasicPlan/RiverBasicPlanScopeModal"
+import type { RiverBasicPlanListAxis } from "./_mapContents/river/riverBasicPlan/RiverBasicPlanScopeModal"
 import { RiverBasicPlanMapDrawingFromMapHandler } from "./_mapContents/river/riverBasicPlan/RiverBasicPlanMapDrawingFromMapHandler"
 import { RoadLedgerListPanel } from "./_mapContents/road/roadLedger/RoadLedgerListPanel"
 import { RoadLedgerDetailPanel } from "./_mapContents/road/roadLedger/RoadLedgerDetailPanel"
@@ -379,12 +376,12 @@ const ROAD_NETWORK_DETAIL_DEFAULT_WIDTH = 420
 const ROAD_NETWORK_DETAIL_MIN_WIDTH = 340
 const ROAD_NETWORK_DETAIL_MAX_WIDTH = 720
 
-const BIKE_ROAD_LIST_DEFAULT_WIDTH = 400
-const BIKE_ROAD_LIST_MIN_WIDTH = 300
+const BIKE_ROAD_LIST_DEFAULT_WIDTH = STANDARD_LIST_DEFAULT_WIDTH
+const BIKE_ROAD_LIST_MIN_WIDTH = STANDARD_LIST_MIN_WIDTH
 const BIKE_ROAD_LIST_MAX_WIDTH = 680
-const BIKE_ROAD_DETAIL_DEFAULT_WIDTH = 420
-const BIKE_ROAD_DETAIL_MIN_WIDTH = 340
-const BIKE_ROAD_DETAIL_MAX_WIDTH = 720
+const BIKE_ROAD_DETAIL_DEFAULT_WIDTH = 980
+const BIKE_ROAD_DETAIL_MIN_WIDTH = 800
+const BIKE_ROAD_DETAIL_MAX_WIDTH = 1200
 
 const SAFETY_MAP_PANEL_DEFAULT_WIDTH = 360
 const SAFETY_MAP_PANEL_MIN_WIDTH = 280
@@ -714,7 +711,6 @@ function MapLayoutContent({
     mapContext.applyRiverBasicPlanMapPickRef.current = (pick) => {
       setRiverPlanTab(pick.tab)
       if (riverBasicPlanListAxis == null) setRiverBasicPlanListAxis("byRiver")
-      setRiverBasicPlanScopeModalOpen(false)
       setRiverBasicPlanPreferredPlan(null)
       setSelectedRiverName(pick.riverName)
     }
@@ -1017,7 +1013,6 @@ function MapLayoutContent({
   const [riverPlanTab, setRiverPlanTab] = useState<"river" | "smallRiver">("river")
   const [riverBasicPlanListAxis, setRiverBasicPlanListAxis] =
     useState<RiverBasicPlanListAxis | null>(null)
-  const [riverBasicPlanScopeModalOpen, setRiverBasicPlanScopeModalOpen] = useState(false)
   const [selectedRiverName, setSelectedRiverName] = useState("")
   const [riverBasicPlanPreferredPlan, setRiverBasicPlanPreferredPlan] =
     useState<RiverBasicPlanPreferredPlan | null>(null)
@@ -1510,12 +1505,11 @@ function MapLayoutContent({
     setRiverBasicPlanSelectedRiver?.(selectedRiverName)
   }, [setRiverBasicPlanPanelOpen, setRiverBasicPlanSelectedRiver, riverBasicPlanOpen, selectedRiverName])
 
-  /** 기본계획 열릴 때 보기(보고서별·하천별) 미선택이면 모달. 닫히면 초기화 */
+  /** 기본계획 열릴 때 보고서 기준. 닫히면 초기화 */
   useEffect(() => {
     if (riverBasicPlanOpen) {
-      if (riverBasicPlanListAxis == null) setRiverBasicPlanScopeModalOpen(true)
+      if (riverBasicPlanListAxis == null) setRiverBasicPlanListAxis("byPlan")
     } else {
-      setRiverBasicPlanScopeModalOpen(false)
       setRiverBasicPlanListAxis(null)
       setRiverPlanTab("river")
       setRiverBasicPlanPreferredPlan(null)
@@ -1884,7 +1878,6 @@ function MapLayoutContent({
   const handleHideRiverBasicPlan = () => {
     const next = openedWindows.filter((w) => w !== RIVER_BASIC_PLAN_OPENED_KEY)
     setOpened(next)
-    setRiverBasicPlanScopeModalOpen(false)
     setRiverBasicPlanListAxis(null)
     setRiverPlanTab("river")
     setRiverBasicPlanPreferredPlan(null)
@@ -1895,7 +1888,6 @@ function MapLayoutContent({
     setRiverBasicPlanListAxis(axis)
     setRiverBasicPlanPreferredPlan(null)
     setSelectedRiverName("")
-    setRiverBasicPlanScopeModalOpen(false)
   }
 
   const handleHideRoadLedger = () => {
@@ -2860,16 +2852,6 @@ function MapLayoutContent({
               </MapSideListPanel>
             </div>
           )}
-          <RiverBasicPlanScopeModal
-            open={riverBasicPlanOpen && riverBasicPlanScopeModalOpen}
-            selectedAxis={riverBasicPlanListAxis}
-            onSelect={handleRiverBasicPlanSelectAxis}
-            onClose={() => {
-              setRiverBasicPlanScopeModalOpen(false)
-              /** 보기를 한 번도 고르지 않은 채 닫으면 패널도 닫음 */
-              if (riverBasicPlanListAxis == null) handleHideRiverBasicPlan()
-            }}
-          />
           {roadLedgerOpen && (
             <div className="pointer-events-auto shrink-0">
               <MapSideListPanel
@@ -2980,10 +2962,6 @@ function MapLayoutContent({
                   onClose={() => setBikeRoadSelectedId(null)}
                   onSave={handleSaveBikeRoad}
                   onDelete={handleDeleteBikeRoad}
-                  overlayLeftPx={bikeRoadListLeftPx}
-                  overlayWidthPx={
-                    bikeRoadListWidth + (bikeRoadDetailOpen ? bikeRoadDetailWidth : 0)
-                  }
                 />
               </MapSideListPanel>
             </div>

@@ -6,10 +6,11 @@ import { cn } from "@/lib/utils";
 import { LayerRowPanelButton } from "../../../_mapComponents/layerRowEdit";
 import {
   BIKE_ROAD_MOCK_ROUTES,
+  normalizeBikeRoadKind,
   type BikeRoadRoute,
 } from "./bikeRoadMock";
 
-type KindFilter = "전체" | "겸용" | "전용";
+type KindFilter = "전체" | "전용도로" | "겸용도로(양측)" | "겸용도로(편측)";
 
 type Props = {
   onClose: () => void;
@@ -25,7 +26,8 @@ function kindBadge(kind: string): {
   text: string;
   border: string;
 } {
-  if (kind.includes("전용")) {
+  const normalized = normalizeBikeRoadKind(kind);
+  if (normalized === "전용도로") {
     return {
       short: "전용",
       bg: "bg-chart-2/15",
@@ -33,8 +35,16 @@ function kindBadge(kind: string): {
       border: "border-chart-2/40",
     };
   }
+  if (normalized === "겸용도로(편측)") {
+    return {
+      short: "편측",
+      bg: "bg-amber-500/10",
+      text: "text-amber-700 dark:text-amber-400",
+      border: "border-amber-500/35",
+    };
+  }
   return {
-    short: "겸용",
+    short: "양측",
     bg: "bg-primary/10",
     text: "text-primary",
     border: "border-primary/30",
@@ -43,8 +53,7 @@ function kindBadge(kind: string): {
 
 function matchesKindFilter(kind: string, filter: KindFilter): boolean {
   if (filter === "전체") return true;
-  if (filter === "전용") return kind.includes("전용");
-  return kind.includes("겸용");
+  return normalizeBikeRoadKind(kind) === filter;
 }
 
 export function BikeRoadListPanel({
@@ -68,7 +77,8 @@ export function BikeRoadListPanel({
         r.direction.toLowerCase().includes(q) ||
         r.startPoint.toLowerCase().includes(q) ||
         r.endPoint.toLowerCase().includes(q) ||
-        r.remark.toLowerCase().includes(q)
+        r.remark.toLowerCase().includes(q) ||
+        r.totalLength.toLowerCase().includes(q)
       );
     });
   }, [routes, keyword, kindFilter]);
@@ -114,33 +124,48 @@ export function BikeRoadListPanel({
               className="h-8 w-full rounded border border-border bg-background pl-7 pr-2.5 text-xs outline-none focus:border-primary focus:ring-2 focus:ring-primary/25"
             />
           </div>
-          <div
-            className="flex h-8 shrink-0 items-stretch gap-0.5"
-            role="group"
-            aria-label="구분 필터"
-            title="구분"
-          >
-            {(["전체", "겸용", "전용"] as const).map((filter) => {
-              const active = kindFilter === filter;
-              return (
-                <button
-                  key={filter}
-                  type="button"
-                  onClick={() => setKindFilter(filter)}
-                  title={filter}
-                  className={cn(
-                    "rounded border px-1.5 text-[10px] font-medium leading-tight transition-colors",
-                    active
-                      ? "border-primary bg-primary/10 text-primary"
-                      : "border-border bg-background text-muted-foreground hover:border-border hover:bg-muted/50"
-                  )}
-                  aria-pressed={active}
-                >
-                  {filter}
-                </button>
-              );
-            })}
-          </div>
+        </div>
+        <div
+          className="flex flex-wrap items-stretch gap-0.5"
+          role="group"
+          aria-label="구분 필터"
+          title="구분"
+        >
+          {(
+            [
+              "전체",
+              "전용도로",
+              "겸용도로(양측)",
+              "겸용도로(편측)",
+            ] as const
+          ).map((filter) => {
+            const active = kindFilter === filter;
+            const label =
+              filter === "전체"
+                ? "전체"
+                : filter === "전용도로"
+                  ? "전용"
+                  : filter === "겸용도로(양측)"
+                    ? "양측"
+                    : "편측";
+            return (
+              <button
+                key={filter}
+                type="button"
+                onClick={() => setKindFilter(filter)}
+                title={filter}
+                className={cn(
+                  "rounded border px-1.5 py-0.5 text-[11px] font-medium leading-tight transition-colors",
+                  active
+                    ? "border-primary bg-primary/10 text-primary"
+                    : "border-border bg-background text-muted-foreground hover:border-border hover:bg-muted/50"
+                )}
+                aria-pressed={active}
+              >
+                {label}
+              </button>
+            );
+          })}
         </div>
         <div className="text-[11px] text-muted-foreground">
           목록 {filtered.length}건
@@ -191,7 +216,7 @@ export function BikeRoadListPanel({
                             badge.text,
                             badge.border
                           )}
-                          title={r.kind}
+                          title={normalizeBikeRoadKind(r.kind)}
                         >
                           {badge.short}
                         </span>

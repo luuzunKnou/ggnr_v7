@@ -2,136 +2,206 @@
 
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
+import {
+  BIKE_FORM_LABEL_W,
+  bikeFormFieldClass,
+  bikeFormTableClass,
+  bikeFormTdClass,
+  bikeFormThClass,
+} from "./bikeRoadFormUi";
+import { BikeRoadDirectionPathField } from "./BikeRoadDirectionPathField";
+import { BIKE_ROAD_KIND_OPTIONS } from "./bikeRoadMock";
 
-const attrLabelClass = "w-[5.5rem] shrink-0";
-
-export type BikeRoadAttrEntry = {
-  fieldKey: string;
-  label: string;
-  value: ReactNode;
-  /** true면 행 전체. 미지정이면 옆 칸과 2열 배치 */
-  fullWidth?: boolean;
-  /** 값 여러 줄(진행방향 등). 기본 1줄 truncate */
-  multiline?: boolean;
+export type BikeRoadAttrDraft = {
+  title: string;
+  kind: string;
+  totalLength: string;
+  direction: string;
+  startPoint: string;
+  endPoint: string;
+  bridges: string;
+  subway: string;
+  remark: string;
 };
 
-function AttrRow({
-  label,
-  value,
-  multiline,
+type Props = {
+  editing: boolean;
+  values: BikeRoadAttrDraft;
+  onChange?: <K extends keyof BikeRoadAttrDraft>(key: K, value: BikeRoadAttrDraft[K]) => void;
+};
+
+function Th({
+  children,
+  className,
+  rowSpan,
 }: {
-  label: string;
-  value: ReactNode;
-  multiline?: boolean;
+  children: ReactNode;
+  className?: string;
+  rowSpan?: number;
 }) {
-  const isControl = typeof value !== "string";
   return (
-    <div className="flex min-w-0 items-stretch">
-      <div
-        className={cn(
-          "flex min-w-0 shrink-0 items-center self-stretch bg-muted px-1.5 py-0.5",
-          attrLabelClass
-        )}
-      >
-        <span className="min-w-0 w-full whitespace-nowrap text-[11px] leading-snug text-muted-foreground">
-          {label}
-        </span>
-      </div>
-      <div
-        className={cn(
-          "flex min-h-[22px] min-w-0 flex-1 items-center overflow-hidden px-1.5 py-0.5",
-          isControl && "[&_input]:min-w-0 [&_select]:min-w-0 [&_select]:max-w-full"
-        )}
-      >
-        {typeof value === "string" ? (
-          <span
-            className={cn(
-              "block w-full min-w-0 text-[11px] leading-snug text-muted-foreground",
-              multiline
-                ? "whitespace-normal break-words line-clamp-2"
-                : "truncate whitespace-nowrap"
-            )}
-            title={value === "—" ? undefined : value}
-          >
-            {value || "—"}
-          </span>
-        ) : (
-          <div className="w-full min-w-0 max-w-full overflow-hidden">{value}</div>
-        )}
-      </div>
-    </div>
+    <th rowSpan={rowSpan} className={cn(bikeFormThClass, className)}>
+      {children}
+    </th>
   );
 }
 
-/** 도로망도·도로대장과 동일: 기본 2열, fullWidth만 행 전체 */
-export function BikeRoadAttrTable({ entries }: { entries: BikeRoadAttrEntry[] }) {
-  if (entries.length === 0) {
-    return <p className="text-[11px] text-muted-foreground">표시할 항목이 없습니다.</p>;
-  }
+function Td({
+  children,
+  className,
+  colSpan,
+}: {
+  children: ReactNode;
+  className?: string;
+  colSpan?: number;
+}) {
+  return (
+    <td colSpan={colSpan} className={cn(bikeFormTdClass, className)}>
+      {children}
+    </td>
+  );
+}
 
-  const normalized = entries.map((e) => ({
-    ...e,
-    value: typeof e.value === "string" ? e.value.trim() || "—" : e.value,
-  }));
+function ViewText({ value, multiline }: { value: string; multiline?: boolean }) {
+  const t = value.trim() || "—";
+  return (
+    <span
+      className={cn(
+        "block w-full min-w-0 text-[11px] leading-snug text-foreground",
+        multiline ? "whitespace-normal break-words" : "truncate whitespace-nowrap"
+      )}
+      title={t === "—" ? undefined : t}
+    >
+      {t}
+    </span>
+  );
+}
 
-  const pairs: { left: (typeof normalized)[number]; right?: (typeof normalized)[number] }[] =
-    [];
-  for (let i = 0; i < normalized.length; ) {
-    const left = normalized[i]!;
-    if (left.fullWidth) {
-      pairs.push({ left });
-      i += 1;
-      continue;
-    }
-    const right = normalized[i + 1];
-    if (right && !right.fullWidth) {
-      pairs.push({ left, right });
-      i += 2;
-    } else {
-      pairs.push({ left });
-      i += 1;
-    }
-  }
+function CellInput({
+  value,
+  onChange,
+  placeholder,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+}) {
+  return (
+    <input
+      className={bikeFormFieldClass}
+      value={value}
+      placeholder={placeholder}
+      onChange={(e) => onChange(e.target.value)}
+    />
+  );
+}
+
+/** 불법점용 관리카드형 속성 표 — 선이 이어지는 table-fixed */
+export function BikeRoadAttrTable({ editing, values, onChange }: Props) {
+  const set = <K extends keyof BikeRoadAttrDraft>(key: K, value: BikeRoadAttrDraft[K]) =>
+    onChange?.(key, value);
 
   return (
-    <div className="overflow-hidden rounded-[5px] border border-border">
-      {pairs.map((pair, rowIdx) => {
-        const isLast = rowIdx === pairs.length - 1;
-        if (!pair.right) {
-          return (
-            <div
-              key={pair.left.fieldKey}
-              className={cn(!isLast && "border-b border-border")}
-            >
-              <AttrRow
-                label={pair.left.label}
-                value={pair.left.value}
-                multiline={pair.left.multiline}
-              />
-            </div>
-          );
-        }
-        return (
-          <div
-            key={`${pair.left.fieldKey}-${pair.right.fieldKey}`}
-            className={cn(
-              "grid grid-cols-2 divide-x divide-border",
-              !isLast && "border-b border-border"
+    <table className={bikeFormTableClass}>
+      <colgroup>
+        <col style={{ width: BIKE_FORM_LABEL_W }} />
+        <col />
+        <col style={{ width: BIKE_FORM_LABEL_W }} />
+        <col />
+      </colgroup>
+      <tbody>
+        <tr>
+          <Th>구분</Th>
+          <Td>
+            {editing ? (
+              <select
+                className={bikeFormFieldClass}
+                value={values.kind}
+                onChange={(e) => set("kind", e.target.value)}
+              >
+                {BIKE_ROAD_KIND_OPTIONS.map((opt) => (
+                  <option key={opt} value={opt}>
+                    {opt}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <ViewText value={values.kind} />
             )}
-          >
-            <AttrRow
-              label={pair.left.label}
-              value={pair.left.value}
-              multiline={pair.left.multiline}
+          </Td>
+          <Th>총 연장</Th>
+          <Td>
+            {editing ? (
+              <CellInput
+                value={values.totalLength}
+                onChange={(v) => set("totalLength", v)}
+                placeholder="예: 17.24"
+              />
+            ) : (
+              <ViewText value={values.totalLength} />
+            )}
+          </Td>
+        </tr>
+        <tr>
+          <Th>진행방향</Th>
+          <Td colSpan={3} className={editing ? "h-auto min-h-[30px] py-0.5" : undefined}>
+            <BikeRoadDirectionPathField
+              editing={editing}
+              value={values.direction}
+              onChange={(direction, title) => {
+                set("direction", direction);
+                set("title", title);
+              }}
             />
-            <AttrRow
-              label={pair.right.label}
-              value={pair.right.value}
-              multiline={pair.right.multiline}
-            />
-          </div>
-        );
-      })}
-    </div>
+          </Td>
+        </tr>
+        <tr>
+          <Th>시점</Th>
+          <Td>
+            {editing ? (
+              <CellInput value={values.startPoint} onChange={(v) => set("startPoint", v)} />
+            ) : (
+              <ViewText value={values.startPoint} />
+            )}
+          </Td>
+          <Th>종점</Th>
+          <Td>
+            {editing ? (
+              <CellInput value={values.endPoint} onChange={(v) => set("endPoint", v)} />
+            ) : (
+              <ViewText value={values.endPoint} />
+            )}
+          </Td>
+        </tr>
+        <tr>
+          <Th>교량</Th>
+          <Td>
+            {editing ? (
+              <CellInput value={values.bridges} onChange={(v) => set("bridges", v)} />
+            ) : (
+              <ViewText value={values.bridges} />
+            )}
+          </Td>
+          <Th>지하철역</Th>
+          <Td>
+            {editing ? (
+              <CellInput value={values.subway} onChange={(v) => set("subway", v)} />
+            ) : (
+              <ViewText value={values.subway} />
+            )}
+          </Td>
+        </tr>
+        <tr>
+          <Th>비고</Th>
+          <Td colSpan={3}>
+            {editing ? (
+              <CellInput value={values.remark} onChange={(v) => set("remark", v)} />
+            ) : (
+              <ViewText value={values.remark} multiline />
+            )}
+          </Td>
+        </tr>
+      </tbody>
+    </table>
   );
 }

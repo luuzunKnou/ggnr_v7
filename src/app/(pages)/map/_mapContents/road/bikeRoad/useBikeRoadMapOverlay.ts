@@ -14,6 +14,7 @@ import { scheduleFitMapToExtent3857 } from "../../../_mapComponents/config/mapAu
 import { MAP_AUTO_NAV_MAX_ZOOM } from "../../../_mapComponents/config/mapDefaults";
 import { useMapContext } from "../../../_mapComponents/MapContext";
 import { BIKE_ROAD_MOCK_ROUTES, type BikeRoadRoute } from "./bikeRoadMock";
+import { collectSegmentLines } from "./bikeRoadSegmentGeom";
 
 const LAYER_PROP = "bikeRoadMockOverlay";
 
@@ -85,13 +86,62 @@ function createStyle(getSelectedId: () => string | null) {
   };
 }
 
+function addRouteFeatures(source: VectorSource, route: BikeRoadRoute) {
+  const segLines = collectSegmentLines(route.segments);
+  if (segLines.length > 0) {
+    for (const line of segLines) {
+      const mapCoords = line.coords.map((c) => fromLonLat(c));
+      const f = new Feature({ geometry: new LineString(mapCoords) });
+      f.set("routeId", route.id);
+      f.set("pathStyle", route.pathStyle);
+      f.set("role", "line");
+      f.set("segmentId", line.segmentId);
+      f.set("side", line.side);
+      source.addFeature(f);
+    }
+  } else if (route.lineCoords.length >= 2) {
+    const mapCoords = route.lineCoords.map((c) => fromLonLat(c));
+    const line = new Feature({ geometry: new LineString(mapCoords) });
+    line.set("routeId", route.id);
+    line.set("pathStyle", route.pathStyle);
+    line.set("role", "line");
+    source.addFeature(line);
+  }
+
+  const start =
+    route.lineCoords[0] ??
+    segLines[0]?.coords[0] ??
+    null;
+  const endLine = segLines.find((s) => s.side === "R" || s.side === "C") ?? segLines[0];
+  const end =
+    route.lineCoords[route.lineCoords.length - 1] ??
+    (endLine ? endLine.coords[endLine.coords.length - 1] : null);
+
+  if (start) {
+    const f = new Feature({ geometry: new Point(fromLonLat(start)) });
+    f.set("routeId", route.id);
+    f.set("pathStyle", route.pathStyle);
+    f.set("role", "endpoint");
+    f.set("label", `기점: ${route.startLabel || ""}`);
+    source.addFeature(f);
+  }
+  if (end) {
+    const f = new Feature({ geometry: new Point(fromLonLat(end)) });
+    f.set("routeId", route.id);
+    f.set("pathStyle", route.pathStyle);
+    f.set("role", "endpoint");
+    f.set("label", `종점: ${route.endLabel || ""}`);
+    source.addFeature(f);
+  }
+}
+
 type Options = {
   open: boolean;
   selectedId: string | null;
   routes?: BikeRoadRoute[];
 };
 
-/** 자전거도로 프로토타입 — 목 선·기점종점 오버레이 */
+/** 자전거도로 — 구간별 라인(양측 이중선) 오버레이 */
 export function useBikeRoadMapOverlay({
   open,
   selectedId,
@@ -134,34 +184,7 @@ export function useBikeRoadMapOverlay({
     layerRef.current = layer;
 
     for (const route of routes) {
-      if (!route.lineCoords.length) continue;
-      const mapCoords = route.lineCoords.map((c) => fromLonLat(c));
-      const line = new Feature({
-        geometry: new LineString(mapCoords),
-      });
-      line.set("routeId", route.id);
-      line.set("pathStyle", route.pathStyle);
-      line.set("role", "line");
-      source.addFeature(line);
-
-      const start = route.lineCoords[0];
-      const end = route.lineCoords[route.lineCoords.length - 1];
-      if (start) {
-        const f = new Feature({ geometry: new Point(fromLonLat(start)) });
-        f.set("routeId", route.id);
-        f.set("pathStyle", route.pathStyle);
-        f.set("role", "endpoint");
-        f.set("label", `기점: ${route.startLabel}`);
-        source.addFeature(f);
-      }
-      if (end) {
-        const f = new Feature({ geometry: new Point(fromLonLat(end)) });
-        f.set("routeId", route.id);
-        f.set("pathStyle", route.pathStyle);
-        f.set("role", "endpoint");
-        f.set("label", `종점: ${route.endLabel}`);
-        source.addFeature(f);
-      }
+      addRouteFeatures(source, route);
     }
 
     return () => {
