@@ -8,6 +8,7 @@ import { finished } from 'node:stream/promises';
 import archiver from 'archiver';
 import { sql } from 'drizzle-orm';
 import db from '@/database/db';
+import { RELATED_CHILD_BY_PARENT } from '@/app/(pages)/map/_mapContents/layerClickDetail/layerClickDetailRelatedConfig';
 import {
   getWtlNetLayerDef,
   isWtlSupplyZoneOrSubzoneLayerDef,
@@ -1280,7 +1281,7 @@ export async function getWtlNetworkAtPoint(params: {
   const tol = Math.max(1, Number(params.tolerance) || 8);
   const materialBundle = await ensureMaterialTopBundle();
 
-  type Hit = { row: WtlNetworkRow; rank: number; dist: number };
+  type Hit = { row: WtlNetworkRow; rank: number; idx: number; dist: number };
   const hits: Hit[] = [];
 
   for (const source of sources) {
@@ -1395,13 +1396,21 @@ export async function getWtlNetworkAtPoint(params: {
       hits.push({
         row: mapRow(raw, true),
         rank: atPointGeomRank(shp),
+        // 분할 키(defineTable)·layerKey 우선 — 동일 LINE끼리 idx 순서
+        idx: defineTableIdxForSort([
+          def.defineTable,
+          def.key,
+          def.table,
+          physicalTable,
+        ]),
         dist: Number.isFinite(dist) ? dist : Number.POSITIVE_INFINITY,
       });
     }
   }
 
   if (hits.length === 0) return { row: null, rows: [] };
-  hits.sort((a, b) => a.rank - b.rank || a.dist - b.dist);
+  // POINT → LINE → POLYGON, 이후 define_table_idx, 동률이면 거리
+  hits.sort((a, b) => a.rank - b.rank || a.idx - b.idx || a.dist - b.dist);
   const rows = hits.map((h) => h.row);
   return { row: rows[0] ?? null, rows };
 }
@@ -1534,6 +1543,7 @@ type TablesJsonMetaRow = {
   define_table_schema?: string;
   define_table_parents_layer?: string;
   define_table_shp_type?: string;
+  define_table_idx?: string | number;
 };
 
 function loadTablesJsonMetaByName(): Map<
@@ -1592,6 +1602,42 @@ function loadTablesJsonShpByName(): Map<string, string> {
   }
   tablesJsonShpCache = map;
   return map;
+}
+
+/** define_table_name → define_table_idx (숫자, 없으면 999999) */
+let tablesJsonIdxCache: Map<string, number> | null = null;
+function loadTablesJsonIdxByName(): Map<string, number> {
+  if (tablesJsonIdxCache) return tablesJsonIdxCache;
+  const map = new Map<string, number>();
+  try {
+    const raw = fs.readFileSync(TABLES_JSON_PATH, 'utf8');
+    const rows = JSON.parse(raw) as TablesJsonMetaRow[];
+    for (const row of rows) {
+      const name = String(row.define_table_name ?? '')
+        .trim()
+        .toLowerCase();
+      if (!name || map.has(name)) continue;
+      const idxRaw = parseInt(String(row.define_table_idx ?? ''), 10);
+      map.set(name, Number.isFinite(idxRaw) ? idxRaw : 999999);
+    }
+  } catch {
+    /* empty */
+  }
+  tablesJsonIdxCache = map;
+  return map;
+}
+
+function defineTableIdxForSort(names: readonly (string | null | undefined)[]): number {
+  const map = loadTablesJsonIdxByName();
+  for (const n of names) {
+    const key = String(n ?? '')
+      .trim()
+      .toLowerCase();
+    if (!key) continue;
+    const idx = map.get(key);
+    if (idx != null) return idx;
+  }
+  return 999999;
 }
 
 /** layer·public_layer 실테이블 존재 여부 (소문자 테이블명 Set) */
@@ -1744,17 +1790,6 @@ export type WtlNetworkRelatedChildTab = {
   /** defineLayer 필드용 논리 테이블명 */
   defineTable: string;
   label: string;
-};
-
-const RELATED_CHILD_BY_PARENT: Record<
-  string,
-  Array<{ defineTable: string; label: string }>
-> = {
-  wtl_pres_ps: [
-    { defineTable: 'wtl_pres_pm_ps', label: '펌프현황' },
-    { defineTable: 'wtl_pres_hj_ps', label: '흡수정 현황' },
-  ],
-  wtl_puri_as: [{ defineTable: 'wtl_puri_dt_ps', label: '펌프 현황' }],
 };
 
 /** layer 스키마 — 본명 또는 `*_본명` 접두 테이블 */

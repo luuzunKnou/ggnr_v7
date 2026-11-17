@@ -1,10 +1,11 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronLeft, ChevronRight, RefreshCw, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Pentagon, RefreshCw, X } from 'lucide-react'
 import { call } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { useMapContext } from '../../../_mapComponents/MapContext'
+import { canStartMapDrawInteraction } from '../../../_mapComponents/mapDrawInteraction'
 import { MapSideListPanel } from '../../../_mapComponents/MapSideListPanel'
 import { WtlFacilityDetailPanel } from './WtlFacilityDetailPanel'
 import {
@@ -22,10 +23,16 @@ import {
 } from './wtlFacilityCatalog'
 import {
   groupRelatedLayersByCategory,
+  PIPE_CATEGORY,
   resolveRelatedLayers,
 } from './wtlFacilityRelatedLayers'
 import { flyToWtlNetworkGeom } from '../networkMap/wtlNetworkMapFly'
+import { useEnsureMapCenterInSggOnMount } from '../useEnsureMapCenterInSggOnMount'
 import { WtlLayerMark } from '../networkMap/WtlLayerMark'
+import { exportWtlFacilityExcel } from './exportWtlFacilityExcel'
+import {
+  loadWtlDefineDisplayBundle,
+} from '../networkMap/wtlNetworkDefineDisplayCache'
 import { claimMapLayerClickDetailHighlight } from '@/lib/mapLayerClickDetailHighlight'
 import { useWtlFacilityMapClick } from './useWtlFacilityMapClick'
 import { useWtlFacilityMapHighlight } from './useWtlFacilityMapHighlight'
@@ -41,7 +48,7 @@ const RELATED_BTN =
 const RELATED_BTN_ON = 'standard-layer-toggle-chip-active'
 const RELATED_BTN_OFF = 'standard-layer-toggle-chip-inactive'
 
-const LIST_DEFAULT = 598
+const LIST_DEFAULT = 480
 const LIST_MIN = 400
 const LIST_MAX = 720
 const DETAIL_DEFAULT = 420
@@ -99,6 +106,7 @@ export function WtlFacilityShell({
   layerGroupsMode = 'facility',
 }: Props) {
   const mapContext = useMapContext()
+  useEnsureMapCenterInSggOnMount()
   const [listWidth, setListWidth] = useState(LIST_DEFAULT)
   const [detailWidth, setDetailWidth] = useState(DETAIL_DEFAULT)
   /** catalog 미지정(시설관리)일 때 JSON 탭 — 서버 fs 런타임 */
@@ -141,6 +149,8 @@ export function WtlFacilityShell({
   const [riSelected, setRiSelected] = useState('')
   const [supplyBlock, setSupplyBlock] = useState('')
   const [areaWkts5181, setAreaWkts5181] = useState<string[]>([])
+  const [zoneWkt5181, setZoneWkt5181] = useState<string | null>(null)
+  const [zoneDrawing, setZoneDrawing] = useState(false)
   const [emdOptions, setEmdOptions] = useState<{ code: string; name: string }[]>([])
   const [riOptions, setRiOptions] = useState<{ code: string; name: string }[]>([])
   const [supplyBlockOptions, setSupplyBlockOptions] = useState<
@@ -148,6 +158,8 @@ export function WtlFacilityShell({
   >([])
   const [rows, setRows] = useState<WtlFacilityListRow[]>([])
   const [total, setTotal] = useState(0)
+  const [shpExporting, setShpExporting] = useState(false)
+  const [excelExporting, setExcelExporting] = useState(false)
   /** 점용허가 목록과 동일 — thead 다중 정렬 */
   const [sorts, setSorts] = useState<WtlFacilityListSortSpec[]>([])
   const [fieldsTable, setFieldsTable] = useState<string | null>(null)
@@ -211,6 +223,38 @@ export function WtlFacilityShell({
     [relatedLayers]
   )
 
+  /** 버튼 표시용 — 관로는 자동 ON만 하고 토글 버튼은 숨김 (관련 설비·시설만) */
+  const relatedLayerGroupsForUi = useMemo(
+    () => relatedLayerGroups.filter((g) => g.category !== PIPE_CATEGORY),
+    [relatedLayerGroups]
+  )
+
+  /** 관로(버튼 숨김·탭/그룹 진입 시 1회 ON) */
+  const pipeRelatedNames = useMemo(
+    () =>
+      relatedLayerGroups
+        .find((g) => g.category === PIPE_CATEGORY)
+        ?.layers.map((l) => l.tableName)
+        .filter(Boolean) ?? [],
+    [relatedLayerGroups]
+  )
+  const pipeRelatedKey = useMemo(
+    () => [...pipeRelatedNames].sort().join('\0'),
+    [pipeRelatedNames]
+  )
+
+  /** 관로 외 연관(버튼) — 토글 시에만 visible 가감 */
+  const toggleableRelatedNames = useMemo(() => {
+    const pipeNames = new Set(pipeRelatedNames)
+    return relatedLayers
+      .map((l) => l.tableName)
+      .filter((name) => name && !pipeNames.has(name))
+  }, [pipeRelatedNames, relatedLayers])
+  const toggleableRelatedKey = useMemo(
+    () => [...toggleableRelatedNames].sort().join('\0'),
+    [toggleableRelatedNames]
+  )
+
   /** 연관 테이블명 서명(정렬) — relatedOnKey와 동일 형식이어야 visible sync가 진행됨 */
   const relatedLayerKeys = useMemo(
     () =>
@@ -245,8 +289,18 @@ export function WtlFacilityShell({
     setRiSelected('')
     setSupplyBlock('')
     setAreaWkts5181([])
+    setZoneWkt5181(null)
+    setZoneDrawing(false)
+    mapContext?.setSpatialDrawRequest?.(null)
     mapContext?.setSpatialFilterWkt?.(null)
-  }, [mapContext?.setSpatialFilterWkt])
+  }, [mapContext?.setSpatialDrawRequest, mapContext?.setSpatialFilterWkt])
+
+  const effectiveAreaWkts5181 = useMemo(() => {
+    const list = [...areaWkts5181]
+    const zone = String(zoneWkt5181 ?? '').trim()
+    if (zone) list.push(zone)
+    return list
+  }, [areaWkts5181, zoneWkt5181])
   const detailOpen = selected != null
   const totalWidth = listWidth + (detailOpen ? detailWidth : 0)
 
@@ -417,8 +471,9 @@ export function WtlFacilityShell({
   )
 
   /**
-   * 직접 매칭 + 연관 ON → visibleLayerNames → 지하시설물 동기화.
-   * visibleSyncReady 이후에만 수행. 토글 시 relatedOnKey 변경으로 재적용.
+   * 직접 매칭 + 관련 설비·시설 버튼 ON/OFF → visibleLayerNames.
+   * - 토글 대상만 가감한다(관로·이미 켜진 다른 레이어는 건드리지 않음).
+   * - 버튼으로 끈 관련 설비·시설만 끈다.
    */
   useEffect(() => {
     const setVisible = mapContext?.setVisibleLayerNames
@@ -430,18 +485,20 @@ export function WtlFacilityShell({
     if (!direct) return
     if (!tab || groupsReadyTabRef.current !== tab) return
 
-    const wantedList = [
-      ...new Set([
-        direct,
-        ...(relatedOnKey ? relatedOnKey.split('\0') : []),
-      ]),
-    ].filter(Boolean)
+    const onSet = new Set(relatedOnKey ? relatedOnKey.split('\0') : [])
+    const toggleable = toggleableRelatedKey
+      ? toggleableRelatedKey.split('\0')
+      : []
+    const wantedToggleable = toggleable.filter((name) => onSet.has(name))
     const prevApplied = lastAppliedVisibleRef.current
 
     setVisible((prev) => {
       const next = new Set(prev)
-      for (const t of prevApplied) next.delete(t)
-      for (const t of wantedList) next.add(t)
+      next.add(direct)
+      for (const name of toggleable) {
+        if (onSet.has(name)) next.add(name)
+        else next.delete(name)
+      }
       if (next.size === prev.size) {
         let same = true
         for (const n of next) {
@@ -454,12 +511,55 @@ export function WtlFacilityShell({
       }
       return next
     })
-    lastAppliedVisibleRef.current = wantedList
+    lastAppliedVisibleRef.current = [
+      ...new Set([...prevApplied, direct, ...wantedToggleable]),
+    ]
   }, [
     mapContext?.setVisibleLayerNames,
     selectedSource?.tableName,
     relatedOnKey,
     tab,
+    toggleableRelatedKey,
+    visibleSyncReady,
+  ])
+
+  /**
+   * 관로 — 탭·그룹 확정 시에만 ON.
+   * 관련 설비·시설 버튼 토글마다 관로를 다시 켜지 않는다.
+   */
+  useEffect(() => {
+    const setVisible = mapContext?.setVisibleLayerNames
+    if (!setVisible) return
+    if (!visibleSyncReady) return
+    const direct = String(selectedSource?.tableName ?? '')
+      .trim()
+      .toLowerCase()
+    if (!direct) return
+    if (!tab || groupsReadyTabRef.current !== tab) return
+
+    const pipes = pipeRelatedKey ? pipeRelatedKey.split('\0') : []
+    if (pipes.length === 0) return
+    const prevApplied = lastAppliedVisibleRef.current
+
+    setVisible((prev) => {
+      const next = new Set(prev)
+      let changed = false
+      for (const name of pipes) {
+        if (!next.has(name)) {
+          next.add(name)
+          changed = true
+        }
+      }
+      return changed ? next : prev
+    })
+    lastAppliedVisibleRef.current = [
+      ...new Set([...prevApplied, ...pipes]),
+    ]
+  }, [
+    mapContext?.setVisibleLayerNames,
+    selectedSource?.tableName,
+    tab,
+    pipeRelatedKey,
     visibleSyncReady,
   ])
 
@@ -491,6 +591,8 @@ export function WtlFacilityShell({
     setRows([])
     setTotal(0)
     setError(null)
+    setLoading(Boolean(tab && isTabEnabled(tab)))
+    loadSourceKeyRef.current = ''
     clearLocationFilters()
     setRelatedOn(new Set())
     setVisibleSyncReady(false)
@@ -499,6 +601,7 @@ export function WtlFacilityShell({
       setGroupOptions([])
       setGroup('')
       setGroupsLoading(false)
+      setLoading(false)
       return
     }
     let cancelled = false
@@ -549,11 +652,13 @@ export function WtlFacilityShell({
       })
       .catch(() => {
         if (cancelled) return
-        groupsReadyTabRef.current = null
-        setVisibleSyncReady(false)
+        groupsReadyTabRef.current = requestTab
         setRelatedOn(new Set())
         setGroupOptions([])
         setGroup('')
+        setLoading(false)
+        // 실패 시에도 ready — 빈 목록/안내로 전환 (로딩 고착 방지)
+        setVisibleSyncReady(true)
       })
       .finally(() => {
         if (!cancelled) setGroupsLoading(false)
@@ -687,6 +792,25 @@ export function WtlFacilityShell({
       }
       if (cancelled) return
       setAreaWkts5181(wkts)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [emdSelected, riSelected, showLocationFilter, supplyBlock])
+
+  /** 행정경계 + 구역설정 → 지도 공간필터 */
+  useEffect(() => {
+    if (!showLocationFilter) {
+      mapContext?.setSpatialFilterWkt?.(null)
+      return
+    }
+    const wkts = effectiveAreaWkts5181
+    if (wkts.length === 0) {
+      mapContext?.setSpatialFilterWkt?.(null)
+      return
+    }
+    let cancelled = false
+    ;(async () => {
       let filterWkt: string | null = wkts[0] ?? null
       if (wkts.length > 1) {
         try {
@@ -706,19 +830,44 @@ export function WtlFacilityShell({
     return () => {
       cancelled = true
     }
-  }, [
-    emdSelected,
-    mapContext?.setSpatialFilterWkt,
-    riSelected,
-    showLocationFilter,
-    supplyBlock,
-  ])
+  }, [effectiveAreaWkts5181, mapContext?.setSpatialFilterWkt, showLocationFilter])
 
   useEffect(() => {
     return () => {
+      mapContext?.setSpatialDrawRequest?.(null)
       mapContext?.setSpatialFilterWkt?.(null)
     }
-  }, [mapContext?.setSpatialFilterWkt])
+  }, [mapContext?.setSpatialDrawRequest, mapContext?.setSpatialFilterWkt])
+
+  const handleZoneTool = useCallback(() => {
+    const setDraw = mapContext?.setSpatialDrawRequest
+    if (zoneDrawing) {
+      setDraw?.(null)
+      setZoneDrawing(false)
+      return
+    }
+    if (zoneWkt5181) {
+      setZoneWkt5181(null)
+      return
+    }
+    if (!setDraw) return
+    if (!canStartMapDrawInteraction(mapContext, 'spatialSearch')) return
+    setZoneDrawing(true)
+    setDraw({
+      type: 'polygon',
+      onComplete: (wkt5181: string) => {
+        const w = String(wkt5181 ?? '').trim()
+        setZoneDrawing(false)
+        if (w) setZoneWkt5181(w)
+      },
+    })
+  }, [mapContext, zoneDrawing, zoneWkt5181])
+
+  const zoneToolLabel = zoneDrawing
+    ? '구역취소'
+    : zoneWkt5181
+      ? '구역해제'
+      : '구역설정'
 
   rowsLenRef.current = rows.length
   totalRef.current = total
@@ -761,7 +910,9 @@ export function WtlFacilityShell({
           schema: selectedSource.schema,
           keyword,
           areaWkts5181:
-            showLocationFilter && areaWkts5181.length > 0 ? areaWkts5181 : null,
+            showLocationFilter && effectiveAreaWkts5181.length > 0
+              ? effectiveAreaWkts5181
+              : null,
           sorts: requestSorts,
           limit: LIST_PAGE_SIZE,
           offset: 0,
@@ -801,7 +952,7 @@ export function WtlFacilityShell({
     } finally {
       setLoading(false)
     }
-  }, [areaWkts5181, keyword, selectedSource, showLocationFilter, sorts])
+  }, [effectiveAreaWkts5181, keyword, selectedSource, showLocationFilter, sorts])
 
   const loadMoreRows = useCallback(() => {
     if (!selectedSource) return
@@ -818,7 +969,9 @@ export function WtlFacilityShell({
         schema: selectedSource.schema,
         keyword,
         areaWkts5181:
-          showLocationFilter && areaWkts5181.length > 0 ? areaWkts5181 : null,
+          showLocationFilter && effectiveAreaWkts5181.length > 0
+            ? effectiveAreaWkts5181
+            : null,
         sorts,
         limit: LIST_PAGE_SIZE,
         offset,
@@ -857,11 +1010,140 @@ export function WtlFacilityShell({
         loadingMoreRef.current = false
         setLoadingMore(false)
       })
-  }, [areaWkts5181, keyword, loading, selectedSource, showLocationFilter, sorts])
+  }, [
+    effectiveAreaWkts5181,
+    keyword,
+    loading,
+    selectedSource,
+    showLocationFilter,
+    sorts,
+  ])
 
+  const handleExcelExport = useCallback(async () => {
+    if (!selectedSource || excelExporting) return
+    setExcelExporting(true)
+    try {
+      const pageSize = 500
+      const allRows: WtlFacilityListRow[] = []
+      let offset = 0
+      let totalCount = Number.POSITIVE_INFINITY
+      while (offset < totalCount) {
+        const res = await call('', 'POST', {
+          service: 'wtlFacilityService',
+          action: 'listFacilityRows',
+          params: {
+            table: selectedSource.tableName,
+            schema: selectedSource.schema,
+            keyword,
+            areaWkts5181:
+              showLocationFilter && effectiveAreaWkts5181.length > 0
+                ? effectiveAreaWkts5181
+                : null,
+            sorts,
+            limit: pageSize,
+            offset,
+          },
+        })
+        const data = (res?.data ?? res) as
+          | { rows?: WtlFacilityListRow[]; total?: number }
+          | undefined
+        const page = Array.isArray(data?.rows) ? data.rows : []
+        totalCount = Number(data?.total ?? 0) || 0
+        allRows.push(...page)
+        if (page.length === 0) break
+        offset += page.length
+        if (offset >= totalCount) break
+      }
+      if (allRows.length === 0) {
+        window.alert('내보낼 목록이 없습니다.')
+        return
+      }
+      const sample = allRows[0]
+      const bundle = await loadWtlDefineDisplayBundle(
+        sample?.fieldsTable ?? selectedSource.tableName,
+        sample?.fieldsTableFallback ?? null
+      )
+      exportWtlFacilityExcel({
+        rows: allRows,
+        fields: bundle.fields,
+        codesByField: bundle.codesByField,
+        sheetName: title,
+        title,
+        fileName: undefined,
+      })
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : '엑셀 내려받기에 실패했습니다.')
+    } finally {
+      setExcelExporting(false)
+    }
+  }, [
+    excelExporting,
+    selectedSource,
+    keyword,
+    showLocationFilter,
+    effectiveAreaWkts5181,
+    sorts,
+    title,
+  ])
+
+  const handleShpExport = useCallback(async () => {
+    if (!selectedSource || shpExporting) return
+    setShpExporting(true)
+    try {
+      const res = await fetch('/api/download/wtl-facility-shp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          table: selectedSource.tableName,
+          schema: selectedSource.schema,
+          keyword,
+          areaWkts5181:
+            showLocationFilter && effectiveAreaWkts5181.length > 0
+              ? effectiveAreaWkts5181
+              : null,
+        }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(
+          typeof data?.error === 'string' ? data.error : 'SHP 다운로드 실패'
+        )
+      }
+      const blob = await res.blob()
+      const cd = res.headers.get('Content-Disposition') ?? ''
+      const m = /filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i.exec(cd)
+      const rawName = m?.[1] ? decodeURIComponent(m[1]) : m?.[2]
+      const fileName = rawName?.trim() || '시설목록_SHP.zip'
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(blob)
+      a.download = fileName
+      a.rel = 'noopener'
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(a.href)
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : 'SHP 다운로드 실패')
+    } finally {
+      setShpExporting(false)
+    }
+  }, [
+    shpExporting,
+    selectedSource,
+    keyword,
+    showLocationFilter,
+    effectiveAreaWkts5181,
+  ])
+
+  /**
+   * 그룹·탭이 맞춰진 뒤에만 목록 조회.
+   * 탭 전환 직후 이전 selectedSource로 재조회되거나, 목록만 비운 채 조회가 스킵되는 것을 막음.
+   */
   useEffect(() => {
+    if (!visibleSyncReady) return
+    if (!tab || groupsReadyTabRef.current !== tab) return
     void loadRows()
-  }, [loadRows])
+  }, [loadRows, tab, visibleSyncReady])
 
   const toggleListSort = useCallback((field: string) => {
     const key = String(field ?? '').trim()
@@ -897,18 +1179,23 @@ export function WtlFacilityShell({
     setTab(name)
   }
 
-  const toggleRelatedLayer = useCallback((tableName: string) => {
-    const key = String(tableName ?? '')
-      .trim()
-      .toLowerCase()
-    if (!key) return
-    setRelatedOn((prev) => {
-      const next = new Set(prev)
-      if (next.has(key)) next.delete(key)
-      else next.add(key)
-      return next
-    })
-  }, [])
+  const toggleRelatedLayer = useCallback(
+    (tableName: string) => {
+      const key = String(tableName ?? '')
+        .trim()
+        .toLowerCase()
+      if (!key) return
+      // 관로는 버튼 없음·항상 ON — 토글 대상에서 제외
+      if (!toggleableRelatedNames.includes(key)) return
+      setRelatedOn((prev) => {
+        const next = new Set(prev)
+        if (next.has(key)) next.delete(key)
+        else next.add(key)
+        return next
+      })
+    },
+    [toggleableRelatedNames]
+  )
 
   return (
     <>
@@ -1030,9 +1317,9 @@ export function WtlFacilityShell({
                 </div>
                 {tab && isTabEnabled(tab) && groupOptions.length > 0 ? (
                   <div className="mt-2 space-y-1.5">
-                    {relatedLayerGroups.length > 0 ? (
+                    {relatedLayerGroupsForUi.length > 0 ? (
                       <div className="space-y-1.5" aria-label="연관 레이어">
-                        {relatedLayerGroups.map((group) => (
+                        {relatedLayerGroupsForUi.map((group) => (
                           <div
                             key={group.category}
                             className="flex items-start gap-1"
@@ -1119,6 +1406,21 @@ export function WtlFacilityShell({
                             ))}
                           </select>
                         </div>
+                        <button
+                          type="button"
+                          title={zoneToolLabel}
+                          aria-label={zoneToolLabel}
+                          aria-pressed={zoneDrawing || Boolean(zoneWkt5181)}
+                          onClick={handleZoneTool}
+                          className={cn(
+                            'inline-flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded border transition-colors',
+                            zoneDrawing || zoneWkt5181
+                              ? 'border-primary bg-primary/10 text-primary'
+                              : 'border-border bg-background text-muted-foreground hover:border-border hover:text-foreground'
+                          )}
+                        >
+                          <Pentagon className="h-3.5 w-3.5 shrink-0" strokeWidth={2} aria-hidden />
+                        </button>
                       </div>
                     ) : null}
                     <div className="flex items-center gap-1">
@@ -1154,21 +1456,49 @@ export function WtlFacilityShell({
                   </p>
                 )}
               </div>
-              {tab && isTabEnabled(tab) && selectedSource ? (
+              {tab && isTabEnabled(tab) && (selectedSource || groupsLoading || !visibleSyncReady) ? (
                 <WtlFacilityListView
-                  rows={rows}
-                  total={total}
-                  loading={loading}
+                  rows={
+                    visibleSyncReady && groupsReadyTabRef.current === tab
+                      ? rows
+                      : []
+                  }
+                  total={
+                    visibleSyncReady && groupsReadyTabRef.current === tab
+                      ? total
+                      : 0
+                  }
+                  loading={loading || groupsLoading || !visibleSyncReady}
                   loadingMore={loadingMore}
-                  error={error}
-                  fieldsTable={fieldsTable}
-                  fieldsTableFallback={fieldsTableFallback}
-                  selectedId={selectedId}
+                  error={
+                    visibleSyncReady && groupsReadyTabRef.current === tab
+                      ? error
+                      : null
+                  }
+                  fieldsTable={
+                    visibleSyncReady && groupsReadyTabRef.current === tab
+                      ? fieldsTable
+                      : null
+                  }
+                  fieldsTableFallback={
+                    visibleSyncReady && groupsReadyTabRef.current === tab
+                      ? fieldsTableFallback
+                      : null
+                  }
+                  selectedId={
+                    visibleSyncReady && groupsReadyTabRef.current === tab
+                      ? selectedId
+                      : null
+                  }
                   onSelect={(row) => selectFacilityRow(row, { fly: true })}
                   onScrollNearEnd={loadMoreRows}
                   scrollLoadThresholdPx={LIST_SCROLL_LOAD_THRESHOLD_PX}
                   sorts={sorts}
                   onToggleSort={toggleListSort}
+                  onShpDownload={() => void handleShpExport()}
+                  onExcelDownload={() => void handleExcelExport()}
+                  shpBusy={shpExporting}
+                  excelBusy={excelExporting}
                 />
               ) : (
                 <div className="flex min-h-0 flex-1 items-center justify-center px-3">

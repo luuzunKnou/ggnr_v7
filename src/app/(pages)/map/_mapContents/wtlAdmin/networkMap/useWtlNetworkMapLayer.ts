@@ -112,7 +112,11 @@ type Props = {
   availableSourceIds: readonly string[]
   selected: WtlNetworkRow | null
   /** hits: 클릭 지점 다중 피처(점→선→면 정렬). 목록 선택은 hits 없이 호출 */
-  onSelect: (row: WtlNetworkRow, hits?: WtlNetworkRow[]) => void
+  onSelect: (
+    row: WtlNetworkRow,
+    hits?: WtlNetworkRow[],
+    screenAnchor?: { top: number; left: number } | null
+  ) => void
   onExtentChange: (bbox3857: [number, number, number, number] | null) => void
   /** 화면 내 조회 시 이동 중 진행 중 요청 취소용 */
   onMapMoveStart?: () => void
@@ -237,7 +241,8 @@ export function useWtlNetworkMapLayer({
               y: evt.coordinate[1],
               layerKeys: keys,
               mapSources: sources,
-              tolerance: 12,
+              /** 클릭 버퍼(m, 3857). 작을수록 여백 좁음 */
+              tolerance: 5,
               keyword: f?.keyword,
               yearFrom: f?.yearFrom,
               yearTo: f?.yearTo,
@@ -255,7 +260,17 @@ export function useWtlNetworkMapLayer({
               ? [data.row]
               : []
           const row = rows[0] ?? data?.row ?? null
-          if (row) onSelectRef.current(row, rows)
+          if (row) {
+            const oe = evt.originalEvent
+            const screenAnchor =
+              oe && 'clientX' in oe && 'clientY' in oe
+                ? {
+                    left: Math.round((oe as PointerEvent).clientX),
+                    top: Math.round((oe as PointerEvent).clientY),
+                  }
+                : null
+            onSelectRef.current(row, rows, screenAnchor)
+          }
         } catch {
           /* ignore */
         }

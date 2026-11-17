@@ -12,24 +12,15 @@ import { useSession } from 'next-auth/react'
 import {
   ChevronDown,
   ChevronLeft,
-  ChevronRight,
-  Crosshair,
+  FileSpreadsheet,
+  MapPinned,
   Loader2,
   Pentagon,
-  Printer,
   RefreshCw,
+  SquareSplitHorizontal,
   X,
 } from 'lucide-react'
 import { call } from '@/lib/api'
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/app/shadcnComponents/ui/dialog'
-import { useResolvedThemeSafe } from '@/app/(pages)/(index)/theme-provider'
-import { MAP_UI_Z } from '@/lib/mapUiZIndex'
 import { useConsoleMenuAccess } from '@/hooks/useConsoleMenuAccess'
 import { hasAnyDevConsoleAccess } from '@/lib/consoleMenuAccess/client'
 import { isSuperUser } from '@/lib/auth/superUser'
@@ -43,34 +34,26 @@ import { claimMapLayerClickDetailHighlight } from '@/lib/mapLayerClickDetailHigh
 import { cn } from '@/lib/utils'
 import { useMapContext } from '../../../_mapComponents/MapContext'
 import { canStartMapDrawInteraction } from '../../../_mapComponents/mapDrawInteraction'
-import { MapDetailFloatingPanel } from '../../../_mapComponents/MapDetailFloatingPanel'
-import {
-  computeMapDetailDockPin,
-  MAP_DETAIL_FLOAT_MINIMIZED_WIDTH,
-} from '../../../_mapComponents/mapDetailFloatingDock'
+import { computeMapDetailDockPin } from '../../../_mapComponents/mapDetailFloatingDock'
 import { MAP_FLOATING_DETAIL_CLOSE_EVENT } from '../../../_mapComponents/mapFloatingDetailEvent'
 import { notifyLayerClickDetailMatchClose } from '../../layerClickDetail/notifyLayerClickDetailMatchClose'
+import { LayerClickDetailFloating } from '../../layerClickDetail/LayerClickDetailFloating'
+import type { LayerClickHit } from '../../layerClickDetail/useLayerClickDetail'
 import { MapSideListPanel } from '../../../_mapComponents/MapSideListPanel'
 import {
   getDefineFieldDisplayLabel,
   getRowValueByField,
-  isDefineFieldFlagTrue,
-  isGeomLikeDefineFieldName,
-  selectDefineLayerDetailFields,
   selectDefineLayerListFields,
   type DefineFieldLike,
 } from '../../../_mapComponents/standard/defineLayerRowUtils'
-import { resolveWtlNetworkRowEditTarget } from './WtlNetworkMapAttachmentSection'
 import {
   useWtlNetworkMapLayer,
   type WtlNetworkDetailRelatedLayer,
 } from './useWtlNetworkMapLayer'
-import { WtlNetworkDetailRelatedTabs } from './WtlNetworkDetailRelatedTabs'
 import {
   loadWtlDefineDisplayBundle,
   peekWtlDefineDisplayBundle,
   prefetchWtlDefineDisplayBundles,
-  type WtlDefineDisplayBundle,
 } from './wtlNetworkDefineDisplayCache'
 import { WtlNetworkMapStatus } from './WtlNetworkMapStatus'
 import { exportWtlNetworkMapExcel } from './exportWtlNetworkMapExcel'
@@ -78,7 +61,9 @@ import {
   WtlNetworkExportMenu,
   type WtlNetworkExportLayerOption,
   type WtlNetworkExportScope,
+  type WtlNetworkToolBtnVariant,
 } from './WtlNetworkExportMenu'
+import { useEnsureMapCenterInSggOnMount } from '../useEnsureMapCenterInSggOnMount'
 import { centerMapOnWtlNetworkGeom, flyToWtlNetworkGeom } from './wtlNetworkMapFly'
 import { WtlNetworkSectionPanel } from './section/WtlNetworkSectionPanel'
 import { WtlNetworkSectionDrawGuide } from './section/WtlNetworkSectionDrawGuide'
@@ -97,19 +82,14 @@ import {
   type WtlNetMapSourcePayload,
 } from './wtlNetworkMapSources'
 import { facilityTabLabel } from '../facility/wtlFacilityCatalog'
-import type { FacilityReportAttrRow } from '../facility/wtlFacilityDetailReport'
 import adminTabsJson from '@/config/wtlAdmin/adminTabs.json'
-import { buildWtlNetworkDetailReportHtml } from './wtlNetworkDetailReportData'
+import tablesJson from '@/config/defineLayer/tables.json'
 import type {
   WtlNetworkFilterMeta,
   WtlNetworkRow,
   WtlNetworkStatusListFilter,
 } from './wtlNetworkTypes'
 
-const reportBtnPrimary =
-  'inline-flex h-7 items-center gap-1 rounded border border-primary bg-primary px-2 text-[11px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50'
-const reportBtnGhost =
-  'inline-flex h-7 items-center gap-1 rounded border border-border bg-background px-2 text-[11px] font-medium text-muted-foreground hover:bg-muted/50 disabled:opacity-50'
 
 const LIST_DEFAULT = 440
 const LIST_MIN = 360
@@ -121,31 +101,60 @@ const RESULT_MAX = 680
 const LIST_PAGE_SIZE = 7
 /** 목록 표 — 행 7개 이상일 때만 적용 (미만은 내용 높이) */
 const LIST_TABLE_MIN_HEIGHT_PX = 206
-/** 시설 상세 플로팅 — MapDetailFloatingPanel(detailFloating) */
-const DETAIL_MODAL_WIDTH = 'min(600px, calc(100vw - 2rem))'
-const DETAIL_MODAL_MAX_HEIGHT = '92vh'
-const DETAIL_MODAL_STACK_OFFSET_PX = 28
+/** 하단 도구(단면도·SHP·Excel) 버튼 스타일 선택 저장 */
+const TOOL_BTN_VARIANT_STORAGE_KEY = 'wtl-network-map-tool-btn-variant'
+const TOOL_BTN_VARIANT_OPTIONS: {
+  value: WtlNetworkToolBtnVariant
+  label: string
+}[] = [
+  { value: 'legacy', label: '기존 UI' },
+  { value: 'iconLabel', label: '아이콘+라벨 UI' },
+  { value: 'iconLabelColor', label: '아이콘+라벨+색 UI' },
+]
 
-type DetailModalEntry = {
-  /** 안정 키 (item.id와 다를 수 있음 — 다중 히트 select 전환) */
-  key: string
+function readStoredToolBtnVariant(): WtlNetworkToolBtnVariant {
+  if (typeof window === 'undefined') return 'legacy'
+  try {
+    const raw = window.localStorage.getItem(TOOL_BTN_VARIANT_STORAGE_KEY)
+    if (
+      raw === 'legacy' ||
+      raw === 'iconLabel' ||
+      raw === 'iconLabelColor'
+    ) {
+      return raw
+    }
+  } catch {
+    /* ignore */
+  }
+  return 'legacy'
+}
+
+function networkRowToLayerClickHit(row: WtlNetworkRow): LayerClickHit {
+  const tableName = String(row.layerKey ?? '').trim()
+  const fieldsTable = String(row.fieldsTable ?? tableName).trim() || tableName
+  const kor =
+    wtlNetKorNameForTable(tableName) ||
+    wtlNetKorNameForTable(fieldsTable) ||
+    tableName
+  const data: Record<string, unknown> = {
+    ...(row.record && typeof row.record === 'object' ? { ...row.record } : {}),
+  }
+  if (row.geom != null) data.geom = row.geom
+  return {
+    key: String(row.id),
+    tableName,
+    fieldsTable,
+    korName: kor,
+    titleValue: String(row.name ?? '').trim(),
+    data,
+  }
+}
+
+type CommonDetailState = {
   item: WtlNetworkRow
   hitRows: WtlNetworkRow[]
-  stackIndex: number
-  expandToken: number
-  focusToken: number
-  minimized: boolean
-}
-
-let detailModalKeySeq = 0
-function nextDetailModalKey(): string {
-  detailModalKeySeq += 1
-  return `wtl-detail-${detailModalKeySeq}`
-}
-
-function modalOwnsFacilityId(entry: DetailModalEntry, facilityId: string): boolean {
-  if (entry.item.id === facilityId) return true
-  return entry.hitRows.some((r) => r.id === facilityId)
+  placement: 'listCenter' | 'mapClick'
+  anchor?: { top: number; left: number } | null
 }
 
 type LayerBoxSlot = {
@@ -259,7 +268,7 @@ function getLayerShowMode(key: string): WtlNetLayerShowMode {
   return 'underground'
 }
 
-const SEARCH_TOOLS = ['단면도', 'SHP 다운로드', 'Excel'] as const
+const SEARCH_TOOLS = ['단면도', 'SHP 다운로드', '엑셀 다운로드'] as const
 
 function allKeysOfDisplayGroup(title: string): string[] {
   const g = DISPLAY_GROUPS.find((item) => item.title === title)
@@ -335,12 +344,12 @@ function resolveUndergroundTableNames(key: string, sourceId: string): string[] {
       }
       for (const c of [keyName, defineName]) {
         if (!c) continue
-        const remapped = src.remapTable(c)
-        const hit =
-          src.tables.find((t) => t.toLowerCase() === remapped.toLowerCase()) ??
-          src.tables.find((t) => t.toLowerCase() === c.toLowerCase())
-        if (hit) out.push(hit)
-      }
+    const remapped = src.remapTable(c)
+    const hit =
+      src.tables.find((t) => t.toLowerCase() === remapped.toLowerCase()) ??
+      src.tables.find((t) => t.toLowerCase() === c.toLowerCase())
+    if (hit) out.push(hit)
+  }
     }
     return [...new Set(out.filter(Boolean))]
   }
@@ -616,13 +625,6 @@ function DualRange({
   )
 }
 
-function statusClass(status: string): string {
-  if (status === '정상') return 'standard-status-badge standard-status-badge-primary'
-  if (status === '주의' || status === '노후') return 'standard-status-badge standard-status-badge-warning'
-  if (status === '—' || status === '') return ''
-  return 'standard-status-badge standard-status-badge-ended'
-}
-
 type ListColumn = {
   key: string
   label: string
@@ -670,18 +672,18 @@ function resolveListColumns(
   if (fieldsTable) {
     const bundle = peekWtlDefineDisplayBundle(fieldsTable, fallback)
     if (!bundle) return null
-    const listFields = selectDefineLayerListFields(bundle.fields)
-    if (listFields.length > 0) {
-      return {
-        columns: listFields.map((f) => {
-          const key = String(f.define_field_name ?? '').trim()
-          return {
-            key,
-            label: getDefineFieldDisplayLabel(key, f.define_field_kor_name),
-            field: f,
-          }
-        }),
-        codesByField: bundle.codesByField,
+      const listFields = selectDefineLayerListFields(bundle.fields)
+      if (listFields.length > 0) {
+        return {
+          columns: listFields.map((f) => {
+            const key = String(f.define_field_name ?? '').trim()
+            return {
+              key,
+              label: getDefineFieldDisplayLabel(key, f.define_field_kor_name),
+              field: f,
+            }
+          }),
+          codesByField: bundle.codesByField,
       }
     }
   }
@@ -750,6 +752,8 @@ function bboxKey(bbox: [number, number, number, number] | null | undefined): str
 
 export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }: Props) {
   const mapContext = useMapContext()
+  useEnsureMapCenterInSggOnMount()
+
   const { data: session } = useSession()
   const { levels: consoleMenuLevels, loading: consoleAccessLoading } = useConsoleMenuAccess()
   /** 우측 «로그 보기» 버튼과 동일: 슈퍼유저 또는 개발자 콘솔 접근 */
@@ -779,15 +783,12 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
   >({})
   /** 단면도 데이터 범례로 켠 선택자 — 패널 닫을 때 하이라이트 제거용 */
   const sectionLegendSelectionRef = useRef(false)
-  /** 열린 상세 플로팅 (다중) */
-  const [detailModals, setDetailModals] = useState<DetailModalEntry[]>([])
-  /** Escape·연관 레이어·하이라이트 기준 활성 모달 */
-  const [activeDetailKey, setActiveDetailKey] = useState<string | null>(null)
-  const activeDetailKeyRef = useRef<string | null>(null)
-  activeDetailKeyRef.current = activeDetailKey
-  const detailModalsRef = useRef<DetailModalEntry[]>([])
-  detailModalsRef.current = detailModals
-
+  /** 공통 상세 플로팅 (목록 클릭·지도 클릭 공용) */
+  const [commonDetail, setCommonDetail] = useState<CommonDetailState | null>(null)
+  const [commonDetailMinimized, setCommonDetailMinimized] = useState(false)
+  const commonDetailRef = useRef<CommonDetailState | null>(null)
+  commonDetailRef.current = commonDetail
+  
   const listPageSize = LIST_PAGE_SIZE
   const [group, setGroup] = useState(INITIAL_GROUP)
   const [keyword, setKeyword] = useState('')
@@ -838,6 +839,18 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
     return list
   }, [areaWkts5181, zoneWkt5181])
   const [resultOpen, setResultOpen] = useState(true)
+  const [toolBtnVariant, setToolBtnVariant] =
+    useState<WtlNetworkToolBtnVariant>('legacy')
+  useEffect(() => {
+    setToolBtnVariant(readStoredToolBtnVariant())
+  }, [])
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(TOOL_BTN_VARIANT_STORAGE_KEY, toolBtnVariant)
+    } catch {
+      /* ignore */
+    }
+  }, [toolBtnVariant])
   /** 시설목록 레이어 박스 접힘 (key = box.key) */
   const [collapsedBoxKeys, setCollapsedBoxKeys] = useState<Set<string>>(() => new Set())
   const [excelExporting, setExcelExporting] = useState(false)
@@ -867,17 +880,16 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
     return () => onTotalWidthChange(0)
   }, [onTotalWidthChange])
 
-  /** 관망조회 중 동일 테이블은 지하시설물 WMS 대신 필터된 관망 WMS만 지도에 표시 */
+  /**
+   * 관망 전용 WMS는 쓰지 않고 지하시설물 WMS만 표시한다.
+   * (예전 suppress는 관망 WMS 대체용인데, 관망 WMS가 꺼진 뒤에도 suppress가 남아 레이어가 안 보였음)
+   */
   useEffect(() => {
     const setSuppress = mapContext?.setNetworkMapSuppressUfTableNames
     if (!setSuppress) return
-    const sourceIds =
-      availableSourceIds.length > 0
-        ? availableSourceIds
-        : getWtlNetMapSources().map((s) => s.id)
-    setSuppress(collectManagedUndergroundNames(sourceIds))
+    setSuppress(null)
     return () => setSuppress(null)
-  }, [mapContext?.setNetworkMapSuppressUfTableNames, availableSourceIds])
+  }, [mapContext?.setNetworkMapSuppressUfTableNames])
 
   useEffect(() => {
     return () => {
@@ -887,8 +899,8 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
 
   /** 상세·단면도 플로팅 일괄 닫기 (패널 X · 다른 메뉴 전환 직전) */
   const dismissDetailUi = useCallback(() => {
-    setDetailModals([])
-    setActiveDetailKey(null)
+    setCommonDetail(null)
+    setCommonDetailMinimized(false)
     setSelected(null)
     setSectionMinimized(false)
     section.closePanel()
@@ -1103,42 +1115,42 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
       const on = new Set(
         [...selected].map((k) => String(k).trim().toLowerCase()).filter(Boolean)
       )
-      const order = DISPLAY_GROUPS.flatMap((g) => g.items)
-      const slots: LayerBoxSlot[] = []
-      const sourceIds = availableSourceIds.filter((id) => mapSources.has(id))
-      const primarySource = sourceIds[0] ?? ''
-      for (const item of order) {
+    const order = DISPLAY_GROUPS.flatMap((g) => g.items)
+    const slots: LayerBoxSlot[] = []
+    const sourceIds = availableSourceIds.filter((id) => mapSources.has(id))
+    const primarySource = sourceIds[0] ?? ''
+    for (const item of order) {
         if (!on.has(item.define_table_name.toLowerCase())) continue
-        const key = item.define_table_name
-        const mode = getLayerShowMode(key)
-        if (mode === 'thematic') continue
+      const key = item.define_table_name
+      const mode = getLayerShowMode(key)
+      if (mode === 'thematic') continue
         if (!getWtlNetLayerDef(key)?.table) continue
         // 급수구역 — 출처와 무관, 슬롯 1개 (지하시설물 동기화)
         if (isWtlNetZoneLayerKey(key)) {
           const sid = primarySource || availableSourceIds[0]
           if (!sid) continue
           if (resolveUndergroundTableNames(key, sid).length === 0) continue
-          slots.push({
-            key: `zone:${key}`,
-            layerKey: key,
-            label: item.define_table_kor_name,
-            geomKind: getWtlNetLayerDef(key)?.geomKind ?? 'area',
+        slots.push({
+          key: `zone:${key}`,
+          layerKey: key,
+          label: item.define_table_kor_name,
+          geomKind: getWtlNetLayerDef(key)?.geomKind ?? 'area',
             mapSources: [sid],
-          })
-          continue
-        }
-        for (const id of sourceIds) {
-          if (resolveUndergroundTableNames(key, id).length === 0) continue
-          slots.push({
-            key: `${id}:${key}`,
-            layerKey: key,
-            label: item.define_table_kor_name,
-            geomKind: getWtlNetLayerDef(key)?.geomKind ?? 'point',
-            mapSources: [id],
-          })
-        }
+        })
+        continue
       }
-      return slots
+      for (const id of sourceIds) {
+        if (resolveUndergroundTableNames(key, id).length === 0) continue
+        slots.push({
+          key: `${id}:${key}`,
+          layerKey: key,
+          label: item.define_table_kor_name,
+          geomKind: getWtlNetLayerDef(key)?.geomKind ?? 'point',
+          mapSources: [id],
+        })
+      }
+    }
+    return slots
     },
     [availableSourceIds, mapSources]
   )
@@ -1443,18 +1455,18 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
       setBoxData({})
       let failed = 0
       await Promise.all(
-        listSlots.map(async (slot) => {
+          listSlots.map(async (slot) => {
           try {
             const data = await fetchBoxPage(slot, 1, viewBbox, ac.signal)
             if (ac.signal.aborted || listAbortRef.current !== ac) return
             if (data.total <= 0 && data.rows.length === 0) return
             setBoxData((prev) => ({ ...prev, [slot.key]: data }))
-          } catch (e) {
+      } catch (e) {
             if (ac.signal.aborted || listAbortRef.current !== ac) return
             if (e instanceof DOMException && e.name === 'AbortError') return
             failed += 1
             if (failed === 1) {
-              setListError(e instanceof Error ? e.message : '목록 조회 실패')
+        setListError(e instanceof Error ? e.message : '목록 조회 실패')
             }
           }
         })
@@ -1566,97 +1578,11 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
     }
   }, [boxData])
 
-  const openOrFocusDetailModal = useCallback(
-    (row: WtlNetworkRow, hitRows: WtlNetworkRow[] = []) => {
-      const orderedHits = sortNetworkHitRows(hitRows)
-      const facilityId = String(row.id)
-      notifyLayerClickDetailMatchClose({
-        tableNames: [row.layerKey, row.fieldsTable, row.fieldsTableFallback],
-        fieldsTable: row.fieldsTable,
-        fieldsTableFallback: row.fieldsTableFallback,
-        record:
-          row.record && typeof row.record === 'object'
-            ? (row.record as Record<string, unknown>)
-            : null,
-      })
-      const prev = detailModalsRef.current
-      const existing = prev.find((m) => modalOwnsFacilityId(m, facilityId))
-      if (existing) {
-        setDetailModals(
-          prev.map((m) =>
-            m.key !== existing.key
-              ? m
-              : {
-                  ...m,
-                  item: row,
-                  hitRows: orderedHits,
-                  expandToken: m.expandToken + 1,
-                  focusToken: m.focusToken + 1,
-                  minimized: false,
-                }
-          )
-        )
-        setActiveDetailKey(existing.key)
-        setSelected(row)
-        return
-      }
-      const stackIndex =
-        prev.reduce((max, m) => Math.max(max, m.stackIndex), -1) + 1
-      const key = nextDetailModalKey()
-      setDetailModals([
-        ...prev,
-        {
-          key,
-          item: row,
-          hitRows: orderedHits,
-          stackIndex,
-          expandToken: 0,
-          focusToken: 0,
-          minimized: false,
-        },
-      ])
-      setActiveDetailKey(key)
-      setSelected(row)
-    },
-    []
-  )
-
-  const closeDetailModal = useCallback((modalKey: string) => {
-    const prev = detailModalsRef.current
-    const next = prev.filter((m) => m.key !== modalKey)
-    setDetailModals(next)
-    if (activeDetailKeyRef.current === modalKey) {
-      const last = next[next.length - 1]
-      setActiveDetailKey(last?.key ?? null)
-      setSelected(last?.item ?? null)
-    }
-  }, [])
-
-  const updateDetailModalItem = useCallback(
-    (modalKey: string, next: WtlNetworkRow) => {
-      setDetailModals((prev) =>
-        prev.map((m) => {
-          if (m.key !== modalKey) return m
-          const hitRows =
-            m.hitRows.length === 0
-              ? m.hitRows
-              : m.hitRows.map((r) =>
-                  r.id === next.id
-                    ? { ...r, ...next, geom: next.geom ?? r.geom }
-                    : r
-                )
-          return { ...m, item: next, hitRows }
-        })
-      )
-      if (activeDetailKeyRef.current === modalKey) setSelected(next)
-    },
-    []
-  )
-
   /**
    * 시설목록 행·지도 클릭·단면도 범례 공통.
    * fly=true: extent fit / center=true: 도형 중심으로 맵 센터 이동.
    * openDetail=false 이면 상세 모달 없이 선택·하이라이트만.
+   * screenAnchor 있으면 지도 클릭 위치(mapClick), 없으면 목록 중앙(listCenter).
    */
   const pickRow = async (
     item: WtlNetworkRow,
@@ -1665,6 +1591,7 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
       center?: boolean
       openDetail?: boolean
       hitRows?: WtlNetworkRow[]
+      screenAnchor?: { top: number; left: number } | null
     }
   ) => {
     const openDetail = opts?.openDetail !== false
@@ -1683,11 +1610,38 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
       next = item
     }
     if (openDetail) {
-      openOrFocusDetailModal(next, hitRows)
-    } else {
-      setSelected(next)
+      notifyLayerClickDetailMatchClose({
+        tableNames: [next.layerKey, next.fieldsTable, next.fieldsTableFallback],
+        fieldsTable: next.fieldsTable,
+        fieldsTableFallback: next.fieldsTableFallback,
+        record:
+          next.record && typeof next.record === 'object'
+            ? (next.record as Record<string, unknown>)
+            : null,
+      })
+      const screenAnchor = opts?.screenAnchor ?? null
+      const fromMap = screenAnchor != null
+      const prevDetail = commonDetailRef.current
+      // 지도 클릭으로 이미 떠 있는 모달은 목록 행으로 내용만 바꾸고 위치는 유지
+      const keepMapPlacement =
+        !fromMap && prevDetail?.placement === 'mapClick' && prevDetail.anchor != null
+      // 최소화 유지 — 선택·데이터만 바뀌어도 자동 펼침 금지
+      setCommonDetail({
+        item: next,
+        hitRows: sortNetworkHitRows(hitRows),
+        placement: fromMap || keepMapPlacement ? 'mapClick' : 'listCenter',
+        anchor: fromMap
+          ? screenAnchor
+          : keepMapPlacement
+            ? prevDetail.anchor
+            : {
+                top: Math.max(72, Math.round(viewportSize.h / 2 - 100)),
+                left: leftOffsetPx + Math.round(listWidth / 2),
+              },
+      })
     }
-    const map = mapContext?.mapInstanceRef?.current
+    setSelected(next)
+      const map = mapContext?.mapInstanceRef?.current
     const applyPad = () => mapContext?.applyMapViewPaddingRef?.current?.()
     if (opts?.center) {
       centerMapOnWtlNetworkGeom(map, next.geom, applyPad)
@@ -1695,7 +1649,6 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
       flyToWtlNetworkGeom(map, next.geom, applyPad)
     }
   }
-
   const searchFilter = useMemo(() => {
     const year = narrowedRange(yearFrom, yearTo, meta.yearMin, meta.yearMax)
     const diameter = narrowedRange(
@@ -1721,20 +1674,20 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
       areaWkts5181: effectiveAreaWkts5181,
     }
   }, [
-    yearFrom,
-    yearTo,
-    diameterFrom,
-    diameterTo,
+      yearFrom,
+      yearTo,
+      diameterFrom,
+      diameterTo,
     meta.yearMin,
     meta.yearMax,
     meta.diameterMin,
     meta.diameterMax,
-    materials,
+      materials,
     meta.materialLabelToCodes,
     meta.materialTopCodes,
-    keyword,
-    supplyBlock,
-    effectiveAreaWkts5181,
+      keyword,
+      supplyBlock,
+      effectiveAreaWkts5181,
   ])
 
   /** 현황·교차표 — 켜진 레이어 + 리스트 검색 + 화면에 보이는 시설만 */
@@ -1794,11 +1747,11 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
     selected,
     searchFilter,
     detailRelatedLayer,
-    onSelect: (row, hits) => {
+    onSelect: (row, hits, screenAnchor) => {
       const hitRows =
         Array.isArray(hits) && hits.length > 0 ? sortNetworkHitRows(hits) : []
       const primary = hitRows[0] ?? row
-      void pickRow(primary, { hitRows })
+      void pickRow(primary, { hitRows, screenAnchor })
     },
     onMapMoveStart: () => {
       // 화면 체크가 켜져 있어도 이동 시작만으로 조회를 끊지 않는다.
@@ -1817,24 +1770,9 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
     },
   })
 
-  const handleDetailRelatedLayer = useCallback((next: WtlNetworkDetailRelatedLayer) => {
-    setDetailRelatedLayer((prev) => {
-      if (prev == null && next == null) return prev
-      if (
-        prev &&
-        next &&
-        prev.table === next.table &&
-        prev.ftrIdn === next.ftrIdn
-      ) {
-        return prev
-      }
-      return next
-    })
-  }, [])
-
   useEffect(() => {
-    if (!activeDetailKey) setDetailRelatedLayer(null)
-  }, [activeDetailKey])
+    if (!commonDetail) setDetailRelatedLayer(null)
+  }, [commonDetail])
 
   /** 단면도 패널 닫힘(언마운트) 시 데이터 범례로 켠 선택자 레이어 제거 */
   useEffect(() => {
@@ -1842,27 +1780,17 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
     if (!sectionLegendSelectionRef.current) return
     sectionLegendSelectionRef.current = false
     /** 범례 전용 하이라이트만 제거 — 열린 상세 모달은 유지 */
-    if (detailModalsRef.current.length === 0) {
-      setSelected(null)
-    } else {
-      const active = detailModalsRef.current.find(
-        (m) => m.key === activeDetailKeyRef.current
-      )
-      setSelected(active?.item ?? detailModalsRef.current.at(-1)?.item ?? null)
-    }
+    setSelected(commonDetailRef.current?.item ?? null)
   }, [section.panelOpen])
 
   useEffect(() => {
-    const isEntryVisible = (m: DetailModalEntry) => {
-      const key = String(m.item.layerKey)
-      const sourceId = String(m.item.id).split(':')[0] as WtlNetMapSourceId
-      if (!extraOn.has(key)) return false
-      if (getWtlNetMapSource(sourceId) && !mapSources.has(sourceId)) return false
-      return true
-    }
-    setDetailModals((prev) => {
-      const next = prev.filter(isEntryVisible)
-      return next.length === prev.length ? prev : next
+    setCommonDetail((prev) => {
+      if (!prev) return prev
+      const key = String(prev.item.layerKey)
+      const sourceId = String(prev.item.id).split(':')[0] as WtlNetMapSourceId
+      if (!extraOn.has(key)) return null
+      if (getWtlNetMapSource(sourceId) && !mapSources.has(sourceId)) return null
+      return prev
     })
     setSelected((prevSel) => {
       if (!prevSel) return prevSel
@@ -1873,22 +1801,6 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
       return prevSel
     })
   }, [extraOn, mapSources])
-
-  useEffect(() => {
-    if (detailModals.length === 0) {
-      if (activeDetailKey != null) setActiveDetailKey(null)
-      return
-    }
-    if (
-      activeDetailKey &&
-      detailModals.some((m) => m.key === activeDetailKey)
-    ) {
-      return
-    }
-    const last = detailModals[detailModals.length - 1]
-    setActiveDetailKey(last.key)
-    setSelected(last.item)
-  }, [detailModals, activeDetailKey])
 
   const [viewportSize, setViewportSize] = useState(() => ({
     w: typeof window !== 'undefined' ? window.innerWidth : 1280,
@@ -1901,23 +1813,9 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
     return () => window.removeEventListener('resize', onResize)
   }, [])
 
-  /** 최소화된 상세 — 하단 좌→우 도킹 순서 */
-  const minimizedDockKeys = useMemo(
-    () => detailModals.filter((m) => m.minimized).map((m) => m.key),
-    [detailModals]
-  )
-
+  /** 단면도 최소화 도킹 — 공통 상세가 최소화돼 있으면 한 칸 뒤 */
   const dockLeftStartPx =
     leftOffsetPx + listWidth + (resultOpen ? resultWidth : 0) + 8
-
-  const setDetailModalMinimized = useCallback(
-    (modalKey: string, minimized: boolean) => {
-      setDetailModals((prev) =>
-        prev.map((m) => (m.key === modalKey ? { ...m, minimized } : m))
-      )
-    },
-    []
-  )
 
   const layerBoxes = useMemo(() => {
     return listSlots
@@ -1966,8 +1864,8 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
     setKeywordDraft('')
     setKeyword('')
     setSelected(null)
-    setDetailModals([])
-    setActiveDetailKey(null)
+    setCommonDetail(null)
+    setCommonDetailMinimized(false)
   }
 
   useEffect(() => {
@@ -2134,8 +2032,6 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
    * 보호구역은 주제도 경로로 별도 처리
    */
   useEffect(() => {
-    const setVisible = mapContext?.setVisibleLayerNames
-    if (!setVisible) return
     if (availableLayerKeys == null) return
     const sourceIds = availableSourceIds.filter((id) => mapSources.has(id))
     if (sourceIds.length === 0) return
@@ -2149,6 +2045,13 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
       }
     }
     skipUfToNetworkSyncRef.current = true
+    const sync = mapContext?.syncUndergroundFromNetworkRef?.current
+    if (sync) {
+      // 패널 선택·visible·지하시설물 그룹 on을 한 번에
+      sync(wanted, managed)
+    } else {
+      const setVisible = mapContext?.setVisibleLayerNames
+      if (!setVisible) return
     setVisible((prev) => {
       const next = new Set(prev)
       for (const n of managed) next.delete(n)
@@ -2165,6 +2068,7 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
       }
       return next
     })
+    }
     networkUfForwardReadyRef.current = true
     const t = window.setTimeout(() => {
       skipUfToNetworkSyncRef.current = false
@@ -2401,6 +2305,10 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
               title="SHP 다운로드"
               busy={shpExporting}
               busyLabel="SHP…"
+              variant={toolBtnVariant}
+              icon={
+                <MapPinned className="h-3.5 w-3.5 shrink-0" strokeWidth={2} aria-hidden />
+              }
               layers={EXPORT_LAYER_OPTIONS}
               selectedKeys={enabledKeys}
               availableKeys={availableLayerKeys}
@@ -2411,14 +2319,22 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
             />
           )
         }
-        if (label === 'Excel') {
+        if (label === '엑셀 다운로드') {
           return (
             <WtlNetworkExportMenu
               key={label}
-              label="Excel"
-              title="Excel 다운로드"
+              label="엑셀 다운로드"
+              title="엑셀 다운로드"
               busy={excelExporting}
-              busyLabel="Excel…"
+              busyLabel="엑셀…"
+              variant={toolBtnVariant}
+              icon={
+                <FileSpreadsheet
+                  className="h-3.5 w-3.5 shrink-0"
+                  strokeWidth={2}
+                  aria-hidden
+                />
+              }
               layers={EXPORT_LAYER_OPTIONS}
               selectedKeys={enabledKeys}
               availableKeys={availableLayerKeys}
@@ -2431,38 +2347,48 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
           section.modePickerOpen || section.drawing || section.panelOpen
         const title =
           isSection && section.drawing ? '단면취소' : label
+        const sectionLabel = isSection && section.drawing ? '단면취소' : label
         return (
           <button
             key={label}
             type="button"
             title={title}
             className={cn(
-              'flex h-7 min-w-0 flex-1 cursor-pointer items-center justify-center whitespace-nowrap rounded-[5px] px-0.5 text-[11px] font-semibold leading-none',
-              isSection && sectionActive
-                ? 'bg-[#14607a] text-white hover:bg-[#0f4d62] dark:bg-[#d7ebf1] dark:text-[#14607a] dark:hover:bg-[#c5e3eb]'
-                : 'bg-[#d7ebf1] text-[#14607a] hover:bg-[#c5e3eb] dark:bg-[#14607a] dark:text-[#d7ebf1] dark:hover:bg-[#0f4d62]'
+              'flex h-7 min-w-0 flex-1 cursor-pointer items-center justify-center whitespace-nowrap',
+              toolBtnVariant === 'legacy' &&
+                'rounded-[5px] px-0.5 text-[11px] font-semibold leading-none',
+              toolBtnVariant === 'legacy' &&
+                (isSection && sectionActive
+                  ? 'bg-[#14607a] text-white hover:bg-[#0f4d62] dark:bg-[#d7ebf1] dark:text-[#14607a] dark:hover:bg-[#c5e3eb]'
+                  : 'bg-[#d7ebf1] text-[#14607a] hover:bg-[#c5e3eb] dark:bg-[#14607a] dark:text-[#d7ebf1] dark:hover:bg-[#0f4d62]'),
+              toolBtnVariant === 'iconLabel' &&
+                'standard-detail-action-btn gap-0.5 px-1.5 text-[11px] font-medium',
+              toolBtnVariant === 'iconLabel' &&
+                isSection &&
+                sectionActive &&
+                'border-primary bg-primary text-primary-foreground hover:bg-primary/90',
+              toolBtnVariant === 'iconLabelColor' &&
+                'gap-0.5 rounded border px-1.5 text-[11px] font-medium transition-colors',
+              toolBtnVariant === 'iconLabelColor' &&
+                (isSection && sectionActive
+                  ? 'border-primary bg-primary text-primary-foreground hover:bg-primary/90'
+                  : 'border-primary bg-primary/15 text-primary hover:bg-primary/20')
             )}
             onClick={() => {
               if (isSection) section.startSection()
             }}
           >
-            {isSection && section.drawing ? '단면취소' : label}
+            {toolBtnVariant !== 'legacy' ? (
+              <SquareSplitHorizontal
+                className="h-3 w-3 shrink-0"
+                strokeWidth={2}
+                aria-hidden
+              />
+            ) : null}
+            {sectionLabel}
           </button>
         )
       })}
-      <button
-        type="button"
-        className="flex h-7 min-w-0 flex-1 cursor-pointer items-center justify-center gap-0.5 whitespace-nowrap rounded-[5px] bg-[#d7ebf1] px-0.5 text-[11px] font-semibold leading-none text-[#14607a] hover:bg-[#c5e3eb] dark:bg-[#14607a] dark:text-[#d7ebf1] dark:hover:bg-[#0f4d62]"
-        title={resultOpen ? '시설목록 접기' : '시설목록 펼치기'}
-        onClick={() => setResultOpen((open) => !open)}
-      >
-        {resultOpen ? (
-          <ChevronLeft className="h-3.5 w-3.5 shrink-0" />
-        ) : (
-          <ChevronRight className="h-3.5 w-3.5 shrink-0" />
-        )}
-        시설목록
-      </button>
     </div>
   )
 
@@ -2479,8 +2405,38 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
           <div className="standard-panel-root">
             <div className="standard-panel-header">
               <span className="standard-panel-title">관망조회</span>
-              <div className="flex shrink-0 items-center gap-0.5">
-                                <button type="button" className="standard-panel-close" onClick={handleClose} title="닫기" aria-label="닫기">
+              <div className="flex shrink-0 items-center gap-1">
+                {!resultOpen ? (
+                  <button
+                    type="button"
+                    title="시설목록 펼치기"
+                    aria-label="시설목록 펼치기"
+                    onClick={() => setResultOpen(true)}
+                    className="inline-flex h-7 cursor-pointer items-center gap-0.5 rounded border border-border px-1.5 text-[11px] font-medium text-foreground hover:bg-muted/50"
+                  >
+                    <ChevronLeft className="h-3.5 w-3.5 rotate-180" aria-hidden />
+                    목록
+                  </button>
+                ) : null}
+                <label className="sr-only" htmlFor="wtl-network-tool-btn-variant">
+                  하단 도구 버튼 UI
+                </label>
+                <select
+                  id="wtl-network-tool-btn-variant"
+                  title="하단 도구 버튼 UI"
+                  value={toolBtnVariant}
+                  onChange={(e) =>
+                    setToolBtnVariant(e.target.value as WtlNetworkToolBtnVariant)
+                  }
+                  className="h-7 max-w-[9.5rem] cursor-pointer rounded border border-border bg-background px-1.5 text-[11px] text-foreground"
+                >
+                  {TOOL_BTN_VARIANT_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+                <button type="button" className="standard-panel-close" onClick={handleClose} title="닫기" aria-label="닫기">
                   <X className="h-4 w-4" />
                 </button>
               </div>
@@ -2508,26 +2464,26 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
                     })}
                   </div>
                   {visibleDisplayGroups.length > 0 ? (
-                    <div className="flex border-b border-border">
+                  <div className="flex border-b border-border">
                       {visibleDisplayGroups.map(({ title }) => {
-                        const on = group === title
-                        return (
-                          <button
-                            key={title}
-                            type="button"
-                            className={cn(
-                              'h-7 min-w-0 flex-1 truncate px-0.5 text-center text-[11px] border-b-2 -mb-px',
-                              on
-                                ? 'border-primary font-semibold text-primary'
-                                : 'border-transparent text-muted-foreground hover:text-foreground'
-                            )}
-                            onClick={() => setGroup(title)}
-                          >
-                            {title}
-                          </button>
-                        )
-                      })}
-                    </div>
+                      const on = group === title
+                      return (
+                        <button
+                          key={title}
+                          type="button"
+                          className={cn(
+                            'h-7 min-w-0 flex-1 truncate px-0.5 text-center text-[11px] border-b-2 -mb-px',
+                            on
+                              ? 'border-primary font-semibold text-primary'
+                              : 'border-transparent text-muted-foreground hover:text-foreground'
+                          )}
+                          onClick={() => setGroup(title)}
+                        >
+                          {title}
+                        </button>
+                      )
+                    })}
+                  </div>
                   ) : null}
                   {currentGroup && (
                     <div
@@ -2551,31 +2507,31 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
                             )
                             const on =
                               selectable && extraOn.has(item.define_table_name)
-                            const eng = resolveLayerEngName(
-                              item.define_table_name,
-                              activeSourceId
-                            )
-                            const titleBase = dualTitle(
-                              item.define_table_kor_name,
-                              eng,
-                              showFieldKeys
-                            )
-                            return (
-                              <button
-                                key={item.define_table_name}
-                                type="button"
-                                disabled={!selectable}
-                                title={
-                                  selectable
-                                    ? titleBase
-                                    : `${item.define_table_kor_name} (데이터 없음)`
-                                }
-                                className={cn(
-                                  GROUP_BTN,
-                                  on ? GROUP_BTN_ON : GROUP_BTN_OFF,
-                                  !selectable &&
-                                    'cursor-not-allowed opacity-40 hover:bg-transparent'
-                                )}
+                        const eng = resolveLayerEngName(
+                          item.define_table_name,
+                          activeSourceId
+                        )
+                        const titleBase = dualTitle(
+                          item.define_table_kor_name,
+                          eng,
+                          showFieldKeys
+                        )
+                        return (
+                          <button
+                            key={item.define_table_name}
+                            type="button"
+                            disabled={!selectable}
+                            title={
+                              selectable
+                                ? titleBase
+                                : `${item.define_table_kor_name} (데이터 없음)`
+                            }
+                            className={cn(
+                              GROUP_BTN,
+                              on ? GROUP_BTN_ON : GROUP_BTN_OFF,
+                              !selectable &&
+                                'cursor-not-allowed opacity-40 hover:bg-transparent'
+                            )}
                                 onClick={() =>
                                   toggleLayer(item.define_table_name)
                                 }
@@ -2589,12 +2545,12 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
                                     ] ?? null
                                   }
                                 />
-                                <span className="min-w-0 truncate [word-break:keep-all]">
-                                  {item.define_table_kor_name}
-                                </span>
-                              </button>
-                            )
-                          })}
+                            <span className="min-w-0 truncate [word-break:keep-all]">
+                              {item.define_table_kor_name}
+                            </span>
+                          </button>
+                        )
+                      })}
                     </div>
                   )}
                   <div className="space-y-2 !mt-[13px] border-t border-border pt-[13px]">
@@ -2868,34 +2824,34 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
                               </div>
                             ) : (
                             <>
-                              <div
-                                className="overflow-x-auto"
+                          <div
+                            className="overflow-x-auto"
                                 style={
                                   box.items.length >= LIST_PAGE_SIZE
                                     ? { minHeight: LIST_TABLE_MIN_HEIGHT_PX }
                                     : undefined
                                 }
-                              >
-                                <table className="standard-list-table">
-                                  <thead className="standard-table-thead">
-                                    <tr>
-                                      {columns.map((col) => (
-                                        <th
-                                          key={col.key}
-                                          className="standard-table-th standard-table-th-left"
-                                          title={listHeaderTitle(col, showFieldKeys)}
-                                        >
-                                          {col.label}
-                                        </th>
-                                      ))}
-                                    </tr>
-                                  </thead>
-                                  <tbody>
+                          >
+                            <table className="standard-list-table">
+                              <thead className="standard-table-thead">
+                                <tr>
+                                  {columns.map((col) => (
+                                    <th
+                                      key={col.key}
+                                      className="standard-table-th standard-table-th-left"
+                                      title={listHeaderTitle(col, showFieldKeys)}
+                                    >
+                                      {col.label}
+                                    </th>
+                                  ))}
+                                </tr>
+                              </thead>
+                              <tbody>
                                     {box.items.map((item, rowIdx) => (
-                                      <tr
-                                        key={item.id}
-                                        className={cn(
-                                          'standard-list-row',
+                                  <tr
+                                    key={item.id}
+                                    className={cn(
+                                      'standard-list-row',
                                           selected?.id === item.id &&
                                             'standard-list-row-selected',
                                           box.items.length >= LIST_PAGE_SIZE &&
@@ -2908,59 +2864,59 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
                                             hitRows: [],
                                           })
                                         }}
-                                      >
-                                        {columns.map((col) => {
-                                          const cell = listCellParts(
-                                            item,
-                                            col,
-                                            codesByField,
-                                            showFieldKeys
-                                          )
-                                          return (
-                                            <td
-                                              key={col.key}
-                                              className="standard-table-td-compact"
-                                              title={cell.title}
-                                            >
-                                              {cell.text}
-                                            </td>
-                                          )
-                                        })}
-                                      </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
-                              </div>
-                              <div className="flex items-center justify-between gap-2 border-t border-border bg-muted/30 px-2 py-1.5">
-                                <span className="text-[11px] text-muted-foreground">
-                                  {box.total === 0
-                                    ? '0건'
-                                    : `${from}–${to} / ${box.total.toLocaleString()}건`}
-                                </span>
-                                <div className="flex items-center gap-1">
-                                  <button
-                                    type="button"
-                                    title="이전"
-                                    disabled={page <= 1 || listLoading}
-                                    className="cursor-pointer rounded border border-border bg-background px-2 py-0.5 text-[11px] text-muted-foreground hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-50"
-                                    onClick={() => void goBoxPage(box, page - 1)}
                                   >
-                                    이전
-                                  </button>
-                                  <span className="px-1.5 text-[11px] text-muted-foreground">
-                                    {page}페이지
-                                  </span>
-                                  <button
-                                    type="button"
-                                    title="다음"
-                                    disabled={!hasNext || listLoading}
-                                    className="cursor-pointer rounded border border-border bg-background px-2 py-0.5 text-[11px] text-muted-foreground hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-50"
-                                    onClick={() => void goBoxPage(box, page + 1)}
-                                  >
-                                    다음
-                                  </button>
-                                </div>
-                              </div>
+                                    {columns.map((col) => {
+                                      const cell = listCellParts(
+                                        item,
+                                        col,
+                                        codesByField,
+                                        showFieldKeys
+                                      )
+                                      return (
+                                        <td
+                                          key={col.key}
+                                          className="standard-table-td-compact"
+                                          title={cell.title}
+                                        >
+                                          {cell.text}
+                                        </td>
+                                      )
+                                    })}
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                          <div className="flex items-center justify-between gap-2 border-t border-border bg-muted/30 px-2 py-1.5">
+                            <span className="text-[11px] text-muted-foreground">
+                              {box.total === 0
+                                ? '0건'
+                                : `${from}–${to} / ${box.total.toLocaleString()}건`}
+                            </span>
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                title="이전"
+                                disabled={page <= 1 || listLoading}
+                                className="cursor-pointer rounded border border-border bg-background px-2 py-0.5 text-[11px] text-muted-foreground hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-50"
+                                onClick={() => void goBoxPage(box, page - 1)}
+                              >
+                                이전
+                              </button>
+                              <span className="px-1.5 text-[11px] text-muted-foreground">
+                                {page}페이지
+                              </span>
+                              <button
+                                type="button"
+                                title="다음"
+                                disabled={!hasNext || listLoading}
+                                className="cursor-pointer rounded border border-border bg-background px-2 py-0.5 text-[11px] text-muted-foreground hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-50"
+                                onClick={() => void goBoxPage(box, page + 1)}
+                              >
+                                다음
+                              </button>
+                            </div>
+                          </div>
                             </>
                             )
                           ) : null}
@@ -2978,48 +2934,53 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
           </MapSideListPanel>
         </div>
       )}
-      {detailModals.map((modal) => {
-        const dockIndex = minimizedDockKeys.indexOf(modal.key)
-        const pinPosition =
-          modal.minimized && dockIndex >= 0
-            ? computeMapDetailDockPin({
-                dockIndex,
-                dockLeftStart: dockLeftStartPx,
-                viewportW: viewportSize.w,
-                viewportH: viewportSize.h,
-              })
-            : null
-        return (
-        <NetworkDetailModal
-          key={modal.key}
-          item={modal.item}
-          hitRows={modal.hitRows}
-          expandToken={modal.expandToken}
-          focusToken={modal.focusToken}
-          showFieldKeys={showFieldKeys}
-          escapeEnabled={activeDetailKey === modal.key}
-          minimized={modal.minimized}
-          pinPosition={pinPosition}
-          onMinimizedChange={(next) =>
-            setDetailModalMinimized(modal.key, next)
-          }
+      {commonDetail ? (
+        <LayerClickDetailFloating
+          key="wtl-network-map-detail"
+          open
+          startAsSimple
+          placementAsTopLeft={commonDetail.placement === 'listCenter'}
+          hits={(commonDetail.hitRows.length > 0
+            ? commonDetail.hitRows.map((r) =>
+                r.id === commonDetail.item.id ? commonDetail.item : r
+              )
+            : [commonDetail.item]
+          ).map(networkRowToLayerClickHit)}
+          selected={networkRowToLayerClickHit(commonDetail.item)}
+          minimized={commonDetailMinimized}
+          onMinimizedChange={setCommonDetailMinimized}
+          focusToken={0}
           anchorLeftPx={
-            leftOffsetPx +
-            listWidth +
-            (resultOpen ? resultWidth : 0) +
-            8 +
-            modal.stackIndex * DETAIL_MODAL_STACK_OFFSET_PX
+            commonDetail.anchor?.left ??
+            leftOffsetPx + Math.round(listWidth / 2)
           }
-          anchorTopPx={72 + modal.stackIndex * DETAIL_MODAL_STACK_OFFSET_PX}
-          onActivate={() => {
-            setActiveDetailKey(modal.key)
-            const cur = detailModalsRef.current.find((m) => m.key === modal.key)
-            if (cur) setSelected(cur.item)
-            const map = mapContext?.mapInstanceRef?.current
-            if (map) claimMapLayerClickDetailHighlight(map, 'wtlNetwork')
-          }}
-          onClose={() => closeDetailModal(modal.key)}
-          onSelectHit={(row) => {
+          anchorTopPx={
+            commonDetail.anchor?.top ??
+            Math.max(72, Math.round(viewportSize.h / 2 - 100))
+          }
+          viewportW={viewportSize.w}
+          viewportH={viewportSize.h}
+          dockIndex={0}
+          dockLeftStartPx={dockLeftStartPx}
+          writeSerEng="wtlNetworkMap"
+          undergroundFacilityTableNames={(() => {
+            const s = new Set<string>()
+            const item = commonDetail.item
+            for (const v of [
+              item.layerKey,
+              item.fieldsTable,
+              getWtlNetLayerDef(String(item.layerKey ?? ''))?.table,
+            ]) {
+              const t = String(v ?? '')
+                .trim()
+                .toLowerCase()
+              if (t) s.add(t)
+            }
+            return s
+          })()}
+          onSelectHit={(key) => {
+            const row = commonDetail.hitRows.find((r) => String(r.id) === key)
+            if (!row) return
             void (async () => {
               let next: WtlNetworkRow = row
               try {
@@ -3036,49 +2997,61 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
               } catch {
                 next = row
               }
-              setDetailModals((prev) =>
-                prev.map((m) =>
-                  m.key === modal.key
-                    ? {
-                        ...m,
-                        item: next,
-                        expandToken: m.expandToken + 1,
-                      }
-                    : m
-                )
-              )
-              setActiveDetailKey(modal.key)
+              setCommonDetail((prev) => (prev ? { ...prev, item: next } : prev))
               setSelected(next)
             })()
           }}
-          onRelatedMapLayer={handleDetailRelatedLayer}
-          onItemUpdated={(next) => {
-            updateDetailModalItem(modal.key, next)
+          onClose={() => {
+            setCommonDetail(null)
+            setCommonDetailMinimized(false)
+            setSelected(null)
+          }}
+          onActivate={() => {
+            setSelected(commonDetail.item)
+            const map = mapContext?.mapInstanceRef?.current
+            if (map) claimMapLayerClickDetailHighlight(map, 'wtlNetwork')
+          }}
+          onSelectedUpdated={(hit) => {
+            const record: Record<string, unknown> = { ...(hit.data ?? {}) }
+            delete record.geom
+            const mergeRow = (row: WtlNetworkRow): WtlNetworkRow => ({
+              ...row,
+              record: {
+                ...(row.record && typeof row.record === 'object' ? row.record : {}),
+                ...record,
+              },
+            })
+            const id = hit.key
+            setCommonDetail((prev) =>
+              prev && String(prev.item.id) === id
+                ? {
+                    ...prev,
+                    item: mergeRow(prev.item),
+                    hitRows: prev.hitRows.map((r) =>
+                      String(r.id) === id ? mergeRow(r) : r
+                    ),
+                  }
+                : prev
+            )
             setBoxData((prev) => {
               let changed = false
               const out: Record<string, LayerBoxData> = {}
               for (const [key, data] of Object.entries(prev)) {
-                const idx = data.rows.findIndex((r) => r.id === next.id)
+                const idx = data.rows.findIndex((r) => String(r.id) === id)
                 if (idx < 0) {
                   out[key] = data
                   continue
                 }
                 changed = true
                 const rows = data.rows.slice()
-                rows[idx] = {
-                  ...rows[idx],
-                  ...next,
-                  geom: next.geom ?? rows[idx]?.geom,
-                }
+                rows[idx] = mergeRow(rows[idx])
                 out[key] = { ...data, rows }
               }
               return changed ? out : prev
             })
           }}
         />
-        )
-      })}
-      <WtlNetworkSectionDrawGuide
+      ) : null}      <WtlNetworkSectionDrawGuide
         open={section.modePickerOpen || section.drawing}
         drawMode={section.drawMode}
         drawing={section.drawing}
@@ -3113,7 +3086,7 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
         pinPosition={
           section.panelOpen && sectionMinimized
             ? computeMapDetailDockPin({
-                dockIndex: minimizedDockKeys.length,
+                dockIndex: commonDetail && commonDetailMinimized ? 1 : 0,
                 dockLeftStart: dockLeftStartPx,
                 viewportW: viewportSize.w,
                 viewportH: viewportSize.h,
@@ -3149,746 +3122,87 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
   )
 }
 
-function networkDetailLayerKor(row: WtlNetworkRow): string {
-  const key = String(row.layerKey ?? '').trim()
-  if (!key) return ''
-  for (const group of DISPLAY_GROUPS) {
-    const hit = group.items.find((i) => i.define_table_name === key)
-    if (hit) return hit.define_table_kor_name
-  }
-  return key
-}
-
-function networkDetailHitLabel(row: WtlNetworkRow): string {
-  const kor = networkDetailLayerKor(row) || String(row.layerKey ?? '').trim()
-  const name = String(row.name ?? '').trim()
-  return name ? `${kor} — ${name}` : kor
-}
-
 /** 다건 select option — POINT → LINE → POLYGON */
-function networkHitGeomRank(row: WtlNetworkRow): number {
-  const geomType = row.geom?.type
-  if (geomType === 'Point' || geomType === 'MultiPoint') return 0
-  if (geomType === 'LineString' || geomType === 'MultiLineString') return 1
-  if (geomType === 'Polygon' || geomType === 'MultiPolygon') return 2
-  const k = String(row.geomKind ?? '').trim().toLowerCase()
-  if (k === 'point') return 0
-  if (k === 'line') return 1
-  if (k === 'area' || k === 'polygon') return 2
-  return 1
+/** tables.json define_table_shp_type — POINT → LINE → POLYGON */
+function networkHitShpRank(shpOrKind: string | undefined): number {
+  const k = String(shpOrKind ?? '')
+    .trim()
+    .toUpperCase()
+  if (k === 'POINT' || k === 'MULTIPOINT') return 0
+  if (k === 'LINE' || k === 'LINESTRING' || k === 'MULTILINESTRING') return 1
+  if (
+    k === 'POLYGON' ||
+    k === 'MULTIPOLYGON' ||
+    k === 'AREA' ||
+    k === 'SURFACE'
+  ) {
+    return 2
+  }
+  const low = k.toLowerCase()
+  if (low === 'point') return 0
+  if (low === 'line') return 1
+  if (low === 'area' || low === 'polygon') return 2
+  return 9
 }
 
+type NetworkHitSortMeta = { shpRank: number; idx: number }
+
+const NETWORK_HIT_SORT_META = (() => {
+  const map = new Map<string, NetworkHitSortMeta>()
+  const rows = (
+    Array.isArray(tablesJson) ? tablesJson : []
+  ) as {
+    define_table_name?: string
+    define_table_shp_type?: string
+    define_table_idx?: string | number
+  }[]
+  for (const row of rows) {
+    const name = String(row.define_table_name ?? '')
+      .trim()
+      .toLowerCase()
+    if (!name || map.has(name)) continue
+    const idxRaw = parseInt(String(row.define_table_idx ?? ''), 10)
+    map.set(name, {
+      shpRank: networkHitShpRank(row.define_table_shp_type),
+      idx: Number.isFinite(idxRaw) ? idxRaw : 999999,
+    })
+  }
+  return map
+})()
+
+function networkHitSortMeta(row: WtlNetworkRow): NetworkHitSortMeta {
+  const def = getWtlNetLayerDef(String(row.layerKey ?? ''))
+  const candidates = [
+    row.layerKey,
+    def?.defineTable,
+    row.fieldsTable,
+    def?.table,
+  ]
+  for (const c of candidates) {
+    const key = String(c ?? '')
+      .trim()
+      .toLowerCase()
+    if (!key) continue
+    const meta = NETWORK_HIT_SORT_META.get(key)
+    if (meta) return meta
+  }
+  const geomType = row.geom?.type
+  let fallbackShp = String(row.geomKind ?? '')
+  if (geomType === 'Point' || geomType === 'MultiPoint') fallbackShp = 'POINT'
+  else if (geomType === 'LineString' || geomType === 'MultiLineString') {
+    fallbackShp = 'LINE'
+  } else if (geomType === 'Polygon' || geomType === 'MultiPolygon') {
+    fallbackShp = 'POLYGON'
+  }
+  return { shpRank: networkHitShpRank(fallbackShp), idx: 999999 }
+}
+
+/** 다중 선택 options — shp_type(POINT→LINE→POLYGON) 후 define_table_idx */
 function sortNetworkHitRows(rows: WtlNetworkRow[]): WtlNetworkRow[] {
   if (rows.length < 2) return rows
-  return rows.slice().sort((a, b) => networkHitGeomRank(a) - networkHitGeomRank(b))
-}
-
-function NetworkDetailModal({
-  item,
-  hitRows = [],
-  expandToken = 0,
-  focusToken = 0,
-  showFieldKeys = false,
-  escapeEnabled = true,
-  minimized = false,
-  pinPosition = null,
-  onMinimizedChange,
-  anchorLeftPx,
-  anchorTopPx = 72,
-  onActivate,
-  onClose,
-  onSelectHit,
-  onRelatedMapLayer,
-  onItemUpdated,
-}: {
-  item: WtlNetworkRow | null
-  /** 지도 클릭 다중 피처. 2건 이상일 때 heading 자리 select·화살표, 우측에 건수 */
-  hitRows?: WtlNetworkRow[]
-  /** 증가 시 최소화 해제 */
-  expandToken?: number
-  /** 증가 시 재마운트 없이 앞으로 */
-  focusToken?: number
-  /** 슈퍼유저·개발자 콘솔 — 시설목록과 동일: HTML title에만 영문 필드·코드 원문 괄호 */
-  showFieldKeys?: boolean
-  /** 활성 모달만 Escape 닫기 */
-  escapeEnabled?: boolean
-  minimized?: boolean
-  pinPosition?: { top: number; left: number } | null
-  onMinimizedChange?: (minimized: boolean) => void
-  /** 시설목록 패널 오른쪽 끝 */
-  anchorLeftPx: number
-  anchorTopPx?: number
-  onActivate?: () => void
-  onClose: () => void
-  onSelectHit?: (row: WtlNetworkRow) => void
-  onRelatedMapLayer: (next: WtlNetworkDetailRelatedLayer) => void
-  onItemUpdated: (next: WtlNetworkRow) => void
-}) {
-  const open = item != null
-  const mapContext = useMapContext()
-  const theme = useResolvedThemeSafe()
-  const fieldsTable = String(item?.fieldsTable ?? '').trim()
-  const fieldsFallback = String(item?.fieldsTableFallback ?? '').trim() || null
-  const bundleKey = fieldsTable
-    ? `${fieldsTable.toLowerCase()}\0${(fieldsFallback ?? '').toLowerCase()}`
-    : ''
-  /** 캐시 히트는 렌더 동기 — row 전환 시 영문→한글 깜빡임 방지 */
-  const peeked = fieldsTable
-    ? peekWtlDefineDisplayBundle(fieldsTable, fieldsFallback)
-    : null
-  const [loaded, setLoaded] = useState<WtlDefineDisplayBundle | null>(null)
-  const [loadedKey, setLoadedKey] = useState('')
-  const bundle = peeked ?? (loadedKey === bundleKey ? loaded : null)
-  const fieldsReady = bundle != null
-  const fields = fieldsReady ? bundle.fields : []
-  const codesByField = fieldsReady ? bundle.codesByField : {}
-  const fieldsLoading = open && Boolean(fieldsTable) && !fieldsReady
-
-  const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState<Record<string, string>>({})
-  const [saving, setSaving] = useState(false)
-  const [editError, setEditError] = useState<string | null>(null)
-  const [reportOpen, setReportOpen] = useState(false)
-  const [reportHtml, setReportHtml] = useState('')
-  const [printing, setPrinting] = useState(false)
-  const reportIframeRef = useRef<HTMLIFrameElement | null>(null)
-
-  const cancelEdit = useCallback(() => {
-    setEditing(false)
-    setDraft({})
-    setEditError(null)
-  }, [])
-
-  useEffect(() => {
-    cancelEdit()
-  }, [item?.id, cancelEdit])
-
-  /** expandToken이 증가할 때만 펼침 — minimized 의존 시 최소화 직후 바로 다시 펼쳐짐 */
-  const prevExpandTokenRef = useRef(expandToken)
-  useEffect(() => {
-    const prev = prevExpandTokenRef.current
-    prevExpandTokenRef.current = expandToken
-    if (expandToken > prev) onMinimizedChange?.(false)
-  }, [expandToken, onMinimizedChange])
-
-  useEffect(() => {
-    if (!open || !escapeEnabled) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return
-      if (editing) {
-        cancelEdit()
-        return
-      }
-      onClose()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [open, escapeEnabled, onClose, editing, cancelEdit])
-
-  useEffect(() => {
-    if (!open || !fieldsTable) {
-      setLoaded(null)
-      setLoadedKey('')
-      return
-    }
-    if (peekWtlDefineDisplayBundle(fieldsTable, fieldsFallback)) return
-    let cancelled = false
-    void loadWtlDefineDisplayBundle(fieldsTable, fieldsFallback).then((next) => {
-      if (cancelled) return
-      setLoaded(next)
-      setLoadedKey(bundleKey)
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [open, fieldsTable, fieldsFallback, bundleKey])
-
-  const detailFields = useMemo(() => selectDefineLayerDetailFields(fields), [fields])
-
-  type FieldEditMeta = DefineFieldLike & {
-    define_field_is_key?: unknown
-    define_field_read_only?: unknown
-  }
-
-  const keyFieldName = useMemo(() => {
-    const hit = (fields as FieldEditMeta[]).find((f) =>
-      isDefineFieldFlagTrue(f.define_field_is_key)
-    )
-    return String(hit?.define_field_name ?? '').trim() || null
-  }, [fields])
-
-  const editTarget = useMemo(() => {
-    if (!item || !fieldsReady) return null
-    return resolveWtlNetworkRowEditTarget(item, fields)
-  }, [item, fields, fieldsReady])
-
-  const canEdit = Boolean(item?.record && editTarget && detailFields.length > 0)
-
-  type AttrRow = {
-    key: string
-    label: string
-    /** HTML title — 슈퍼유저일 때 영문 필드명 괄호 */
-    labelTitle: string
-    value: string
-    /** HTML title — 슈퍼유저·코드형일 때 원문 괄호 */
-    valueTitle: string
-    readOnly: boolean
-    editable: boolean
-    title: boolean
-  }
-
-  const attrRows = useMemo(() => {
-    if (!item) return [] as AttrRow[]
-    if (fieldsLoading) return []
-    const record = item.record ?? null
-    if (record && detailFields.length > 0) {
-      return (detailFields as FieldEditMeta[]).map((f, i) => {
-        const key = String(f.define_field_name ?? '').trim()
-        const kor = String(f.define_field_kor_name ?? '').trim()
-        const label = getDefineFieldDisplayLabel(key, f.define_field_kor_name)
-        const labelTitle = dualTitle(kor || label, key, showFieldKeys)
-        const raw = getRowValueByField(record, key)
-        const value = formatDefineFieldDisplayValue(
-          raw,
-          f.define_field_type,
-          codesByField[key.toLowerCase()],
-          '—'
-        )
-        let valueTitle = value
-        if (showFieldKeys && isDefineFieldCodeType(f.define_field_type)) {
-          const rawText = formatDetailScalarValue(raw, { empty: '—', asLiteral: true })
-          if (rawText !== '—' && value !== '—' && rawText !== value) {
-            valueTitle = value + ' (' + rawText + ')'
-          }
-        }
-        const isKey = Boolean(
-          key && keyFieldName && key.toLowerCase() === keyFieldName.toLowerCase()
-        )
-        const readOnly =
-          isKey ||
-          isDefineFieldFlagTrue(f.define_field_read_only) ||
-          isGeomLikeDefineFieldName(key)
-        return {
-          key: key || `f-${i}`,
-          label,
-          labelTitle,
-          value,
-          valueTitle,
-          readOnly,
-          editable: Boolean(key) && !readOnly,
-          title: isDefineFieldFlagTrue(f.define_field_show_title),
-        }
-      })
-    }
-    if (record) {
-      return Object.entries(record)
-        .filter(([k]) => !isGeomLikeDefineFieldName(k) && k.toLowerCase() !== 'gid')
-        .map(([k, v], i) => {
-          const label = getDefineFieldDisplayLabel(k)
-          const value = formatDefineFieldDisplayValue(v, undefined, undefined, '—')
-          return {
-            key: k || `auto-${i}`,
-            label,
-            labelTitle: dualTitle(label, k, showFieldKeys),
-            value,
-            valueTitle: value,
-            readOnly: true,
-            editable: false,
-            title: false,
-          }
-        })
-    }
-    if (item.attrs?.length) {
-      return item.attrs.map((a, i) => ({
-        key: `${a.label}-${i}`,
-        label: a.label,
-        labelTitle: a.label,
-        value: a.value,
-        valueTitle: a.value,
-        readOnly: true,
-        editable: false,
-        title: false,
-      }))
-    }
-    return [
-      { key: 'name', label: '관리번호', labelTitle: '관리번호', value: item.name, valueTitle: item.name, readOnly: true, editable: false, title: false },
-      { key: 'diameter', label: '구경', labelTitle: '구경', value: item.diameter, valueTitle: item.diameter, readOnly: true, editable: false, title: false },
-      { key: 'material', label: '재질', labelTitle: '재질', value: item.material, valueTitle: item.material, readOnly: true, editable: false, title: false },
-      { key: 'length', label: '연장', labelTitle: '연장', value: item.length, valueTitle: item.length, readOnly: true, editable: false, title: false },
-      { key: 'year', label: '설치연도', labelTitle: '설치연도', value: item.year, valueTitle: item.year, readOnly: true, editable: false, title: false },
-    ]
-  }, [item, detailFields, codesByField, fieldsLoading, keyFieldName, showFieldKeys])
-
-  const beginEdit = useCallback(() => {
-    if (!canEdit || !item?.record) return
-    const next: Record<string, string> = {}
-    for (const row of attrRows) {
-      if (!row.editable) continue
-      const raw = getRowValueByField(item.record, row.key)
-      next[row.key] = raw == null ? '' : String(raw)
-    }
-    setDraft(next)
-    setEditError(null)
-    setEditing(true)
-  }, [canEdit, item, attrRows])
-
-  const refreshSelectedItem = useCallback(async () => {
-    if (!item) return
-    try {
-      const detailRes = await call('', 'POST', {
-        service: 'wtlNetworkService',
-        action: 'getWtlNetworkDetail',
-        params: { id: item.id },
-      })
-      const refreshed =
-        ((detailRes?.data ?? detailRes)?.row as WtlNetworkRow | null | undefined) ?? null
-      if (refreshed) onItemUpdated(refreshed)
-    } catch {
-      /* 목록·상세는 기존 값 유지 */
-    }
-  }, [item, onItemUpdated])
-
-  const handleSave = useCallback(async () => {
-    if (!item || !editTarget || !item.record) return
-    setSaving(true)
-    setEditError(null)
-    try {
-      const res = await call('', 'POST', {
-        service: 'layerRowService',
-        action: 'updateTableRowByKey',
-        params: {
-          table: editTarget.table,
-          schema: editTarget.schema,
-          keyValue: editTarget.keyValue,
-          keyField: editTarget.keyField,
-          changes: draft,
-          includeHiddenDetail: false,
-        },
-      })
-      const data = res?.data ?? res
-      if (data?.error || data?.success === false) {
-        setEditError(String(data?.error ?? '수정에 실패했습니다.'))
-        return
-      }
-      const updatedRecord: Record<string, unknown> = { ...item.record, ...draft }
-      let refreshed: WtlNetworkRow | null = null
-      try {
-        const detailRes = await call('', 'POST', {
-          service: 'wtlNetworkService',
-          action: 'getWtlNetworkDetail',
-          params: { id: item.id },
-        })
-        refreshed = ((detailRes?.data ?? detailRes)?.row as WtlNetworkRow | null | undefined) ?? null
-      } catch {
-        refreshed = null
-      }
-      const next: WtlNetworkRow = refreshed
-        ? { ...refreshed, record: refreshed.record ?? updatedRecord }
-        : { ...item, record: updatedRecord }
-      onItemUpdated(next)
-      setEditing(false)
-      setDraft({})
-    } catch (e: unknown) {
-      setEditError(e instanceof Error ? e.message : '수정에 실패했습니다.')
-    } finally {
-      setSaving(false)
-    }
-  }, [item, editTarget, draft, onItemUpdated])
-
-  const titleField = useMemo(() => {
-    if (!fieldsReady || !item) return item?.name ?? ''
-    const title = fields.find((f) => isDefineFieldFlagTrue(f.define_field_show_title))
-    if (!title || !item.record) return item.name
-    const key = String(title.define_field_name ?? '').trim()
-    const raw = getRowValueByField(item.record, key)
-    const text = formatDefineFieldDisplayValue(
-      raw,
-      title.define_field_type,
-      codesByField[key.toLowerCase()],
-      ''
-    )
-    return text || item.name
-  }, [fields, item, codesByField, fieldsReady])
-
-  /** 목록 박스와 동일 — DISPLAY_GROUPS 한글명 */
-  const layerKorName = useMemo(
-    () => (item ? networkDetailLayerKor(item) : ''),
-    [item]
-  )
-
-  /** 다건 option — POINT → LINE → POLYGON 고정 */
-  const orderedHitRows = useMemo(() => sortNetworkHitRows(hitRows), [hitRows])
-
-  const closeReportModal = useCallback(() => {
-    setReportOpen(false)
-    setReportHtml('')
-    setPrinting(false)
-  }, [])
-
-  const handlePrintReport = useCallback(async () => {
-    if (!item) return
-    setPrinting(true)
-    setReportHtml('')
-    setReportOpen(true)
-    try {
-      const basicAttrs: FacilityReportAttrRow[] = attrRows.map((row) => ({
-        label: row.label,
-        value: row.value,
-      }))
-      const reportTitle = titleField || item.name || layerKorName || '시설 상세'
-      const html = await buildWtlNetworkDetailReportHtml({
-        title: reportTitle,
-        layerLabel: layerKorName || reportTitle,
-        basicAttrs,
-        item,
-        fields,
-      })
-      setReportHtml(html)
-    } catch {
-      setReportOpen(false)
-      setReportHtml('')
-      window.alert('보고서 인쇄에 실패했습니다.')
-    } finally {
-      setPrinting(false)
-    }
-  }, [attrRows, fields, item, layerKorName, titleField])
-
-  useEffect(() => {
-    const doc = reportIframeRef.current?.contentDocument
-    if (!doc?.documentElement) return
-    doc.documentElement.classList.toggle('dark', theme === 'dark')
-  }, [theme, reportHtml, reportOpen])
-
-  const printReportFromModal = () => {
-    if (printing || !reportHtml) return
-    const win = reportIframeRef.current?.contentWindow
-    if (!win) return
-    win.focus()
-    win.print()
-  }
-
-  if (!open || !item) return null
-
-  const subtitle = titleField || item.name
-  const baseTitle = subtitle || layerKorName || '시설 상세'
-  /** select(다중 히트) 최소화 — 첫 히트 레이어명 외 n건 */
-  const multiHitMinimized = minimized && orderedHitRows.length > 1
-  const firstHitLayerKor = multiHitMinimized
-    ? networkDetailLayerKor(orderedHitRows[0] ?? item) || layerKorName
-    : ''
-  const titleLine = multiHitMinimized
-    ? `${firstHitLayerKor || '시설'} 외 ${orderedHitRows.length - 1}건`
-    : baseTitle
-  const showLayerLine =
-    !multiHitMinimized && Boolean(layerKorName && layerKorName !== baseTitle)
-  const multiHit = orderedHitRows.length > 1
-  const hitIndex = multiHit
-    ? orderedHitRows.findIndex((r) => r.id === item.id)
-    : -1
-
-  const selectHitRow = (next: WtlNetworkRow | undefined) => {
-    if (!next || next.id === item.id) return
-    if (editing) cancelEdit()
-    onSelectHit?.(next)
-  }
-
-  const handleGoToLocation = () => {
-    const map = mapContext?.mapInstanceRef?.current
-    flyToWtlNetworkGeom(map, item.geom, () =>
-      mapContext?.applyMapViewPaddingRef?.current?.()
-    )
-  }
-
-  const renderCellValue = (row: AttrRow) => {
-    if (editing && row.editable) {
-      return (
-        <input
-          className="standard-detail-input h-6 w-full min-w-0"
-          value={draft[row.key] ?? ''}
-          disabled={saving}
-          title={row.labelTitle}
-          onChange={(e) =>
-            setDraft((prev) => ({
-              ...prev,
-              [row.key]: e.target.value,
-            }))
-          }
-        />
-      )
-    }
-    if (row.label === '상태') {
-      return <span className={statusClass(row.value)}>{row.value}</span>
-    }
-    return row.value
-  }
-
-  return (
-    <MapDetailFloatingPanel
-      layer={showLayerLine ? layerKorName : null}
-      title={titleLine}
-      minimized={minimized}
-      onMinimizedChange={onMinimizedChange}
-      onClose={() => {
-        if (editing) cancelEdit()
-        onClose()
-      }}
-      pinPosition={pinPosition}
-      focusToken={focusToken}
-      onActivate={onActivate}
-      width={DETAIL_MODAL_WIDTH}
-      minimizedWidth={MAP_DETAIL_FLOAT_MINIMIZED_WIDTH}
-      maxHeight={DETAIL_MODAL_MAX_HEIGHT}
-      defaultPosition={{ top: anchorTopPx, left: anchorLeftPx }}
-      hideHeading={multiHit}
-      headerLeading={
-        multiHit ? (
-          <>
-            <select
-              className="h-7 min-w-0 max-w-[14rem] flex-1 cursor-pointer rounded border border-border bg-background px-1.5 text-[11px] text-foreground outline-none focus:border-primary"
-              value={item.id}
-              title="상세보기 선택"
-              aria-label="상세보기 선택"
-              onChange={(e) => {
-                selectHitRow(orderedHitRows.find((r) => r.id === e.target.value))
-              }}
-            >
-              {orderedHitRows.map((row) => (
-                <option key={row.id} value={row.id}>
-                  {networkDetailHitLabel(row)}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              title="이전"
-              aria-label="이전 상세"
-              disabled={hitIndex <= 0}
-              onClick={() => selectHitRow(orderedHitRows[hitIndex - 1])}
-              className="standard-panel-close cursor-pointer disabled:pointer-events-none disabled:opacity-40"
-            >
-              <ChevronLeft className="h-4 w-4" aria-hidden />
-            </button>
-            <button
-              type="button"
-              title="다음"
-              aria-label="다음 상세"
-              disabled={hitIndex < 0 || hitIndex >= orderedHitRows.length - 1}
-              onClick={() => selectHitRow(orderedHitRows[hitIndex + 1])}
-              className="standard-panel-close cursor-pointer disabled:pointer-events-none disabled:opacity-40"
-            >
-              <ChevronRight className="h-4 w-4" aria-hidden />
-            </button>
-          </>
-        ) : null
-      }
-      headerActionsAlways={
-        <button
-          type="button"
-          title="위치 이동"
-          aria-label="위치 이동"
-          onClick={handleGoToLocation}
-          className={
-            minimized
-              ? 'standard-panel-close cursor-pointer'
-              : 'standard-detail-hdr-btn cursor-pointer'
-          }
-        >
-          <Crosshair className="h-3.5 w-3.5" aria-hidden />
-          {minimized ? null : '위치 이동'}
-        </button>
-      }
-      headerActions={
-        <>
-          <button
-            type="button"
-            title={printing ? '보고서 준비 중…' : '보고서 인쇄'}
-            disabled={printing || editing}
-            onClick={() => void handlePrintReport()}
-            className="standard-detail-hdr-btn"
-          >
-            <Printer className="h-3 w-3" aria-hidden />
-            {printing ? '준비 중…' : '보고서 인쇄'}
-          </button>
-          {multiHit ? (
-            <span
-              className="shrink-0 px-1 text-[11px] tabular-nums text-muted-foreground"
-              title={`${orderedHitRows.length}건 선택됨`}
-            >
-              {orderedHitRows.length}건 선택됨
-            </span>
-          ) : null}
-        </>
-      }
-    >
-          <div className="standard-detail-scroll">
-            {fieldsLoading ? (
-              <p className="standard-detail-loading">필드 설정 불러오는 중…</p>
-            ) : attrRows.length === 0 ? (
-              <p className="standard-detail-attr-empty">표시할 속성이 없습니다.</p>
-            ) : (
-              <table className="standard-detail-attr-table">
-                <tbody>
-                  {attrRows.map((row) => (
-                    <tr key={row.key}>
-                      <th
-                        scope="row"
-                        className="standard-detail-attr-label standard-detail-attr-cell-border"
-                        title={row.labelTitle}
-                      >
-                        {row.label}
-                      </th>
-                      <td
-                        className={cn(
-                          'standard-detail-attr-value standard-detail-attr-cell-border',
-                          row.title && !editing
-                            ? 'standard-detail-attr-value-title'
-                            : 'text-foreground'
-                        )}
-                        title={editing && row.editable ? row.labelTitle : row.valueTitle}
-                      >
-                        {renderCellValue(row)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-            {editError ? (
-              <p className="standard-detail-error mt-2" role="alert">
-                {editError}
-              </p>
-            ) : null}
-          </div>
-          {!editing ? (
-            <WtlNetworkDetailRelatedTabs
-              item={item}
-              fields={fields}
-              onRelatedMapLayer={onRelatedMapLayer}
-              onHistoryReverted={() => void refreshSelectedItem()}
-            />
-          ) : null}
-          <div className="standard-detail-edit-footer">
-            {editing ? (
-              <>
-                <button
-                  type="button"
-                  title="취소"
-                  disabled={saving}
-                  onClick={cancelEdit}
-                  className="standard-detail-hdr-btn"
-                >
-                  취소
-                </button>
-                <button
-                  type="button"
-                  title={saving ? '저장 중…' : '저장'}
-                  disabled={saving}
-                  onClick={() => void handleSave()}
-                  className="standard-detail-hdr-btn-save"
-                >
-                  {saving ? '저장 중…' : '저장'}
-                </button>
-              </>
-            ) : (
-              <>
-                <button
-                  type="button"
-                  title="수정"
-                  disabled={!canEdit}
-                  onClick={beginEdit}
-                  className="standard-detail-hdr-btn"
-                >
-                  수정
-                </button>
-                <button
-                  type="button"
-                  title="닫기"
-                  onClick={onClose}
-                  className="standard-detail-hdr-btn"
-                >
-                  닫기
-                </button>
-              </>
-            )}
-          </div>
-
-      <Dialog
-        open={reportOpen}
-        onOpenChange={(next) => {
-          if (!next) {
-            closeReportModal()
-            return
-          }
-          setReportOpen(true)
-        }}
-      >
-        <DialogContent
-          layerZIndex={MAP_UI_Z.nestedDialog}
-          className="flex max-h-[min(90vh,900px)] w-[min(56rem,calc(100vw-1.5rem))] max-w-none flex-col gap-0 overflow-hidden bg-background p-0 text-foreground scheme-light dark:scheme-dark sm:max-w-none sm:rounded-lg"
-        >
-          <DialogHeader className="shrink-0 border-b border-border px-4 py-3 text-left">
-            <DialogTitle className="text-base font-semibold text-foreground">
-              {baseTitle} 상세보고서
-            </DialogTitle>
-          </DialogHeader>
-          <div className="min-h-0 flex-1 bg-background">
-            {reportHtml ? (
-              <iframe
-                ref={reportIframeRef}
-                title={`${baseTitle} 상세보고서 미리보기`}
-                className="h-[min(70vh,720px)] w-full border-0 bg-background"
-                onLoad={(e) => {
-                  const doc = e.currentTarget.contentDocument
-                  if (!doc?.documentElement) return
-                  doc.documentElement.classList.toggle(
-                    'dark',
-                    document.documentElement.classList.contains('dark')
-                  )
-                }}
-                srcDoc={reportHtml}
-              />
-            ) : (
-              <div
-                className="flex h-[min(70vh,720px)] flex-col items-center justify-center gap-3 px-6"
-                aria-live="polite"
-              >
-                <p className="text-sm font-medium text-foreground">
-                  보고서 준비 중…
-                </p>
-                {printing ? (
-                  <p className="text-xs text-muted-foreground">
-                    탭 현황·이력을 불러오는 중입니다.
-                  </p>
-                ) : null}
-              </div>
-            )}
-          </div>
-          <DialogFooter className="gap-1 border-t border-border px-4 py-2.5 sm:space-x-0">
-            <button
-              type="button"
-              title={
-                printing || !reportHtml
-                  ? '준비가 끝난 뒤 인쇄할 수 있습니다'
-                  : '인쇄 / PDF 저장'
-              }
-              disabled={printing || !reportHtml}
-              className={cn(reportBtnPrimary, 'cursor-pointer disabled:opacity-50')}
-              onClick={printReportFromModal}
-            >
-              <Printer className="h-3 w-3" aria-hidden />
-              {printing ? '준비 중…' : '인쇄 / PDF 저장'}
-            </button>
-            <button
-              type="button"
-              title="닫기"
-              className={cn(reportBtnGhost, 'cursor-pointer')}
-              onClick={closeReportModal}
-            >
-              닫기
-            </button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </MapDetailFloatingPanel>
-  )
+  return rows.slice().sort((a, b) => {
+    const ma = networkHitSortMeta(a)
+    const mb = networkHitSortMeta(b)
+    return ma.shpRank - mb.shpRank || ma.idx - mb.idx
+  })
 }

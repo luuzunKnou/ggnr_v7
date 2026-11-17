@@ -42,7 +42,16 @@ import {
   buildServiceFilePreviewGalleryItems,
   isServiceFilePreviewableName,
 } from './serviceFilePreviewItems';
+import tablesJson from '@/config/defineLayer/tables.json';
+import {
+  buildIdentifyDefineSortMetaMap,
+  sortIdentifyLayersByDefineOrder,
+} from '@/lib/mapLayerGeometryOrder';
 import type { IdentifyLayerResult, IdentifyFeatureItem, IdentifyPopupState } from '../hooks/useFeatureIdentify';
+
+const LAYER_DATA_IDENTIFY_SORT_META = buildIdentifyDefineSortMetaMap(
+  Array.isArray(tablesJson) ? tablesJson : []
+);
 import { isOrthoDataQueryLayerId } from '../../_mapContents/aerialView/orthoDataQueryLayerId';
 import { IdentifyHitListBlock } from './IdentifyHitListBlock';
 import { compareFeaturesByGeometryStackOrder } from '@/lib/mapLayerGeometryOrder';
@@ -354,9 +363,10 @@ function findRowIndexByHistoryKey(
 function flattenIdentifyResults(
   results: IdentifyLayerResult[]
 ): { layer: IdentifyLayerResult; feature: IdentifyFeatureItem; index: number }[] {
+  const ordered = sortIdentifyLayersByDefineOrder(results, LAYER_DATA_IDENTIFY_SORT_META);
   const out: { layer: IdentifyLayerResult; feature: IdentifyFeatureItem; index: number }[] = [];
   let index = 0;
-  for (const layer of results) {
+  for (const layer of ordered) {
     for (const feature of layer.features) {
       out.push({ layer: layer as IdentifyLayerResult, feature, index });
       index += 1;

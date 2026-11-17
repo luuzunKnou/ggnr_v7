@@ -871,7 +871,8 @@ export function useWtlNetworkSection(enabledLayerKeys: string[]) {
       setRoadChordActive(false)
 
       if (mode === 'roadWidth') {
-        setRoadPreviewTable(null)
+        // 실폭도로 WMS 미리보기 + 가로지르기 픽
+        setRoadPreviewTable('tl_sprd_rw')
         setRoadChordActive(true)
         setMapDrawInputSuspended?.(true)
         return
@@ -885,6 +886,7 @@ export function useWtlNetworkSection(enabledLayerKeys: string[]) {
       setSpatialDrawRequest({
         type: 'line',
         snapLayerName: mode === 'roadSeg' ? 'tl_sprd_manage' : undefined,
+        showSnapLayer: mode === 'roadSeg',
         sketchControlRef,
         onSketchPointCount: setSketchPointCount,
         onComplete: (wkt5181: string) => {

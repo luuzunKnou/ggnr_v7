@@ -1454,6 +1454,8 @@ function MapLayoutContent({
    * 상하 분할 override([0,0,0,0])가 있으면 왼쪽 패딩을 넣지 않음(스페이서와 이중 패딩 방지). */
   useLayoutEffect(() => {
     const apply = () => {
+      // 맵 미준비여도 최소화 독·축척 등 플로팅이 리스트/상세 폭을 따라가도록 먼저 반영
+      setMapPaddingLeft?.((prev) => (prev === mapPaddingLeft ? prev : mapPaddingLeft))
       const map = mapInstanceRef?.current
       if (!map) return
       const override = mapViewPaddingOverrideRef?.current
@@ -1464,7 +1466,6 @@ function MapLayoutContent({
       } else {
         map.getView().padding = padding
       }
-      setMapPaddingLeft?.((prev) => (prev === mapPaddingLeft ? prev : mapPaddingLeft))
     }
     if (applyMapViewPaddingRef) {
       applyMapViewPaddingRef.current = apply

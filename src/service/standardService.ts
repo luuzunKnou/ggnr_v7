@@ -10,7 +10,13 @@ import {
 } from '@/integrations/krasLayerSync.config';
 import * as fs from 'fs';
 import * as path from 'path';
-import { identifyHitPriorityRank } from '@/lib/mapLayerGeometryOrder';
+import {
+  buildIdentifyDefineSortMetaMap,
+  compareIdentifyDefineSortMeta,
+  identifyHitPriorityRank,
+  resolveIdentifyDefineSortMeta,
+  type IdentifyDefineSortMeta,
+} from '@/lib/mapLayerGeometryOrder';
 import { isFmsFacilityLayerTable } from '@/lib/fmsLinkage/fmsBinding';
 import { fetchVworldCadastralGeomByPnu } from '@/lib/vworldCadastralGeom';
 import { readDefineLayerCodes } from '@/lib/defineLayerCodeFiles';
@@ -648,6 +654,35 @@ function getTablesJson(): Record<string, unknown>[] {
 
 export function invalidateTablesJsonCache(): void {
   _tablesJsonCache = null;
+  _identifyDefineSortMetaCache = null;
+}
+
+let _identifyDefineSortMetaCache: Map<string, IdentifyDefineSortMeta> | null = null;
+function getIdentifyDefineSortMetaMap(): Map<string, IdentifyDefineSortMeta> {
+  if (_identifyDefineSortMetaCache) return _identifyDefineSortMetaCache;
+  _identifyDefineSortMetaCache = buildIdentifyDefineSortMetaMap(getTablesJson());
+  return _identifyDefineSortMetaCache;
+}
+
+/** Identify 레이어 정렬 메타 — define_table_shp_type → define_table_idx */
+function identifySortMetaForTable(
+  ...tableNames: Array<string | null | undefined>
+): IdentifyDefineSortMeta {
+  return resolveIdentifyDefineSortMeta(getIdentifyDefineSortMetaMap(), ...tableNames);
+}
+
+function compareIdentifyLayerResults(
+  a: { tableName: string; physicalTable?: string; isSplitLayer?: boolean; korName?: string },
+  b: { tableName: string; physicalTable?: string; isSplitLayer?: boolean; korName?: string }
+): number {
+  const ma = identifySortMetaForTable(a.physicalTable, a.tableName);
+  const mb = identifySortMetaForTable(b.physicalTable, b.tableName);
+  const byDefine = compareIdentifyDefineSortMeta(ma, mb);
+  if (byDefine !== 0) return byDefine;
+  const da = a.isSplitLayer ? 0 : 1;
+  const db = b.isSplitLayer ? 0 : 1;
+  if (da !== db) return da - db;
+  return String(a.korName ?? '').localeCompare(String(b.korName ?? ''), 'ko');
 }
 
 function getTitleFieldName(tableName: string): string | null {
@@ -655,9 +690,11 @@ function getTitleFieldName(tableName: string): string | null {
   const filePath = path.join(FIELDS_DIR, `table_${safe}.json`);
   try {
     if (!fs.existsSync(filePath)) return null;
-    const fields: Record<string, string>[] = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-    const titleField = fields.find((f) => f.define_field_show_title === 'true');
-    return titleField ? String(titleField.define_field_name ?? '') : null;
+    const fields: Record<string, unknown>[] = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    // boolean true / "true" / "1" 모두 인식 (defineFlagTrue)
+    const titleField = fields.find((f) => defineFlagTrue(f.define_field_show_title));
+    const name = titleField ? String(titleField.define_field_name ?? '').trim() : '';
+    return name || null;
   } catch { return null; }
 }
 
@@ -1050,6 +1087,11 @@ export async function identifyFeatures(params: {
           const korName = getTableKorName(displayName);
           const titleField = getTitleFieldName(physicalTable);
           const features = mapRowsToIdentifyFeatures(rawFeatures, physicalTable, columns, geomCol);
+          const defineMeta = identifySortMetaForTable(physicalTable, displayName);
+          const metaMap = getIdentifyDefineSortMetaMap();
+          const hasDefine =
+            metaMap.has(String(physicalTable).toLowerCase()) ||
+            metaMap.has(String(displayName).toLowerCase());
           results.push({
             tableName: displayName,
             physicalTable,
@@ -1057,7 +1099,9 @@ export async function identifyFeatures(params: {
             titleField,
             isSplitLayer,
             features,
-            identifyGeomRank: identifyHitPriorityRank(geomTypeRaw),
+            identifyGeomRank: hasDefine
+              ? defineMeta.shpRank
+              : identifyHitPriorityRank(geomTypeRaw),
           });
         }
       } catch (e) {
@@ -1067,14 +1111,8 @@ export async function identifyFeatures(params: {
     })
   );
 
-  /** 레이어 간 순서: 점 레이어 → 선 → 면, 그다음 분할 레이어 우선, 한글명 */
-  results.sort((a, b) => {
-    if (a.identifyGeomRank !== b.identifyGeomRank) return a.identifyGeomRank - b.identifyGeomRank;
-    const da = a.isSplitLayer ? 0 : 1;
-    const db = b.isSplitLayer ? 0 : 1;
-    if (da !== db) return da - db;
-    return a.korName.localeCompare(b.korName, 'ko');
-  });
+  /** 레이어 간 순서: define_table_shp_type(POINT→LINE→POLYGON) → define_table_idx */
+  results.sort(compareIdentifyLayerResults);
 
   const resultsOut = results.map(({ identifyGeomRank: _rank, ...rest }) => rest);
 
@@ -1735,6 +1773,11 @@ export async function searchDefineLayersByGeometry(params: {
         const korName = getTableKorName(displayName);
         const titleField = getTitleFieldName(physicalTable);
         const features = mapRowsToIdentifyFeatures(rawFeatures, physicalTable, columns, geomCol);
+        const defineMeta = identifySortMetaForTable(physicalTable, displayName);
+        const metaMap = getIdentifyDefineSortMetaMap();
+        const hasDefine =
+          metaMap.has(String(physicalTable).toLowerCase()) ||
+          metaMap.has(String(displayName).toLowerCase());
         results.push({
           tableName: displayName,
           physicalTable,
@@ -1742,7 +1785,9 @@ export async function searchDefineLayersByGeometry(params: {
           titleField,
           isSplitLayer,
           features,
-          identifyGeomRank: identifyHitPriorityRank(geomTypeRaw),
+          identifyGeomRank: hasDefine
+            ? defineMeta.shpRank
+            : identifyHitPriorityRank(geomTypeRaw),
         });
       } catch {
         /* skip */
@@ -1750,13 +1795,7 @@ export async function searchDefineLayersByGeometry(params: {
     })
   );
 
-  results.sort((a, b) => {
-    if (a.identifyGeomRank !== b.identifyGeomRank) return a.identifyGeomRank - b.identifyGeomRank;
-    const da = a.isSplitLayer ? 0 : 1;
-    const db = b.isSplitLayer ? 0 : 1;
-    if (da !== db) return da - db;
-    return a.korName.localeCompare(b.korName, 'ko');
-  });
+  results.sort(compareIdentifyLayerResults);
 
   return {
     results: results.map(({ identifyGeomRank: _r, ...rest }) => rest),
@@ -1909,6 +1948,11 @@ export async function searchDefineLayersByKeyword(params: {
         const titleField = getTitleFieldName(physicalTable);
         const baseFeatures = mapRowsToIdentifyFeatures(rawFeatures, physicalTable, columns, geomCol);
         const features = attachKeywordMatchToFeatures(baseFeatures, textCols, keywordRaw, physicalTable);
+        const defineMeta = identifySortMetaForTable(physicalTable, displayName);
+        const metaMap = getIdentifyDefineSortMetaMap();
+        const hasDefine =
+          metaMap.has(String(physicalTable).toLowerCase()) ||
+          metaMap.has(String(displayName).toLowerCase());
         results.push({
           tableName: displayName,
           physicalTable,
@@ -1916,7 +1960,9 @@ export async function searchDefineLayersByKeyword(params: {
           titleField,
           isSplitLayer,
           features,
-          identifyGeomRank: identifyHitPriorityRank(geomTypeRaw),
+          identifyGeomRank: hasDefine
+            ? defineMeta.shpRank
+            : identifyHitPriorityRank(geomTypeRaw),
         });
       } catch {
         /* skip */
@@ -1924,13 +1970,7 @@ export async function searchDefineLayersByKeyword(params: {
     })
   );
 
-  results.sort((a, b) => {
-    if (a.identifyGeomRank !== b.identifyGeomRank) return a.identifyGeomRank - b.identifyGeomRank;
-    const da = a.isSplitLayer ? 0 : 1;
-    const db = b.isSplitLayer ? 0 : 1;
-    if (da !== db) return da - db;
-    return a.korName.localeCompare(b.korName, 'ko');
-  });
+  results.sort(compareIdentifyLayerResults);
 
   return {
     results: results.map(({ identifyGeomRank: _r, ...rest }) => rest),

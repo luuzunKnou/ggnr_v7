@@ -32,6 +32,7 @@ import {
   isWtlMetaPsLayer,
   WtlNetworkWimsHistoryTab,
 } from './WtlNetworkWimsHistoryTab'
+import { isRelatedChildParentKey } from '../../layerClickDetail/layerClickDetailRelatedConfig'
 import type { WtlNetworkRow } from './wtlNetworkTypes'
 
 export type WtlNetworkDetailRelatedOverlay = {
@@ -57,6 +58,8 @@ type Props = {
   onRelatedMapLayer: (next: WtlNetworkDetailRelatedOverlay) => void
   /** 데이터 이력 되돌리기 후 상세·목록 갱신 */
   onHistoryReverted?: () => void
+  /** 탭 본문 높이(px). 기본 250 — 지도 기본 모달은 더 낮게 */
+  bodyHeightPx?: number
 }
 
 type ActiveTab = 'attach' | 'dataHistory' | 'wimsHistory' | string
@@ -100,17 +103,18 @@ export function WtlNetworkDetailRelatedTabs({
   fields,
   onRelatedMapLayer,
   onHistoryReverted,
+  bodyHeightPx = 250,
 }: Props) {
   const mapContext = useMapContext()
   const parentKey = useMemo(() => {
     const fromLayer = String(item.layerKey ?? '')
       .trim()
       .toLowerCase()
-    if (fromLayer === 'wtl_pres_ps' || fromLayer === 'wtl_puri_as') return fromLayer
+    if (isRelatedChildParentKey(fromLayer)) return fromLayer
     const fromFields = String(item.fieldsTable ?? '')
       .trim()
       .toLowerCase()
-    if (fromFields === 'wtl_pres_ps' || fromFields === 'wtl_puri_as') return fromFields
+    if (isRelatedChildParentKey(fromFields)) return fromFields
     return fromLayer
   }, [item.layerKey, item.fieldsTable])
 
@@ -249,7 +253,7 @@ export function WtlNetworkDetailRelatedTabs({
     clearRowHighlight()
     onRelatedMapLayerRef.current(null)
 
-    if (!parentKey || (parentKey !== 'wtl_pres_ps' && parentKey !== 'wtl_puri_as')) {
+    if (!parentKey || !isRelatedChildParentKey(parentKey)) {
       return () => {
         cancelled = true
       }
@@ -497,7 +501,10 @@ export function WtlNetworkDetailRelatedTabs({
           <span className="truncate">데이터 이력관리</span>
         </button>
       </div>
-      <div className="h-[250px] shrink-0 overflow-hidden px-3 pb-2 pt-1">
+      <div
+        className="shrink-0 overflow-hidden px-3 pb-2 pt-1"
+        style={{ height: Math.max(80, bodyHeightPx) }}
+      >
         {active === 'attach' ? (
           <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-card">
             <WtlNetworkMapAttachmentSection item={item} fields={fields} />

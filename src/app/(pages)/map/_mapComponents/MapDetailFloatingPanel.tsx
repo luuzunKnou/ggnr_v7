@@ -1,6 +1,6 @@
 'use client'
 
-import type { ReactNode } from 'react'
+import type { ReactNode, Ref } from 'react'
 import { Minus, Square, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { MapUiZLayer } from '@/lib/mapUiZIndex'
@@ -25,6 +25,8 @@ export type MapDetailFloatingPanelProps = {
    * hideHeading과 함께 쓰면 heading은 숨기고 이 슬롯이 flex-1을 차지한다.
    */
   headerLeading?: ReactNode
+  /** 헤더 최좌측(제목 앞) — pin 등 */
+  headerStart?: ReactNode
   /** 펼침 시 standard-detail-float-heading display:none (최소화 시에는 기본 heading 유지) */
   hideHeading?: boolean
   /** 펼침 시 최소화·닫기 왼쪽 — 건수 표시·다시 그리기 등 */
@@ -40,6 +42,11 @@ export type MapDetailFloatingPanelProps = {
   defaultPosition?: MapFloatingPanelPosition
   zLayer?: MapUiZLayer
   className?: string
+  /** 패널 루트 위 오버레이(튜토리얼 팁 등). absolute 기준은 패널 */
+  overlay?: ReactNode
+  panelRef?: Ref<HTMLDivElement | null>
+  /** 클릭 모서리 부착 — 하단 gap clamp로 모서리가 밀리지 않게 */
+  flushViewportClamp?: boolean
   children: ReactNode
 }
 
@@ -56,6 +63,7 @@ export function MapDetailFloatingPanel({
   allowMinimize = true,
   onClose,
   headerLeading,
+  headerStart,
   hideHeading = false,
   headerActions,
   headerActionsAlways,
@@ -68,6 +76,9 @@ export function MapDetailFloatingPanel({
   defaultPosition = { top: 72, left: 80 },
   zLayer = 'detailFloating',
   className,
+  overlay,
+  panelRef,
+  flushViewportClamp = false,
   children,
 }: MapDetailFloatingPanelProps) {
   const layerText = String(layer ?? '').trim()
@@ -86,12 +97,15 @@ export function MapDetailFloatingPanel({
       pinPosition={pinPosition}
       focusToken={focusToken}
       onActivate={onActivate}
+      panelRef={panelRef}
       onHeaderDoubleClick={
         allowMinimize ? () => onMinimizedChange?.(!minimized) : undefined
       }
-      className={cn('bg-background backdrop-blur-none', className)}
+      flushViewportClamp={flushViewportClamp}
+      className={cn('relative bg-background backdrop-blur-none', className)}
       header={
         <>
+          {headerStart}
           <div
             className={cn(
               minimized
@@ -163,6 +177,7 @@ export function MapDetailFloatingPanel({
         </>
       }
     >
+      {overlay}
       <div
         className={cn(
           'flex min-h-0 flex-1 flex-col overflow-hidden bg-background',
