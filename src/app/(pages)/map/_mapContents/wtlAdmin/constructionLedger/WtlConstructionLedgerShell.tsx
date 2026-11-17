@@ -27,6 +27,7 @@ import {
   type WtlConsMapFocus,
   type WtlConsRelatedFacility,
 } from './useWtlConsMapLayer'
+import { invalidateRelatedFacilityStyleCache } from './wtlConsRelatedStyle'
 import { WtlConsAlertSettingsDialog } from './WtlConsAlertSettingsDialog'
 import {
   CONS_ALERT_OPEN_EVENT,
@@ -224,6 +225,14 @@ export function WtlConstructionLedgerShell({
   const [showAllProjectGeoms, setShowAllProjectGeoms] = useState(false)
   const [workScrollToken, setWorkScrollToken] = useState(0)
   const activeProjectRef = useRef<HTMLButtonElement>(null)
+
+  /** 공사대장 패널을 열 때마다 이전 세션 스타일·심볼 캐시 비움 */
+  useEffect(() => {
+    invalidateRelatedFacilityStyleCache()
+    return () => {
+      invalidateRelatedFacilityStyleCache()
+    }
+  }, [])
 
   const startAttachResize = useCallback((event: React.MouseEvent) => {
     event.preventDefault()

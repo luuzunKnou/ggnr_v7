@@ -81,15 +81,34 @@ const FACILITY_LAYER_KEYS = WTL_NET_LAYER_DEFS.filter(
   (d) => d.table && !FACILITY_LAYER_SKIP.has(d.key)
 ).map((d) => d.key)
 
+function facilityStyleCode(row: WtlNetworkRow): string | null {
+  const record = row.record
+  if (!record || typeof record !== 'object') return null
+  const raw =
+    getRowValueByField(record, 'ftr_cde') ??
+    record.ftr_cde ??
+    record.FTR_CDE ??
+    null
+  const code = String(raw ?? '')
+    .trim()
+    .toUpperCase()
+  return code || null
+}
+
 function facilitiesToMapItems(rows: WtlNetworkRow[]): WtlConsRelatedFacility[] {
   const items: WtlConsRelatedFacility[] = []
   for (const row of rows) {
     const geom = row.geom
     if (!geom || typeof geom !== 'object' || !('type' in geom)) continue
+    const styleName = String(row.layerKey ?? '').trim()
+    if (!styleName) continue
     items.push({
       id: row.id,
       geom: geom as Record<string, unknown>,
       projection: 'EPSG:4326',
+      /** GeoServer 스타일명 — 관로 분할키(wtl_pipe_lm_saa003 등)와 동일 */
+      styleName,
+      styleCode: facilityStyleCode(row),
     })
   }
   return items
@@ -504,7 +523,8 @@ export function WtlConsRelatedTabs({
   const toggleRow = (
     id: string,
     geom: Record<string, unknown> | GeoJSON.Geometry | null | undefined,
-    projection: 'EPSG:4326' | 'EPSG:3857'
+    projection: 'EPSG:4326' | 'EPSG:3857',
+    style?: { styleName?: string; styleCode?: string | null }
   ) => {
     if (pickedId === id) {
       setPickedId(null)
@@ -516,7 +536,12 @@ export function WtlConsRelatedTabs({
       onFocus?.(null)
       return
     }
-    onFocus?.({ geom: geom as Record<string, unknown>, projection })
+    onFocus?.({
+      geom: geom as Record<string, unknown>,
+      projection,
+      styleName: style?.styleName,
+      styleCode: style?.styleCode,
+    })
   }
 
   useEffect(() => {
@@ -608,7 +633,8 @@ function buildingRowId(row: BuildingRow, index: number) {
 type RowToggle = (
   id: string,
   geom: Record<string, unknown> | GeoJSON.Geometry | null | undefined,
-  projection: 'EPSG:4326' | 'EPSG:3857'
+  projection: 'EPSG:4326' | 'EPSG:3857',
+  style?: { styleName?: string; styleCode?: string | null }
 ) => void
 
 function ZoneTable({
@@ -686,7 +712,12 @@ function FacilityTable({
             <button
               type="button"
               className={cn(tone.row, pickedId === r.id ? tone.rowOn : tone.rowOff)}
-              onClick={() => onToggle(r.id, r.geom, 'EPSG:4326')}
+              onClick={() =>
+                onToggle(r.id, r.geom, 'EPSG:4326', {
+                  styleName: String(r.layerKey ?? '').trim(),
+                  styleCode: facilityStyleCode(r),
+                })
+              }
             >
               <span
                 className={cn('w-[5.5rem] shrink-0 truncate text-slate-600', tone.cell)}
