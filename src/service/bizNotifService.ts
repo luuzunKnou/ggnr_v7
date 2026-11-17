@@ -10,11 +10,12 @@ import { getUseFeeUnpaidDueNotifications } from '@/service/useFeeService';
 import { getUseFeeBinding } from '@/lib/useFeeBinding';
 import { getOccupationLedgerBinding } from '@/lib/occupationLedgerBinding';
 import { getSystemList } from '@/service/configService';
+import { listDueConsAlerts } from '@/service/consAlertService';
 
 export type BizNotifItem = {
   id: string;
   notifKey: string;
-  category: '만료임박' | '미납임박' | '위치없음';
+  category: '만료임박' | '미납임박' | '위치없음' | '공사알림';
   title: string;
   name: string;
   listKey: string;
@@ -243,6 +244,27 @@ export async function listMyBizNotifications(params?: {
     });
   }
 
+  try {
+    const consAlerts = await listDueConsAlerts(withinDays);
+    for (const row of consAlerts) {
+      candidates.push({
+        id: row.id,
+        notifKey: row.notifKey,
+        category: '공사알림',
+        title: '공사 알림',
+        name: row.name,
+        listKey: row.listKey,
+        important: true,
+        target: 'ledger',
+        targetId: row.targetId,
+        serEng: row.serEng,
+        systemScope: resolveNotifSystemScope(row.serEng, row.kind === 'swl' ? 'swl' : 'wtlAdmin'),
+      });
+    }
+  } catch (e) {
+    console.warn('[bizNotif] cons alert load failed:', e instanceof Error ? e.message : e);
+  }
+
   for (const row of feeRes.items ?? []) {
     const feeBinding = getUseFeeBinding({ prefix: row.prefix });
     const feeTitle = feeBinding.title;
@@ -282,6 +304,7 @@ export async function listMyBizNotifications(params?: {
     만료임박: 0,
     미납임박: 1,
     위치없음: 2,
+    공사알림: 3,
   };
   items.sort((a, b) => {
     const byCategory = categoryOrder[a.category] - categoryOrder[b.category];

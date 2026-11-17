@@ -12,6 +12,10 @@ export const HISTORY_OPTION_OPEN = '개방망 (node_modules 미포함)';
 export const HISTORY_OPTION_RESTART_EXIT = '프로세스 종료(nssm)';
 export const HISTORY_OPTION_RESTART_LAUNCHER = 'Node 런처(Node 내 앱 재실행)';
 export const HISTORY_OPTION_RESTART_NONE = '재시작 안 함';
+export const HISTORY_OPTION_APPLY_OVERWRITE = '덮어쓰기';
+export const HISTORY_OPTION_APPLY_SIBLING = '따로 생성';
+
+export type SourceApplyLayout = 'overwrite' | 'sibling';
 
 export function uploadHistoryOptions(includeNodeModules: boolean): string[] {
   return [
@@ -31,12 +35,14 @@ export function restartModeHistoryOption(mode: RestartModeForHistory): string {
 
 export function applyLatestHistoryOptions(
   includeNodeModules: boolean,
-  restartMode: RestartModeForHistory
+  restartMode: RestartModeForHistory,
+  layout: SourceApplyLayout = 'overwrite'
 ): string[] {
-  return [
-    includeNodeModules ? HISTORY_OPTION_CLOSED : HISTORY_OPTION_OPEN,
-    restartModeHistoryOption(restartMode),
-  ];
+  const net = includeNodeModules ? HISTORY_OPTION_CLOSED : HISTORY_OPTION_OPEN;
+  if (layout === 'sibling') {
+    return [HISTORY_OPTION_APPLY_SIBLING, net];
+  }
+  return [HISTORY_OPTION_APPLY_OVERWRITE, net, restartModeHistoryOption(restartMode)];
 }
 
 export function installZipHistoryOptions(profile: PackageProfileForHistory): string[] {

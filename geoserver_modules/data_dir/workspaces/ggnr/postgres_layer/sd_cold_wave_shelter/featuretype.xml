@@ -1,5 +1,5 @@
 <featureType>
-  <id>FeatureTypeInfoImpl-3c0551ac:1a0e4074eaf:-8000</id>
+  <id>FeatureTypeInfoImpl--65fa6f4:1a1cd366d6f:-7f02</id>
   <name>sd_cold_wave_shelter</name>
   <nativeName>sd_cold_wave_shelter</nativeName>
   <namespace>
@@ -12,17 +12,17 @@
   </keywords>
   <srs>EPSG:5181</srs>
   <nativeBoundingBox>
-    <minx>387214.78106911376</minx>
-    <maxx>421212.3985836995</maxx>
-    <miny>352338.12861186115</miny>
-    <maxy>406149.59976037487</maxy>
+    <minx>355028.4626407591</minx>
+    <maxx>370148.18047140527</maxx>
+    <miny>248884.34370014016</miny>
+    <maxy>275053.1538397906</maxy>
     <crs class="projected">EPSG:5181</crs>
   </nativeBoundingBox>
   <latLonBoundingBox>
-    <minx>129.09359891025693</minx>
-    <maxx>129.48918008937883</maxx>
-    <miny>36.64383006454398</miny>
-    <maxy>37.1356841607542</maxy>
+    <minx>128.71339999846808</minx>
+    <maxx>128.8860020564358</maxx>
+    <miny>35.72249608925566</miny>
+    <maxy>35.96073328790133</maxy>
     <crs>EPSG:4326</crs>
   </latLonBoundingBox>
   <projectionPolicy>FORCE_DECLARED</projectionPolicy>

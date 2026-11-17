@@ -14,7 +14,6 @@ import {
   COMPLAINT_DETAIL_PANEL_DEFAULT_TOP,
   COMPLAINT_DETAIL_PANEL_MAX_HEIGHT,
   COMPLAINT_DETAIL_PANEL_WIDTH,
-  COMPLAINT_DETAIL_PANEL_Z_INDEX,
 } from '../../_mapComponents/complaint/complaintPanelLayout'
 import { COMPLAINT_STATE_OPTIONS, getStateStyle } from '../../_mapComponents/complaint/state-options'
 import {
@@ -249,9 +248,9 @@ export function WaterComplaintFloat({
   return (
     <MapFloatingPanel
       viewport
+      zLayer="detailFloating"
       width={COMPLAINT_DETAIL_PANEL_WIDTH}
       maxHeight={COMPLAINT_DETAIL_PANEL_MAX_HEIGHT}
-      style={{ zIndex: COMPLAINT_DETAIL_PANEL_Z_INDEX }}
       defaultPosition={{ top: COMPLAINT_DETAIL_PANEL_DEFAULT_TOP, left: floatingLeftPx }}
       header={
         <>

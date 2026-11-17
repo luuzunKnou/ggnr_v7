@@ -92,6 +92,9 @@ export type MapContextValue = {
   mapInstanceRef: RefObject<Map | null>;
   showDebugUi: boolean;
   setShowDebugUi: Dispatch<SetStateAction<boolean>>;
+  /** 꺼짐(기본)은 축척 따라 변경. 켜면 점·심볼 크기를 18로 고정 */
+  iconScaleSizeOn: boolean;
+  setIconScaleSizeOn: Dispatch<SetStateAction<boolean>>;
   visibleLayerNames: Set<string>;
   setVisibleLayerNames: Dispatch<SetStateAction<Set<string>>>;
   selectedDetail: SelectedDetail;
@@ -123,6 +126,9 @@ export type MapContextValue = {
   /** 도형 내 데이터만 표시할 때 사용. WKT(5181). null이면 공간 필터 없음 */
   spatialFilterWkt: string | null;
   setSpatialFilterWkt: Dispatch<SetStateAction<string | null>>;
+  /** false면 공간필터 도형은 그리되 지도 fit(줌·이동)은 하지 않음 */
+  spatialFilterAutoFit: boolean;
+  setSpatialFilterAutoFit: Dispatch<SetStateAction<boolean>>;
   /** 공간 필터 적용 시 레이어 목록에 표시할 테이블 이름 집합. null이면 전체 표시 */
   spatialFilteredLayerNames: Set<string> | null;
   setSpatialFilteredLayerNames: Dispatch<SetStateAction<Set<string> | null>>;
@@ -139,14 +145,10 @@ export type MapContextValue = {
   serviceWmsStyleByLayer: Record<string, string> | null;
   setServiceWmsStyleByLayer: Dispatch<SetStateAction<Record<string, string> | null>>;
   /** 레이어 목록에서 도형 그리기 요청. OpenLayersMap에서 구독 후 Draw 추가, 완료 시 onComplete 호출 후 null로 초기화 */
-  spatialDrawRequest: {
-    type: 'rectangle' | 'polygon' | 'circle' | 'line';
-    onComplete: (wkt5181: string) => void;
-  } | null;
-  setSpatialDrawRequest: Dispatch<SetStateAction<{
-    type: 'rectangle' | 'polygon' | 'circle' | 'line';
-    onComplete: (wkt5181: string) => void;
-  } | null>>;
+  spatialDrawRequest: import('./hooks/useSpatialDrawOnMap').SpatialDrawRequest;
+  setSpatialDrawRequest: Dispatch<
+    SetStateAction<import('./hooks/useSpatialDrawOnMap').SpatialDrawRequest>
+  >;
   /** 거리/면적 등 측정 도구가 켜져 있는지. OpenLayersMap에서 동기화. 레이어 목록 도형 그리기와 배타 */
   measurementActive: boolean;
   setMeasurementActive: Dispatch<SetStateAction<boolean>>;
@@ -164,6 +166,11 @@ export type MapContextValue = {
   /** 뷰 오른쪽 패딩(px). 우측 메뉴·확장 패널 폭. 거터 pill 가용 범위용 */
   mapPaddingRight: number;
   setMapPaddingRight: Dispatch<SetStateAction<number>>;
+  /**
+   * 뷰 아래 패딩(px). 상하수도 공사대장 첨부파일이 지도를 가릴 때만 넣고, 없으면 0.
+   * 왼쪽 패널과 같이 지도 맞춤의 보이는 영역으로 쓴다.
+   */
+  mapPaddingBottomRef: MutableRefObject<number>;
   /** MapLayout이 등록 — 지도 인스턴스 준비 후 view.padding 재적용 */
   applyMapViewPaddingRef: MutableRefObject<(() => void) | null>;
   /**
@@ -669,6 +676,7 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
     applyManaged: (wanted: ReadonlySet<string>, managed: ReadonlySet<string>) => void;
   } | null>(null);
   const [showDebugUi, setShowDebugUi] = useState(false);
+  const [iconScaleSizeOn, setIconScaleSizeOn] = useState(false);
   const [visibleLayerNames, setVisibleLayerNames] = useState<Set<string>>(() => new Set());
   const [selectedDetail, setSelectedDetail] = useState<SelectedDetail>(null);
   const [identifyResultList, setIdentifyResultList] = useState<IdentifyPopupState | null>(null);
@@ -678,13 +686,13 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
   const addressParcelGeometryRef = useRef<import('ol/geom').Geometry | null>(null);
   const addressParcelSeedGeom4326Ref = useRef<Record<string, unknown> | null>(null);
   const [spatialFilterWkt, setSpatialFilterWkt] = useState<string | null>(null);
+  const [spatialFilterAutoFit, setSpatialFilterAutoFit] = useState(true);
   const [spatialFilteredLayerNames, setSpatialFilteredLayerNames] = useState<Set<string> | null>(null);
   const [serviceWmsCqlByLayer, setServiceWmsCqlByLayer] = useState<Record<string, string> | null>(null);
   const [serviceWmsStyleByLayer, setServiceWmsStyleByLayer] = useState<Record<string, string> | null>(null);
-  const [spatialDrawRequest, setSpatialDrawRequest] = useState<{
-    type: 'rectangle' | 'polygon' | 'circle' | 'line';
-    onComplete: (wkt5181: string) => void;
-  } | null>(null);
+  const [spatialDrawRequest, setSpatialDrawRequest] = useState<
+    import('./hooks/useSpatialDrawOnMap').SpatialDrawRequest
+  >(null);
   const [measurementActive, setMeasurementActive] = useState(false);
   const [mapMeasureTool, setMapMeasureTool] = useState<
     'distance' | 'area' | 'altitude' | 'slope' | null
@@ -695,6 +703,7 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
     MAP_SPLIT_CONTROL_RIGHT_MENU_RESERVE_PX
   );
   const applyMapViewPaddingRef = useRef<(() => void) | null>(null);
+  const mapPaddingBottomRef = useRef(0);
   const mapViewPaddingOverrideRef = useRef<[number, number, number, number] | null>(null);
   const [mapReady, setMapReady] = useState(false);
   const [mapSplitSecondaryKind, setMapSplitSecondaryKind] = useState<MapSplitSecondaryKind>(null);
@@ -956,6 +965,8 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
         mapInstanceRef,
         showDebugUi,
         setShowDebugUi,
+        iconScaleSizeOn,
+        setIconScaleSizeOn,
         visibleLayerNames,
         setVisibleLayerNames,
         selectedDetail,
@@ -975,6 +986,8 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
         wtlNetworkThematicSyncRef,
         spatialFilterWkt,
         setSpatialFilterWkt,
+        spatialFilterAutoFit,
+        setSpatialFilterAutoFit,
         spatialFilteredLayerNames,
         setSpatialFilteredLayerNames,
         serviceWmsCqlByLayer,
@@ -994,6 +1007,7 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
         mapPaddingRight,
         setMapPaddingRight,
         applyMapViewPaddingRef,
+        mapPaddingBottomRef,
         mapViewPaddingOverrideRef,
         mapReady,
         setMapReady,

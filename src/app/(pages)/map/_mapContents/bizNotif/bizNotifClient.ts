@@ -7,6 +7,8 @@ import {
   setProtoNotifs,
   type ProtoNotifItem,
 } from './bizNotifStore';
+import { CONS_ALERT_SAVED_EVENT } from '../wtlAdmin/constructionLedger/WtlConsAlertSettingsDialog';
+import { migrateLocalConsAlertsOnce } from '../wtlAdmin/constructionLedger/wtlConsAlertNotif';
 
 export const BIZ_NOTIF_WITHIN_DAYS = 15;
 
@@ -94,6 +96,7 @@ export async function refreshBizNotifs(opts?: {
   }
 
   try {
+    await migrateLocalConsAlertsOnce().catch(() => undefined);
     const res = await call('', 'POST', {
       service: 'bizNotifService',
       action: 'listMyBizNotifications',
@@ -164,3 +167,11 @@ export async function dismissAllBizNotifs() {
 }
 
 export { PROTO_NOTIF_CHANGED_EVENT, getProtoNotifs };
+
+let consAlertRefreshBound = false;
+if (typeof window !== 'undefined' && !consAlertRefreshBound) {
+  consAlertRefreshBound = true;
+  window.addEventListener(CONS_ALERT_SAVED_EVENT, () => {
+    void refreshBizNotifs();
+  });
+}

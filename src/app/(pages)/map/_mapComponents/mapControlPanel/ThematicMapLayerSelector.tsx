@@ -107,6 +107,7 @@ function ThematicLegendIcon({
         return;
       }
       heldSlotRef.current = true;
+      // 지하시설물 분할과 동일: 자식 발행명·자식 스타일로 GetLegendGraphic
       setSrc(getLegendGraphicUrl(tableName, tableName));
     })();
 

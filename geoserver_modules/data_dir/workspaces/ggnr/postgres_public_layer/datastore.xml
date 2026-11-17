@@ -10,7 +10,7 @@
     <entry key="schema">public_layer</entry>
     <entry key="Estimated extends">false</entry>
     <entry key="preparedStatements">false</entry>
-    <entry key="database">ggnr_ad</entry>
+    <entry key="database">road_gs</entry>
     <entry key="port">5433</entry>
     <entry key="passwd">crypt1:RuM6PC3x5AC4w5iovtcS2w==</entry>
     <entry key="validate connections">true</entry>
@@ -18,10 +18,10 @@
     <entry key="dbtype">postgis</entry>
     <entry key="namespace">http://ggnr</entry>
     <entry key="Loose bbox">true</entry>
-    <entry key="user">ggnr_ad</entry>
+    <entry key="user">road_gs</entry>
   </connectionParameters>
   <__default>false</__default>
   <dateCreated>2026-02-11 16:00:05.477 UTC</dateCreated>
-  <dateModified>2026-10-30 02:03:40.629 UTC</dateModified>
+  <dateModified>2026-11-12 00:10:43.811 UTC</dateModified>
   <disableOnConnFailure>false</disableOnConnFailure>
 </dataStore>

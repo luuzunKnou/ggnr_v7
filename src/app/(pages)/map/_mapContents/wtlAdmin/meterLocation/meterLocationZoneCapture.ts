@@ -1,13 +1,9 @@
 'use client'
 
 import { Map, View } from 'ol'
-import GeoJSON from 'ol/format/GeoJSON'
 import ImageLayer from 'ol/layer/Image'
-import VectorLayer from 'ol/layer/Vector'
 import ImageWMS from 'ol/source/ImageWMS'
-import VectorSource from 'ol/source/Vector'
 import type XYZ from 'ol/source/XYZ'
-import { Circle, Fill, Stroke, Style, Text } from 'ol/style'
 import { defaults as defaultControls } from 'ol/control'
 import { fromString } from 'ol/transform'
 import type MapType from 'ol/Map'
@@ -25,6 +21,7 @@ const CAPTURE_H = 320
 const ZONE_TARGET_SCALE_M = 35
 const ZONE_MIN_SCALE_M = 30
 const ZONE_MAX_SCALE_M = 40
+const METER_LABEL_ENV = 'wtl_meta_ps_show_label:1'
 
 export type MeterZoneCapturePoint = {
   label: string
@@ -66,22 +63,6 @@ function whenAborted(signal?: AbortSignal): Promise<never> {
   })
 }
 
-function waitAbortable(ms: number, signal?: AbortSignal): Promise<void> {
-  if (signal?.aborted) return Promise.reject(abortError())
-  return new Promise((resolve, reject) => {
-    const onAbort = () => {
-      window.clearTimeout(timer)
-      signal?.removeEventListener('abort', onAbort)
-      reject(abortError())
-    }
-    const timer = window.setTimeout(() => {
-      signal?.removeEventListener('abort', onAbort)
-      resolve()
-    }, ms)
-    signal?.addEventListener('abort', onAbort, { once: true })
-  })
-}
-
 async function raceUntil(
   work: Promise<void>,
   signal?: AbortSignal
@@ -107,57 +88,108 @@ function waitRenderComplete(map: MapType, timeoutMs: number): Promise<void> {
   })
 }
 
-/** 타일 대기 — pending이 잠깐 0이면 바로 통과 (캐시 hit 시 빠름) */
-function waitTilesLoaded(source: XYZ, timeoutMs: number): Promise<void> {
-  return new Promise((resolve) => {
-    let pending = 0
-    let settled = false
-    let idleTimer: number | null = null
-    const finish = () => {
-      if (settled) return
-      settled = true
-      if (idleTimer != null) window.clearTimeout(idleTimer)
-      source.un('tileloadstart', onStart)
-      source.un('tileloadend', onEnd)
-      source.un('tileloaderror', onEnd)
-      resolve()
-    }
-    const scheduleIdle = () => {
-      if (idleTimer != null) window.clearTimeout(idleTimer)
-      idleTimer = window.setTimeout(() => {
-        if (pending === 0) finish()
-      }, 40)
-    }
-    const onStart = () => {
-      pending += 1
-    }
-    const onEnd = () => {
-      pending = Math.max(0, pending - 1)
-      if (pending === 0) scheduleIdle()
-    }
-    source.on('tileloadstart', onStart)
-    source.on('tileloadend', onEnd)
-    source.on('tileloaderror', onEnd)
-    // 이미 캐시만 쓰는 경우 이벤트가 안 올 수 있음
-    scheduleIdle()
-    window.setTimeout(finish, timeoutMs)
-  })
+type ArmedWait = {
+  promise: Promise<void>
+  /** 렌더를 건 뒤에 호출. 그 전에 끝나면 타일 요청 전에 통과한다. */
+  arm: () => void
 }
 
-function waitImageWms(source: ImageWMS, timeoutMs: number): Promise<void> {
-  return new Promise((resolve) => {
-    let settled = false
-    const finish = () => {
-      if (settled) return
-      settled = true
-      source.un('imageloadend', finish)
-      source.un('imageloaderror', finish)
-      resolve()
-    }
-    source.once('imageloadend', finish)
-    source.once('imageloaderror', finish)
-    window.setTimeout(finish, timeoutMs)
+/** 타일 대기. arm 이후 요청이 없으면 캐시로 보고 바로 통과. */
+function watchTiles(source: XYZ, timeoutMs: number): ArmedWait {
+  let pending = 0
+  let settled = false
+  let armed = false
+  let idleTimer: number | null = null
+  let capTimer: number | null = null
+  let resolveFn: () => void = () => {}
+  const promise = new Promise<void>((resolve) => {
+    resolveFn = resolve
   })
+  const finish = () => {
+    if (settled) return
+    settled = true
+    if (idleTimer != null) window.clearTimeout(idleTimer)
+    if (capTimer != null) window.clearTimeout(capTimer)
+    source.un('tileloadstart', onStart)
+    source.un('tileloadend', onEnd)
+    source.un('tileloaderror', onEnd)
+    resolveFn()
+  }
+  const scheduleIdle = () => {
+    if (!armed || settled || pending > 0) return
+    if (idleTimer != null) window.clearTimeout(idleTimer)
+    idleTimer = window.setTimeout(() => {
+      if (pending === 0) finish()
+    }, 30)
+  }
+  const onStart = () => {
+    pending += 1
+    if (idleTimer != null) window.clearTimeout(idleTimer)
+  }
+  const onEnd = () => {
+    pending = Math.max(0, pending - 1)
+    if (pending === 0) scheduleIdle()
+  }
+  source.on('tileloadstart', onStart)
+  source.on('tileloadend', onEnd)
+  source.on('tileloaderror', onEnd)
+  capTimer = window.setTimeout(finish, timeoutMs)
+  return {
+    promise,
+    arm() {
+      armed = true
+      scheduleIdle()
+    },
+  }
+}
+
+/** WMS 한 장. 로드가 시작되지 않으면 캐시로 보고 곧 통과. */
+function watchImageWms(source: ImageWMS, timeoutMs: number): ArmedWait {
+  let settled = false
+  let armed = false
+  let started = false
+  let loaded = false
+  let capTimer: number | null = null
+  let idleTimer: number | null = null
+  let resolveFn: () => void = () => {}
+  const promise = new Promise<void>((resolve) => {
+    resolveFn = resolve
+  })
+  const finish = () => {
+    if (settled) return
+    settled = true
+    if (capTimer != null) window.clearTimeout(capTimer)
+    if (idleTimer != null) window.clearTimeout(idleTimer)
+    source.un('imageloadstart', onStart)
+    source.un('imageloadend', onDone)
+    source.un('imageloaderror', onDone)
+    resolveFn()
+  }
+  const onStart = () => {
+    started = true
+    if (idleTimer != null) window.clearTimeout(idleTimer)
+  }
+  const onDone = () => {
+    loaded = true
+    if (armed) finish()
+  }
+  source.on('imageloadstart', onStart)
+  source.on('imageloadend', onDone)
+  source.on('imageloaderror', onDone)
+  capTimer = window.setTimeout(finish, timeoutMs)
+  return {
+    promise,
+    arm() {
+      armed = true
+      if (loaded) {
+        finish()
+        return
+      }
+      idleTimer = window.setTimeout(() => {
+        if (!started) finish()
+      }, 40)
+    },
+  }
 }
 
 function normalizeExtent(
@@ -191,24 +223,6 @@ function buildMetNumCql(labels: string[]): string | undefined {
   if (unique.length === 0) return undefined
   const list = unique.map((n) => `'${n.replace(/'/g, "''")}'`).join(',')
   return `met_num IN (${list})`
-}
-
-function pointStyle(label: string): Style {
-  return new Style({
-    image: new Circle({
-      radius: 5,
-      fill: new Fill({ color: 'rgba(50, 118, 195, 0.95)' }),
-      stroke: new Stroke({ color: '#ffffff', width: 2 }),
-    }),
-    text: new Text({
-      text: label,
-      font: '10px sans-serif',
-      fill: new Fill({ color: '#0f172a' }),
-      stroke: new Stroke({ color: '#ffffff', width: 3 }),
-      overflow: true,
-      offsetY: -12,
-    }),
-  })
 }
 
 function compositeOffscreenToCanvas(map: MapType, target: HTMLCanvasElement): boolean {
@@ -291,33 +305,6 @@ function applyViewToExtent(
   return extent
 }
 
-function setPointFeatures(
-  vectorSource: VectorSource,
-  points: MeterZoneCapturePoint[]
-): void {
-  vectorSource.clear(true)
-  if (points.length === 0) return
-  try {
-    const features = new GeoJSON().readFeatures(
-      {
-        type: 'FeatureCollection',
-        features: points.map((p) => ({
-          type: 'Feature',
-          geometry: { type: 'Point', coordinates: p.point4326 },
-          properties: { label: p.label },
-        })),
-      },
-      { dataProjection: 'EPSG:4326', featureProjection: 'EPSG:3857' }
-    )
-    for (const feature of features) {
-      feature.setStyle(pointStyle(String(feature.get('label') ?? '')))
-    }
-    vectorSource.addFeatures(features)
-  } catch {
-    /* ignore */
-  }
-}
-
 /**
  * 보고서용 숨김 지도 세션 — 구역마다 Map을 새로 만들지 않고 재사용.
  */
@@ -371,6 +358,7 @@ export function createMeterZoneCaptureSession(
       STYLES: 'wtl_meta_ps',
       TRANSPARENT: true,
       FORMAT: 'image/png',
+      ENV: METER_LABEL_ENV,
     },
     serverType: 'geoserver',
     ratio: 1,
@@ -383,13 +371,6 @@ export function createMeterZoneCaptureSession(
     visible: false,
   })
 
-  const vectorSource = new VectorSource()
-  const pointLayer = new VectorLayer({
-    source: vectorSource,
-    declutter: true,
-    zIndex: 20,
-  })
-
   const view = new View({
     resolutions: RESOLUTIONS_3857,
     minZoom: 0,
@@ -399,7 +380,7 @@ export function createMeterZoneCaptureSession(
 
   const map = new Map({
     target: host,
-    layers: [bg, jijukLayer, meterLayer, pointLayer],
+    layers: [bg, jijukLayer, meterLayer],
     view,
     controls: defaultControls({ attribution: false, zoom: false }),
     interactions: [],
@@ -418,35 +399,38 @@ export function createMeterZoneCaptureSession(
       try {
         // 화면은 35m 기준으로 칸 전체 채움 — 레이어만 해당 구역
         applyViewToExtent(view, extent3857)
-        setPointFeatures(vectorSource, points)
 
         const pnus = points
           .map((p) => String(p.pnu ?? '').replace(/\D/g, '').slice(0, 19))
           .filter(Boolean)
         const jijukCql = buildJijukPnuCql(pnus)
+        const meterCql = buildMetNumCql(points.map((p) => p.label))
+        // 첫 구역만 타일 워밍 여유. 이후·캐시는 로드가 끝나는 즉시 통과.
+        const tileCap = captureCount === 0 ? 1600 : 700
+        const wmsCap = captureCount === 0 ? 1200 : 600
+        const tileWait = tileSource ? watchTiles(tileSource, tileCap) : null
+        const jijukWait = jijukCql ? watchImageWms(jijukSource, wmsCap) : null
+        const meterWait = meterCql ? watchImageWms(meterSource, wmsCap) : null
+
         if (jijukCql) {
           jijukLayer.setVisible(true)
-          jijukSource.setImageLoadFunction(geoserverWmsImageLoadFunction)
           jijukSource.updateParams({
             LAYERS: `${WORKSPACE}:jijuk`,
             STYLES: 'jijuk',
             CQL_FILTER: jijukCql,
-            _ts: Date.now(),
           })
         } else {
           jijukLayer.setVisible(false)
           jijukSource.updateParams({ CQL_FILTER: undefined })
         }
 
-        const meterCql = buildMetNumCql(points.map((p) => p.label))
         if (meterCql) {
           meterLayer.setVisible(true)
-          meterSource.setImageLoadFunction(geoserverWmsImageLoadFunction)
           meterSource.updateParams({
             LAYERS: `${WORKSPACE}:wtl_meta_ps`,
             STYLES: 'wtl_meta_ps',
+            ENV: METER_LABEL_ENV,
             CQL_FILTER: meterCql,
-            _ts: Date.now(),
           })
         } else {
           meterLayer.setVisible(false)
@@ -454,23 +438,20 @@ export function createMeterZoneCaptureSession(
         }
 
         map.renderSync()
+        tileWait?.arm()
+        jijukWait?.arm()
+        meterWait?.arm()
         throwIfAborted(signal)
-        // 첫 구역은 타일 워밍, 이후는 캐시 위주라 짧게
-        const tileWait = captureCount === 0 ? 2800 : 1200
-        if (tileSource) {
-          await raceUntil(waitTilesLoaded(tileSource, tileWait), signal)
-        }
+        await raceUntil(
+          Promise.all([
+            tileWait?.promise ?? Promise.resolve(),
+            jijukWait?.promise ?? Promise.resolve(),
+            meterWait?.promise ?? Promise.resolve(),
+          ]).then(() => undefined),
+          signal
+        )
         throwIfAborted(signal)
-        const imgWait = captureCount === 0 ? 1800 : 1200
-        if (jijukCql) {
-          await raceUntil(waitImageWms(jijukSource, imgWait), signal)
-        }
-        if (meterCql) {
-          await raceUntil(waitImageWms(meterSource, imgWait), signal)
-        }
-        throwIfAborted(signal)
-        await raceUntil(waitRenderComplete(map, 1200), signal)
-        await waitAbortable(captureCount === 0 ? 120 : 40, signal)
+        await raceUntil(waitRenderComplete(map, 200), signal)
 
         const canvas = document.createElement('canvas')
         if (!compositeOffscreenToCanvas(map, canvas) || canvas.width < 2) {

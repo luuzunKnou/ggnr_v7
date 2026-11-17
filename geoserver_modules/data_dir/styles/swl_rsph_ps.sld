@@ -45,7 +45,7 @@
                     <ogc:Literal>14</ogc:Literal>
                   </ogc:Function>
                 </ogc:Function>
-              </sld:Size>
+              </ogc:Function></sld:Size>
             </sld:Graphic>
           </sld:PointSymbolizer>
         </sld:Rule>

@@ -60,6 +60,7 @@ import {
   writeLastMapSystemKey,
 } from './hooks/useMapStatePersist';
 import { useServiceLayerSync } from './layerFactory/serviceLayerFactory';
+import { applyIconScaleWmsEnv } from './layerFactory/iconScaleWmsEnv';
 import {
   useCadastralLayerSync,
   useBuildingRoadLayerSync,
@@ -476,6 +477,19 @@ export default function OpenLayersMap({
   useForwardOverlayPointerMoveToMap(mapReady ? mapInstanceRef.current : null, mapReady);
 
   const showDebugUi = mapContext?.showDebugUi ?? false;
+  const iconScaleSizeOn = mapContext?.iconScaleSizeOn ?? false;
+
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!mapReady || !map) return;
+    const apply = () => applyIconScaleWmsEnv(map, iconScaleSizeOn);
+    apply();
+    const layers = map.getLayers();
+    layers.on('add', apply);
+    return () => {
+      layers.un('add', apply);
+    };
+  }, [mapReady, iconScaleSizeOn, mapInstanceRef]);
   const [activeControls, setActiveControls] = useState<string[]>([]);
   const [isResetPanelExiting, setIsResetPanelExiting] = useState(false);
   /** 초기화 패널이 실제로 열려 입력·측정을 막는 상태 (퇴장 애니메이션 제외) */
@@ -1290,6 +1304,7 @@ export default function OpenLayersMap({
     systemKeyFromUrl
   );
   const spatialFilterWkt = mapContext?.spatialFilterWkt ?? null;
+  const spatialFilterAutoFit = mapContext?.spatialFilterAutoFit !== false;
   const serviceWmsCqlByLayer = mapContext?.serviceWmsCqlByLayer ?? null;
   const serviceWmsStyleByLayer = mapContext?.serviceWmsStyleByLayer ?? null;
 
@@ -1357,7 +1372,8 @@ export default function OpenLayersMap({
     serviceWmsCqlByLayer,
     false,
     wmsForceBottomLayerNames,
-    serviceWmsStyleByLayer
+    serviceWmsStyleByLayer,
+    iconScaleSizeOn
   );
 
   // 검색 조건 도형을 지도에 표시 (WKT 5181 → 3857 변환 후 벡터 레이어)
@@ -1396,7 +1412,7 @@ export default function OpenLayersMap({
       spatialFilterLayerRef.current = layer;
 
       const extent = geom.getExtent();
-      if (!isEmptyExtent(extent)) {
+      if (spatialFilterAutoFit && !isEmptyExtent(extent)) {
         map.getView().fit(extent, {
           padding: [48, 48, 48, 48],
           maxZoom: 17,
@@ -1413,7 +1429,7 @@ export default function OpenLayersMap({
         spatialFilterLayerRef.current = null;
       }
     };
-  }, [mapReady, spatialFilterWkt]);
+  }, [mapReady, spatialFilterWkt, spatialFilterAutoFit]);
 
   // 측정(거리/면적 등) 켜짐 여부를 MapContext에 동기화 (레이어 목록 도형 그리기와 배타 처리용)
   useEffect(() => {
@@ -1737,67 +1753,71 @@ export default function OpenLayersMap({
       if (mapContext?.addressParcelSeedGeom4326Ref) {
         mapContext.addressParcelSeedGeom4326Ref.current = null;
       }
-      setAddressInfoDetail({
-        coordinate,
-        viewProjection,
-        loading: true,
-        pnu: null,
-        jibun: null,
-        road: null,
-      });
-      const coord3857 = transformCoordinate(coordinate, viewProjection, 'EPSG:3857');
-      if (coord3857) {
-        const [x, y] = coord3857;
-        call('', 'POST', {
-          service: 'standardService',
-          action: 'getJijukParcelAtPoint',
-          params: { x, y },
-        })
-          .then((res) => {
+
+      // 지적(jijuk) PNU를 먼저 조회한 뒤 주소정보 패널을 연다.
+      void (async () => {
+        let pnu: string | null = null;
+        let jibun: string | null = null;
+        let geomSeedAt: number | undefined;
+        const coord3857 = transformCoordinate(coordinate, viewProjection, 'EPSG:3857');
+        if (coord3857) {
+          const [x, y] = coord3857;
+          try {
+            const res = await call('', 'POST', {
+              service: 'standardService',
+              action: 'getJijukParcelAtPoint',
+              params: { x, y },
+            });
             const payload = (res?.data ?? res) as {
               results?: { tableName?: string; features?: { data?: Record<string, unknown> }[] }[];
             };
             const results = Array.isArray(payload?.results) ? payload.results : [];
             const jijukResult = results.find((r) => String(r?.tableName ?? '').trim() === 'jijuk');
             const row = jijukResult?.features?.[0]?.data;
-            const pnu = row?.pnu != null ? String(row.pnu).trim() : '';
+            const rowPnu = row?.pnu != null ? String(row.pnu).trim() : '';
+            if (rowPnu) pnu = rowPnu;
             const seedGeom = parseParcelGeomField(row?.geom);
             if (seedGeom && mapContext?.addressParcelSeedGeom4326Ref) {
               mapContext.addressParcelSeedGeom4326Ref.current = seedGeom;
+              geomSeedAt = Date.now();
             }
             const parcelJibun = row?.jibun != null ? String(row.jibun).trim() : '';
-            // 지적 jibun은 「1-3」「1-3잡」처럼 짧은 경우가 많음 — 전체 주소는 브이월드 역지오코딩 결과를 우선
+            // 짧은 지번(예: 1-3잡)은 쓰지 않고, 행정구역이 포함된 경우만 채운다.
             const parcelJibunLooksFull =
               parcelJibun.length >= 8 &&
               /(도|특별|광역|자치)/u.test(parcelJibun) &&
               /(읍|면|동|리)/u.test(parcelJibun);
-            setAddressInfoDetail((prev) =>
-              prev
-                ? {
-                    ...prev,
-                    pnu: prev.pnu ?? (pnu || null),
-                    geomSeedAt: seedGeom ? Date.now() : prev.geomSeedAt,
-                    jibun: prev.jibun ?? (parcelJibunLooksFull ? parcelJibun : null),
-                  }
-                : null
-            );
-          })
-          .catch(() => undefined);
-      }
-      const [lon, lat] = wgs84;
-      const apiKey = mapContext?.vworldApiKey?.trim();
-      if (!apiKey) {
-        setAddressInfoDetail((prev) => (prev ? { ...prev, loading: false, jibun: prev.jibun ?? null, road: null } : null));
-        return;
-      }
-      getAddressFromCoord(lon, lat, { apiKey })
-        .then(async (result) => {
+            if (parcelJibunLooksFull) jibun = parcelJibun;
+          } catch {
+            // 지적 조회 실패 시 브이월드 주소 조회로 이어감
+          }
+        }
+
+        setAddressInfoDetail({
+          coordinate,
+          viewProjection,
+          loading: true,
+          pnu,
+          jibun,
+          road: null,
+          ...(geomSeedAt != null ? { geomSeedAt } : {}),
+        });
+
+        const [lon, lat] = wgs84;
+        const apiKey = mapContext?.vworldApiKey?.trim();
+        if (!apiKey) {
+          setAddressInfoDetail((prev) =>
+            prev ? { ...prev, loading: false, jibun: prev.jibun ?? null, road: null } : null
+          );
+          return;
+        }
+        try {
+          const result = await getAddressFromCoord(lon, lat, { apiKey });
           let roadText = result?.road?.trim() || '';
           if (!roadText) {
             const roadOnly = await getAddressFromCoord(lon, lat, { apiKey, type: 'ROAD' });
             roadText = roadOnly?.road?.trim() || '';
           }
-          // 역지오코딩 ROAD=NOT_FOUND 인 경우 — 지번으로 검색 API에서 road 보강
           if (!roadText) {
             const jibunHint = result?.jibun?.trim() || '';
             if (jibunHint) {
@@ -1810,18 +1830,18 @@ export default function OpenLayersMap({
               ? {
                   ...prev,
                   loading: false,
+                  // 지적 PNU 우선, 없을 때만 브이월드 값 사용
                   pnu: prev.pnu ?? (result?.pnu?.trim() || null),
-                  // 브이월드 법정동 전체 주소를 지적 짧은 지번보다 우선
                   jibun: result?.jibun?.trim() || prev.jibun || null,
                   road: roadText || prev.road || null,
                   buildingName: result?.buildingName?.trim() || prev.buildingName || null,
                 }
               : null
           );
-        })
-        .catch(() => {
+        } catch {
           setAddressInfoDetail((prev) => (prev ? { ...prev, loading: false } : null));
-        });
+        }
+      })();
     },
     [mapContext?.setAddressInfoDetail, mapContext?.vworldApiKey, addressInfoDetail]
   );

@@ -9,6 +9,7 @@ import {
   type LayerDbGeometryKind,
 } from '@/lib/mapLayerGeometryOrder';
 import { getGeoServerBase } from '@/lib/geoserverUrl';
+import { mergeIgnoreScaleEnv } from './iconScaleWmsEnv';
 import { withBasePath } from '@/lib/basePath';
 import { isOrthoDataQueryLayerId } from '../../_mapContents/aerialView/orthoDataQueryLayerId';
 
@@ -329,6 +330,8 @@ export function useServiceLayerSync(
   wmsForceBottomLayerNames?: Iterable<string>,
   /** 레이어별 STYLES 대체 (define_table_name → 스타일명). 없으면 테이블명 */
   serviceWmsStyleByLayer?: Record<string, string> | null,
+  /** 켜면 축척 무시(크기 18). 꺼짐이 기본이며 축척에 따라 크기가 변한다. */
+  iconScaleSizeOn: boolean = false,
 ) {
   const filterRef = useRef(layerFilterRows);
   filterRef.current = layerFilterRows;
@@ -390,9 +393,12 @@ export function useServiceLayerSync(
       wmsForceBottomLayerNames
     );
     const layersParam = names.map((n) => `${WORKSPACE}:${n}`).join(',');
-    const stylesParam = names
-      .map((n) => serviceWmsStyleByLayer?.[n]?.trim() || n)
-      .join(',');
+    const styleNames = names.map((n) => serviceWmsStyleByLayer?.[n]?.trim() || n);
+    const stylesParam = styleNames.join(',');
+    const envParam = mergeIgnoreScaleEnv(
+      typeof params.ENV === 'string' ? params.ENV : undefined,
+      iconScaleSizeOn,
+    );
     const filters = filterRef.current;
     const wkt = typeof spatialFilterWkt === 'string' && spatialFilterWkt.trim() ? spatialFilterWkt.trim() : null;
     const hidden = hiddenRef.current;
@@ -413,13 +419,14 @@ export function useServiceLayerSync(
     });
     const allInclude = cqlArr.every((c) => c === 'INCLUDE');
     const cqlParam = allInclude ? '' : cqlArr.join(';');
-    const syncKey = `${layersParam}|${stylesParam}|${cqlParam}|fb:${forceBottomKey}`;
+    const syncKey = `${layersParam}|${stylesParam}|${cqlParam}|fb:${forceBottomKey}|env:${envParam}`;
 
     if (
       lastSyncKeyRef.current === syncKey &&
       params.LAYERS === layersParam &&
       params.STYLES === stylesParam &&
       (params.CQL_FILTER ?? '') === cqlParam &&
+      (params.ENV ?? '') === envParam &&
       serviceLayer.getVisible()
     ) {
       return;
@@ -431,18 +438,24 @@ export function useServiceLayerSync(
         LAYERS: layersParam,
         STYLES: stylesParam,
         CQL_FILTER: undefined,
+        ENV: envParam || undefined,
+        _dc: String(Date.now()),
         TRANSPARENT: 'true',
         EXCEPTIONS: 'application/vnd.ogc.se_xml',
       });
       delete params.CQL_FILTER;
+      if (!envParam) delete params.ENV;
     } else {
       update({
         LAYERS: layersParam,
         STYLES: stylesParam,
         CQL_FILTER: cqlParam,
+        ENV: envParam || undefined,
+        _dc: String(Date.now()),
         TRANSPARENT: 'true',
         EXCEPTIONS: 'application/vnd.ogc.se_xml',
       });
+      if (!envParam) delete params.ENV;
     }
     serviceLayer.setVisible(true);
     source.changed();
@@ -457,6 +470,7 @@ export function useServiceLayerSync(
     serviceWmsStyleByLayer,
     forceBottomKey,
     wmsForceBottomLayerNames,
+    iconScaleSizeOn,
   ]);
 }
 

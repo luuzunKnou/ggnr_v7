@@ -57,6 +57,7 @@ import * as fileConverterService from './fileConverterService';
 import * as pdfToJpgService from './pdfToJpgService';
 import * as shpToDxfService from './shpToDxfService';
 import * as layerCadExportService from './layerCadExportService';
+import * as layerCompareService from './layerCompareService';
 import * as ocrMigrationService from './ocrMigrationService';
 import * as layerRowService from './layerRowService';
 import * as layerExtraService from './layerExtraService';
@@ -100,6 +101,7 @@ import * as drawingDisplayService from './drawingDisplayService';
 import * as landArchiveService from './landArchiveService';
 import * as individualLandPriceService from './individualLandPriceService';
 import * as realTransactionPriceService from './realTransactionPriceService';
+import * as smallPublicService from './smallPublicService';
 
 export {
   configService,
@@ -160,6 +162,7 @@ export {
   pdfToJpgService,
   shpToDxfService,
   layerCadExportService,
+  layerCompareService,
   ocrMigrationService,
   layerRowService,
   layerExtraService,
@@ -200,4 +203,5 @@ export {
   landArchiveService,
   individualLandPriceService,
   realTransactionPriceService,
+  smallPublicService,
 };

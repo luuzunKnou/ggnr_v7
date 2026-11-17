@@ -164,10 +164,9 @@ export function shortYearDate(raw: string): string {
   return s.replace(/\b20(\d{2})\b/g, '$1').replace(/-/g, '.')
 }
 
-/** 리스트 기간란: 준공일(없으면 실준공일)만 */
-function periodOf(works: WtlConsWork[]): string {
-  const ends = works.map((w) => w.doneDate || w.sdoneDate).filter(Boolean).sort()
-  return shortYearDate(ends[ends.length - 1] ?? '')
+/** 리스트에 보이는 준공일. 준공일자, 없으면 실준공일자 */
+function completionText(work: WtlConsWork | undefined): string {
+  return work?.doneDate || work?.sdoneDate || ''
 }
 
 function mockAttachments(workId: string, name: string): WtlConsAttachment[] {
@@ -1364,18 +1363,79 @@ function mapRaw(row: (typeof RAW)[number]): WtlConsWork {
   }
 }
 
-/** 공사명에서 «…사업»까지를 사업명으로 추출 */
-export function extractProjectName(consName: string): string | null {
-  const i = consName.indexOf('사업')
-  if (i < 0) return null
-  return consName.slice(0, i + 2).replace(/^\d{4}년\s*/, '').trim()
+/** 잘린 사업명에 읍·면·리·지구·지역 또는 의성·안동이 있는지 */
+function stemHasPlace(stem: string): boolean {
+  if (/읍|면|지구|지역|의성|안동/.test(stem)) return true
+  const villages = stem.match(/[가-힣]{1,4}\d*리/g) ?? []
+  return villages.some((name) => !/^(관리|처리|수리|분리|지리|원리|심리|물리)$/.test(name))
 }
 
-export function loadWtlConsProjects(): WtlConsProject[] {
-  const works = RAW.map(mapRaw)
+/**
+ * «같은 이름 (구분)» 이면 괄호 앞을 공통명으로 쓴다.
+ * 예: 2018년 상수도 급배수관 긴급보수 (안평면 …) → 2018년 상수도 급배수관 긴급보수
+ * 연도는 빼지 않는다. 괄호가 이름이 아니라 구분일 때만.
+ */
+function parenGroupStem(consName: string): string | null {
+  const raw = String(consName ?? '').trim()
+  const matched = raw.match(/^(.+?)\s*[(（]([^()（）]+)[)）]\s*$/)
+  if (!matched) return null
+  const stem = matched[1].trim()
+  const inside = matched[2].trim()
+  if (!stem || !inside) return null
+  return stem
+}
+
+/**
+ * 공사명에서 «사업» 또는 «공사» 중 먼저 나오는 곳까지를 사업명으로 쓴다.
+ * 앞의 «YYYY년»은 빼고, 장소에 해당하지 않으면 null (공사명 전체로 둔다).
+ */
+export function extractProjectName(consName: string): string | null {
+  const raw = String(consName ?? '').trim()
+  if (!raw) return null
+  let cut = -1
+  let markLen = 0
+  for (const mark of ['사업', '공사'] as const) {
+    const i = raw.indexOf(mark)
+    if (i >= 0 && (cut < 0 || i < cut)) {
+      cut = i
+      markLen = mark.length
+    }
+  }
+  if (cut < 0) return null
+  const stem = raw.slice(0, cut + markLen).replace(/^\d{4}년\s*/, '').trim()
+  if (!stem || !stemHasPlace(stem)) return null
+  return stem
+}
+
+/** 준공일자, 없으면 실준공일자. YYYYMMDD. 없으면 0 (목록 맨 아래) */
+function completionKey(work: WtlConsWork): number {
+  const raw = String(work.doneDate || work.sdoneDate || '').trim()
+  if (!raw) return 0
+  const m = raw.match(/^(\d{4})[-./](\d{1,2})[-./](\d{1,2})/)
+  if (m) return Number(m[1]) * 10000 + Number(m[2]) * 100 + Number(m[3])
+  const compact = raw.match(/^(\d{4})(\d{2})(\d{2})/)
+  if (compact) return Number(compact[1]) * 10000 + Number(compact[2]) * 100 + Number(compact[3])
+  return 0
+}
+
+function byNewestWork(a: WtlConsWork, b: WtlConsWork): number {
+  return completionKey(b) - completionKey(a) || a.name.localeCompare(b.name, 'ko')
+}
+
+/**
+ * 공사 행을 공통명으로 묶어 사업기간·사업비를 만든다.
+ * 괄호로만 구분되면 괄호 앞 이름(연도 포함)으로 묶고, 아니면 «…사업»·«…공사» 규칙을 쓴다.
+ * 묶인 문서가 하나면 사업명은 공사명 전체다.
+ */
+export function groupWtlConsProjects(works: WtlConsWork[]): WtlConsProject[] {
   const byName = new Map<string, WtlConsWork[]>()
   for (const w of works) {
-    const name = extractProjectName(w.name)
+    const paren = parenGroupStem(w.name)
+    const name =
+      (paren ? extractProjectName(paren) || paren : null) ||
+      extractProjectName(w.name) ||
+      w.name.trim() ||
+      w.consCode
     if (!name) continue
     const list = byName.get(name) ?? []
     list.push(w)
@@ -1383,32 +1443,38 @@ export function loadWtlConsProjects(): WtlConsProject[] {
   }
   return [...byName.entries()]
     .map(([name, list]) => {
-      const totalPre = list.reduce((s, w) => s + parseAmount(w.amountPre), 0)
-      const totalAft = list.reduce((s, w) => s + parseAmount(w.amountAft || w.amountPre), 0)
-      const changes = list.filter((w) => Boolean(w.amountCha || w.amountVar))
-      const starts = list.map((w) => w.startDate).filter(Boolean).sort()
-      const ends = list.map((w) => w.doneDate || w.sdoneDate).filter(Boolean).sort()
-      const locs = [...new Set(list.map((w) => w.location).filter(Boolean))]
+      const works = [...list].sort(byNewestWork)
+      const displayName = works.length === 1 ? works[0]!.name.trim() || name : name
+      const totalPre = works.reduce((s, w) => s + parseAmount(w.amountPre), 0)
+      const totalAft = works.reduce((s, w) => s + parseAmount(w.amountAft || w.amountPre), 0)
+      const changes = works.filter((w) => Boolean(w.amountCha || w.amountVar))
+      const starts = works.map((w) => w.startDate).filter(Boolean).sort()
+      const latest = works[0]
+      const locs = [...new Set(works.map((w) => w.location).filter(Boolean))]
       const location = locs[0] ?? ''
       return {
-        id: 'proj-' + name,
-        name,
-        periodLabel: periodOf(list),
+        id: 'proj-' + displayName,
+        name: displayName,
+        periodLabel: shortYearDate(completionText(latest)),
         totalAmountLabel: formatAmount(totalAft),
         totalAmount: totalAft,
         workCount: list.length,
         changeCount: changes.length,
         location,
-        supplyBlock: guessSupplyBlock(name, locs.join(' ')),
+        supplyBlock: guessSupplyBlock(displayName, locs.join(' ')),
         amountPreLabel: formatAmount(totalPre),
         amountAftLabel: formatAmount(totalAft),
         startDate: starts[0] ?? '',
-        doneDate: ends[ends.length - 1] ?? '',
-        descript: list.find((w) => w.descript)?.descript ?? '',
-        works: list,
+        doneDate: completionText(latest),
+        descript: works.find((w) => w.descript)?.descript ?? '',
+        works,
       }
     })
-    .sort((a, b) => b.workCount - a.workCount || a.name.localeCompare(b.name, 'ko'))
+    .sort((a, b) => completionKey(b.works[0]!) - completionKey(a.works[0]!) || a.name.localeCompare(b.name, 'ko'))
+}
+
+export function loadWtlConsProjects(): WtlConsProject[] {
+  return groupWtlConsProjects(RAW.map(mapRaw))
 }
 
 export function workHasChange(work: WtlConsWork): boolean {
@@ -1417,10 +1483,10 @@ export function workHasChange(work: WtlConsWork): boolean {
 
 /** 공사목록 날짜: 준공일(없으면 실준공일)만 */
 export function workPeriodLabel(work: WtlConsWork): string {
-  return shortYearDate(work.doneDate || work.sdoneDate || '')
+  return shortYearDate(completionText(work))
 }
 
-/** 공사목록 표시명: 사업명과 동일한 구간을 제거 */
+/** 공사목록 표시명: 사업명과 동일한 구간을 제거. 2건 이상일 때만 쓴다 */
 export function workListDisplayName(consName: string, projectName: string): string {
   const name = String(consName ?? '').trim()
   const proj = String(projectName ?? '').trim()
