@@ -1,5 +1,5 @@
 <featureType>
-  <id>FeatureTypeInfoImpl-7b45823a:1a113f17c5f:-7f38</id>
+  <id>FeatureTypeInfoImpl-b3cf9b6:1a1e371a7b9:-8000</id>
   <name>tl_sprd_rw</name>
   <nativeName>tl_sprd_rw</nativeName>
   <namespace>
@@ -10,19 +10,38 @@
     <string>features</string>
     <string>tl_sprd_rw</string>
   </keywords>
+  <nativeCRS class="projected">PROJCS[&quot;Korea 2000 / Central Belt&quot;, &#xd;
+  GEOGCS[&quot;Korea 2000&quot;, &#xd;
+    DATUM[&quot;Geocentric_datum_of_Korea&quot;, &#xd;
+      SPHEROID[&quot;GRS 1980&quot;, 6378137.0, 298.257222101], &#xd;
+      TOWGS84[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]], &#xd;
+    PRIMEM[&quot;Greenwich&quot;, 0.0], &#xd;
+    UNIT[&quot;degree&quot;, 0.017453292519943295], &#xd;
+    AXIS[&quot;Longitude&quot;, EAST], &#xd;
+    AXIS[&quot;Latitude&quot;, NORTH]], &#xd;
+  PROJECTION[&quot;Transverse_Mercator&quot;], &#xd;
+  PARAMETER[&quot;central_meridian&quot;, 127.0], &#xd;
+  PARAMETER[&quot;latitude_of_origin&quot;, 38.0], &#xd;
+  PARAMETER[&quot;scale_factor&quot;, 1.0], &#xd;
+  PARAMETER[&quot;false_easting&quot;, 200000.0], &#xd;
+  PARAMETER[&quot;false_northing&quot;, 500000.0], &#xd;
+  UNIT[&quot;m&quot;, 1.0], &#xd;
+  AXIS[&quot;x&quot;, EAST], &#xd;
+  AXIS[&quot;y&quot;, NORTH], &#xd;
+  AUTHORITY[&quot;EPSG&quot;,&quot;5181&quot;]]</nativeCRS>
   <srs>EPSG:5181</srs>
   <nativeBoundingBox>
-    <minx>0.0</minx>
-    <maxx>-1.0</maxx>
-    <miny>0.0</miny>
-    <maxy>-1.0</maxy>
+    <minx>351911.49765999</minx>
+    <maxx>377630.97515382</maxx>
+    <miny>246853.0225935</miny>
+    <maxy>278041.94465575</maxy>
     <crs class="projected">EPSG:5181</crs>
   </nativeBoundingBox>
   <latLonBoundingBox>
-    <minx>124.84847767680762</minx>
-    <maxx>124.84848865053446</maxx>
-    <miny>33.47495973610326</miny>
-    <maxy>33.474968932506</maxy>
+    <minx>128.68016715551872</minx>
+    <maxx>128.96587530722235</maxx>
+    <miny>35.70627417470054</miny>
+    <maxy>35.987366202224955</maxy>
     <crs>EPSG:4326</crs>
   </latLonBoundingBox>
   <projectionPolicy>FORCE_DECLARED</projectionPolicy>

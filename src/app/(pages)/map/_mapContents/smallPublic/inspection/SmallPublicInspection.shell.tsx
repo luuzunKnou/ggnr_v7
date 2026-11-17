@@ -61,7 +61,7 @@ function inspectionOfReport(
 
 /**
  * 안전점검 — 한 패널에서 보고서 목록 ⇄ 상세(점검 대상).
- * 미점검은 바로 등록, 점검 완료는 메타·첨부 모달.
+ * 미점검·점검 완료는 목록을 가리지 않고 주소검색 아래 플로팅(메모·민원과 동일).
  */
 export function SmallPublicInspectionShell({ leftOffsetPx, onTotalWidthChange, onClose, onOpenPlan }: Props) {
   const { facilities, inspections, reports } = useSmallPublicStore()
@@ -177,7 +177,7 @@ export function SmallPublicInspectionShell({ leftOffsetPx, onTotalWidthChange, o
   )
 
   const fitToRef = useRef<(fs: SmallPublicFacility[]) => void>(() => {})
-  /** 미점검 → 바로 등록, 점검 완료 → 보기 모달 */
+  /** 미점검 → 등록 플로팅, 점검 완료 → 상세 플로팅(등록 폼은 반드시 닫음) */
   const openFacility = useCallback(
     (id: string) => {
       setFacilityId(id)
@@ -185,7 +185,7 @@ export function SmallPublicInspectionShell({ leftOffsetPx, onTotalWidthChange, o
       if (f) fitToRef.current([f])
       if (!report) return
       const insp = inspectionOfReport(inspections, id, report.id)
-      if (!insp) setInspectionForm({ initial: null })
+      setInspectionForm(insp ? null : { initial: null })
     },
     [facilityById, report, inspections]
   )
@@ -339,10 +339,10 @@ export function SmallPublicInspectionShell({ leftOffsetPx, onTotalWidthChange, o
           onConfirm={confirmTransfer}
         />
       ) : null}
+      {/* 점검 등록·상세는 유지 — 이관 등 오버레이(z nested)가 그 위+배경을 덮음 */}
       {facility && report && facilityYearInspection && inspectionForm == null ? (
         <SmallPublicFacilityInspectionModal
           key={facilityYearInspection.id}
-          {...overlay}
           facility={facility}
           inspection={facilityYearInspection}
           year={report.year}
@@ -352,7 +352,6 @@ export function SmallPublicInspectionShell({ leftOffsetPx, onTotalWidthChange, o
       ) : null}
       {inspectionForm && facility && report ? (
         <SmallPublicInspectionFormModal
-          {...overlay}
           facility={facility}
           year={report.year}
           reportId={report.id}

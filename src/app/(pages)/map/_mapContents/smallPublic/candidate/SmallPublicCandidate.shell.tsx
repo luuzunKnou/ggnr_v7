@@ -318,8 +318,6 @@ export function SmallPublicCandidateShell({ leftOffsetPx, onTotalWidthChange, on
           key={riskEvalForm.id}
           facility={detail}
           initial={riskEvalForm}
-          overlayLeftPx={leftOffsetPx}
-          overlayWidthPx={total}
           onCancel={() => setRiskEvalForm(null)}
           onSaved={() => setRiskEvalForm(null)}
         />

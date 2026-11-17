@@ -20,7 +20,15 @@ import {
   SmallPublicGradeBadge,
   smallPublicAttachmentDisplayName,
 } from '../smallPublicUi'
-import { SmallPublicModalShell, type SmallPublicModalOverlay } from './SmallPublicInspectionModal'
+import { useMapContext } from '../../../_mapComponents/MapContext'
+import { MapFloatingPanel } from '../../../_mapComponents/MapFloatingPanel'
+
+/** 주소검색 아래·목록 오른쪽 — 너비는 주소검색(350)과 맞추고 세로는 길게 */
+const FLOAT_TOP = 60
+const FLOAT_WIDTH = '350px'
+const FLOAT_MAX_HEIGHT = '92vh'
+const FLOAT_PANEL_CLASS =
+  'bg-white backdrop-blur-none [&>div:first-child]:bg-white [&>div:first-child]:hover:bg-muted/40'
 
 function todayYmd(): string {
   const d = new Date()
@@ -46,7 +54,7 @@ function filesOfInspection(i: SmallPublicInspection | null): SmallPublicFile[] {
 }
 
 /**
- * 점검 등록·수정 — 상세 보기와 같은 한 줄 속성표 + 내용 높이만큼 모달.
+ * 점검 등록·수정 — 목록을 가리지 않고 주소검색 아래 플로팅(메모·민원과 동일).
  */
 export function SmallPublicInspectionFormModal({
   facility,
@@ -55,8 +63,7 @@ export function SmallPublicInspectionFormModal({
   initial,
   onCancel,
   onSaved,
-  ...overlay
-}: SmallPublicModalOverlay & {
+}: {
   facility: SmallPublicFacility
   /** 보고서 연도 — 점검일은 이 연도 안에서만(보고서당 시설 점검 1건) */
   year?: number
@@ -65,7 +72,12 @@ export function SmallPublicInspectionFormModal({
   initial: SmallPublicInspection | null
   onCancel: () => void
   onSaved: (inspection: SmallPublicInspection) => void
+  /** @deprecated 목록 오버레이 방식 제거 — 호환용으로만 받음 */
+  overlayLeftPx?: number
+  overlayWidthPx?: number
 }) {
+  const mapContext = useMapContext()
+  const floatingLeftPx = (mapContext?.mapPaddingLeft ?? 0) + 20
   const { inspections } = useSmallPublicStore()
   const fileRef = useRef<HTMLInputElement>(null)
   const [error, setError] = useState<string | null>(null)
@@ -81,25 +93,6 @@ export function SmallPublicInspectionFormModal({
     .filter((i) => i.facilityId === facility.id && i.id !== initial?.id && i.date < date)
     .sort((a, b) => b.date.localeCompare(a.date))[0]
   const autoClass = classFromGrade(grade, prev?.classResult ?? null)
-  const becomesLatest = !inspections.some(
-    (i) => i.facilityId === facility.id && i.id !== initial?.id && i.date > date
-  )
-  const classChange = becomesLatest && autoClass !== facility.candidate ? autoClass : null
-
-  const spec = [
-    facility.length && `연장 ${facility.length}m`,
-    facility.width && `폭 ${facility.width}m`,
-    facility.height && `높이 ${facility.height}m`,
-  ]
-    .filter(Boolean)
-    .join(' · ')
-  const subtitle = [
-    facility.type,
-    [facility.emd, facility.ri].filter(Boolean).join(' '),
-    spec || null,
-  ]
-    .filter(Boolean)
-    .join(' · ')
 
   const save = () => {
     if (!date) return setError('점검일을 넣으세요.')
@@ -131,16 +124,173 @@ export function SmallPublicInspectionFormModal({
   }
 
   return (
-    <SmallPublicModalShell
-      {...overlay}
-      size="md"
-      title={`${initial ? '점검 수정' : '점검 등록'} · ${facility.name}`}
-      subtitle={subtitle || '위험도 평가 PDF와 점검일·점검자·등급을 넣습니다.'}
-      showHeaderClose
-      onClose={onCancel}
-      bodyClassName="max-h-[min(60dvh,28rem)] overflow-y-auto px-3 py-2.5 scrollbar-thin"
-      footer={
-        <div className="flex w-full items-center gap-2.5">
+    <MapFloatingPanel
+      viewport
+      zLayer="detailFloating"
+      width={FLOAT_WIDTH}
+      maxHeight={FLOAT_MAX_HEIGHT}
+      className={FLOAT_PANEL_CLASS}
+      defaultPosition={{ top: FLOAT_TOP, left: floatingLeftPx }}
+      header={
+        <>
+          <div className="min-w-0 flex-1 text-[#000]">
+            <span className="block truncate text-xs font-semibold">
+              {initial ? '점검 수정' : '점검 등록'}
+            </span>
+            <span className="mt-0.5 block truncate text-[11px]">
+              {[facility.name, facility.type].filter(Boolean).join(' / ')}
+            </span>
+          </div>
+          <button
+            type="button"
+            title="닫기"
+            onClick={onCancel}
+            className="flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded text-[#000]/80 hover:bg-muted/50 hover:text-[#000]"
+            aria-label="닫기"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </>
+      }
+    >
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2.5 scrollbar-thin">
+          <div className="flex flex-col gap-2.5 text-[11px]">
+            <SmallPublicAttrTable
+              stacked
+              entries={[
+                {
+                  key: 'date',
+                  label: '점검일',
+                  value: (
+                    <input
+                      type="date"
+                      className={cn(smallPublicFieldClass, initial && 'cursor-not-allowed bg-muted text-muted-foreground')}
+                      value={date}
+                      readOnly={!!initial}
+                      title={initial ? '점검일은 수정할 수 없습니다.' : undefined}
+                      onChange={(e) => setDate(e.target.value)}
+                    />
+                  ),
+                },
+                {
+                  key: 'inspector',
+                  label: '점검자',
+                  value: (
+                    <input
+                      type="text"
+                      className={smallPublicFieldClass}
+                      value={inspector}
+                      onChange={(e) => setInspector(e.target.value)}
+                      placeholder="점검자"
+                    />
+                  ),
+                },
+                {
+                  key: 'grade',
+                  label: '등급',
+                  value: (
+                    <div className="flex flex-wrap items-center gap-1">
+                      {SMALL_PUBLIC_GRADES.map((g) => (
+                        <button
+                          key={g}
+                          type="button"
+                          onClick={() => setGrade(g)}
+                          className={cn(
+                            'inline-flex items-center rounded border px-1.5 py-0.5',
+                            grade === g
+                              ? 'border-primary bg-primary/10 ring-1 ring-inset ring-primary/30'
+                              : 'border-border hover:bg-muted/50'
+                          )}
+                          aria-pressed={grade === g}
+                        >
+                          <SmallPublicGradeBadge grade={g} />
+                        </button>
+                      ))}
+                    </div>
+                  ),
+                },
+                {
+                  key: 'class',
+                  label: '평가구분',
+                  value: (
+                    <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+                      <SmallPublicClassBadge candidate={autoClass} />
+                      <span className="text-[10px] text-muted-foreground">등급에 따라 자동</span>
+                    </span>
+                  ),
+                },
+                {
+                  key: 'files',
+                  label: '첨부 PDF',
+                  value: (
+                    <div className="flex min-w-0 flex-col gap-1.5">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <button type="button" className={smallPublicBtnGhost} onClick={() => fileRef.current?.click()}>
+                          <Paperclip className="h-3 w-3" />
+                          파일 추가
+                        </button>
+                        {files.length === 0 ? (
+                          <span className="text-[11px] text-muted-foreground">위험도 평가 PDF를 올리세요.</span>
+                        ) : null}
+                      </div>
+                      {files.length > 0 ? (
+                        <ul className="flex flex-col gap-1">
+                          {files.map((f) => (
+                            <li
+                              key={f.id}
+                              className="flex items-center gap-1.5 rounded border border-border bg-card px-2 py-1 text-[11px]"
+                            >
+                              <span className="min-w-0 flex-1 truncate text-foreground/80" title={f.name}>
+                                {smallPublicAttachmentDisplayName(f.name, facility.name)}
+                              </span>
+                              <button
+                                type="button"
+                                className="rounded p-0.5 text-destructive hover:bg-destructive/10"
+                                title="제거"
+                                aria-label="제거"
+                                onClick={() => setFiles((prev) => prev.filter((x) => x.id !== f.id))}
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
+                      <input
+                        ref={fileRef}
+                        type="file"
+                        accept=".pdf,application/pdf"
+                        multiple
+                        className="hidden"
+                        onChange={(e) => {
+                          const list = Array.from(e.target.files ?? [])
+                          if (list.length)
+                            setFiles((prev) => [...prev, ...list.map((f) => smallPublicFileFromUpload(f, 'safety'))])
+                          e.target.value = ''
+                        }}
+                      />
+                    </div>
+                  ),
+                },
+                {
+                  key: 'remark',
+                  label: '비고',
+                  value: (
+                    <input
+                      type="text"
+                      className={smallPublicFieldClass}
+                      value={remark}
+                      onChange={(e) => setRemark(e.target.value)}
+                      placeholder="선택"
+                    />
+                  ),
+                },
+              ]}
+            />
+          </div>
+        </div>
+        <div className="flex w-full shrink-0 items-center gap-2.5 border-t border-border bg-white px-3 py-1.5">
           {error ? <span className="mr-auto text-[11px] text-destructive">{error}</span> : <span className="mr-auto" />}
           <button type="button" className={smallPublicBtnPrimary} onClick={save}>
             저장
@@ -149,150 +299,7 @@ export function SmallPublicInspectionFormModal({
             취소
           </button>
         </div>
-      }
-    >
-      <div className="flex flex-col gap-2.5 text-[11px]">
-        {classChange ? (
-          <p className="rounded border border-amber-300/60 bg-amber-50 px-2 py-1 text-[11px] text-amber-900 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-200">
-            저장하면 시설 구분이 {facility.candidate} → {classChange}(으)로 바뀝니다.
-            {classChange === '위험' ? ' 위험시설은 정비계획 대상이 됩니다.' : ''}
-          </p>
-        ) : null}
-        <SmallPublicAttrTable
-          stacked
-          entries={[
-            {
-              key: 'date',
-              label: '점검일',
-              value: (
-                <input
-                  type="date"
-                  className={cn(smallPublicFieldClass, initial && 'cursor-not-allowed bg-muted text-muted-foreground')}
-                  value={date}
-                  readOnly={!!initial}
-                  title={initial ? '점검일은 수정할 수 없습니다.' : undefined}
-                  onChange={(e) => setDate(e.target.value)}
-                />
-              ),
-            },
-            {
-              key: 'inspector',
-              label: '점검자',
-              value: (
-                <input
-                  type="text"
-                  className={smallPublicFieldClass}
-                  value={inspector}
-                  onChange={(e) => setInspector(e.target.value)}
-                  placeholder="점검자"
-                />
-              ),
-            },
-            {
-              key: 'grade',
-              label: '등급',
-              value: (
-                <div className="flex flex-wrap items-center gap-1">
-                  {SMALL_PUBLIC_GRADES.map((g) => (
-                    <button
-                      key={g}
-                      type="button"
-                      onClick={() => setGrade(g)}
-                      className={cn(
-                        'inline-flex items-center rounded border px-1.5 py-0.5',
-                        grade === g
-                          ? 'border-primary bg-primary/10 ring-1 ring-inset ring-primary/30'
-                          : 'border-border hover:bg-muted/50'
-                      )}
-                      aria-pressed={grade === g}
-                    >
-                      <SmallPublicGradeBadge grade={g} />
-                    </button>
-                  ))}
-                </div>
-              ),
-            },
-            {
-              key: 'class',
-              label: '평가구분',
-              value: (
-                <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
-                  <SmallPublicClassBadge candidate={autoClass} />
-                  <span className="text-[10px] text-muted-foreground">등급에 따라 자동</span>
-                </span>
-              ),
-            },
-            {
-              key: 'files',
-              label: '첨부 PDF',
-              value: (
-                <div className="flex min-w-0 flex-col gap-1.5">
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <button type="button" className={smallPublicBtnGhost} onClick={() => fileRef.current?.click()}>
-                      <Paperclip className="h-3 w-3" />
-                      파일 추가
-                    </button>
-                    {files.length === 0 ? (
-                      <span className="text-[11px] text-muted-foreground">위험도 평가 PDF를 올리세요.</span>
-                    ) : null}
-                  </div>
-                  {files.length > 0 ? (
-                    <ul className="flex flex-col gap-1">
-                      {files.map((f) => (
-                        <li
-                          key={f.id}
-                          className="flex items-center gap-1.5 rounded border border-border bg-card px-2 py-1 text-[11px]"
-                        >
-                          <span
-                            className="min-w-0 flex-1 truncate text-foreground/80"
-                            title={f.name}
-                          >
-                            {smallPublicAttachmentDisplayName(f.name, facility.name)}
-                          </span>
-                          <button
-                            type="button"
-                            className="rounded p-0.5 text-destructive hover:bg-destructive/10"
-                            title="제거"
-                            aria-label="제거"
-                            onClick={() => setFiles((prev) => prev.filter((x) => x.id !== f.id))}
-                          >
-                            <X className="h-3.5 w-3.5" />
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : null}
-                  <input
-                    ref={fileRef}
-                    type="file"
-                    accept=".pdf,application/pdf"
-                    multiple
-                    className="hidden"
-                    onChange={(e) => {
-                      const list = Array.from(e.target.files ?? [])
-                      if (list.length) setFiles((prev) => [...prev, ...list.map((f) => smallPublicFileFromUpload(f, 'safety'))])
-                      e.target.value = ''
-                    }}
-                  />
-                </div>
-              ),
-            },
-            {
-              key: 'remark',
-              label: '비고',
-              value: (
-                <input
-                  type="text"
-                  className={smallPublicFieldClass}
-                  value={remark}
-                  onChange={(e) => setRemark(e.target.value)}
-                  placeholder="선택"
-                />
-              ),
-            },
-          ]}
-        />
       </div>
-    </SmallPublicModalShell>
+    </MapFloatingPanel>
   )
 }

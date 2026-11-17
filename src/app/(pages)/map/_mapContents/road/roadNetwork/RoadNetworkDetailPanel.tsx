@@ -2202,53 +2202,6 @@ export function RoadNetworkDetailPanel({
             )}
             속성정보
           </button>
-          {attrsOpen ? (
-            <div className="flex shrink-0 items-center gap-1">
-              {!attrEditing ? (
-                <>
-                  <button
-                    type="button"
-                    className={btnGhost}
-                    onClick={beginAttrEdit}
-                    disabled={wholeRoadSegments != null}
-                    title={wholeRoadSegments ? "아래 구간 목록에서 구간을 선택한 뒤 수정할 수 있습니다" : undefined}
-                  >
-                    <Pencil className="h-3 w-3" />
-                    수정
-                  </button>
-                  <button
-                    type="button"
-                    className={btnDanger}
-                    onClick={() => void handleDeleteRoad()}
-                    disabled={wholeRoadSegments != null}
-                    title={wholeRoadSegments ? "아래 구간 목록에서 구간을 선택한 뒤 삭제할 수 있습니다" : undefined}
-                  >
-                    <Trash2 className="h-3 w-3" />
-                    삭제
-                  </button>
-                </>
-              ) : (
-                <>
-                  <button
-                    type="button"
-                    className={btnGhost}
-                    onClick={cancelAttrEdit}
-                    disabled={attrSaving}
-                  >
-                    취소
-                  </button>
-                  <button
-                    type="button"
-                    className={btnPrimary}
-                    onClick={() => void handleSaveAttrs()}
-                    disabled={attrSaving}
-                  >
-                    {attrSaving ? "저장 중…" : "저장"}
-                  </button>
-                </>
-              )}
-            </div>
-          ) : null}
         </div>
         {attrsOpen ? (
           <div
@@ -2752,6 +2705,61 @@ export function RoadNetworkDetailPanel({
       ) : null}
 
       {mapEditBanner}
+
+      {/* 점용대장과 동일 — 수정·삭제는 하단 고정 */}
+      <div className="flex shrink-0 items-center justify-end gap-1 border-t border-border bg-background px-3 py-2">
+        {!attrEditing ? (
+          <>
+            <button
+              type="button"
+              className={btnGhost}
+              onClick={beginAttrEdit}
+              disabled={wholeRoadSegments != null}
+              title={
+                wholeRoadSegments
+                  ? "아래 구간 목록에서 구간을 선택한 뒤 수정할 수 있습니다"
+                  : undefined
+              }
+            >
+              <Pencil className="h-3 w-3" />
+              수정
+            </button>
+            <button
+              type="button"
+              className={btnDanger}
+              onClick={() => void handleDeleteRoad()}
+              disabled={wholeRoadSegments != null}
+              title={
+                wholeRoadSegments
+                  ? "아래 구간 목록에서 구간을 선택한 뒤 삭제할 수 있습니다"
+                  : undefined
+              }
+            >
+              <Trash2 className="h-3 w-3" />
+              삭제
+            </button>
+          </>
+        ) : (
+          <>
+            <button
+              type="button"
+              className={btnPrimary}
+              onClick={() => void handleSaveAttrs()}
+              disabled={attrSaving}
+            >
+              {attrSaving ? "저장 중…" : isNewRoad ? "등록" : "저장"}
+            </button>
+            <button
+              type="button"
+              className={btnGhost}
+              onClick={cancelAttrEdit}
+              disabled={attrSaving}
+            >
+              취소
+            </button>
+          </>
+        )}
+      </div>
     </div>
   );
 }
