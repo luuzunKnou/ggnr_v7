@@ -38,7 +38,10 @@ import { computeMapDetailDockPin } from '../../../_mapComponents/mapDetailFloati
 import { MAP_FLOATING_DETAIL_CLOSE_EVENT } from '../../../_mapComponents/mapFloatingDetailEvent'
 import { notifyLayerClickDetailMatchClose } from '../../layerClickDetail/notifyLayerClickDetailMatchClose'
 import { LayerClickDetailFloating } from '../../layerClickDetail/LayerClickDetailFloating'
-import type { LayerClickHit } from '../../layerClickDetail/useLayerClickDetail'
+import type {
+  LayerClickHit,
+  LayerClickKeptEntry,
+} from '../../layerClickDetail/useLayerClickDetail'
 import { MapSideListPanel } from '../../../_mapComponents/MapSideListPanel'
 import {
   getDefineFieldDisplayLabel,
@@ -148,6 +151,26 @@ function networkRowToLayerClickHit(row: WtlNetworkRow): LayerClickHit {
     titleValue: String(row.name ?? '').trim(),
     data,
   }
+}
+
+let networkKeepModalKeySeq = 0
+function nextNetworkKeepModalKey(): string {
+  networkKeepModalKeySeq += 1
+  return `wtl-network-keep-${networkKeepModalKeySeq}`
+}
+
+/** 상세 탭·Search용 — hit 테이블명 집합 */
+function undergroundTablesFromHits(hits: LayerClickHit[]): Set<string> {
+  const s = new Set<string>()
+  for (const hit of hits) {
+    for (const v of [hit.tableName, hit.fieldsTable]) {
+      const t = String(v ?? '')
+        .trim()
+        .toLowerCase()
+      if (t) s.add(t)
+    }
+  }
+  return s
 }
 
 type CommonDetailState = {
@@ -788,6 +811,8 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
   const [commonDetailMinimized, setCommonDetailMinimized] = useState(false)
   const commonDetailRef = useRef<CommonDetailState | null>(null)
   commonDetailRef.current = commonDetail
+  /** 새 창으로 분리된 킵 모달 (기본 모달과 동일) */
+  const [keptModals, setKeptModals] = useState<LayerClickKeptEntry[]>([])
   
   const listPageSize = LIST_PAGE_SIZE
   const [group, setGroup] = useState(INITIAL_GROUP)
@@ -901,10 +926,95 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
   const dismissDetailUi = useCallback(() => {
     setCommonDetail(null)
     setCommonDetailMinimized(false)
+    setKeptModals([])
     setSelected(null)
     setSectionMinimized(false)
     section.closePanel()
   }, [section.closePanel])
+
+  /** origin = 기본 모달 좌상단 — 새 창은 그보다 약간 오른쪽 */
+  const detachKeepDetail = useCallback(
+    (origin?: { top: number; left: number } | null) => {
+      const cur = commonDetailRef.current
+      if (!cur) return
+      const hitRows =
+        cur.hitRows.length > 0
+          ? cur.hitRows.map((r) =>
+              r.id === cur.item.id ? cur.item : r
+            )
+          : [cur.item]
+      const hits = hitRows.map(networkRowToLayerClickHit)
+      const facilityKey = String(cur.item.id)
+      setKeptModals((prev) => {
+        const existing = prev.find((m) =>
+          m.hits.some((h) => h.key === facilityKey)
+        )
+        if (existing) {
+          return prev.map((m) =>
+            m.key === existing.key
+              ? {
+                  ...m,
+                  selectedKey: facilityKey,
+                  focusToken: m.focusToken + 1,
+                }
+              : m
+          )
+        }
+        const stackIndex =
+          prev.reduce((max, m) => Math.max(max, m.stackIndex), -1) + 1
+        const base = origin ?? cur.anchor ?? null
+        const offsetX = 28 + stackIndex * 28
+        const offsetY = 14 + stackIndex * 14
+        return [
+          ...prev,
+          {
+            key: nextNetworkKeepModalKey(),
+            hits: hits.map((h) => ({ ...h, data: { ...h.data } })),
+            selectedKey: facilityKey,
+            anchor: base
+              ? { left: base.left + offsetX, top: base.top + offsetY }
+              : { left: 80 + offsetX, top: 72 + offsetY },
+            stackIndex,
+            focusToken: 0,
+            minimized: false,
+          },
+        ]
+      })
+    },
+    []
+  )
+
+  const closeKeepDetail = useCallback((modalKey: string) => {
+    setKeptModals((prev) => prev.filter((m) => m.key !== modalKey))
+  }, [])
+
+  const setKeepDetailMinimized = useCallback(
+    (modalKey: string, next: boolean) => {
+      setKeptModals((prev) =>
+        prev.map((m) =>
+          m.key === modalKey ? { ...m, minimized: next } : m
+        )
+      )
+    },
+    []
+  )
+
+  const selectKeepDetailHit = useCallback(
+    (modalKey: string, hitKey: string) => {
+      setKeptModals((prev) =>
+        prev.map((m) =>
+          m.key === modalKey
+            ? {
+                ...m,
+                selectedKey: hitKey,
+                focusToken: m.focusToken + 1,
+              }
+            : m
+        )
+      )
+    },
+    []
+  )
 
   const handleClose = useCallback(() => {
     dismissDetailUi()
@@ -1866,6 +1976,7 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
     setSelected(null)
     setCommonDetail(null)
     setCommonDetailMinimized(false)
+    setKeptModals([])
   }
 
   useEffect(() => {
@@ -2934,190 +3045,266 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
           </MapSideListPanel>
         </div>
       )}
-      {commonDetail ? (
-        <LayerClickDetailFloating
-          key="wtl-network-map-detail"
-          open
-          startAsSimple
-          placementAsTopLeft={commonDetail.placement === 'listCenter'}
-          hits={(commonDetail.hitRows.length > 0
-            ? commonDetail.hitRows.map((r) =>
-                r.id === commonDetail.item.id ? commonDetail.item : r
-              )
-            : [commonDetail.item]
-          ).map(networkRowToLayerClickHit)}
-          selected={networkRowToLayerClickHit(commonDetail.item)}
-          minimized={commonDetailMinimized}
-          onMinimizedChange={setCommonDetailMinimized}
-          focusToken={0}
-          anchorLeftPx={
-            commonDetail.anchor?.left ??
-            leftOffsetPx + Math.round(listWidth / 2)
-          }
-          anchorTopPx={
-            commonDetail.anchor?.top ??
-            Math.max(72, Math.round(viewportSize.h / 2 - 100))
-          }
-          viewportW={viewportSize.w}
-          viewportH={viewportSize.h}
-          dockIndex={0}
-          dockLeftStartPx={dockLeftStartPx}
-          writeSerEng="wtlNetworkMap"
-          undergroundFacilityTableNames={(() => {
-            const s = new Set<string>()
-            const item = commonDetail.item
-            for (const v of [
-              item.layerKey,
-              item.fieldsTable,
-              getWtlNetLayerDef(String(item.layerKey ?? ''))?.table,
-            ]) {
-              const t = String(v ?? '')
-                .trim()
-                .toLowerCase()
-              if (t) s.add(t)
-            }
-            return s
-          })()}
-          onSelectHit={(key) => {
-            const row = commonDetail.hitRows.find((r) => String(r.id) === key)
-            if (!row) return
-            void (async () => {
-              let next: WtlNetworkRow = row
-              try {
-                const res = await call('', 'POST', {
-                  service: 'wtlNetworkService',
-                  action: 'getWtlNetworkDetail',
-                  params: { id: row.id },
-                })
-                const fetched = (res?.data ?? res)?.row as
-                  | WtlNetworkRow
-                  | null
-                  | undefined
-                next = fetched ?? row
-              } catch {
-                next = row
-              }
-              setCommonDetail((prev) => (prev ? { ...prev, item: next } : prev))
-              setSelected(next)
-            })()
-          }}
-          onClose={() => {
-            setCommonDetail(null)
-            setCommonDetailMinimized(false)
-            setSelected(null)
-          }}
-          onActivate={() => {
-            setSelected(commonDetail.item)
-            const map = mapContext?.mapInstanceRef?.current
-            if (map) claimMapLayerClickDetailHighlight(map, 'wtlNetwork')
-          }}
-          onSelectedUpdated={(hit) => {
-            const record: Record<string, unknown> = { ...(hit.data ?? {}) }
-            delete record.geom
-            const mergeRow = (row: WtlNetworkRow): WtlNetworkRow => ({
-              ...row,
-              record: {
-                ...(row.record && typeof row.record === 'object' ? row.record : {}),
-                ...record,
-              },
-            })
-            const id = hit.key
-            setCommonDetail((prev) =>
-              prev && String(prev.item.id) === id
-                ? {
-                    ...prev,
-                    item: mergeRow(prev.item),
-                    hitRows: prev.hitRows.map((r) =>
-                      String(r.id) === id ? mergeRow(r) : r
-                    ),
-                  }
-                : prev
-            )
-            setBoxData((prev) => {
-              let changed = false
-              const out: Record<string, LayerBoxData> = {}
-              for (const [key, data] of Object.entries(prev)) {
-                const idx = data.rows.findIndex((r) => String(r.id) === id)
-                if (idx < 0) {
-                  out[key] = data
-                  continue
-                }
-                changed = true
-                const rows = data.rows.slice()
-                rows[idx] = mergeRow(rows[idx])
-                out[key] = { ...data, rows }
-              }
-              return changed ? out : prev
-            })
-          }}
-        />
-      ) : null}      <WtlNetworkSectionDrawGuide
-        open={section.modePickerOpen || section.drawing}
-        drawMode={section.drawMode}
-        drawing={section.drawing}
-        pendingReady={section.pendingReady}
-        canUndoLast={section.canUndoLast}
-        message={section.guideMessage}
-        onChoose={section.chooseDrawMode}
-        onUndoLast={section.undoLastVertex}
-        onApply={section.applyPendingLine}
-        onRespecify={section.respecifyCutLine}
-        onCancel={section.cancelDraw}
-      />
-      <WtlNetworkSectionPanel
-        open={section.panelOpen}
-        tab={section.tab}
-        onTabChange={section.setTab}
-        lineReady={section.lineReady}
-        loading={section.loading}
-        error={section.error}
-        ground={section.ground}
-        groundMin={section.groundMin}
-        groundMax={section.groundMax}
-        features={section.features}
-        totalLengthM={section.totalLengthM}
-        lineLonLat={section.lineLonLat}
-        line3857={section.line3857}
-        enabledKeys={section.enabledKeys}
-        supplyAreaLines={section.supplyAreaLines}
-        supplyAreaBands={section.supplyAreaBands}
-        supplyElevComposition={section.supplyElevComposition}
-        minimized={sectionMinimized}
-        pinPosition={
-          section.panelOpen && sectionMinimized
-            ? computeMapDetailDockPin({
-                dockIndex: commonDetail && commonDetailMinimized ? 1 : 0,
-                dockLeftStart: dockLeftStartPx,
-                viewportW: viewportSize.w,
-                viewportH: viewportSize.h,
-              })
-            : null
+      {(() => {
+        const minimizedDockKeys: string[] = []
+        if (commonDetail && commonDetailMinimized) {
+          minimizedDockKeys.push('primary')
         }
-        onMinimizedChange={setSectionMinimized}
-        onClose={section.closePanel}
-        onRedraw={section.redrawSection}
-        onLegendItemSelect={(item) => {
-          const id = String(item.networkId ?? '').trim()
-          if (!id) return
-          sectionLegendSelectionRef.current = true
-          void pickRow(
-            {
-              id,
-              layerKey: String(item.layerKey ?? '').trim() || id.split(':')[0] || '',
-              geomKind: item.kind === 'point' ? 'point' : 'line',
-              name: item.label,
-              diameter: '',
-              material: '',
-              length: '',
-              year: '',
-              status: '',
-              hjd: '',
-              attrs: [],
-            },
-            { openDetail: false }
-          )
-        }}
-      />
+        for (const kept of keptModals) {
+          if (kept.minimized) minimizedDockKeys.push(kept.key)
+        }
+        const dockIndexOf = (key: string) =>
+          Math.max(0, minimizedDockKeys.indexOf(key))
+        const sectionDockIndex =
+          section.panelOpen && sectionMinimized
+            ? minimizedDockKeys.length
+            : 0
+        return (
+          <>
+            {commonDetail ? (
+              <LayerClickDetailFloating
+                key="wtl-network-map-detail"
+                open
+                startAsSimple
+                placementAsTopLeft={commonDetail.placement === 'listCenter'}
+                hits={(commonDetail.hitRows.length > 0
+                  ? commonDetail.hitRows.map((r) =>
+                      r.id === commonDetail.item.id ? commonDetail.item : r
+                    )
+                  : [commonDetail.item]
+                ).map(networkRowToLayerClickHit)}
+                selected={networkRowToLayerClickHit(commonDetail.item)}
+                minimized={commonDetailMinimized}
+                onMinimizedChange={setCommonDetailMinimized}
+                focusToken={0}
+                anchorLeftPx={
+                  commonDetail.anchor?.left ??
+                  leftOffsetPx + Math.round(listWidth / 2)
+                }
+                anchorTopPx={
+                  commonDetail.anchor?.top ??
+                  Math.max(72, Math.round(viewportSize.h / 2 - 100))
+                }
+                viewportW={viewportSize.w}
+                viewportH={viewportSize.h}
+                dockIndex={dockIndexOf('primary')}
+                dockLeftStartPx={dockLeftStartPx}
+                writeSerEng="wtlNetworkMap"
+                undergroundFacilityTableNames={(() => {
+                  const s = new Set<string>()
+                  const item = commonDetail.item
+                  for (const v of [
+                    item.layerKey,
+                    item.fieldsTable,
+                    getWtlNetLayerDef(String(item.layerKey ?? ''))?.table,
+                  ]) {
+                    const t = String(v ?? '')
+                      .trim()
+                      .toLowerCase()
+                    if (t) s.add(t)
+                  }
+                  return s
+                })()}
+                onSelectHit={(key) => {
+                  const row = commonDetail.hitRows.find(
+                    (r) => String(r.id) === key
+                  )
+                  if (!row) return
+                  void (async () => {
+                    let next: WtlNetworkRow = row
+                    try {
+                      const res = await call('', 'POST', {
+                        service: 'wtlNetworkService',
+                        action: 'getWtlNetworkDetail',
+                        params: { id: row.id },
+                      })
+                      const fetched = (res?.data ?? res)?.row as
+                        | WtlNetworkRow
+                        | null
+                        | undefined
+                      next = fetched ?? row
+                    } catch {
+                      next = row
+                    }
+                    setCommonDetail((prev) =>
+                      prev ? { ...prev, item: next } : prev
+                    )
+                    setSelected(next)
+                  })()
+                }}
+                onClose={() => {
+                  setCommonDetail(null)
+                  setCommonDetailMinimized(false)
+                  setSelected(null)
+                }}
+                onDetach={(origin) => detachKeepDetail(origin)}
+                onActivate={() => {
+                  setSelected(commonDetail.item)
+                  const map = mapContext?.mapInstanceRef?.current
+                  if (map) claimMapLayerClickDetailHighlight(map, 'wtlNetwork')
+                }}
+                onSelectedUpdated={(hit) => {
+                  const record: Record<string, unknown> = {
+                    ...(hit.data ?? {}),
+                  }
+                  delete record.geom
+                  const mergeRow = (row: WtlNetworkRow): WtlNetworkRow => ({
+                    ...row,
+                    record: {
+                      ...(row.record && typeof row.record === 'object'
+                        ? row.record
+                        : {}),
+                      ...record,
+                    },
+                  })
+                  const id = hit.key
+                  setCommonDetail((prev) =>
+                    prev && String(prev.item.id) === id
+                      ? {
+                          ...prev,
+                          item: mergeRow(prev.item),
+                          hitRows: prev.hitRows.map((r) =>
+                            String(r.id) === id ? mergeRow(r) : r
+                          ),
+                        }
+                      : prev
+                  )
+                  setBoxData((prev) => {
+                    let changed = false
+                    const out: Record<string, LayerBoxData> = {}
+                    for (const [key, data] of Object.entries(prev)) {
+                      const idx = data.rows.findIndex(
+                        (r) => String(r.id) === id
+                      )
+                      if (idx < 0) {
+                        out[key] = data
+                        continue
+                      }
+                      changed = true
+                      const rows = data.rows.slice()
+                      rows[idx] = mergeRow(rows[idx])
+                      out[key] = { ...data, rows }
+                    }
+                    return changed ? out : prev
+                  })
+                }}
+              />
+            ) : null}
+            {keptModals.map((kept) => {
+              const selected =
+                kept.hits.find((h) => h.key === kept.selectedKey) ??
+                kept.hits[0] ??
+                null
+              if (!selected) return null
+              return (
+                <LayerClickDetailFloating
+                  key={kept.key}
+                  open
+                  kept
+                  startAsSimple
+                  placementAsTopLeft
+                  hits={kept.hits}
+                  selected={selected}
+                  minimized={kept.minimized}
+                  onMinimizedChange={(next) =>
+                    setKeepDetailMinimized(kept.key, next)
+                  }
+                  focusToken={kept.focusToken}
+                  anchorLeftPx={
+                    kept.anchor?.left ??
+                    leftOffsetPx + Math.round(listWidth / 2)
+                  }
+                  anchorTopPx={
+                    kept.anchor?.top ??
+                    Math.max(72, Math.round(viewportSize.h / 2 - 100))
+                  }
+                  viewportW={viewportSize.w}
+                  viewportH={viewportSize.h}
+                  dockIndex={dockIndexOf(kept.key)}
+                  dockLeftStartPx={dockLeftStartPx}
+                  undergroundFacilityTableNames={undergroundTablesFromHits(
+                    kept.hits
+                  )}
+                  onSelectHit={(hitKey) =>
+                    selectKeepDetailHit(kept.key, hitKey)
+                  }
+                  onClose={() => closeKeepDetail(kept.key)}
+                />
+              )
+            })}
+            <WtlNetworkSectionDrawGuide
+              open={section.modePickerOpen || section.drawing}
+              drawMode={section.drawMode}
+              drawing={section.drawing}
+              pendingReady={section.pendingReady}
+              canUndoLast={section.canUndoLast}
+              message={section.guideMessage}
+              onChoose={section.chooseDrawMode}
+              onUndoLast={section.undoLastVertex}
+              onApply={section.applyPendingLine}
+              onRespecify={section.respecifyCutLine}
+              onCancel={section.cancelDraw}
+            />
+            <WtlNetworkSectionPanel
+              open={section.panelOpen}
+              tab={section.tab}
+              onTabChange={section.setTab}
+              lineReady={section.lineReady}
+              loading={section.loading}
+              error={section.error}
+              ground={section.ground}
+              groundMin={section.groundMin}
+              groundMax={section.groundMax}
+              features={section.features}
+              totalLengthM={section.totalLengthM}
+              lineLonLat={section.lineLonLat}
+              line3857={section.line3857}
+              enabledKeys={section.enabledKeys}
+              supplyAreaLines={section.supplyAreaLines}
+              supplyAreaBands={section.supplyAreaBands}
+              supplyElevComposition={section.supplyElevComposition}
+              minimized={sectionMinimized}
+              pinPosition={
+                section.panelOpen && sectionMinimized
+                  ? computeMapDetailDockPin({
+                      dockIndex: sectionDockIndex,
+                      dockLeftStart: dockLeftStartPx,
+                      viewportW: viewportSize.w,
+                      viewportH: viewportSize.h,
+                    })
+                  : null
+              }
+              onMinimizedChange={setSectionMinimized}
+              onClose={section.closePanel}
+              onRedraw={section.redrawSection}
+              onLegendItemSelect={(item) => {
+                const id = String(item.networkId ?? '').trim()
+                if (!id) return
+                sectionLegendSelectionRef.current = true
+                void pickRow(
+                  {
+                    id,
+                    layerKey:
+                      String(item.layerKey ?? '').trim() ||
+                      id.split(':')[0] ||
+                      '',
+                    geomKind: item.kind === 'point' ? 'point' : 'line',
+                    name: item.label,
+                    diameter: '',
+                    material: '',
+                    length: '',
+                    year: '',
+                    status: '',
+                    hjd: '',
+                    attrs: [],
+                  },
+                  { openDetail: false }
+                )
+              }}
+            />
+          </>
+        )
+      })()}
     </>
   )
 }
