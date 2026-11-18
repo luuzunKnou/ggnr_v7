@@ -37,6 +37,13 @@ export type SpatialDrawRequest = {
   snapLayerName?: string;
   /** true면 스냅용 WFS 피처를 지도에 보이게 한다(기본 투명) */
   showSnapLayer?: boolean;
+  /**
+   * true면 완료 시 모든 꼭짓점이 스냅 대상에 붙어 있어야 함.
+   * 벗어나면 onComplete를 호출하지 않고 onSnapReject 후 그리기를 유지한다.
+   */
+  requireSnap?: boolean;
+  /** requireSnap 실패 안내 */
+  onSnapReject?: (message: string) => void;
   /** 스케치 제어(선 되돌리기). effect cleanup 시 null */
   sketchControlRef?: MutableRefObject<SpatialDrawSketchControl | null>;
   /** 스케치 꼭짓점 수 변경(미완료 도형) */
@@ -85,6 +92,8 @@ export function useSpatialDrawOnMap(
       onComplete,
       snapLayerName,
       showSnapLayer = false,
+      requireSnap = false,
+      onSnapReject,
       sketchControlRef,
       onSketchPointCount,
     } = spatialDrawRequest;
@@ -223,23 +232,97 @@ export function useSpatialDrawOnMap(
       moveKey = map.on('moveend', scheduleLoad) as EventsKey;
     }
 
+    const vertexCoordsOf = (geom: Geometry): number[][] => {
+      const gType = geom.getType();
+      if (gType === 'LineString') {
+        return (geom as LineString).getCoordinates();
+      }
+      if (gType === 'Polygon') {
+        const ring = (geom as Polygon).getCoordinates()?.[0] ?? [];
+        return ring.length > 1 ? ring.slice(0, -1) : ring;
+      }
+      if (gType === 'Point') {
+        return [(geom as import('ol/geom/Point').default).getCoordinates()];
+      }
+      return [];
+    };
+
+    const isSnappedToSource = (coord: number[]): boolean => {
+      if (!snapSource) return false;
+      const res = map.getView().getResolution() ?? 1;
+      const maxDist = SNAP_PIXEL_TOLERANCE * res;
+      const maxDistSq = maxDist * maxDist;
+      let best = Infinity;
+      for (const feat of snapSource.getFeatures()) {
+        const g = feat.getGeometry();
+        if (!g) continue;
+        const closest = g.getClosestPoint(coord);
+        const dx = closest[0]! - coord[0]!;
+        const dy = closest[1]! - coord[1]!;
+        const d2 = dx * dx + dy * dy;
+        if (d2 < best) best = d2;
+        if (best <= maxDistSq) return true;
+      }
+      return false;
+    };
+
     const onDrawEnd = (e: unknown) => {
       const evt = e as { feature: { getGeometry(): import('ol/geom').Geometry } };
       const rawGeom = evt.feature.getGeometry();
       clearSketchTracking();
-      if (sketchControlRef) sketchControlRef.current = null;
-      if (!rawGeom) return;
+      if (!rawGeom) {
+        if (sketchControlRef) sketchControlRef.current = null;
+        return;
+      }
       try {
         const geom =
           rawGeom.getType() === 'Circle'
             ? fromCircle(rawGeom as import('ol/geom/Circle').default)
             : rawGeom;
+
+        if (requireSnap && snapLayerName) {
+          const verts = vertexCoordsOf(geom);
+          const allSnapped =
+            verts.length > 0 && verts.every((c) => isSnappedToSource(c));
+          if (!allSnapped) {
+            source.clear();
+            onSnapReject?.(
+              '도로구간에 스냅해서 두 점을 찍으세요. 도로 밖에는 입력할 수 없습니다.'
+            );
+            // 그리기 interaction 유지 — 다시 찍을 수 있게
+            if (sketchControlRef || onSketchPointCount) {
+              if (sketchControlRef) {
+                sketchControlRef.current = {
+                  removeLastPoint: () => {
+                    draw.removeLastPoint();
+                    reportSketchCount();
+                  },
+                  sketchPointCount: () => {
+                    if (!sketchGeom) return 0;
+                    if (sketchGeom.getType() === 'LineString') {
+                      return (sketchGeom as LineString).getCoordinates().length;
+                    }
+                    if (sketchGeom.getType() === 'Polygon') {
+                      const ring = (sketchGeom as Polygon).getCoordinates()?.[0];
+                      return Math.max(0, (ring?.length ?? 0) - 1);
+                    }
+                    return 0;
+                  },
+                };
+              }
+            }
+            return;
+          }
+        }
+
+        if (sketchControlRef) sketchControlRef.current = null;
         const cloned = geom.clone();
         cloned.transform('EPSG:3857', 'EPSG:5181');
         const wkt = new WKT().writeGeometry(cloned);
         onComplete(wkt);
       } catch (err) {
         console.error('[SpatialDraw] WKT write failed', err);
+        if (sketchControlRef) sketchControlRef.current = null;
       }
       setSpatialDrawRequest(null);
       map.removeInteraction(draw);

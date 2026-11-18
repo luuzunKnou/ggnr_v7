@@ -18,6 +18,12 @@ export type WtlNetworkToolBtnVariant = 'legacy' | 'iconLabel' | 'iconLabelColor'
 
 export type WtlNetworkExportScope = 'all' | 'filtered'
 
+/** SHP 모달 — 수치지형도·배경영상 동봉 */
+export type WtlNetworkExportExtras = {
+  includeDigitalMap: boolean
+  includeBackgroundImage: boolean
+}
+
 /** 관망조회 SHP 다운로드 기본 좌표계 — 위경도 */
 export const WTL_NETWORK_SHP_DEFAULT_SRS = 'EPSG:4326'
 
@@ -55,10 +61,13 @@ type Props = {
   availableKeys?: ReadonlySet<string> | null
   /** SHP 전용 — 좌표계 select 표시 */
   showCrsSelect?: boolean
+  /** SHP 전용 — 수치지형도·배경영상 체크 */
+  showExtraAssets?: boolean
   onConfirm: (
     scope: WtlNetworkExportScope,
     layerKeys: string[],
-    targetSrs?: string
+    targetSrs?: string,
+    extras?: WtlNetworkExportExtras
   ) => void
 }
 
@@ -77,12 +86,15 @@ export function WtlNetworkExportMenu({
   selectedKeys = [],
   availableKeys = null,
   showCrsSelect = false,
+  showExtraAssets = false,
   onConfirm,
 }: Props) {
   const [open, setOpen] = useState(false)
   const [scope, setScope] = useState<WtlNetworkExportScope>('all')
   const [checked, setChecked] = useState<Set<string>>(() => new Set())
   const [targetSrs, setTargetSrs] = useState(WTL_NETWORK_SHP_DEFAULT_SRS)
+  const [includeDigitalMap, setIncludeDigitalMap] = useState(false)
+  const [includeBackgroundImage, setIncludeBackgroundImage] = useState(false)
 
   const selectedKeySet = useMemo(() => {
     const list =
@@ -107,6 +119,8 @@ export function WtlNetworkExportMenu({
     if (!open) return
     setScope('all')
     setTargetSrs(WTL_NETWORK_SHP_DEFAULT_SRS)
+    setIncludeDigitalMap(false)
+    setIncludeBackgroundImage(false)
     const next = new Set<string>()
     for (const layer of layers) {
       if (!isLayerAvailable(layer.key)) continue
@@ -192,7 +206,14 @@ export function WtlNetworkExportMenu({
       return
     }
     setOpen(false)
-    onConfirm(scope, keys, showCrsSelect ? targetSrs : undefined)
+    onConfirm(
+      scope,
+      keys,
+      showCrsSelect ? targetSrs : undefined,
+      showExtraAssets
+        ? { includeDigitalMap, includeBackgroundImage }
+        : undefined
+    )
   }
 
   return (
@@ -294,6 +315,31 @@ export function WtlNetworkExportMenu({
                   ))}
                 </select>
               </label>
+            ) : null}
+            {showExtraAssets ? (
+              <div className="space-y-1.5 border-t border-border pt-2">
+                <label className="flex cursor-pointer items-center gap-2 text-[12px] text-foreground">
+                  <input
+                    type="checkbox"
+                    className="h-3.5 w-3.5 cursor-pointer accent-primary"
+                    checked={includeDigitalMap}
+                    onChange={(e) => setIncludeDigitalMap(e.target.checked)}
+                  />
+                  수치지형도 포함
+                </label>
+                <label className="flex cursor-pointer items-center gap-2 text-[12px] text-foreground">
+                  <input
+                    type="checkbox"
+                    className="h-3.5 w-3.5 cursor-pointer accent-primary"
+                    checked={includeBackgroundImage}
+                    onChange={(e) => setIncludeBackgroundImage(e.target.checked)}
+                  />
+                  배경영상 포함
+                </label>
+                <p className="text-[11px] text-muted-foreground">
+                  구역설정 또는 검색 조건(화면 범위)과 겹치는 자료만 ZIP에 넣습니다.
+                </p>
+              </div>
             ) : null}
           </div>
 

@@ -1524,15 +1524,38 @@ export async function listWtlNetMapSources(): Promise<{
   const candidates = loadWtlNetMapSourcesFromTablesJson();
   const allNames = candidates.flatMap((s) => [...s.tables]);
   const existing = await existingLayerTables(allNames);
+  const metaByName = loadTablesJsonMetaByName();
 
   const sources: WtlNetMapSourcePayload[] = [];
   for (const source of candidates) {
-    const liveTables = source.tables.filter((t) => existing.has(t.toLowerCase()));
+    const liveTables = source.tables.filter((t) =>
+      existing.has(String(t).toLowerCase())
+    );
     if (liveTables.length === 0) continue;
+    const liveSet = new Set(liveTables.map((t) => String(t).toLowerCase()));
+    // 분할 레이어(wtl_pipe_lm_etc 등)는 DB에 없고 부모만 있는 경우가 많음.
+    // parents_layer가 실테이블이면 그룹 tables에 분할명도 유지 (가용·WMS·버튼용)
+    const tables: string[] = [];
+    const seen = new Set<string>();
+    for (const raw of source.tables) {
+      const name = String(raw ?? '').trim();
+      const low = name.toLowerCase();
+      if (!name || seen.has(low)) continue;
+      if (liveSet.has(low)) {
+        seen.add(low);
+        tables.push(name);
+        continue;
+      }
+      const parents = metaByName.get(low)?.parentsLayer ?? '';
+      if (parents && liveSet.has(parents)) {
+        seen.add(low);
+        tables.push(name);
+      }
+    }
     sources.push({
       id: source.id,
       label: source.label,
-      tables: liveTables,
+      tables,
     });
   }
   return { sources };
@@ -1712,35 +1735,87 @@ export async function listWtlNetworkAvailableLayerKeys(params: {
       else layerNames.add(n);
     };
 
+    const baseTable = String(def?.table ?? '').trim();
+    const defineName = String(def?.defineTable ?? '').trim();
+    const keyName = String(key ?? '').trim();
+    const isVirtualSplit =
+      !!baseTable &&
+      ((!!keyName && keyName.toLowerCase() !== baseTable.toLowerCase()) ||
+        (!!defineName && defineName.toLowerCase() !== baseTable.toLowerCase()));
+
     if (def?.table && sources.length > 0) {
+      // 출처가 있으면 해당 그룹 테이블만 후보 — 상수 wtl_pipe_lm 이 대진 가용을 오염시키지 않음
       for (const source of sources) {
-        add(source.remapTable(def.table), 'layer');
-        if (def.defineTable) add(source.remapTable(def.defineTable), 'layer');
-        add(source.remapTable(key), 'layer');
-        // 시설관리와 동일 — 한글명 일치 후보(저수조: tank/rsrv 등)
-        for (const n of listWtlNetSameKorTablesInGroup(source.tables, def.table)) {
-          add(n, 'layer');
-        }
-        if (def.defineTable) {
-          for (const n of listWtlNetSameKorTablesInGroup(source.tables, def.defineTable)) {
+        if (isVirtualSplit) {
+          // 관로 분할: 그룹 내 parents_layer LIKE '%wtl_pipe_lm' 인 레이어만 후보.
+          // DB에는 부모만 있는 경우가 많아 parents/부모 remap도 존재 검사에 포함.
+          let splitInGroup = false;
+          const keyLow = keyName.toLowerCase();
+          const defineLow = defineName.toLowerCase();
+          for (const raw of source.tables) {
+            const table = String(raw ?? '')
+              .trim()
+              .toLowerCase();
+            if (!table) continue;
+            const parents = metaByName.get(table)?.parentsLayer ?? '';
+            if (!parents.endsWith('wtl_pipe_lm')) continue;
+            const matchesKey =
+              table === keyLow ||
+              table.endsWith(`_${keyLow}`) ||
+              table.endsWith(keyLow) ||
+              (!!defineLow &&
+                (table === defineLow ||
+                  table.endsWith(`_${defineLow}`) ||
+                  table.endsWith(defineLow))) ||
+              listWtlNetSameKorTablesInGroup(source.tables, keyName).includes(table) ||
+              (!!defineName &&
+                listWtlNetSameKorTablesInGroup(source.tables, defineName).includes(table));
+            if (!matchesKey) continue;
+            add(table, 'layer');
+            add(parents, 'layer');
+            splitInGroup = true;
+          }
+          if (splitInGroup) {
+            add(source.remapTable(baseTable), 'layer');
+          }
+        } else {
+          // remap이 그룹에 없으면 원명(wtl_prga_ps)을 그대로 돌려 DB 실존만으로
+          // 대진 가용 처리되는 것을 막음 — 그룹 tables에 속한 후보만 추가
+          const addIfInSource = (name: string | null | undefined) => {
+            const n = String(name ?? '')
+              .trim()
+              .toLowerCase();
+            if (!n) return;
+            if (source.tables.some((t) => String(t).toLowerCase() === n)) {
+              add(n, 'layer');
+            }
+          };
+          addIfInSource(source.remapTable(def.table));
+          if (def.defineTable) addIfInSource(source.remapTable(def.defineTable));
+          addIfInSource(source.remapTable(key));
+          for (const n of listWtlNetSameKorTablesInGroup(source.tables, def.table)) {
+            add(n, 'layer');
+          }
+          if (def.defineTable) {
+            for (const n of listWtlNetSameKorTablesInGroup(source.tables, def.defineTable)) {
+              add(n, 'layer');
+            }
+          }
+          for (const n of listWtlNetSameKorTablesInGroup(source.tables, key)) {
             add(n, 'layer');
           }
         }
-        for (const n of listWtlNetSameKorTablesInGroup(source.tables, key)) {
-          add(n, 'layer');
-        }
       }
+    } else {
+      add(def?.table);
+      add(def?.defineTable);
+      add(key);
+      for (const base of [def?.table, def?.defineTable, key]) {
+        for (const n of listWtlNetSameKorTables(String(base ?? ''))) add(n);
+      }
+      if (meta?.parentsLayer) add(meta.parentsLayer, meta.schema);
+      if (meta) add(key, meta.schema);
     }
-
-    add(def?.table);
-    add(def?.defineTable);
-    add(key);
-    // 출처 그룹 밖(시설관리 CCTV 등) — 한글명 동일 물리 후보
-    for (const base of [def?.table, def?.defineTable, key]) {
-      for (const n of listWtlNetSameKorTables(String(base ?? ''))) add(n);
-    }
-    if (meta?.parentsLayer) add(meta.parentsLayer, meta.schema);
-    if (meta) add(key, meta.schema);
 
     for (const n of layerNames) layerCandidates.add(n);
     for (const n of publicNames) publicCandidates.add(n);
@@ -3352,6 +3427,10 @@ export type ExportWtlNetworkShpParams = {
   areaWkts5181?: string[] | null;
   /** ogr2ogr -t_srs (EPSG:xxxx). 미지정·비허용이면 5179 */
   targetSrs?: string | null;
+  /** 구역·화면 범위와 겹치는 수치지형도 DXF 동봉 */
+  includeDigitalMap?: boolean | null;
+  /** 구역·화면 범위 WMS 배경영상 PNG 동봉 */
+  includeBackgroundImage?: boolean | null;
 };
 
 function safeShpEntryName(raw: string): string {
@@ -3363,6 +3442,166 @@ function safeShpEntryName(raw: string): string {
       .replace(/^_|_$/g, '')
       .slice(0, 80) || 'layer'
   );
+}
+
+/** WKT 좌표열에서 envelope (EPSG:5181 가정) */
+function envelopeFromWkt5181(wkt: string): [number, number, number, number] | null {
+  const nums = String(wkt ?? '')
+    .match(/[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?/g)
+    ?.map(Number)
+    .filter((n) => Number.isFinite(n));
+  if (!nums || nums.length < 4) return null;
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (let i = 0; i + 1 < nums.length; i += 2) {
+    const x = nums[i]!;
+    const y = nums[i + 1]!;
+    if (x < minX) minX = x;
+    if (y < minY) minY = y;
+    if (x > maxX) maxX = x;
+    if (y > maxY) maxY = y;
+  }
+  if (!(maxX > minX) || !(maxY > minY)) return null;
+  return [minX, minY, maxX, maxY];
+}
+
+async function resolveExportExtent5181(
+  params: ExportWtlNetworkShpParams
+): Promise<[number, number, number, number] | null> {
+  const wkts = (params.areaWkts5181 ?? [])
+    .map((w) => String(w ?? '').trim())
+    .filter(Boolean);
+  if (wkts.length > 0) {
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const w of wkts) {
+      const box = envelopeFromWkt5181(w);
+      if (!box) continue;
+      minX = Math.min(minX, box[0]);
+      minY = Math.min(minY, box[1]);
+      maxX = Math.max(maxX, box[2]);
+      maxY = Math.max(maxY, box[3]);
+    }
+    if (Number.isFinite(minX) && maxX > minX && maxY > minY) {
+      return [minX, minY, maxX, maxY];
+    }
+  }
+  const bbox = Array.isArray(params.bbox) ? params.bbox.map(Number) : null;
+  if (bbox && bbox.length === 4 && bbox.every((n) => Number.isFinite(n))) {
+    const { default: proj4 } = await import('proj4');
+    proj4.defs(
+      'EPSG:3857',
+      '+proj=merc +a=6378137 +b=6378137 +lat_ts=0.0 +lon_0=0.0 +x_0=0.0 +y_0=0 +k=1.0 +units=m +nadgrids=@null +no_defs'
+    );
+    proj4.defs(
+      'EPSG:5181',
+      '+proj=tmerc +lat_0=38 +lon_0=127 +k=1 +x_0=200000 +y_0=500000 +ellps=GRS80 +units=m +no_defs'
+    );
+    const a = proj4('EPSG:3857', 'EPSG:5181', [bbox[0]!, bbox[1]!]) as [
+      number,
+      number,
+    ];
+    const b = proj4('EPSG:3857', 'EPSG:5181', [bbox[2]!, bbox[3]!]) as [
+      number,
+      number,
+    ];
+    return [
+      Math.min(a[0], b[0]),
+      Math.min(a[1], b[1]),
+      Math.max(a[0], b[0]),
+      Math.max(a[1], b[1]),
+    ];
+  }
+  return null;
+}
+
+/** V6 데이터요청과 동일 — GeoServer WMS GetMap PNG (배경영상) */
+async function fetchBackgroundWmsPngs(
+  bbox5181: [number, number, number, number]
+): Promise<Array<{ entryName: string; buffer: Buffer }>> {
+  const { getGeoServerInternalBase } = await import('@/lib/geoserverUrl');
+  const base = getGeoServerInternalBase();
+  let layerNames: string[] = [];
+  try {
+    const res = await fetch(`${base}/rest/workspaces/ggnr/layers.json`, {
+      headers: {
+        Authorization:
+          'Basic ' +
+          Buffer.from(
+            `${process.env.GEOSERVER_USER ?? 'admin'}:${process.env.GEOSERVER_PASSWORD ?? 'geoserver'}`
+          ).toString('base64'),
+      },
+    });
+    if (res.ok) {
+      const json = (await res.json()) as {
+        layers?: { layer?: Array<{ name?: string }> | { name?: string } };
+      };
+      const raw = json.layers?.layer;
+      const list = Array.isArray(raw) ? raw : raw ? [raw] : [];
+      layerNames = list
+        .map((l) => String(l.name ?? '').trim())
+        .filter(Boolean)
+        .filter((n) =>
+          /ortho|aerial|satellite|항공|영상|drone|정사/i.test(n)
+        )
+        .slice(0, 8);
+    }
+  } catch (e) {
+    console.warn(
+      '[exportWtlNetworkShpZip] layers.json',
+      e instanceof Error ? e.message : e
+    );
+  }
+
+  if (layerNames.length === 0) {
+    // 폴백 — VWorld 위성 (단일 GetMap 대체로 타일 서비스 JPEG 1장 근사 불가 → 안내용 빈)
+    return [];
+  }
+
+  const [minX, minY, maxX, maxY] = bbox5181;
+  const width = 1024;
+  const height = Math.max(
+    256,
+    Math.round(width * ((maxY - minY) / Math.max(1e-6, maxX - minX)))
+  );
+  const out: Array<{ entryName: string; buffer: Buffer }> = [];
+  for (const name of layerNames) {
+    const layerParam = name.includes(':') ? name : `ggnr:${name}`;
+    const qs = new URLSearchParams({
+      SERVICE: 'WMS',
+      VERSION: '1.1.1',
+      REQUEST: 'GetMap',
+      FORMAT: 'image/png',
+      TRANSPARENT: 'TRUE',
+      SRS: 'EPSG:5181',
+      WIDTH: String(width),
+      HEIGHT: String(Math.min(2048, height)),
+      LAYERS: layerParam,
+      STYLES: '',
+      BBOX: `${minX},${minY},${maxX},${maxY}`,
+    });
+    try {
+      const imgRes = await fetch(`${base}/ggnr/wms?${qs.toString()}`);
+      if (!imgRes.ok) continue;
+      const ct = imgRes.headers.get('content-type') ?? '';
+      if (!ct.includes('image')) continue;
+      const buf = Buffer.from(await imgRes.arrayBuffer());
+      if (buf.length < 800) continue;
+      const safe = safeShpEntryName(name.replace(/:/g, '_'));
+      out.push({ entryName: `배경영상/${safe}.png`, buffer: buf });
+    } catch (e) {
+      console.warn(
+        '[exportWtlNetworkShpZip] GetMap',
+        name,
+        e instanceof Error ? e.message : e
+      );
+    }
+  }
+  return out;
 }
 
 /**
@@ -3436,7 +3675,22 @@ export async function exportWtlNetworkShpZip(
     return { success: false, error: '내보낼 SHP가 없습니다.' };
   }
 
-  const multi = exportTargets.length > 1;
+  const includeDigitalMap = Boolean(params.includeDigitalMap);
+  const includeBackgroundImage = Boolean(params.includeBackgroundImage);
+  const wantExtras = includeDigitalMap || includeBackgroundImage;
+  let extent5181: [number, number, number, number] | null = null;
+  if (wantExtras) {
+    extent5181 = await resolveExportExtent5181(params);
+    if (!extent5181) {
+      return {
+        success: false,
+        error:
+          '수치지형도·배경영상은 구역설정 또는 화면 범위(검색 조건)가 필요합니다.',
+      };
+    }
+  }
+
+  const multi = exportTargets.length > 1 || wantExtras;
 
   for (const { source, physicalTable, def } of exportTargets) {
     const sqlText = await buildShpExportSql(def, physicalTable, filterOpts);
@@ -3485,6 +3739,40 @@ export async function exportWtlNetworkShpZip(
   })();
   const scopeTag = scope === 'all' ? '전체' : '조건';
 
+  const extraFiles: Array<{ name: string; buffer: Buffer }> = [];
+  if (extent5181 && includeDigitalMap) {
+    try {
+      const { collectDigitalMapFilesIntersectingBbox5181 } = await import(
+        '@/service/digitalMapService'
+      );
+      const dxfs = await collectDigitalMapFilesIntersectingBbox5181(extent5181);
+      for (const f of dxfs) {
+        extraFiles.push({
+          name: f.entryName,
+          buffer: fs.readFileSync(f.absPath),
+        });
+      }
+    } catch (e) {
+      console.warn(
+        '[exportWtlNetworkShpZip] digitalMap',
+        e instanceof Error ? e.message : e
+      );
+    }
+  }
+  if (extent5181 && includeBackgroundImage) {
+    try {
+      const imgs = await fetchBackgroundWmsPngs(extent5181);
+      for (const img of imgs) {
+        extraFiles.push({ name: img.entryName, buffer: img.buffer });
+      }
+    } catch (e) {
+      console.warn(
+        '[exportWtlNetworkShpZip] background',
+        e instanceof Error ? e.message : e
+      );
+    }
+  }
+
   if (!multi) {
     const only = parts[0]!;
     return {
@@ -3506,6 +3794,9 @@ export async function exportWtlNetworkShpZip(
     for (const file of part.files ?? []) {
       archive.append(file.buffer, { name: `${part.folderName}/${file.name}` });
     }
+  }
+  for (const file of extraFiles) {
+    archive.append(file.buffer, { name: file.name });
   }
   await archive.finalize();
   await finished(out);

@@ -768,7 +768,7 @@ function SupplyAreaGanttChart({
         legend: { display: false },
         datalabels: {
           color: ink.ink,
-          font: { size: 9, weight: 600 },
+          font: { size: 12, weight: 600 },
           clamp: true,
           formatter: (v, ctx) => {
             const n = Number(v)
@@ -792,7 +792,7 @@ function SupplyAreaGanttChart({
           grid: { display: false },
           border: { display: false },
           ticks: {
-            font: { size: 10, weight: 'bold' },
+            font: { size: 12, weight: 'bold' },
             color: ink.tick,
             padding: 4,
           },
@@ -846,12 +846,14 @@ function CrossSectionChart({
   totalLengthM,
   supplyAreaBands,
   onLegendItemSelect,
+  onLegendHighlightClear,
 }: {
   ground: SectionGroundPt[]
   features: SectionFeatureMark[]
   totalLengthM: number
   supplyAreaBands: SectionSupplyBandSegment[]
   onLegendItemSelect?: (item: import('./wtlNetworkSectionLegend').LongPipeLegendItem) => void
+  onLegendHighlightClear?: () => void
 }) {
   const ink = sectionChartInk(useResolvedThemeSafe() === 'dark')
   const { plotInset, insetSyncPlugin } = usePlotInsetSync()
@@ -876,6 +878,33 @@ function CrossSectionChart({
   const selectedFeature = useMemo(
     () => features.find((f) => f.id === selectedKey) ?? null,
     [features, selectedKey]
+  )
+  const clearHighlightIfNeeded = useCallback(
+    (keysBecomingHidden: string[]) => {
+      if (!selectedKey || !keysBecomingHidden.includes(selectedKey)) return
+      setSelectedKey(null)
+      onLegendHighlightClear?.()
+    },
+    [selectedKey, onLegendHighlightClear]
+  )
+  const handleToggleItem = useCallback(
+    (key: string) => {
+      const willHide = !hiddenKeys.has(key)
+      toggleLegendItem(key)
+      if (willHide) clearHighlightIfNeeded([key])
+    },
+    [hiddenKeys, toggleLegendItem, clearHighlightIfNeeded]
+  )
+  const handleToggleLayer = useCallback(
+    (group: import('./wtlNetworkSectionLegend').LongPipeLegendGroup) => {
+      const allHidden =
+        group.items.length > 0 &&
+        group.items.every((it) => hiddenKeys.has(it.key))
+      const keys = group.items.map((it) => it.key)
+      toggleLegendLayer(group)
+      if (!allHidden) clearHighlightIfNeeded(keys)
+    },
+    [hiddenKeys, toggleLegendLayer, clearHighlightIfNeeded]
   )
   // annotation 옵션 변경이 scatter 심볼 위에 바로 안 그려지는 경우 강제 갱신
   useEffect(() => {
@@ -1141,7 +1170,7 @@ function CrossSectionChart({
           position: 'top',
           labels: {
             color: ink.ink,
-            font: { size: 11 },
+            font: { size: 12 },
             boxWidth: 12,
             usePointStyle: true,
             generateLabels: (chart) =>
@@ -1165,7 +1194,12 @@ function CrossSectionChart({
             label: (ctx) => {
               const raw = ctx.raw as MarkPt | undefined
               const legend = String(ctx.dataset.label || '')
-              if (legend === '지반고') return ['범례: 지반고']
+              const y = Number(ctx.parsed.y)
+              if (legend === '지반고') {
+                return Number.isFinite(y)
+                  ? [`범례: 지반고`, `EL ${y.toFixed(2)} m`]
+                  : ['범례: 지반고']
+              }
               const featureLabel = String(raw?.label ?? '').trim() || '—'
               return [`범례: ${legend}`, `라벨: ${featureLabel}`]
             },
@@ -1201,8 +1235,8 @@ function CrossSectionChart({
           type: 'linear',
           min: ymin,
           max: ymax,
-          title: { display: true, text: '표고 (m)', color: ink.ink, font: { size: 11 } },
-          ticks: { font: { size: 10 }, color: ink.tick },
+          title: { display: true, text: '표고 (m)', color: ink.ink, font: { size: 12 } },
+          ticks: { font: { size: 12 }, color: ink.tick },
           grid: { color: ink.grid },
         },
       },
@@ -1252,8 +1286,8 @@ function CrossSectionChart({
         stylesByKey={stylesByKey}
         hiddenKeys={hiddenKeys}
         selectedKey={selectedKey}
-        onToggleItem={toggleLegendItem}
-        onToggleLayer={toggleLegendLayer}
+        onToggleItem={handleToggleItem}
+        onToggleLayer={handleToggleLayer}
         onItemClick={(item) => {
           setSelectedKey(item.key)
           onLegendItemSelect?.(item)
@@ -1272,6 +1306,7 @@ function LongSectionChart({
   supplyAreaBands,
   supplyElevComposition = [],
   onLegendItemSelect,
+  onLegendHighlightClear,
 }: {
   ground: SectionGroundPt[]
   groundMin: SectionGroundPt[]
@@ -1281,6 +1316,7 @@ function LongSectionChart({
   supplyAreaBands: SectionSupplyBandSegment[]
   supplyElevComposition?: import('./useWtlNetworkSection').SectionSupplyElevRow[]
   onLegendItemSelect?: (item: import('./wtlNetworkSectionLegend').LongPipeLegendItem) => void
+  onLegendHighlightClear?: () => void
 }) {
   const ink = sectionChartInk(useResolvedThemeSafe() === 'dark')
   const chartRef = useRef<ChartJS | null>(null)
@@ -1304,6 +1340,33 @@ function LongSectionChart({
   const selectedFeature = useMemo(
     () => features.find((f) => f.id === selectedKey) ?? null,
     [features, selectedKey]
+  )
+  const clearHighlightIfNeeded = useCallback(
+    (keysBecomingHidden: string[]) => {
+      if (!selectedKey || !keysBecomingHidden.includes(selectedKey)) return
+      setSelectedKey(null)
+      onLegendHighlightClear?.()
+    },
+    [selectedKey, onLegendHighlightClear]
+  )
+  const handleToggleItem = useCallback(
+    (key: string) => {
+      const willHide = !hiddenKeys.has(key)
+      toggleLegendItem(key)
+      if (willHide) clearHighlightIfNeeded([key])
+    },
+    [hiddenKeys, toggleLegendItem, clearHighlightIfNeeded]
+  )
+  const handleToggleLayer = useCallback(
+    (group: import('./wtlNetworkSectionLegend').LongPipeLegendGroup) => {
+      const allHidden =
+        group.items.length > 0 &&
+        group.items.every((it) => hiddenKeys.has(it.key))
+      const keys = group.items.map((it) => it.key)
+      toggleLegendLayer(group)
+      if (!allHidden) clearHighlightIfNeeded(keys)
+    },
+    [hiddenKeys, toggleLegendLayer, clearHighlightIfNeeded]
   )
   useEffect(() => {
     chartRef.current?.update('none')
@@ -1572,7 +1635,7 @@ function LongSectionChart({
         legend: {
           position: 'top',
           labels: {
-            font: { size: 10 },
+            font: { size: 12 },
             color: ink.ink,
             boxWidth: 10,
             usePointStyle: true,
@@ -1607,8 +1670,16 @@ function LongSectionChart({
             label: (ctx) => {
               const name = String(ctx.dataset.label || '')
               const y = Number(ctx.parsed.y)
-              if (name === '지반고') return ['범례: 지반고']
-              if (name.startsWith('옆면')) return [`범례: ${name}`]
+              if (name === '지반고') {
+                return Number.isFinite(y)
+                  ? [`범례: 지반고`, `EL ${y.toFixed(2)} m`]
+                  : ['범례: 지반고']
+              }
+              if (name.startsWith('옆면')) {
+                return Number.isFinite(y)
+                  ? [`범례: ${name}`, `EL ${y.toFixed(2)} m`]
+                  : [`범례: ${name}`]
+              }
               if (featureLegendLabels.has(name)) {
                 const raw = ctx.raw as
                   | { label?: string; layerName?: string }
@@ -1630,7 +1701,7 @@ function LongSectionChart({
               yValue: ymax,
               content: `절단면(${cutLen}m)`,
               color: '#c2410c',
-              font: { size: 10, weight: '600' },
+              font: { size: 12, weight: '600' },
               backgroundColor: ink.labelBg,
               padding: { top: 2, bottom: 2, left: 4, right: 4 },
               borderRadius: 2,
@@ -1656,16 +1727,16 @@ function LongSectionChart({
           type: 'linear',
           min: 0,
           max: len,
-          title: { display: true, text: '깊이축 (m)', color: ink.ink, font: { size: 11 } },
-          ticks: { font: { size: 10 }, color: ink.tick },
+          title: { display: true, text: '깊이축 (m)', color: ink.ink, font: { size: 12 } },
+          ticks: { font: { size: 12 }, color: ink.tick },
           grid: { color: ink.grid },
         },
         y: {
           type: 'linear',
           min: ymin,
           max: ymax,
-          title: { display: true, text: '표고 (m)', color: ink.ink, font: { size: 11 } },
-          ticks: { font: { size: 10 }, color: ink.tick },
+          title: { display: true, text: '표고 (m)', color: ink.ink, font: { size: 12 } },
+          ticks: { font: { size: 12 }, color: ink.tick },
           grid: { color: ink.grid },
         },
       },
@@ -1718,8 +1789,8 @@ function LongSectionChart({
         stylesByKey={stylesByKey}
         hiddenKeys={hiddenKeys}
         selectedKey={selectedKey}
-        onToggleItem={toggleLegendItem}
-        onToggleLayer={toggleLegendLayer}
+        onToggleItem={handleToggleItem}
+        onToggleLayer={handleToggleLayer}
         onItemClick={(item) => {
           setSelectedKey(item.key)
           onLegendItemSelect?.(item)
@@ -1739,6 +1810,7 @@ export function WtlNetworkSectionChart({
   supplyAreaBands = [],
   supplyElevComposition = [],
   onLegendItemSelect,
+  onLegendHighlightClear,
 }: {
   mode: 'crossChart' | 'longChart'
   ground?: SectionGroundPt[]
@@ -1749,6 +1821,7 @@ export function WtlNetworkSectionChart({
   supplyAreaBands?: SectionSupplyBandSegment[]
   supplyElevComposition?: import('./useWtlNetworkSection').SectionSupplyElevRow[]
   onLegendItemSelect?: (item: import('./wtlNetworkSectionLegend').LongPipeLegendItem) => void
+  onLegendHighlightClear?: () => void
 }) {
   if (mode === 'crossChart') {
     return (
@@ -1759,6 +1832,7 @@ export function WtlNetworkSectionChart({
           totalLengthM={totalLengthM}
           supplyAreaBands={supplyAreaBands}
           onLegendItemSelect={onLegendItemSelect}
+          onLegendHighlightClear={onLegendHighlightClear}
         />
       </div>
     )
@@ -1774,6 +1848,7 @@ export function WtlNetworkSectionChart({
         supplyAreaBands={supplyAreaBands}
         supplyElevComposition={supplyElevComposition}
         onLegendItemSelect={onLegendItemSelect}
+        onLegendHighlightClear={onLegendHighlightClear}
       />
     </div>
   )

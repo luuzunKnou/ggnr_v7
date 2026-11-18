@@ -294,7 +294,7 @@ function SupplyAreaGanttGroup({
               y={rowY + SUPPLY_GANTT_ROW_H / 2 + 3}
               textAnchor="end"
               fill={paper.label}
-              fontSize={10}
+              fontSize={12}
               fontWeight={600}
             >
               {row.label}
@@ -326,7 +326,7 @@ function SupplyAreaGanttGroup({
                       y={barY + SUPPLY_GANTT_BAR_H / 2 + 3}
                       textAnchor="middle"
                       fill={paper.ink}
-                      fontSize={9}
+                      fontSize={12}
                       fontWeight={600}
                     >
                       {seg.name}
@@ -621,13 +621,13 @@ function CrossSectionLegacySvg({
               y={t.y + 3}
               textAnchor="end"
               fill={AXIS_LABEL}
-              fontSize={10}
+              fontSize={12}
             >
               {t.label}
             </text>
           </g>
         ))}
-        <text x={8} y={plotTop + 4} fill={AXIS_LABEL} fontSize={11}>
+        <text x={8} y={plotTop + 4} fill={AXIS_LABEL} fontSize={12}>
           표고 (m)
         </text>
 
@@ -662,7 +662,7 @@ function CrossSectionLegacySvg({
                     stroke={paper.dim}
                     strokeWidth={1}
                   />
-                  <text x={midX} y={DIM_Y - 4} textAnchor="middle" fill={paper.dim} fontSize={11}>
+                  <text x={midX} y={DIM_Y - 4} textAnchor="middle" fill={paper.dim} fontSize={12}>
                     {gapM.toFixed(2)}m
                   </text>
                 </g>
@@ -716,7 +716,7 @@ function CrossSectionLegacySvg({
                     y={(m.surfY + m.centerY) / 2}
                     dy={4}
                     fill={paper.dim}
-                    fontSize={10}
+                    fontSize={12}
                   >
                     {Math.round(dep * 1000)}mm
                   </text>
@@ -737,7 +737,7 @@ function CrossSectionLegacySvg({
                   dy={3}
                   textAnchor={dipAnchor}
                   fill={color}
-                  fontSize={10}
+                  fontSize={12}
                 >
                   {stdDipMm}mm
                 </text>
@@ -758,7 +758,7 @@ function CrossSectionLegacySvg({
                   y={polylineY - 5}
                   textAnchor={textAnchor}
                   fill={color}
-                  fontSize={10}
+                  fontSize={12}
                 >
                   {korName}
                 </text>
@@ -768,7 +768,7 @@ function CrossSectionLegacySvg({
                 y={polylineY + 12}
                 textAnchor={textAnchor}
                 fill={color}
-                fontSize={10}
+                fontSize={12}
               >
                 {item.label}
               </text>
@@ -1033,7 +1033,7 @@ function LongSectionSvg({
               y={t.y + 3}
               textAnchor="end"
               fill={AXIS_LABEL}
-              fontSize={10}
+              fontSize={12}
             >
               {t.label}
             </text>
@@ -1062,7 +1062,7 @@ function LongSectionSvg({
               y={layout.plotBottom + 16}
               textAnchor="middle"
               fill={AXIS_LABEL}
-              fontSize={10}
+              fontSize={12}
             >
               {t.label}
             </text>
@@ -1105,13 +1105,13 @@ function LongSectionSvg({
           y={Math.max(12, layout.plotTop - 6)}
           textAnchor="middle"
           fill={SECTION_LINE_COLOR}
-          fontSize={11}
+          fontSize={12}
           fontWeight={600}
         >
           절단선
         </text>
 
-        <text x={8} y={padT + layout.labelHeadroom + 4} fill={AXIS_LABEL} fontSize={11}>
+        <text x={8} y={padT + layout.labelHeadroom + 4} fill={AXIS_LABEL} fontSize={12}>
           표고 (m)
         </text>
         <text
@@ -1119,7 +1119,7 @@ function LongSectionSvg({
           y={layout.height - 8}
           textAnchor="middle"
           fill={AXIS_LABEL}
-          fontSize={11}
+          fontSize={12}
         >
           깊이 (m) · 옆면
         </text>
@@ -1132,7 +1132,7 @@ function LongSectionSvg({
               y={dl.labelY}
               textAnchor="middle"
               fill={dl.color}
-              fontSize={11}
+              fontSize={12}
               fontWeight={600}
             >
               {dl.label}
@@ -1188,7 +1188,7 @@ function PrevOriginalSectionSvg({
   return (
     <div className="overflow-auto">
       <WtlNetworkMapSectionFigure points={points} diameterMm={dip} />
-      <p className="mt-2 text-[11px] text-muted-foreground">
+      <p className="mt-2 text-[12px] text-muted-foreground">
         위 지표면은 예시 지형 높이를 따릅니다. 원은 관이고, 그 자리 지면에서 관 위까지가 토피 1.2m입니다.
       </p>
     </div>

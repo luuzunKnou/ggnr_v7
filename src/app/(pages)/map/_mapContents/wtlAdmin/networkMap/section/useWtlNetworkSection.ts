@@ -887,6 +887,11 @@ export function useWtlNetworkSection(enabledLayerKeys: string[]) {
         type: 'line',
         snapLayerName: mode === 'roadSeg' ? 'tl_sprd_manage' : undefined,
         showSnapLayer: mode === 'roadSeg',
+        requireSnap: mode === 'roadSeg',
+        onSnapReject:
+          mode === 'roadSeg'
+            ? (msg) => flashGuideRef.current(msg)
+            : undefined,
         sketchControlRef,
         onSketchPointCount: setSketchPointCount,
         onComplete: (wkt5181: string) => {
@@ -950,7 +955,7 @@ export function useWtlNetworkSection(enabledLayerKeys: string[]) {
     }
   }, [pendingLine3857, drawMode, beginLineDraw, sketchPointCount])
 
-  /** 다시 지정 — 방식 선택부터 */
+  /** 다시 지정 — 실폭도로 기본으로 다시 그리기 */
   const respecifyCutLine = useCallback(() => {
     setPendingLine3857(null)
     setSketchPointCount(0)
@@ -961,14 +966,15 @@ export function useWtlNetworkSection(enabledLayerKeys: string[]) {
     clearRoadPreview()
     setMapDrawInputSuspended?.(false)
     setGuideMessage('')
-    setModePickerOpen(true)
+    beginLineDraw('roadWidth')
   }, [
     setSpatialDrawRequest,
     clearRoadPreview,
     setMapDrawInputSuspended,
+    beginLineDraw,
   ])
 
-  /** 도구 버튼 — 그리는 중·초안이면 취소, 선택 중이면 닫기, 아니면 방식 선택 */
+  /** 도구 버튼 — 그리는 중·초안이면 취소, 선택 중이면 닫기, 아니면 실폭도로 기본 시작 */
   const startSection = useCallback(() => {
     if (drawing || roadChordActive || pendingLine3857) {
       cancelDraw()
@@ -982,9 +988,8 @@ export function useWtlNetworkSection(enabledLayerKeys: string[]) {
       setPanelOpen(false)
       clearSectionData()
     }
-    setDrawMode(null)
     setGuideMessage('')
-    setModePickerOpen(true)
+    beginLineDraw('roadWidth')
   }, [
     drawing,
     roadChordActive,
@@ -994,15 +999,16 @@ export function useWtlNetworkSection(enabledLayerKeys: string[]) {
     cancelDraw,
     closeModePicker,
     clearSectionData,
+    beginLineDraw,
   ])
 
-  /** 패널 «다시 그리기» — 방식 선택부터 */
+  /** 패널 «다시 그리기» — 실폭도로 기본 */
   const redrawSection = useCallback(() => {
     setPanelOpen(false)
     clearSectionData()
     stopDrawingSession()
-    setModePickerOpen(true)
-  }, [clearSectionData, stopDrawingSession])
+    beginLineDraw('roadWidth')
+  }, [clearSectionData, stopDrawingSession, beginLineDraw])
 
   const setTabAndReload = useCallback(
     (next: SectionTab) => {

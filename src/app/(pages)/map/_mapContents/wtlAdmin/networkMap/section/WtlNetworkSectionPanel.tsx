@@ -47,6 +47,8 @@ type Props = {
   onRedraw: () => void
   /** 데이터 범례 항목 — 시설목록 행 선택과 동일 */
   onLegendItemSelect?: (item: LongPipeLegendItem) => void
+  /** 범례 체크 해제로 선택 해제 시 지도 하이라이트도 끔 */
+  onLegendHighlightClear?: () => void
 }
 
 export function WtlNetworkSectionPanel({
@@ -73,6 +75,7 @@ export function WtlNetworkSectionPanel({
   onClose,
   onRedraw,
   onLegendItemSelect,
+  onLegendHighlightClear,
 }: Props) {
   /** 3D는 첫 진입 후 유지 — 탭 전환마다 씬·조회 재생성 방지 (횡·종단 캐시와 동일 의도) */
   const [keepThreeJs, setKeepThreeJs] = useState(tab === 'threejs')
@@ -175,6 +178,7 @@ export function WtlNetworkSectionPanel({
               supplyAreaBands={supplyAreaBands}
               supplyElevComposition={supplyElevComposition}
               onLegendItemSelect={onLegendItemSelect}
+              onLegendHighlightClear={onLegendHighlightClear}
             />
           )
         ) : !lineReady || !line3857 || line3857.length < 2 ? (

@@ -344,6 +344,107 @@ export async function readDxfText(folderRaw: string, fileRaw: string): Promise<s
   return decodeDxfBytes(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength));
 }
 
+export type DigitalMapExportFile = {
+  /** ZIP 내 상대 경로 (수치지형도/폴더/파일.dxf) */
+  entryName: string;
+  absPath: string;
+};
+
+function boxesOverlap(
+  a: { minX: number; minY: number; maxX: number; maxY: number },
+  b: { minX: number; minY: number; maxX: number; maxY: number }
+): boolean {
+  return !(a.maxX < b.minX || a.minX > b.maxX || a.maxY < b.minY || a.minY > b.maxY);
+}
+
+/**
+ * EPSG:5181 bbox와 겹치는 수치지형도 DXF 목록.
+ * 축척 폴더는 숫자 최소 폴더 우선, 없으면 전체 폴더.
+ */
+export async function collectDigitalMapFilesIntersectingBbox5181(
+  bbox5181: [number, number, number, number]
+): Promise<DigitalMapExportFile[]> {
+  const [minX, minY, maxX, maxY] = bbox5181;
+  if (![minX, minY, maxX, maxY].every(Number.isFinite) || !(maxX > minX) || !(maxY > minY)) {
+    return [];
+  }
+  const query = { minX, minY, maxX, maxY };
+  const { folders } = await listFolders({});
+  if (!folders.length) return [];
+
+  const { pickSmallestNumberFolder } = await import('@/service/digitalMapElevation');
+  const preferred = pickSmallestNumberFolder(folders.map((f) => f.name));
+  const targets = preferred
+    ? folders.filter((f) => f.name === preferred)
+    : folders;
+
+  const { default: proj4 } = await import('proj4');
+  proj4.defs(
+    'EPSG:5181',
+    '+proj=tmerc +lat_0=38 +lon_0=127 +k=1 +x_0=200000 +y_0=500000 +ellps=GRS80 +units=m +no_defs'
+  );
+  proj4.defs(
+    'EPSG:5186',
+    '+proj=tmerc +lat_0=38 +lon_0=127 +k=1 +x_0=200000 +y_0=600000 +ellps=GRS80 +units=m +no_defs'
+  );
+  proj4.defs(
+    'EPSG:5187',
+    '+proj=tmerc +lat_0=38 +lon_0=129 +k=1 +x_0=200000 +y_0=600000 +ellps=GRS80 +units=m +no_defs'
+  );
+  proj4.defs(
+    'EPSG:5179',
+    '+proj=tmerc +lat_0=38 +lon_0=127.5 +k=0.9996 +x_0=1000000 +y_0=2000000 +ellps=GRS80 +units=m +no_defs'
+  );
+
+  const out: DigitalMapExportFile[] = [];
+  for (const folderInfo of targets) {
+    let index: DigitalMapFolderIndex;
+    try {
+      index = await ensureIndex(folderInfo.name, false);
+    } catch {
+      continue;
+    }
+    const crsCode = String(index.crs ?? CRS_FALLBACK).replace(/^EPSG:/i, '');
+    const fromEpsg = `EPSG:${crsCode}`;
+    if (!proj4.defs(fromEpsg)) {
+      proj4.defs(
+        fromEpsg,
+        '+proj=tmerc +lat_0=38 +lon_0=127 +k=1 +x_0=200000 +y_0=600000 +ellps=GRS80 +units=m +no_defs'
+      );
+    }
+    for (const sheet of index.sheets) {
+      let sheet5181 = {
+        minX: sheet.minX,
+        minY: sheet.minY,
+        maxX: sheet.maxX,
+        maxY: sheet.maxY,
+      };
+      if (fromEpsg !== 'EPSG:5181') {
+        try {
+          const a = proj4(fromEpsg, 'EPSG:5181', [sheet.minX, sheet.minY]) as [number, number];
+          const b = proj4(fromEpsg, 'EPSG:5181', [sheet.maxX, sheet.maxY]) as [number, number];
+          sheet5181 = {
+            minX: Math.min(a[0], b[0]),
+            minY: Math.min(a[1], b[1]),
+            maxX: Math.max(a[0], b[0]),
+            maxY: Math.max(a[1], b[1]),
+          };
+        } catch {
+          // 변환 실패 시 원본 좌표로 비교
+        }
+      }
+      if (!boxesOverlap(query, sheet5181)) continue;
+      const abs = fileAbs(folderInfo.name, sheet.file);
+      if (!existsSync(abs)) continue;
+      out.push({
+        entryName: `수치지형도/${folderInfo.name}/${sheet.file}`,
+        absPath: abs,
+      });
+    }
+  }
+  return out;
+}
+
 /** 수치지형도 DXF 등고 점 고도 — 폴더명 숫자 최소 폴더 */
 export {
   getDigitalMapElevationAtPoint,
