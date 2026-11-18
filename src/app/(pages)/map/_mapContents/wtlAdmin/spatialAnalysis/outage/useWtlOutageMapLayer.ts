@@ -141,7 +141,7 @@ function paintOutageResult(
 ) {
   const toView = (c: [number, number]) => lonLatToView(c, viewProj)
   if (!options?.hideZone) {
-    // 구멍(지우기로 뺀 곳) 포함
+    // 구멍(지우기로 뺀 곳) 포함 — 수용가(건물군) 면
     outagePolygonsOf(result).forEach((poly, index) => {
       const rings = poly.map((raw) => {
         const ring = raw.map(toView)
