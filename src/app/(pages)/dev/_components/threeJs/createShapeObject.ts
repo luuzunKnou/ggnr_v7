@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import { createCadDimensions, setCadDimensionsVisible } from './cadDimensions';
-import { createGroundContourOverlay } from './groundContours';
 import { createGroundElevMarkers } from './groundElevMarkers';
 import { createGroundRiverOverlay } from './groundRivers';
 import { createPipesOverlay } from './groundPipes';
@@ -8,6 +7,7 @@ import { createManholesOverlay } from './groundManholes';
 import {
   createInterpolatedGroundParts,
   createSectionRectGroundParts,
+  extractHighVariationEdgePositions,
 } from './groundInterpolatedMesh';
 import { getWtlLayerShapeDef } from '@/lib/wtlLayerShapeDefs';
 import { shapeHalfExtentY } from './shapeCatalog';
@@ -316,6 +316,8 @@ function buildGround(props: ShapeProps): THREE.Group {
   topMesh.renderOrder = 1;
   group.add(topMesh);
 
+  const rimColor = edgeColor(colorHex);
+  // 기존 영역 외곽선
   if (parts.outlinePositions.length >= 6) {
     const outlineGeo = new THREE.BufferGeometry();
     outlineGeo.setAttribute(
@@ -325,17 +327,36 @@ function buildGround(props: ShapeProps): THREE.Group {
     const outline = new THREE.LineSegments(
       outlineGeo,
       new THREE.LineBasicMaterial({
-        color: edgeColor(colorHex),
+        color: rimColor,
         depthTest: true,
       })
     );
     markEdgeOnly(outline);
     group.add(outline);
   }
-
-  // 등고·지반고·하천 — 범위(정사각) 발자국일 때만 (단면 사각형 메시와 격자 등고는 경계 불일치)
+  // 기복·경사 변화가 큰 면 경계만 추가 테두리 (전체 메시 조각 X)
+  // 2번째 인자(도): 작을수록 기복 테두리 더 많이 표시 (예: 8→많음, 20→적음)
+  const creasePos = extractHighVariationEdgePositions(parts.topGeo, 8.5);
+  if (creasePos.length >= 6) {
+    const creaseGeo = new THREE.BufferGeometry();
+    creaseGeo.setAttribute(
+      'position',
+      new THREE.Float32BufferAttribute(creasePos, 3)
+    );
+    const crease = new THREE.LineSegments(
+      creaseGeo,
+      new THREE.LineBasicMaterial({
+        color: rimColor,
+        depthTest: true,
+        transparent: true,
+        opacity: 0.9,
+      })
+    );
+    markEdgeOnly(crease);
+    group.add(crease);
+  }
+  // 지반고·하천 — 범위(정사각) 발자국일 때만
   if (!sectionLine) {
-    group.add(createGroundContourOverlay(field));
     group.add(createGroundElevMarkers(field));
     group.add(
       createGroundRiverOverlay(field, {
