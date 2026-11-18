@@ -68,6 +68,78 @@ function errorMessage(err: unknown): string {
   return '업로드에 실패했습니다.';
 }
 
+const CHUNK_POST_TIMEOUT_MS = 180_000;
+const CHUNK_POST_RETRIES = 3;
+
+function sleep(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) {
+      reject(new DOMException('Aborted', 'AbortError'));
+      return;
+    }
+    const t = setTimeout(() => resolve(), ms);
+    const onAbort = () => {
+      clearTimeout(t);
+      reject(new DOMException('Aborted', 'AbortError'));
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+/** 한 청크 전송 — 타임아웃·재시도. 한 요청이 멈추면 진행률이 영원히 안 바뀌는 문제 완화 */
+async function postChunkWithRetry(params: {
+  url: string;
+  body: Blob;
+  signal: AbortSignal;
+  chunkLabel: string;
+}): Promise<void> {
+  const { url, body, signal, chunkLabel } = params;
+  let lastErr: unknown;
+  for (let attempt = 1; attempt <= CHUNK_POST_RETRIES; attempt++) {
+    if (signal.aborted) throw new Error('취소됨');
+    const timeoutCtrl = new AbortController();
+    const timer = setTimeout(() => timeoutCtrl.abort(), CHUNK_POST_TIMEOUT_MS);
+    const onParentAbort = () => timeoutCtrl.abort();
+    signal.addEventListener('abort', onParentAbort);
+    try {
+      const res = await appFetch(url, {
+        method: 'POST',
+        body,
+        signal: timeoutCtrl.signal,
+      });
+      if (!res.ok) {
+        const errText = await res.text();
+        let errMsg = `${chunkLabel} 전송 실패`;
+        try {
+          const j = JSON.parse(errText) as { error?: string };
+          if (j?.error) errMsg = j.error;
+        } catch {
+          if (errText) errMsg = errText.slice(0, 200);
+        }
+        throw new Error(errMsg);
+      }
+      return;
+    } catch (err) {
+      lastErr = err;
+      if (signal.aborted) throw new Error('취소됨');
+      const timedOut =
+        err instanceof DOMException && err.name === 'AbortError' && !signal.aborted;
+      if (attempt >= CHUNK_POST_RETRIES) {
+        throw timedOut
+          ? new Error(`${chunkLabel} 전송 시간이 초과되었습니다. 다시 시도하세요.`)
+          : err instanceof Error
+            ? err
+            : new Error(errorMessage(err));
+      }
+      await sleep(1000 * attempt, signal);
+    } finally {
+      clearTimeout(timer);
+      signal.removeEventListener('abort', onParentAbort);
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error(errorMessage(lastErr));
+}
+
 function emitComplete(event: AerialMediaUploadCompleteEvent) {
   for (const l of listeners) {
     try {
@@ -205,18 +277,12 @@ export function startAerialMediaUpload(
           const end = Math.min(start + chunkSize, file.size);
           const blob = file.slice(start, end);
           const url = `${withBasePath('/api/upload/chunk')}?uploadId=${encodeURIComponent(uploadId)}&chunkIndex=${chunkIndex}&totalChunks=${expectedChunks}`;
-          const res = await appFetch(url, { method: 'POST', body: blob, signal });
-          if (!res.ok) {
-            const errText = await res.text();
-            let errMsg = `청크 ${chunkIndex + 1} 전송 실패`;
-            try {
-              const j = JSON.parse(errText) as { error?: string };
-              if (j?.error) errMsg = j.error;
-            } catch {
-              if (errText) errMsg = errText.slice(0, 200);
-            }
-            throw new Error(errMsg);
-          }
+          await postChunkWithRetry({
+            url,
+            body: blob,
+            signal,
+            chunkLabel: `청크 ${chunkIndex + 1}/${expectedChunks}`,
+          });
           updateClientUploadJob({
             kind,
             folderName,
@@ -228,6 +294,16 @@ export function startAerialMediaUpload(
           });
         }
 
+        updateClientUploadJob({
+          kind,
+          folderName,
+          fileIndex: i + 1,
+          fileTotal: files.length,
+          currentFileName: `${file.name} · 파일 합치는 중…`,
+          chunkIndex: expectedChunks,
+          chunkTotal: expectedChunks,
+          percent: 99,
+        });
         const completeRes = await call('', 'POST', {
           service: 'aerialUploadService',
           action: 'completeMediaUpload',
@@ -254,19 +330,23 @@ export function startAerialMediaUpload(
         if (completeData.item) items.push(completeData.item);
       }
 
-      /** 드론영상·항공영상: 업로드 직후 변환 큐 */
+      /**
+       * 드론영상·항공영상: 파일 등록까지가 업로드 성공.
+       * 타일 변환은 백그라운드로 시작하고, 변환 실패를 업로드 실패로 치지 않는다.
+       * (대용량 TIF 변환은 수 시간이라 기다리면 맨 끝에서 «업로드 실패»로 보임)
+       */
       if ((kind === 'ortho' || kind === 'satellite') && items.length > 0 && !signal.aborted) {
         updateClientUploadJob({
           kind,
           folderName,
           fileIndex: files.length,
           fileTotal: files.length,
-          currentFileName: kind === 'satellite' ? '자체항공영상 등록 중…' : '타일 변환 중…',
-          chunkIndex: 0,
-          chunkTotal: 0,
-          percent: 80,
+          currentFileName: kind === 'satellite' ? '자체항공영상 변환 요청…' : '타일 변환 요청…',
+          chunkIndex: 1,
+          chunkTotal: 1,
+          percent: 99,
         });
-        const convertRes = await call('', 'POST', {
+        void call('', 'POST', {
           service: 'aerialOrthoService',
           action: kind === 'satellite' ? 'convertSatelliteWorkUnit' : 'convertOrthoWorkUnit',
           params: {
@@ -274,26 +354,8 @@ export function startAerialMediaUpload(
             folderName,
             ...(resolvedWuKey != null ? { wuKey: resolvedWuKey } : {}),
           },
-        });
-        if (!convertRes?.success) {
-          throw new Error(
-            typeof convertRes?.error === 'string'
-              ? convertRes.error
-              : (convertRes?.error as { message?: string } | undefined)?.message ||
-                  (kind === 'satellite'
-                    ? '자체항공영상 등록에 실패했습니다.'
-                    : '타일 변환에 실패했습니다.')
-          );
-        }
-        updateClientUploadJob({
-          kind,
-          folderName,
-          fileIndex: files.length,
-          fileTotal: files.length,
-          currentFileName: kind === 'satellite' ? '자체항공영상 등록 완료' : '변환 완료',
-          chunkIndex: 1,
-          chunkTotal: 1,
-          percent: 99,
+        }).catch(() => {
+          /* 변환은 목록·스케줄러에서 재시도. 업로드 성공과 분리 */
         });
       }
 

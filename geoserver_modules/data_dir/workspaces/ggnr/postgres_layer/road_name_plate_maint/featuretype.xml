@@ -1,0 +1,41 @@
+<featureType>
+  <id>FeatureTypeInfoImpl--55857d9c:1a19abc0bff:-7607</id>
+  <name>road_name_plate_maint</name>
+  <nativeName>road_name_plate_maint</nativeName>
+  <namespace>
+    <id>NamespaceInfoImpl-4bf97568:19c4d6c3053:-7ffa</id>
+  </namespace>
+  <title>road_name_plate_maint</title>
+  <keywords>
+    <string>features</string>
+    <string>road_name_plate_maint</string>
+  </keywords>
+  <srs>EPSG:5181</srs>
+  <nativeBoundingBox>
+    <minx>330170.45769352</minx>
+    <maxx>376580.20696332</maxx>
+    <miny>322202.6668614</miny>
+    <maxy>348036.31022913</maxy>
+    <crs class="projected">EPSG:5181</crs>
+  </nativeBoundingBox>
+  <latLonBoundingBox>
+    <minx>128.45082776487436</minx>
+    <maxx>128.97375101410574</maxx>
+    <miny>36.3817407327452</miny>
+    <maxy>36.621868206004734</maxy>
+    <crs>EPSG:4326</crs>
+  </latLonBoundingBox>
+  <projectionPolicy>FORCE_DECLARED</projectionPolicy>
+  <enabled>true</enabled>
+  <store class="dataStore">
+    <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff9</id>
+  </store>
+  <serviceConfiguration>false</serviceConfiguration>
+  <maxFeatures>0</maxFeatures>
+  <numDecimals>0</numDecimals>
+  <padWithZeros>false</padWithZeros>
+  <forcedDecimal>false</forcedDecimal>
+  <overridingServiceSRS>false</overridingServiceSRS>
+  <skipNumberMatched>false</skipNumberMatched>
+  <circularArcPresent>false</circularArcPresent>
+</featureType>

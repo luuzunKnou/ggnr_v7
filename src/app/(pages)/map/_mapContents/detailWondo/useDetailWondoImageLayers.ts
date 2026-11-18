@@ -1,14 +1,13 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import type OLMap from 'ol/Map'
-import type BaseLayer from 'ol/layer/Base'
 import ImageLayer from 'ol/layer/Image'
 import { boundingExtent, intersects, type Extent } from 'ol/extent'
 import ImageCanvasSource from 'ol/source/ImageCanvas'
 import { withBasePath } from '@/lib/basePath'
 import { useMapContext } from '../../_mapComponents/MapContext'
 import type { DetailWondoItem, DetailWondoShown } from './detailWondoConfig'
+import { insertDetailWondoImage } from './detailWondoLayerOrder'
 import { detailWondoCorners3857, detailWondoWorldCorners3857 } from './useDetailWondoFootprintLayer'
 
 const LAYER_PROP = 'detailWondoImageLayer'
@@ -36,16 +35,6 @@ function putOffCache(cache: Map<string, Decoded>, id: string, decoded: Decoded) 
     if (oldest == null) break
     cache.delete(oldest)
   }
-}
-
-/** 지적도 아래(없으면 서비스 레이어 아래)에 원도를 깐다 */
-function insertBelowCadastral(map: OLMap, layer: BaseLayer) {
-  const collection = map.getLayers()
-  const arr = collection.getArray()
-  let idx = arr.findIndex((l) => l.get('cadastralLayer') === true)
-  if (idx < 0) idx = arr.findIndex((l) => l.get('serviceLayer') === true)
-  if (idx >= 0) collection.insertAt(idx, layer)
-  else collection.push(layer)
 }
 
 function reducedOf(entry: Entry): HTMLCanvasElement | null {
@@ -155,7 +144,7 @@ export function useDetailWondoImageLayers({ items, shown }: Options) {
       entry.layer.setOpacity(opacity)
       entry.layer.set(LAYER_PROP, true)
       entries.set(id, entry)
-      insertBelowCadastral(map, entry.layer)
+      insertDetailWondoImage(map, entry.layer)
 
       const cached = offCache.get(id)
       if (cached) {

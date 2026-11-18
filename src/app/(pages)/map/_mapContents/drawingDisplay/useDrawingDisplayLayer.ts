@@ -245,56 +245,14 @@ type PreparedBundle = {
 /**
  * 원본 → 지도 투영. 경위도 검사는 전체 extent 모서리만 (15만건 이중 transform 방지).
  */
-function prepareFeatures(
-  sourceFeatures: Feature<Geometry>[],
+function finishPreparedBundle(
+  out: Feature<Geometry>[],
+  mapExtent: Extent,
+  rawExtent: Extent,
+  failed: number,
   crs: DrawingCrsCode,
-  mapProjectionCode: string
+  sourceProjection: string
 ): PreparedBundle {
-  const sourceProjection = `EPSG:${crs}`;
-  const mapExtent = createEmpty();
-  const rawExtent = createEmpty();
-  const out: Feature<Geometry>[] = [];
-  let failed = 0;
-
-  for (const src of sourceFeatures) {
-    try {
-      const geom = src.getGeometry();
-      if (!geom) {
-        failed++;
-        continue;
-      }
-      const eRaw = geom.getExtent();
-      if (!eRaw.every(Number.isFinite)) {
-        failed++;
-        continue;
-      }
-      extend(rawExtent, eRaw);
-
-      const gMap = geom.clone();
-      gMap.transform(sourceProjection, mapProjectionCode);
-      const eMap = gMap.getExtent();
-      if (!eMap.every(Number.isFinite)) {
-        failed++;
-        continue;
-      }
-      extend(mapExtent, eMap);
-
-      const f = src.clone();
-      f.setGeometry(gMap);
-      f.set(DXF_STABLE_IDX, out.length);
-      f.set(DXF_LENGTH, geometryLength(gMap));
-      const srcH = Number(src.get(DXF_TEXT_HEIGHT));
-      if (Number.isFinite(srcH) && srcH > 0) {
-        const cx = (eRaw[0] + eRaw[2]) / 2;
-        const cy = (eRaw[1] + eRaw[3]) / 2;
-        f.set(DXF_TEXT_HEIGHT, srcH * mapUnitScale([cx, cy], sourceProjection, mapProjectionCode));
-      }
-      out.push(f);
-    } catch {
-      failed++;
-    }
-  }
-
   let outOfKorea = false;
   if (!isEmpty(rawExtent) && crs !== '4326') {
     try {
@@ -333,6 +291,104 @@ function prepareFeatures(
     failed,
     large: out.length >= DRAWING_LARGE_FEATURE_THRESHOLD,
   };
+}
+
+function prepareOneFeature(
+  src: Feature<Geometry>,
+  sourceProjection: string,
+  mapProjectionCode: string,
+  outLen: number,
+  mapExtent: Extent,
+  rawExtent: Extent
+): Feature<Geometry> | null {
+  try {
+    const geom = src.getGeometry();
+    if (!geom) return null;
+    const eRaw = geom.getExtent();
+    if (!eRaw.every(Number.isFinite)) return null;
+    extend(rawExtent, eRaw);
+
+    const gMap = geom.clone();
+    gMap.transform(sourceProjection, mapProjectionCode);
+    const eMap = gMap.getExtent();
+    if (!eMap.every(Number.isFinite)) return null;
+    extend(mapExtent, eMap);
+
+    const f = src.clone();
+    f.setGeometry(gMap);
+    f.set(DXF_STABLE_IDX, outLen);
+    f.set(DXF_LENGTH, geometryLength(gMap));
+    const srcH = Number(src.get(DXF_TEXT_HEIGHT));
+    if (Number.isFinite(srcH) && srcH > 0) {
+      const cx = (eRaw[0] + eRaw[2]) / 2;
+      const cy = (eRaw[1] + eRaw[3]) / 2;
+      f.set(DXF_TEXT_HEIGHT, srcH * mapUnitScale([cx, cy], sourceProjection, mapProjectionCode));
+    }
+    return f;
+  } catch {
+    return null;
+  }
+}
+
+function prepareFeatures(
+  sourceFeatures: Feature<Geometry>[],
+  crs: DrawingCrsCode,
+  mapProjectionCode: string
+): PreparedBundle {
+  const sourceProjection = `EPSG:${crs}`;
+  const mapExtent = createEmpty();
+  const rawExtent = createEmpty();
+  const out: Feature<Geometry>[] = [];
+  let failed = 0;
+
+  for (const src of sourceFeatures) {
+    const f = prepareOneFeature(src, sourceProjection, mapProjectionCode, out.length, mapExtent, rawExtent);
+    if (!f) {
+      failed++;
+      continue;
+    }
+    out.push(f);
+  }
+
+  return finishPreparedBundle(out, mapExtent, rawExtent, failed, crs, sourceProjection);
+}
+
+/** 청크마다 양보 — 수치지형도 등 대량 피처 준비 시 지도 조작 유지 */
+async function prepareFeaturesYielding(
+  sourceFeatures: Feature<Geometry>[],
+  crs: DrawingCrsCode,
+  mapProjectionCode: string,
+  isCancelled: () => boolean
+): Promise<PreparedBundle | null> {
+  const sourceProjection = `EPSG:${crs}`;
+  const mapExtent = createEmpty();
+  const rawExtent = createEmpty();
+  const out: Feature<Geometry>[] = [];
+  let failed = 0;
+  const chunk = 300;
+
+  for (let i = 0; i < sourceFeatures.length; i++) {
+    if (isCancelled()) return null;
+    if (i > 0 && i % chunk === 0) {
+      await new Promise<void>((r) => requestAnimationFrame(() => r()));
+      if (isCancelled()) return null;
+    }
+    const f = prepareOneFeature(
+      sourceFeatures[i],
+      sourceProjection,
+      mapProjectionCode,
+      out.length,
+      mapExtent,
+      rawExtent
+    );
+    if (!f) {
+      failed++;
+      continue;
+    }
+    out.push(f);
+  }
+
+  return finishPreparedBundle(out, mapExtent, rawExtent, failed, crs, sourceProjection);
 }
 
 /**
@@ -420,7 +476,8 @@ export function useDrawingDisplayLayer(
     const map = mapRef?.current;
     const vSource = vectorSourceRef.current;
 
-    if (!map || !enabled || !sourceFeatures?.length || !crs) {
+    // 피처가 잠깐 비어도 clear하지 않음(수치지형도 패닝·모드 전환 깜빡임 방지). 끌 때만 비움.
+    if (!map || !enabled) {
       paintCtlRef.current?.cancel();
       paintCtlRef.current = null;
       vSource.clear();
@@ -438,6 +495,9 @@ export function useDrawingDisplayLayer(
       setStatus(EMPTY_STATUS);
       return;
     }
+    if (!sourceFeatures?.length || !crs) {
+      return;
+    }
 
     modeRef.current = 'preparing';
     setStatus((prev) => ({ ...prev, mode: 'preparing' }));
@@ -445,42 +505,47 @@ export function useDrawingDisplayLayer(
     let cancelled = false;
     const mapProjectionCode = map.getView().getProjection().getCode();
 
-    // 다음 프레임에 투영 — 끝나면 소스 교체 (먼저 clear 하지 않음)
+    // 다음 프레임에 투영 — 대량은 청크 양보(지도 팬 유지), 끝나면 소스 교체
     const timer = window.setTimeout(() => {
-      if (cancelled) return;
-      const prepared = prepareFeatures(sourceFeatures, crs, mapProjectionCode);
-      if (cancelled) return;
-      if (disableLod) prepared.large = false;
-
-      const prevBaked = bakedRef.current;
-      preparedRef.current = prepared;
-      indexSourceRef.current.clear(true);
-      indexSourceRef.current.addFeatures(prepared.features);
-
-      if (prepared.large && !isEmpty(prepared.extent)) {
-        bakedRef.current = bakeDrawingOverviewCanvas(
-          prepared.features,
-          prepared.extent,
-          hiddenRef.current
-        );
-      } else {
-        bakedRef.current = null;
-      }
-      revokeOverviewUrl(prevBaked);
-      overviewActiveRef.current = false;
-      loadedExtentRef.current = null;
-      lastLodIndexRef.current = -1;
-
-      if (cancelled) return;
-
-      if (fitView && !prepared.outOfKorea && !isEmpty(prepared.extent)) {
-        map.getView().fit(prepared.extent, { padding: [80, 80, 80, 80], maxZoom: 18, duration: 400 });
-      }
-
-      window.setTimeout(() => {
+      void (async () => {
         if (cancelled) return;
-        refreshRef.current(map);
-      }, fitView ? 450 : 0);
+        const prepared =
+          sourceFeatures.length > 400 || disableLod
+            ? await prepareFeaturesYielding(sourceFeatures, crs, mapProjectionCode, () => cancelled)
+            : prepareFeatures(sourceFeatures, crs, mapProjectionCode);
+        if (cancelled || !prepared) return;
+        if (disableLod) prepared.large = false;
+
+        const prevBaked = bakedRef.current;
+        preparedRef.current = prepared;
+        indexSourceRef.current.clear(true);
+        indexSourceRef.current.addFeatures(prepared.features);
+
+        if (prepared.large && !isEmpty(prepared.extent)) {
+          bakedRef.current = bakeDrawingOverviewCanvas(
+            prepared.features,
+            prepared.extent,
+            hiddenRef.current
+          );
+        } else {
+          bakedRef.current = null;
+        }
+        revokeOverviewUrl(prevBaked);
+        overviewActiveRef.current = false;
+        loadedExtentRef.current = null;
+        lastLodIndexRef.current = -1;
+
+        if (cancelled) return;
+
+        if (fitView && !prepared.outOfKorea && !isEmpty(prepared.extent)) {
+          map.getView().fit(prepared.extent, { padding: [80, 80, 80, 80], maxZoom: 18, duration: 400 });
+        }
+
+        window.setTimeout(() => {
+          if (cancelled) return;
+          refreshRef.current(map);
+        }, fitView ? 450 : 0);
+      })();
     }, 0);
 
     return () => {

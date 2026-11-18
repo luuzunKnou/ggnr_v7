@@ -24,6 +24,8 @@ type Props = {
   year: string | null;
   /** 하천 목록이 펼쳐진 카드 */
   openedPlanKey: string | null;
+  /** 펼친 하천 목록이 차지할 수 있는 최대 높이(목록 영역) */
+  riverListMaxPx?: number;
   /** 상세에서 보고 있는 계획·하천 */
   selectedPlanKey: string | null;
   selectedRiver: string;
@@ -45,19 +47,28 @@ function reportPdfCount(plan: RiverBasicPlanReportPlan, summary: RiverBasicPlanR
 
 const Dot = () => <span className="text-muted-foreground/40" aria-hidden>·</span>;
 
-/** 카드 아래로 펼치는 하천 목록 — 하천이 많은 보고서(소하천 등)는 최대 높이 안에서 스크롤 */
+/**
+ * 카드 아래로 펼치는 하천 목록.
+ * 높이는 내용만큼 늘어나고, 목록 영역이 가득 차면 그 안에서 스크롤한다.
+ */
 function PlanRiverList({
   plan,
   selectedRiver,
+  maxHeightPx,
   onSelectRiver,
 }: {
   plan: RiverBasicPlanReportPlan;
   selectedRiver: string | null;
+  /** 목록 패널에서 비어 보이지 않도록 잡아 둔 최대 높이. 0이면 패널 높이에 맞춤 */
+  maxHeightPx: number;
   onSelectRiver: (river: RiverBasicPlanReportRiver) => void;
 }) {
   const rivers = riverBasicPlanShownRivers(plan);
   return (
-    <ul className="max-h-[15.5rem] overflow-y-auto rounded-b-md border border-t-0 border-primary/30 bg-background py-0.5">
+    <ul
+      className="overflow-y-auto overscroll-contain rounded-b-md border border-t-0 border-primary/30 bg-background py-0.5"
+      style={{ maxHeight: maxHeightPx > 0 ? maxHeightPx : "calc(100dvh - 16rem)" }}
+    >
       {rivers.map((r) => {
         const active = selectedRiver === r.riverName;
         const len = formatRiverBasicPlanKm(r.planLen);
@@ -100,13 +111,14 @@ function PlanRiverList({
 
 /**
  * 보고서별 — 보고서마다 한 줄 카드(보고서명 / 연도·합계연장·개소 / 보고서 아이콘).
- * 하천이 2곳 이상이면 누를 때 카드 아래로 하천 목록이 펼쳐지고, 1곳이면 바로 그 하천 상세.
+ * 하천이 한 곳이어도 여러 곳이어도 누르면 카드 아래로 하천 목록이 펼쳐진다.
  */
 export function RiverBasicPlanReportCardList({
   plans,
   folderSummary,
   year,
   openedPlanKey,
+  riverListMaxPx = 0,
   selectedPlanKey,
   selectedRiver,
   onOpenPlan,
@@ -119,8 +131,7 @@ export function RiverBasicPlanReportCardList({
     <ul className="flex flex-col gap-1.5 p-2.5" aria-label="보고서별 기본계획">
       {shown.map((plan) => {
         const key = riverBasicPlanPlanKey(plan);
-        const multi = (plan.rivers ? riverBasicPlanShownRivers(plan).length : plan.riverCount) > 1;
-        const opened = multi && openedPlanKey === key;
+        const opened = openedPlanKey === key;
         const selected = selectedPlanKey === key;
         const title = riverBasicPlanPlanTitle(plan);
         const length = riverBasicPlanPlanLengthLabel(plan);
@@ -139,7 +150,7 @@ export function RiverBasicPlanReportCardList({
             <div
               role="button"
               tabIndex={0}
-              aria-expanded={multi ? opened : undefined}
+              aria-expanded={opened}
               onClick={open}
               onKeyDown={onKey}
               title={title}
@@ -147,7 +158,7 @@ export function RiverBasicPlanReportCardList({
                 "flex cursor-pointer items-center gap-2 rounded-md border py-2 pl-3 pr-2 outline-none transition-colors",
                 "focus-visible:ring-2 focus-visible:ring-ring",
                 opened && "rounded-b-none",
-                opened || (!multi && selected)
+                opened
                   ? "border-primary/30 border-l-[3px] border-l-primary bg-primary/[0.11] pl-[10px] hover:bg-primary/[0.14] dark:bg-primary/20"
                   : selected
                     ? "border-primary/40 bg-background hover:bg-muted/50"
@@ -205,6 +216,7 @@ export function RiverBasicPlanReportCardList({
             {opened ? (
               <PlanRiverList
                 plan={plan}
+                maxHeightPx={riverListMaxPx}
                 selectedRiver={selected ? selectedRiver : null}
                 onSelectRiver={(r) => onSelectRiver(plan, r)}
               />
