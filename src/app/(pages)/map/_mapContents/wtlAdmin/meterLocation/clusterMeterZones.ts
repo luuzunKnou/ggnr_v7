@@ -57,6 +57,15 @@ function extentOf(pts: PointRow[]): [number, number, number, number] {
   return [xmin, ymin, xmax, ymax]
 }
 
+/** 북서쪽부터 — 북(Y↓)·서(X↑). 목록·보고서 번호·캡처 마커에 동일 적용 */
+function sortNorthwestFirst(pts: PointRow[]): PointRow[] {
+  return [...pts].sort((a, b) => {
+    if (a.y !== b.y) return b.y - a.y
+    if (a.x !== b.x) return a.x - b.x
+    return a.row.id.localeCompare(b.row.id)
+  })
+}
+
 function fitsOneScreen(pts: PointRow[]): boolean {
   if (pts.length <= 1) return true
   const [xmin, ymin, xmax, ymax] = extentOf(pts)
@@ -214,11 +223,12 @@ export function clusterMeterZones(rows: MeterLocateResult[]): MeterZone[] {
   const zones: MeterZone[] = []
   let zoneIdx = 1
   for (const g of groups) {
+    const ordered = sortNorthwestFirst(g)
     zones.push({
       zoneId: `zone-${zoneIdx}`,
       label: `구역${zoneIdx}`,
       navigable: true,
-      rowIds: g.map((p) => p.row.id),
+      rowIds: ordered.map((p) => p.row.id),
       extent3857: zoneDivisionExtent(extentOf(g)),
     })
     zoneIdx += 1

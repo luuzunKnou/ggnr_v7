@@ -388,10 +388,10 @@ export function WtlNetworkStatusCombinedChart({
         })}
       </div>
       {/* 그래프 본체 높이 200px 고정 — 좌측 관재질 목록만 이 높이 안에서 스크롤 */}
-      <div className="flex h-[200px] min-h-[200px] w-full min-w-0 shrink-0 overflow-hidden">
+      <div className="flex h-50 min-h-50 w-full min-w-0 shrink-0 overflow-hidden">
         {chartData && chartData.datasets.length > 0 ? (
           <aside
-            className="flex h-full w-[5.5rem] shrink-0 flex-col overflow-hidden border-r border-border"
+            className="flex h-full w-22 shrink-0 flex-col overflow-hidden border-r border-border"
             title="관재질 범례"
           >
             <ul className="scrollbar-thin flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto overflow-x-hidden px-1.5 py-1.5">
@@ -411,7 +411,7 @@ export function WtlNetworkStatusCombinedChart({
                       aria-pressed={!hidden}
                       onClick={() => toggleMaterial(label)}
                       className={cn(
-                        'flex w-full min-w-0 cursor-pointer items-start gap-1.5 rounded px-0.5 py-0.5 text-left text-[12px] leading-snug hover:bg-muted/60',
+                        'flex w-full min-w-0 cursor-pointer items-start gap-1.5 rounded px-0.5 py-0.5 text-left text-xs leading-snug hover:bg-muted/60',
                         hidden
                           ? 'text-muted-foreground/45 line-through'
                           : 'text-muted-foreground'
@@ -419,7 +419,7 @@ export function WtlNetworkStatusCombinedChart({
                     >
                       <span
                         className={cn(
-                          'mt-1 h-2.5 w-2.5 shrink-0 rounded-[2px]',
+                          'mt-1 h-2.5 w-2.5 shrink-0 rounded-md',
                           hidden && 'opacity-40'
                         )}
                         style={{ backgroundColor: color }}
@@ -435,11 +435,11 @@ export function WtlNetworkStatusCombinedChart({
         ) : null}
         <div className="relative h-full min-w-0 flex-1 overflow-hidden px-1 pt-1">
           {loading ? (
-            <p className="flex h-full items-center justify-center text-[12px] text-muted-foreground">
+            <p className="flex h-full items-center justify-center text-xs text-muted-foreground">
               그래프 집계 중…
             </p>
           ) : !chartData ? (
-            <p className="flex h-full items-center justify-center text-[12px] text-muted-foreground">
+            <p className="flex h-full items-center justify-center text-xs text-muted-foreground">
               해당 자료가 없습니다.
             </p>
           ) : (

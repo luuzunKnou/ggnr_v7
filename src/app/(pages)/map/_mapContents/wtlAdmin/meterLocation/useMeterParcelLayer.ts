@@ -99,7 +99,8 @@ function buildJijukPnuCql(pnus: string[]): string | undefined {
 }
 
 /**
- * 계량기 점(벡터) + 필지(jijuk) — 목록만, 구역 선택 시 구역 외는 숨김.
+ * 구역 박스(벡터) + 필지(jijuk) — 목록만, 구역 선택 시 구역 외 필지 숨김.
+ * 계량기 번호 마커는 useWtlMeterIndexLayer.
  */
 export function useMeterParcelLayer(
   rows: MeterLocateResult[],

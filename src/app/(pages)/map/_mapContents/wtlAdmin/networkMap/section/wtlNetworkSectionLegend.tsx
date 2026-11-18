@@ -93,7 +93,7 @@ export function SectionFeatureLegendSkeleton({
       aria-busy
       aria-label="데이터 범례 불러오는 중"
     >
-      <div className="shrink-0 border-b-2 border-border bg-muted px-1.5 py-1 text-[12px] font-semibold text-muted-foreground">
+      <div className="shrink-0 border-b-2 border-border bg-muted px-1.5 py-1 text-xs font-semibold text-muted-foreground">
         데이터 범례
       </div>
       <div className="min-h-0 flex-1 space-y-2 overflow-hidden bg-background p-2">
@@ -181,7 +181,7 @@ export function SectionFeatureLegendPanel({
       style={{ width: SECTION_FEATURE_LEGEND_WIDTH_PX }}
       title="데이터 범례"
     >
-      <div className="shrink-0 border-b-2 border-border bg-muted px-1.5 py-1 text-[12px] font-semibold text-muted-foreground">
+      <div className="shrink-0 border-b-2 border-border bg-muted px-1.5 py-1 text-xs font-semibold text-muted-foreground">
         데이터 범례
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto bg-background">
@@ -220,7 +220,7 @@ export function SectionFeatureLegendPanel({
                   )}
                 </button>
                 <span
-                  className="min-w-0 flex-1 truncate text-[12px] font-semibold text-foreground"
+                  className="min-w-0 flex-1 truncate text-xs font-semibold text-foreground"
                   title={g.layerName}
                 >
                   {g.layerName}
@@ -315,7 +315,7 @@ export function SectionFeatureLegendPanel({
                           {onItemClick && it.networkId ? (
                             <button
                               type="button"
-                              className="min-w-0 flex-1 cursor-pointer truncate text-left text-[12px] hover:underline"
+                              className="min-w-0 flex-1 cursor-pointer truncate text-left text-xs hover:underline"
                               style={{
                                 textDecoration: hidden ? 'line-through' : undefined,
                               }}
@@ -329,7 +329,7 @@ export function SectionFeatureLegendPanel({
                             </button>
                           ) : (
                             <span
-                              className="min-w-0 flex-1 truncate text-[12px]"
+                              className="min-w-0 flex-1 truncate text-xs"
                               style={{
                                 textDecoration: hidden ? 'line-through' : 'none',
                               }}

@@ -500,7 +500,7 @@ function CrossSectionLegacySvg({
 
   if (!layout) {
     return (
-      <p className="py-10 text-center text-[12px] text-muted-foreground">
+      <p className="py-10 text-center text-xs text-muted-foreground">
         등고 지반고를 읽지 못했습니다. 절단선을 다시 그려 주세요.
       </p>
     )
@@ -974,7 +974,7 @@ function LongSectionSvg({
 
   if (!layout) {
     return (
-      <p className="py-10 text-center text-[12px] text-muted-foreground">
+      <p className="py-10 text-center text-xs text-muted-foreground">
         등고 지반고를 읽지 못했습니다. 절단선을 다시 그려 주세요.
       </p>
     )
@@ -1179,7 +1179,7 @@ function PrevOriginalSectionSvg({
 
   if (!points) {
     return (
-      <p className="py-10 text-center text-[12px] text-muted-foreground">
+      <p className="py-10 text-center text-xs text-muted-foreground">
         기존 단면도를 그릴 라인이 없습니다.
       </p>
     )
@@ -1188,7 +1188,7 @@ function PrevOriginalSectionSvg({
   return (
     <div className="overflow-auto">
       <WtlNetworkMapSectionFigure points={points} diameterMm={dip} />
-      <p className="mt-2 text-[12px] text-muted-foreground">
+      <p className="mt-2 text-xs text-muted-foreground">
         위 지표면은 예시 지형 높이를 따릅니다. 원은 관이고, 그 자리 지면에서 관 위까지가 토피 1.2m입니다.
       </p>
     </div>

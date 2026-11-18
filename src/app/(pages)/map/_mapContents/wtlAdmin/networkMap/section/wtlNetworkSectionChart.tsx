@@ -1255,7 +1255,7 @@ function CrossSectionChart({
 
   if (!ground.length) {
     return (
-      <p className="py-10 text-center text-[12px] text-muted-foreground">
+      <p className="py-10 text-center text-xs text-muted-foreground">
         등고 지반고를 읽지 못했습니다. 절단선을 다시 그려 주세요.
       </p>
     )
@@ -1756,7 +1756,7 @@ function LongSectionChart({
 
   if (!ground.length) {
     return (
-      <p className="py-10 text-center text-[12px] text-muted-foreground">
+      <p className="py-10 text-center text-xs text-muted-foreground">
         등고 지반고를 읽지 못했습니다. 절단선을 다시 그려 주세요.
       </p>
     )

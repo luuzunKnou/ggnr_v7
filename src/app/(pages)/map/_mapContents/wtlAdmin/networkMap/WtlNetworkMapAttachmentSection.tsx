@@ -354,7 +354,7 @@ export function WtlNetworkMapAttachmentSection({ item, fields, canEdit = true }:
   if (!enabled || !target) {
     return (
       <div className="flex h-full min-h-0 flex-col items-center justify-center p-6">
-        <p className="text-center text-[12px] text-muted-foreground/80">
+        <p className="text-center text-xs text-muted-foreground/80">
           첨부 폴더를 확인할 수 없습니다. (레이어·키 값 없음)
         </p>
       </div>
@@ -382,23 +382,23 @@ export function WtlNetworkMapAttachmentSection({ item, fields, canEdit = true }:
       >
         {dragOver && canEdit ? (
           <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-primary/10">
-            <p className="rounded border border-primary/40 bg-background/90 px-3 py-1.5 text-[12px] font-medium text-primary">
+            <p className="rounded border border-primary/40 bg-background/90 px-3 py-1.5 text-xs font-medium text-primary">
               여기에 파일을 놓으세요
             </p>
           </div>
         ) : null}
         <div className="scrollbar-thin flex min-h-0 flex-1 flex-col overflow-y-auto">
           {query.loading ? (
-            <div className="flex flex-1 items-center justify-center px-3 text-center text-[12px] text-muted-foreground/80">
+            <div className="flex flex-1 items-center justify-center px-3 text-center text-xs text-muted-foreground/80">
               불러오는 중…
             </div>
           ) : query.error ? (
-            <div className="flex flex-1 items-center justify-center px-3 text-center text-[12px] text-red-600">
+            <div className="flex flex-1 items-center justify-center px-3 text-center text-xs text-red-600">
               {query.error}
             </div>
           ) : query.files.length === 0 ? (
             <div className="flex flex-1 flex-col items-center justify-center gap-1 px-3 text-center">
-              <p className="text-[12px] text-muted-foreground/80">첨부파일이 없습니다.</p>
+              <p className="text-xs text-muted-foreground/80">첨부파일이 없습니다.</p>
               {canEdit ? (
                 <p className="text-[11px] text-muted-foreground/70">
                   파일을 끌어다 놓거나 «파일 추가»로 등록하세요.
@@ -482,8 +482,8 @@ export function WtlNetworkMapAttachmentSection({ item, fields, canEdit = true }:
                         'group-hover:pl-1'
                       )}
                     >
-                      <p className="truncate text-[12px] font-normal text-foreground/90">{f.name}</p>
-                      <p className="text-[12px] text-muted-foreground/90">
+                      <p className="truncate text-xs font-normal text-foreground/90">{f.name}</p>
+                      <p className="text-xs text-muted-foreground/90">
                         {formatFileSize(f.size)} | {modified}
                       </p>
                     </div>
@@ -541,7 +541,7 @@ export function WtlNetworkMapAttachmentSection({ item, fields, canEdit = true }:
         </div>
 
         <div className="mt-auto flex items-center justify-between gap-2 border-t border-border px-3 py-2.5">
-          <span className="text-[12px] text-muted-foreground">
+          <span className="text-xs text-muted-foreground">
             첨부파일{' '}
             <span className="font-semibold text-foreground">{query.files.length}</span>건
           </span>
@@ -586,7 +586,7 @@ export function WtlNetworkMapAttachmentSection({ item, fields, canEdit = true }:
                     )}
                     download
                     title="전체 내려받기"
-                    className="flex w-full cursor-pointer px-3 py-2 text-left text-[12px] text-foreground transition-colors hover:bg-muted/50"
+                    className="flex w-full cursor-pointer px-3 py-2 text-left text-xs text-foreground transition-colors hover:bg-muted/50"
                     onClick={() => setDownloadMenuOpen(false)}
                   >
                     전체 내려받기
@@ -596,7 +596,7 @@ export function WtlNetworkMapAttachmentSection({ item, fields, canEdit = true }:
                     role="menuitem"
                     title="선택 내려받기"
                     disabled={selectedNames.size === 0}
-                    className="flex w-full cursor-pointer px-3 py-2 text-left text-[12px] text-foreground transition-colors hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="flex w-full cursor-pointer px-3 py-2 text-left text-xs text-foreground transition-colors hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-50"
                     onClick={() => downloadSelected()}
                   >
                     선택 내려받기

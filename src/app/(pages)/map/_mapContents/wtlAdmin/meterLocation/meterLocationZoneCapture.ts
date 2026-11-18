@@ -1,10 +1,17 @@
 'use client'
 
 import { Map, View } from 'ol'
+import Feature from 'ol/Feature'
+import Point from 'ol/geom/Point'
 import ImageLayer from 'ol/layer/Image'
+import VectorLayer from 'ol/layer/Vector'
 import ImageWMS from 'ol/source/ImageWMS'
+import VectorSource from 'ol/source/Vector'
 import type XYZ from 'ol/source/XYZ'
+import { Circle as CircleStyle, Fill, Stroke, Style, Text } from 'ol/style'
+import type { FeatureLike } from 'ol/Feature'
 import { defaults as defaultControls } from 'ol/control'
+import { fromLonLat } from 'ol/proj'
 import { fromString } from 'ol/transform'
 import type MapType from 'ol/Map'
 import { geoserverWmsImageLoadFunction } from '@/lib/geoserverWmsImageLoad'
@@ -15,19 +22,39 @@ import { SCALE_BAR_PX } from '../../../_mapComponents/hooks/mapScale'
 import { WORKSPACE } from '../../../_mapComponents/layerFactory/serviceLayerFactory'
 import { createPrintCaptureBackgroundLayer } from '../../mapPrint/mapPrintCapture'
 
-/** A4 가로 보고서 지도 열 비중용 — 인쇄 선명도 */
+/** A4 세로 보고서용 — 인쇄 선명도 */
 const CAPTURE_W = 960
 const CAPTURE_H = 540
 /** 구역 캡처 목표 축척막대(m) — 클러스터·화면 이동과 동일 */
 const ZONE_TARGET_SCALE_M = 35
 const ZONE_MIN_SCALE_M = 30
 const ZONE_MAX_SCALE_M = 40
-const METER_LABEL_ENV = 'wtl_meta_ps_show_label:1'
 
 export type MeterZoneCapturePoint = {
   label: string
   point4326: [number, number]
   pnu?: string | null
+  /** 보고서 표 번호(1부터) — 지도 벡터 마커에 표시 */
+  index: number
+}
+
+function meterIndexStyle(feature: FeatureLike): Style {
+  const idx = String(feature.get('index') ?? '')
+  return new Style({
+    image: new CircleStyle({
+      radius: 12,
+      fill: new Fill({ color: '#2563eb' }),
+      stroke: new Stroke({ color: '#ffffff', width: 2.5 }),
+    }),
+    text: new Text({
+      text: idx,
+      font: 'bold 12px "Malgun Gothic","Apple SD Gothic Neo",sans-serif',
+      fill: new Fill({ color: '#ffffff' }),
+      textAlign: 'center',
+      textBaseline: 'middle',
+    }),
+    zIndex: 30,
+  })
 }
 
 export type MeterZoneCaptureResult = {
@@ -241,13 +268,6 @@ function buildJijukPnuCql(pnus: string[]): string | undefined {
   return `pnu IN (${list})`
 }
 
-function buildMetNumCql(labels: string[]): string | undefined {
-  const unique = [...new Set(labels.map((n) => String(n ?? '').trim()).filter(Boolean))]
-  if (unique.length === 0) return undefined
-  const list = unique.map((n) => `'${n.replace(/'/g, "''")}'`).join(',')
-  return `met_num IN (${list})`
-}
-
 function compositeOffscreenToCanvas(map: MapType, target: HTMLCanvasElement): boolean {
   const size = map.getSize()
   if (!size) return false
@@ -373,25 +393,13 @@ export function createMeterZoneCaptureSession(
     visible: false,
   })
 
-  // 구역 선택과 동일 — 해당 구역 급수전만 WMS
-  const meterSource = new ImageWMS({
-    url: `${geoServerBase}/${WORKSPACE}/wms`,
-    params: {
-      LAYERS: `${WORKSPACE}:wtl_meta_ps`,
-      STYLES: 'wtl_meta_ps',
-      TRANSPARENT: true,
-      FORMAT: 'image/png',
-      ENV: METER_LABEL_ENV,
-    },
-    serverType: 'geoserver',
-    ratio: 1,
-    imageLoadFunction: geoserverWmsImageLoadFunction,
-    crossOrigin: 'anonymous',
-  })
-  const meterLayer = new ImageLayer({
-    source: meterSource,
-    zIndex: 15,
-    visible: false,
+  // 보고서 캡처: 계량기 WMS 미사용 — 번호 벡터만 표시
+  const indexSource = new VectorSource()
+  const indexLayer = new VectorLayer({
+    source: indexSource,
+    style: meterIndexStyle,
+    zIndex: 40,
+    visible: true,
   })
 
   const view = new View({
@@ -403,7 +411,7 @@ export function createMeterZoneCaptureSession(
 
   const map = new Map({
     target: host,
-    layers: [bg, jijukLayer, meterLayer],
+    layers: [bg, jijukLayer, indexLayer],
     view,
     controls: defaultControls({ attribution: false, zoom: false }),
     interactions: [],
@@ -427,13 +435,11 @@ export function createMeterZoneCaptureSession(
           .map((p) => String(p.pnu ?? '').replace(/\D/g, '').slice(0, 19))
           .filter(Boolean)
         const jijukCql = buildJijukPnuCql(pnus)
-        const meterCql = buildMetNumCql(points.map((p) => p.label))
-        // 타일·WMS가 실제로 끝난 뒤에만 캡처 (미로드 격자 방지)
+        // 타일·필지 WMS가 실제로 끝난 뒤에만 캡처 (미로드 격자 방지)
         const tileCap = captureCount === 0 ? 6000 : 4500
         const wmsCap = captureCount === 0 ? 5000 : 4000
         const tileWait = tileSource ? watchTiles(tileSource, tileCap) : null
         const jijukWait = jijukCql ? watchImageWms(jijukSource, wmsCap) : null
-        const meterWait = meterCql ? watchImageWms(meterSource, wmsCap) : null
 
         if (jijukCql) {
           jijukLayer.setVisible(true)
@@ -448,30 +454,27 @@ export function createMeterZoneCaptureSession(
           jijukSource.updateParams({ CQL_FILTER: undefined })
         }
 
-        if (meterCql) {
-          meterLayer.setVisible(true)
-          meterSource.updateParams({
-            LAYERS: `${WORKSPACE}:wtl_meta_ps`,
-            STYLES: 'wtl_meta_ps',
-            ENV: METER_LABEL_ENV,
-            CQL_FILTER: meterCql,
-            _: String(Date.now()),
+        // 계량기 WMS 대신 표 번호 벡터 마커만
+        indexSource.clear()
+        for (const p of points) {
+          const lon = Number(p.point4326[0])
+          const lat = Number(p.point4326[1])
+          if (!Number.isFinite(lon) || !Number.isFinite(lat)) continue
+          const feature = new Feature({
+            geometry: new Point(fromLonLat([lon, lat])),
+            index: p.index,
           })
-        } else {
-          meterLayer.setVisible(false)
-          meterSource.updateParams({ CQL_FILTER: undefined })
+          indexSource.addFeature(feature)
         }
 
         map.renderSync()
         tileWait?.arm()
         jijukWait?.arm()
-        meterWait?.arm()
         throwIfAborted(signal)
         await raceUntil(
           Promise.all([
             tileWait?.promise ?? Promise.resolve(),
             jijukWait?.promise ?? Promise.resolve(),
-            meterWait?.promise ?? Promise.resolve(),
           ]).then(() => undefined),
           signal
         )
@@ -518,6 +521,7 @@ export function createMeterZoneCaptureSession(
     dispose() {
       if (disposed) return
       disposed = true
+      indexSource.clear()
       map.setTarget(undefined)
       host.remove()
     },

@@ -72,7 +72,7 @@ type Props = {
   mapTabContent?: ReactNode
   /**
    * true면 현황 목록 행 클릭 시 지도 이동 대신
-   * 해당 행 상세를 현재 창 안 모달로 연다 (새 창 상세용).
+   * 해당 행 상세를 창 안 모달로 연다 (지도 기본·새 창 상세).
    */
   relatedChildAsModal?: boolean
 }
@@ -478,7 +478,7 @@ export function WtlNetworkDetailRelatedTabs({
             type="button"
             title="지도"
             className={cn(
-              'inline-flex h-9 w-[5.5rem] shrink-0 cursor-pointer items-center justify-center gap-1 border-b-2 px-2 text-[11px] font-medium pointer-events-auto',
+              'inline-flex h-9 w-22 shrink-0 cursor-pointer items-center justify-center gap-1 border-b-2 px-2 text-[11px] font-medium pointer-events-auto',
               active === 'map'
                 ? 'border-primary bg-primary/5 text-primary'
                 : 'border-transparent text-muted-foreground hover:bg-muted/50 hover:text-foreground'
@@ -493,7 +493,7 @@ export function WtlNetworkDetailRelatedTabs({
           type="button"
           title="첨부파일"
           className={cn(
-            'inline-flex h-9 w-[5.5rem] shrink-0 cursor-pointer items-center justify-center gap-1 border-b-2 px-2 text-[11px] font-medium pointer-events-auto',
+            'inline-flex h-9 w-22 shrink-0 cursor-pointer items-center justify-center gap-1 border-b-2 px-2 text-[11px] font-medium pointer-events-auto',
             active === 'attach'
               ? 'border-primary bg-primary/5 text-primary'
               : 'border-transparent text-muted-foreground hover:bg-muted/50 hover:text-foreground'
@@ -509,7 +509,7 @@ export function WtlNetworkDetailRelatedTabs({
             type="button"
             title={tab.label}
             className={cn(
-              'inline-flex h-9 w-[5.5rem] shrink-0 cursor-pointer items-center justify-center gap-1 border-b-2 px-2 text-[11px] font-medium pointer-events-auto',
+              'inline-flex h-9 w-22 shrink-0 cursor-pointer items-center justify-center gap-1 border-b-2 px-2 text-[11px] font-medium pointer-events-auto',
               active === tab.table
                 ? 'border-primary bg-primary/5 text-primary'
                 : 'border-transparent text-muted-foreground hover:bg-muted/50 hover:text-foreground'

@@ -136,7 +136,7 @@ export function WtlNetworkSectionPanel({
             type="button"
             title={t.label}
             className={cn(
-              'cursor-pointer border-b-2 px-3 py-1.5 text-[12px] font-medium',
+              'cursor-pointer border-b-2 px-3 py-1.5 text-xs font-medium',
               tab === t.id
                 ? 'border-primary text-primary'
                 : 'border-transparent text-muted-foreground hover:text-foreground'
@@ -153,18 +153,18 @@ export function WtlNetworkSectionPanel({
           loading ? (
             <div className="flex h-full min-h-0 gap-2 overflow-hidden rounded border-2 border-border bg-background p-2">
               <div className="flex min-h-0 min-w-0 flex-1 items-center justify-center">
-                <p className="text-center text-[12px] text-muted-foreground">
+                <p className="text-center text-xs text-muted-foreground">
                   등고·시설 조회 중…
                 </p>
               </div>
               <SectionFeatureLegendSkeleton />
             </div>
           ) : error ? (
-            <p className="py-10 text-center text-[12px] text-destructive">
+            <p className="py-10 text-center text-xs text-destructive">
               {error}
             </p>
           ) : !lineReady ? (
-            <p className="py-10 text-center text-[12px] text-muted-foreground">
+            <p className="py-10 text-center text-xs text-muted-foreground">
               절단선 데이터가 없습니다.
             </p>
           ) : (
@@ -182,7 +182,7 @@ export function WtlNetworkSectionPanel({
             />
           )
         ) : !lineReady || !line3857 || line3857.length < 2 ? (
-          <p className="py-10 text-center text-[12px] text-muted-foreground">
+          <p className="py-10 text-center text-xs text-muted-foreground">
             절단선 데이터가 없습니다.
           </p>
         ) : null}
