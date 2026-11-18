@@ -215,7 +215,10 @@ async function clipFeatureGeomsToAreaWkt<T extends { geom: { type: string; coord
 ): Promise<T[]> {
   if (features.length === 0) return features;
 
-  const CHUNK = 80;
+  /** 왕복 횟수↓ — 너무 크면 SQL 파라미터·파싱 부담. 체감·부하 균형 기본값 */
+  const CHUNK = 400;
+  /** 청크 동시 실행 상한 — DB 과부하 방지 */
+  const CLIP_CONCURRENCY = 3;
   const clippedByIdx = new Map<number, { type: string; coordinates?: unknown }>();
 
   const applyRows = (rows: { idx?: number; clipped_gj?: string | null }[]) => {
@@ -277,20 +280,28 @@ async function clipFeatureGeomsToAreaWkt<T extends { geom: { type: string; coord
     }
   };
 
+  const clipJobs: { start: number; values: string[] }[] = [];
   for (let start = 0; start < features.length; start += CHUNK) {
     const slice = features.slice(start, start + CHUNK);
     const values = slice
       .map((f, j) => geomAsSqlValue(start + j, f.geom))
       .filter((v): v is string => Boolean(v));
     if (values.length === 0) continue;
+    clipJobs.push({ start, values });
+  }
 
-    const ok = await runClip(values);
-    if (ok) continue;
-
-    // 청크 실패 → 건별 재시도. 그래도 실패하면 해당 도형은 제외(원본 전체 금지).
-    for (const one of values) {
-      await runClip([one]);
-    }
+  for (let i = 0; i < clipJobs.length; i += CLIP_CONCURRENCY) {
+    const batch = clipJobs.slice(i, i + CLIP_CONCURRENCY);
+    await Promise.all(
+      batch.map(async ({ values }) => {
+        const ok = await runClip(values);
+        if (ok) return;
+        // 청크 실패 → 건별 재시도. 그래도 실패하면 해당 도형은 제외(원본 전체 금지).
+        for (const one of values) {
+          await runClip([one]);
+        }
+      })
+    );
   }
 
   const out: T[] = [];

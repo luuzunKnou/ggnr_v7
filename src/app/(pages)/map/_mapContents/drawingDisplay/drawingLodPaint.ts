@@ -45,8 +45,9 @@ function featLength(f: Feature<Geometry>): number {
 
 /**
  * 격자 칸을 돌아가며 긴 선부터 집어, 한쪽에만 몰리지 않게 한다.
+ * 수치지형도 중줌 샘플링에서도 재사용.
  */
-function pickSpatiallySpread(
+export function pickSpatiallySpread(
   features: Feature<Geometry>[],
   extent: Extent,
   max: number

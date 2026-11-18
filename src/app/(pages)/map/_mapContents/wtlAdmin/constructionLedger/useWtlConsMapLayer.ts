@@ -5,8 +5,8 @@ import Feature from 'ol/Feature'
 import GeoJSON from 'ol/format/GeoJSON'
 import VectorLayer from 'ol/layer/Vector'
 import VectorSource from 'ol/source/Vector'
-import { Fill, Stroke, Style } from 'ol/style'
-import type { StyleFunction } from 'ol/style/Style'
+import { Fill, Icon, Stroke, Style } from 'ol/style'
+import type { StyleFunction, StyleLike } from 'ol/style/Style'
 import '../../../_mapComponents/config/projections'
 import { MAP_AUTO_NAV_MAX_ZOOM } from '../../../_mapComponents/config/mapDefaults'
 import { scheduleFitMapToExtent3857 } from '../../../_mapComponents/config/mapAutoNavigation'
@@ -15,16 +15,26 @@ import {
   createDataQuerySelectionRowHighlightStyle,
   DATA_QUERY_SELECTION_PULSE_STEP,
 } from '@/lib/mapDataQueryMapHighlight'
+import { LAYER_GEOM_STACK_SKIP_KEY } from '@/lib/mapLayerGeometryOrder'
 import type { WtlConsGeom4326 } from './wtlConsLedgerApi'
+import {
+  peekRelatedFacilityIcon,
+  prefetchRelatedFacilityStyles,
+  resolveRelatedFacilityOlStyle,
+} from './wtlConsRelatedStyle'
 
-/** 공사목록·공사구역 선택 깜빡임. 공통 속도의 2.4배 */
-const FOCUS_PULSE_STEP = DATA_QUERY_SELECTION_PULSE_STEP * 2.4
+/** 관련시설 강조 깜빡임 — 데이터조회·시설목록과 동일 속도 */
+const FOCUS_PULSE_STEP = DATA_QUERY_SELECTION_PULSE_STEP
 
 const MAIN_FILL = 'rgba(37, 99, 235, 0.18)'
 const MAIN_STROKE = '#1d4ed8'
-const FOCUS_FILL = 'rgba(22, 163, 74, 0.28)'
-const FOCUS_STROKE = '#15803d'
-
+/** 관련시설 강조 — 도로·하천 선택 강조와 같은 최상단대 */
+const FOCUS_LAYER_Z = 9999
+/** 관련시설 전체(미선택) — 공사·구역 위, 선택 강조 아래 */
+const RELATED_LAYER_Z = 892
+/** 관련시설 선택 시 공사·구역 면이 강조를 가리지 않도록 */
+const WORK_DIM_OPACITY = 0.38
+const ZONE_DIM_OPACITY = 0.45
 function pulseFeatureId(id: string) {
   return `pulse:${id}`
 }
@@ -105,14 +115,69 @@ function midSparkleStyle(feature: Feature, phase: number, zIndex = 20): Style | 
   })
 }
 
-function zoneFeatureStyle(feature: Feature, phase: number, selectionStyle: StyleFunction): Style | Style[] | undefined {
-  if (feature.get('focus')) {
-    return new Style({
-      fill: new Fill({ color: FOCUS_FILL }),
-      stroke: new Stroke({ color: FOCUS_STROKE, width: 3 }),
-      zIndex: 40,
-    })
+/** 관련시설 — GeoServer 레이어 심볼(조건 ftr_cde 포함). 없으면 모듈 폴백 */
+function relatedFacilityStyle(feature: Feature, onStyleReady: () => void): StyleLike {
+  const styleName = String(feature.get('styleName') ?? '').trim()
+  const styleCode = String(feature.get('styleCode') ?? '').trim() || null
+  if (!styleName) {
+    return resolveRelatedFacilityOlStyle('', null, feature.getGeometry()?.getType(), onStyleReady)
   }
+  return resolveRelatedFacilityOlStyle(
+    styleName,
+    styleCode,
+    feature.getGeometry()?.getType(),
+    onStyleReady
+  )
+}
+
+/** 관련시설 강조. 점+심볼이면 아이콘 유지 + 레이더, 선은 굵게. */
+function focusFeatureStyle(feature: Feature, selectionStyle: StyleFunction): Style | Style[] | undefined {
+  const geomType = feature.getGeometry()?.getType()
+  const styleName = String(feature.get('styleName') ?? '').trim()
+  const styleCode = String(feature.get('styleCode') ?? '').trim() || null
+  if (
+    (geomType === 'Point' || geomType === 'MultiPoint') &&
+    styleName
+  ) {
+    const icon = peekRelatedFacilityIcon(styleName, styleCode)
+    const pulse = selectionStyle(feature, 1) as Style | Style[] | undefined
+    const pulseList = pulse ? (Array.isArray(pulse) ? pulse : [pulse]) : []
+    for (const style of pulseList) style.setZIndex(FOCUS_LAYER_Z)
+    if (icon) {
+      const focusPx = Math.min(24, icon.size + 2)
+      return [
+        new Style({
+          zIndex: FOCUS_LAYER_Z + 1,
+          image: new Icon({
+            src: icon.src,
+            width: focusPx,
+            height: focusPx,
+            anchor: [0.5, 0.5],
+            opacity: 1,
+          }),
+        }),
+        ...pulseList,
+      ]
+    }
+    return withZIndex(pulse, FOCUS_LAYER_Z)
+  }
+  const styled = selectionStyle(feature, 1) as Style | Style[] | undefined
+  if (!styled) return undefined
+  const list = Array.isArray(styled) ? styled : [styled]
+  if (geomType === 'LineString' || geomType === 'MultiLineString') {
+    for (const style of list) {
+      const stroke = style.getStroke()
+      if (!stroke) continue
+      const w = stroke.getWidth() ?? 5
+      stroke.setWidth(w + 4)
+      style.setZIndex(FOCUS_LAYER_Z)
+    }
+    return list
+  }
+  return withZIndex(styled, FOCUS_LAYER_Z)
+}
+
+function zoneFeatureStyle(feature: Feature, phase: number, selectionStyle: StyleFunction): Style | Style[] | undefined {
   if (feature.get('zoneOn')) {
     return withZIndex(selectionStyle(feature, 1) as Style | Style[] | undefined, 30)
   }
@@ -133,6 +198,20 @@ function readGeom(
 export type WtlConsMapFocus = {
   geom: Record<string, unknown>
   projection: 'EPSG:4326' | 'EPSG:3857'
+  /** 관련시설 선택 시 심볼 유지용 */
+  styleName?: string
+  styleCode?: string | null
+}
+
+/** 관련시설 목록 도형 — 지하시설물 패널과 무관하게 벡터로만 그림 */
+export type WtlConsRelatedFacility = {
+  id: string
+  geom: Record<string, unknown>
+  projection: 'EPSG:4326' | 'EPSG:3857'
+  /** getGeoServerStyle name — 보통 관망 layerKey */
+  styleName: string
+  /** SLD 조건 심볼 키 (ftr_cde 등) */
+  styleCode?: string | null
 }
 
 export type WtlConsProjectGeom = {
@@ -151,6 +230,8 @@ export type WtlConsMapInput = {
   zones: WtlConsMapZone[]
   zoneId: string | null
   focus: WtlConsMapFocus | null
+  /** 관련시설(변류·관로 등) 전체. 패널 체크 없이 표시 */
+  relatedFacilities?: WtlConsRelatedFacility[]
   /** 검색·사업 선택처럼 도형이 그대로여도 지도를 다시 맞출 때 올린다. */
   fitToken?: number
   /** 첨부파일이 가리는 아래 높이. 드래그 중에는 바꾸지 않는다. */
@@ -168,8 +249,21 @@ export function useWtlConsMapLayer(input: WtlConsMapInput) {
   const mapContext = useMapContext()
   const sourceRef = useRef<VectorSource | null>(null)
   const zoneSourceRef = useRef<VectorSource | null>(null)
+  const relatedSourceRef = useRef<VectorSource | null>(null)
+  const focusSourceRef = useRef<VectorSource | null>(null)
+  const workLayerRef = useRef<VectorLayer<VectorSource> | null>(null)
+  const zoneLayerRef = useRef<VectorLayer<VectorSource> | null>(null)
+  const relatedLayerRef = useRef<VectorLayer<VectorSource> | null>(null)
+  const focusLayerRef = useRef<VectorLayer<VectorSource> | null>(null)
   const pulsePhaseRef = useRef(0)
   const focusPhaseRef = useRef(0)
+  /** 이전 맞춤 기준. 탭·강조 해제만으로는 지도를 다시 맞추지 않는다. */
+  const fitGateRef = useRef<{
+    fitToken?: number
+    selectedId: string | null
+    projectKey: string
+    focusKey: string
+  } | null>(null)
   const selectionStyleRef = useRef(
     createDataQuerySelectionRowHighlightStyle(() => focusPhaseRef.current)
   )
@@ -187,6 +281,12 @@ export function useWtlConsMapLayer(input: WtlConsMapInput) {
   const projectKey = input.projectGeoms.map((item) => `${item.id}:${item.geom4326 ? 1 : 0}`).join(',')
   const zoneKey = `${input.zoneId ?? ''}|${input.zones.map((zone) => `${zone.id}:${zone.geometry3857 ? 1 : 0}`).join(',')}`
   const focusKey = input.focus ? `${input.focus.projection}:${JSON.stringify(input.focus.geom).slice(0, 180)}` : ''
+  const relatedKey = (input.relatedFacilities ?? [])
+    .map(
+      (item) =>
+        `${item.id}:${item.styleName}:${item.styleCode ?? ''}:${item.projection}:${JSON.stringify(item.geom).slice(0, 80)}`
+    )
+    .join('|')
 
   useEffect(() => {
     const map = mapContext?.mapInstanceRef?.current
@@ -200,6 +300,8 @@ export function useWtlConsMapLayer(input: WtlConsMapInput) {
       zIndex: 890,
     })
     layer.set('wtlConsWork', true)
+    layer.set(LAYER_GEOM_STACK_SKIP_KEY, true)
+    workLayerRef.current = layer
     const zoneSource = new VectorSource()
     zoneSourceRef.current = zoneSource
     const zoneLayer = new VectorLayer({
@@ -208,14 +310,49 @@ export function useWtlConsMapLayer(input: WtlConsMapInput) {
       zIndex: 891,
     })
     zoneLayer.set('wtlConsZone', true)
+    zoneLayer.set(LAYER_GEOM_STACK_SKIP_KEY, true)
+    zoneLayerRef.current = zoneLayer
+    const relatedSource = new VectorSource()
+    relatedSourceRef.current = relatedSource
+    const relatedLayer = new VectorLayer({
+      source: relatedSource,
+      style: (feature) =>
+        relatedFacilityStyle(feature as Feature, () => {
+          relatedLayerRef.current?.changed()
+        }),
+      zIndex: RELATED_LAYER_Z,
+    })
+    relatedLayer.set('wtlConsRelated', true)
+    relatedLayer.set(LAYER_GEOM_STACK_SKIP_KEY, true)
+    relatedLayerRef.current = relatedLayer
+    const focusSource = new VectorSource()
+    focusSourceRef.current = focusSource
+    const focusLayer = new VectorLayer({
+      source: focusSource,
+      style: (feature) => focusFeatureStyle(feature as Feature, selectionStyleRef.current),
+      zIndex: FOCUS_LAYER_Z,
+    })
+    focusLayer.set('wtlConsFocus', true)
+    focusLayer.set(LAYER_GEOM_STACK_SKIP_KEY, true)
+    focusLayerRef.current = focusLayer
     map.addLayer(layer)
     map.addLayer(zoneLayer)
+    map.addLayer(relatedLayer)
+    map.addLayer(focusLayer)
 
     return () => {
       sourceRef.current = null
       zoneSourceRef.current = null
+      relatedSourceRef.current = null
+      focusSourceRef.current = null
+      workLayerRef.current = null
+      zoneLayerRef.current = null
+      relatedLayerRef.current = null
+      focusLayerRef.current = null
       map.removeLayer(layer)
       map.removeLayer(zoneLayer)
+      map.removeLayer(relatedLayer)
+      map.removeLayer(focusLayer)
     }
   }, [mapContext?.mapInstanceRef, mapContext?.mapReady])
 
@@ -230,6 +367,9 @@ export function useWtlConsMapLayer(input: WtlConsMapInput) {
       zoneSourceRef.current?.forEachFeature((feature) => {
         if (feature.get('sparkle')) feature.changed()
       })
+      focusSourceRef.current?.forEachFeature((feature) => {
+        if (feature.get('focus')) feature.changed()
+      })
       rafId = requestAnimationFrame(loop)
     }
     rafId = requestAnimationFrame(loop)
@@ -240,10 +380,31 @@ export function useWtlConsMapLayer(input: WtlConsMapInput) {
     const map = mapContext?.mapInstanceRef?.current
     const source = sourceRef.current
     const zoneSource = zoneSourceRef.current
-    if (!map || !source || !zoneSource) return
+    const relatedSource = relatedSourceRef.current
+    const focusSource = focusSourceRef.current
+    if (!map || !source || !zoneSource || !relatedSource || !focusSource) return
     source.clear()
     zoneSource.clear()
+    relatedSource.clear()
+    focusSource.clear()
     const current = inputRef.current
+    const hasFocus = Boolean(current.focus?.geom)
+    const workLayer = workLayerRef.current
+    const zoneLayer = zoneLayerRef.current
+    const relatedLayer = relatedLayerRef.current
+    const focusLayer = focusLayerRef.current
+    if (workLayer) workLayer.setOpacity(hasFocus ? WORK_DIM_OPACITY : 1)
+    if (zoneLayer) zoneLayer.setOpacity(hasFocus ? ZONE_DIM_OPACITY : 1)
+    if (relatedLayer) relatedLayer.setOpacity(hasFocus ? 0.55 : 1)
+    if (focusLayer) {
+      focusLayer.setZIndex(FOCUS_LAYER_Z)
+      focusLayer.set(LAYER_GEOM_STACK_SKIP_KEY, true)
+      const layers = map.getLayers()
+      if (layers.getArray().includes(focusLayer)) {
+        layers.remove(focusLayer)
+        layers.push(focusLayer)
+      }
+    }
     const format = new GeoJSON()
     let focusFeature: Feature | null = null
     let selectedFeature: Feature | null = null
@@ -275,23 +436,58 @@ export function useWtlConsMapLayer(input: WtlConsMapInput) {
         zoneSource.addFeature(feature)
         if (selected) zoneFeature = feature
       }
+      for (const item of current.relatedFacilities ?? []) {
+        if (!item.geom) continue
+        const feature = new Feature(readGeom(format, item.geom, item.projection))
+        feature.setId(`related:${item.id}`)
+        feature.set('related', true)
+        feature.set('styleName', item.styleName)
+        feature.set('styleCode', item.styleCode ?? '')
+        relatedSource.addFeature(feature)
+      }
       if (current.focus?.geom) {
         focusFeature = new Feature(readGeom(format, current.focus.geom, current.focus.projection))
         focusFeature.set('focus', true)
-        zoneSource.addFeature(focusFeature)
+        if (current.focus.styleName) {
+          focusFeature.set('styleName', current.focus.styleName)
+          focusFeature.set('styleCode', current.focus.styleCode ?? '')
+        }
+        const focusGeomType = focusFeature.getGeometry()?.getType()
+        if (focusGeomType === 'Point' || focusGeomType === 'MultiPoint') {
+          focusFeature.set('isRadarPoint', true)
+        }
+        focusSource.addFeature(focusFeature)
       }
     } catch {
       source.clear()
       zoneSource.clear()
+      relatedSource.clear()
+      focusSource.clear()
       return
     }
+
+    const prev = fitGateRef.current
+    const focusAcquired = Boolean(focusKey) && focusKey !== prev?.focusKey
+    const shouldFit =
+      !prev ||
+      prev.fitToken !== current.fitToken ||
+      prev.selectedId !== current.selectedId ||
+      prev.projectKey !== projectKey ||
+      focusAcquired
+    fitGateRef.current = {
+      fitToken: current.fitToken,
+      selectedId: current.selectedId,
+      projectKey,
+      focusKey,
+    }
+    if (!shouldFit) return
 
     const preferred = (focusFeature ?? zoneFeature ?? selectedFeature)?.getGeometry()?.getExtent()
     const extent = finiteExtent(preferred) ?? finiteExtent(source.getExtent())
     if (!extent) return
     const paddingRef = mapContext?.applyMapViewPaddingRef
     const mapRef = mapContext?.mapInstanceRef
-    // 다른 목록 메뉴와 같이, 패널 여백이 반영된 뒤에 같은 맞춤을 쓴다.
+    // 사업·공사 선택·관련시설 신규 선택·명시 fitToken 때만 맞춤. 탭·강조 해제는 제외.
     const timer = window.setTimeout(() => {
       const liveMap = mapRef?.current
       if (!liveMap) return
@@ -307,9 +503,27 @@ export function useWtlConsMapLayer(input: WtlConsMapInput) {
     input.selectedId,
     zoneKey,
     focusKey,
-    input.bottomInset,
+    relatedKey,
     mapContext?.applyMapViewPaddingRef,
     mapContext?.mapInstanceRef,
     mapContext?.mapReady,
   ])
+
+  /** 관련시설 목록이 바뀔 때만 SLD·심볼 재조회 (선택 토글 등과 분리) */
+  useEffect(() => {
+    const entries = (inputRef.current.relatedFacilities ?? []).map((item) => ({
+      styleName: item.styleName,
+      styleCode: item.styleCode,
+    }))
+    if (entries.length === 0) return
+    let cancelled = false
+    void prefetchRelatedFacilityStyles(entries, { refresh: true }).then(() => {
+      if (cancelled) return
+      relatedLayerRef.current?.changed()
+      focusLayerRef.current?.changed()
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [relatedKey])
 }
