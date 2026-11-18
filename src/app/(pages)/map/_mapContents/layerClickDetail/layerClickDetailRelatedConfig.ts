@@ -105,6 +105,24 @@ export const FACILITY_NAME_LOOKUP_TARGETS: Array<{
   { table: 'wtl_puri_as', title: '정수장', fieldsTable: 'wtl_puri_as' },
 ]
 
+/** 사업장명 접미어 → 시설 대상 (정수장·배수지·가압장) */
+export function resolveFacilityNameLookupTargetBySuffix(
+  value: string
+): (typeof FACILITY_NAME_LOOKUP_TARGETS)[number] | null {
+  const v = String(value ?? '').trim()
+  if (!v) return null
+  if (v.endsWith('정수장')) {
+    return FACILITY_NAME_LOOKUP_TARGETS.find((t) => t.table === 'wtl_puri_as') ?? null
+  }
+  if (v.endsWith('배수지')) {
+    return FACILITY_NAME_LOOKUP_TARGETS.find((t) => t.table === 'wtl_serv_ps') ?? null
+  }
+  if (v.endsWith('가압장')) {
+    return FACILITY_NAME_LOOKUP_TARGETS.find((t) => t.table === 'wtl_pres_ps') ?? null
+  }
+  return null
+}
+
 /** @deprecated FACILITY_NAME_LOOKUP_TARGETS 사용 */
 export const FACILITY_SHOW_TITLE_LOOKUP_TARGETS = FACILITY_NAME_LOOKUP_TARGETS
 

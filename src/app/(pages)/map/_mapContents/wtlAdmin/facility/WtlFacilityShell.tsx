@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronLeft, ChevronRight, Pentagon, RefreshCw, X } from 'lucide-react'
+import { Pentagon, RefreshCw, X } from 'lucide-react'
 import { call } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { useMapContext } from '../../../_mapComponents/MapContext'
@@ -24,6 +24,7 @@ import {
 import {
   groupRelatedLayersByCategory,
   PIPE_CATEGORY,
+  RELATED_FACILITY_CATEGORY,
   resolveRelatedLayers,
 } from './wtlFacilityRelatedLayers'
 import { flyToWtlNetworkGeom } from '../networkMap/wtlNetworkMapFly'
@@ -174,34 +175,8 @@ export function WtlFacilityShell({
   const totalRef = useRef(0)
   const loadingMoreRef = useRef(false)
   const loadSourceKeyRef = useRef('')
-  const tabScrollRef = useRef<HTMLDivElement>(null)
-  const [canScrollTabLeft, setCanScrollTabLeft] = useState(false)
-  const [canScrollTabRight, setCanScrollTabRight] = useState(false)
   /** 연관 레이어 토글(물리 테이블명) — 탭·그룹 변경 시 초기화 */
   const [relatedOn, setRelatedOn] = useState<Set<string>>(() => new Set())
-
-  const updateTabScrollState = useCallback(() => {
-    const el = tabScrollRef.current
-    if (!el) {
-      setCanScrollTabLeft(false)
-      setCanScrollTabRight(false)
-      return
-    }
-    const { scrollLeft, scrollWidth, clientWidth } = el
-    setCanScrollTabLeft(scrollLeft > 1)
-    setCanScrollTabRight(scrollLeft + clientWidth < scrollWidth - 1)
-  }, [])
-
-  const scrollTabs = useCallback((dir: -1 | 1) => {
-    const el = tabScrollRef.current
-    if (!el) return
-    el.scrollBy({
-      left: dir * Math.max(120, Math.floor(el.clientWidth * 0.6)),
-      behavior: 'smooth',
-    })
-  }, [])
-
-  const showTabSlide = canScrollTabLeft || canScrollTabRight
 
   const selectedSource: WtlFacilityGroupOption | null = useMemo(() => {
     if (!groupOptions.length) return null
@@ -228,6 +203,25 @@ export function WtlFacilityShell({
     () => relatedLayerGroups.filter((g) => g.category !== PIPE_CATEGORY),
     [relatedLayerGroups]
   )
+
+  /** 설비관리 footer — 관련 시설 레이어 목록 */
+  const relatedFacilityLayers = useMemo(
+    () =>
+      relatedLayerGroups.find((g) => g.category === RELATED_FACILITY_CATEGORY)
+        ?.layers ?? [],
+    [relatedLayerGroups]
+  )
+  const relatedFacilityLayersKey = useMemo(
+    () =>
+      relatedFacilityLayers
+        .map((l) => `${l.tableName}\0${l.schema}`)
+        .sort()
+        .join('\n'),
+    [relatedFacilityLayers]
+  )
+  const [relatedFacilityCounts, setRelatedFacilityCounts] = useState<
+    Array<{ label: string; total: number }> | null
+  >(null)
 
   /** 관로(버튼 숨김·탭/그룹 진입 시 1회 ON) */
   const pipeRelatedNames = useMemo(
@@ -280,6 +274,56 @@ export function WtlFacilityShell({
       return new Set(names)
     })
   }, [relatedLayerKeys, hasSelectedSource])
+
+  /** 설비관리 — 관련 시설 레이어별 건수 (목록 footer) */
+  useEffect(() => {
+    if (layerGroupsMode !== 'equipment' || title !== '설비관리') {
+      setRelatedFacilityCounts(null)
+      return
+    }
+    if (!relatedFacilityLayersKey || relatedFacilityLayers.length === 0) {
+      setRelatedFacilityCounts(null)
+      return
+    }
+    let cancelled = false
+    setRelatedFacilityCounts(null)
+    void (async () => {
+      const next: Array<{ label: string; total: number }> = []
+      for (const layer of relatedFacilityLayers) {
+        const label = String(layer.korName || layer.tableName).trim()
+        try {
+          const res = await call('', 'POST', {
+            service: 'wtlFacilityService',
+            action: 'listFacilityRows',
+            params: {
+              table: layer.tableName,
+              schema: layer.schema || 'layer',
+              limit: 1,
+              offset: 0,
+            },
+          })
+          if (cancelled) return
+          const data = (res?.data ?? res) as { total?: number } | undefined
+          next.push({
+            label: label || layer.tableName,
+            total: Number(data?.total ?? 0) || 0,
+          })
+        } catch {
+          if (cancelled) return
+          next.push({ label: label || layer.tableName, total: 0 })
+        }
+      }
+      if (!cancelled) setRelatedFacilityCounts(next)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [
+    layerGroupsMode,
+    title,
+    relatedFacilityLayers,
+    relatedFacilityLayersKey,
+  ])
 
   const selected =
     selectedRow && selectedId && selectedRow.id === selectedId ? selectedRow : null
@@ -348,6 +392,7 @@ export function WtlFacilityShell({
     source: selectedSource
       ? { tableName: selectedSource.tableName, schema: selectedSource.schema }
       : null,
+    tab,
     onSelect: (row) => selectFacilityRow(row),
   })
 
@@ -384,38 +429,6 @@ export function WtlFacilityShell({
   useEffect(() => {
     return () => onTotalWidthChangeRef.current(0)
   }, [])
-
-  useEffect(() => {
-    updateTabScrollState()
-    const el = tabScrollRef.current
-    if (!el) return
-    const ro = new ResizeObserver(() => updateTabScrollState())
-    ro.observe(el)
-    const onWheel = (e: WheelEvent) => {
-      if (el.scrollWidth <= el.clientWidth + 1) return
-      const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY
-      if (!delta) return
-      e.preventDefault()
-      el.scrollBy({ left: delta })
-    }
-    el.addEventListener('scroll', updateTabScrollState, { passive: true })
-    el.addEventListener('wheel', onWheel, { passive: false })
-    return () => {
-      ro.disconnect()
-      el.removeEventListener('scroll', updateTabScrollState)
-      el.removeEventListener('wheel', onWheel)
-    }
-  }, [listWidth, tabsKey, updateTabScrollState])
-
-  useEffect(() => {
-    const el = tabScrollRef.current
-    if (!el || !tab) return
-    const active = el.querySelector<HTMLElement>(
-      `[data-facility-tab="${CSS.escape(tab)}"]`
-    )
-    active?.scrollIntoView({ inline: 'nearest', block: 'nearest', behavior: 'smooth' })
-    requestAnimationFrame(updateTabScrollState)
-  }, [tab, updateTabScrollState])
 
   /** 시설관리 기본 카탈로그 — adminTabs.json wtlFacility + DB 활성 탭 */
   useEffect(() => {
@@ -1255,29 +1268,10 @@ export function WtlFacilityShell({
                     </select>
                   </div>
                 ) : null}
-                <div className="flex items-stretch border-b border-border">
-                  {showTabSlide ? (
-                    <button
-                      type="button"
-                      title="이전 탭"
-                      aria-label="이전 탭"
-                      disabled={!canScrollTabLeft}
-                      onClick={() => scrollTabs(-1)}
-                      className={cn(
-                        'inline-flex h-7 w-6 shrink-0 cursor-pointer items-center justify-center border-b-2 border-transparent text-muted-foreground hover:text-foreground',
-                        !canScrollTabLeft && 'cursor-not-allowed opacity-30 hover:text-muted-foreground'
-                      )}
-                    >
-                      <ChevronLeft className="h-3.5 w-3.5" aria-hidden />
-                    </button>
-                  ) : null}
-                  <div
-                    ref={tabScrollRef}
-                    className="flex min-w-0 flex-1 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
-                  >
-                    {catalog.tabs
-                      .filter((name) => isTabEnabled(name))
-                      .map((name) => {
+                <div className="flex flex-wrap items-stretch gap-x-0 gap-y-0 border-b border-border">
+                  {catalog.tabs
+                    .filter((name) => isTabEnabled(name))
+                    .map((name) => {
                       const on = tab === name
                       const label = catalog.tabLabel(name) || name
                       return (
@@ -1298,22 +1292,6 @@ export function WtlFacilityShell({
                         </button>
                       )
                     })}
-                  </div>
-                  {showTabSlide ? (
-                    <button
-                      type="button"
-                      title="다음 탭"
-                      aria-label="다음 탭"
-                      disabled={!canScrollTabRight}
-                      onClick={() => scrollTabs(1)}
-                      className={cn(
-                        'inline-flex h-7 w-6 shrink-0 cursor-pointer items-center justify-center border-b-2 border-transparent text-muted-foreground hover:text-foreground',
-                        !canScrollTabRight && 'cursor-not-allowed opacity-30 hover:text-muted-foreground'
-                      )}
-                    >
-                      <ChevronRight className="h-3.5 w-3.5" aria-hidden />
-                    </button>
-                  ) : null}
                 </div>
                 {tab && isTabEnabled(tab) && groupOptions.length > 0 ? (
                   <div className="mt-2 space-y-1.5">
@@ -1413,13 +1391,14 @@ export function WtlFacilityShell({
                           aria-pressed={zoneDrawing || Boolean(zoneWkt5181)}
                           onClick={handleZoneTool}
                           className={cn(
-                            'inline-flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded border transition-colors',
+                            'inline-flex h-7 shrink-0 cursor-pointer items-center gap-0.5 rounded border px-1.5 text-[11px] font-medium transition-colors',
                             zoneDrawing || zoneWkt5181
                               ? 'border-primary bg-primary/10 text-primary'
                               : 'border-border bg-background text-muted-foreground hover:border-border hover:text-foreground'
                           )}
                         >
                           <Pentagon className="h-3.5 w-3.5 shrink-0" strokeWidth={2} aria-hidden />
+                          {zoneToolLabel}
                         </button>
                       </div>
                     ) : null}
@@ -1499,6 +1478,13 @@ export function WtlFacilityShell({
                   onExcelDownload={() => void handleExcelExport()}
                   shpBusy={shpExporting}
                   excelBusy={excelExporting}
+                  relatedFacilityCounts={
+                    title === '설비관리' &&
+                    visibleSyncReady &&
+                    groupsReadyTabRef.current === tab
+                      ? relatedFacilityCounts
+                      : null
+                  }
                 />
               ) : (
                 <div className="flex min-h-0 flex-1 items-center justify-center px-3">

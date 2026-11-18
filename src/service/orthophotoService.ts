@@ -2682,3 +2682,162 @@ export async function warpExtentToPng(params: {
   }
 }
 
+const MERC_ORIGIN = 20037508.342789244;
+const EXPORT_XYZ_TILE_PX = 512;
+
+/** tiles_jpg 하위 폴더(자체항공영상 id) 절대 경로 해석 */
+async function resolveTilesJpgAbsDir(idRaw: string): Promise<string | null> {
+  const id = String(idRaw ?? '').trim();
+  if (!isSafeOrthoSegment(id)) return null;
+  const tilesRoot = path.join(getBaseDir(), 'tiles_jpg');
+  const direct = path.join(tilesRoot, id);
+  if (await dirLooksLikeTileRoot(direct)) return direct;
+  try {
+    const subs = await fsPromises.readdir(direct, { withFileTypes: true });
+    const kids = subs
+      .filter((s) => s.isDirectory() && isSafeOrthoSegment(s.name))
+      .map((s) => s.name)
+      .sort((a, b) => a.localeCompare(b));
+    for (const kid of kids) {
+      const p = path.join(direct, kid);
+      if (await dirLooksLikeTileRoot(p)) return p;
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+async function readExportXyzZoomInfo(
+  tilesAbsDir: string
+): Promise<{ zooms: number[]; xsByZoom: Map<number, Set<number>> }> {
+  const zooms: number[] = [];
+  const xsByZoom = new Map<number, Set<number>>();
+  const zDirs = await fsPromises.readdir(tilesAbsDir, { withFileTypes: true });
+  for (const d of zDirs) {
+    if (!d.isDirectory() || !/^\d+$/.test(d.name)) continue;
+    const z = Number(d.name);
+    const xDirs = await fsPromises.readdir(path.join(tilesAbsDir, d.name), {
+      withFileTypes: true,
+    });
+    const xs = new Set<number>();
+    for (const x of xDirs) {
+      if (x.isDirectory() && /^\d+$/.test(x.name)) xs.add(Number(x.name));
+    }
+    zooms.push(z);
+    xsByZoom.set(z, xs);
+  }
+  zooms.sort((a, b) => a - b);
+  return { zooms, xsByZoom };
+}
+
+/**
+ * 자체항공영상(tiles_jpg) — EPSG:5181 bbox 범위 PNG.
+ * 관망조회 SHP ZIP 배경영상 동봉용.
+ */
+export async function renderCustomAerialPngForBbox5181(params: {
+  aerialId: string;
+  bbox5181: [number, number, number, number];
+  width?: number;
+}): Promise<{ ok: true; buffer: Buffer; entryName: string } | { ok: false; error: string }> {
+  const tilesAbsDir = await resolveTilesJpgAbsDir(params.aerialId);
+  if (!tilesAbsDir) {
+    return { ok: false, error: `자체항공영상 타일을 찾을 수 없습니다: ${params.aerialId}` };
+  }
+  const [minX, minY, maxX, maxY] = params.bbox5181;
+  if (![minX, minY, maxX, maxY].every(Number.isFinite) || !(maxX > minX) || !(maxY > minY)) {
+    return { ok: false, error: 'BBOX가 올바르지 않습니다.' };
+  }
+  const { default: proj4 } = await import('proj4');
+  proj4.defs(
+    'EPSG:3857',
+    '+proj=merc +a=6378137 +b=6378137 +lat_ts=0.0 +lon_0=0.0 +x_0=0.0 +y_0=0 +k=1.0 +units=m +nadgrids=@null +no_defs'
+  );
+  proj4.defs(
+    'EPSG:5181',
+    '+proj=tmerc +lat_0=38 +lon_0=127 +k=1 +x_0=200000 +y_0=500000 +ellps=GRS80 +units=m +no_defs'
+  );
+  const a = proj4('EPSG:5181', 'EPSG:3857', [minX, minY]) as [number, number];
+  const b = proj4('EPSG:5181', 'EPSG:3857', [maxX, maxY]) as [number, number];
+  const te: [number, number, number, number] = [
+    Math.min(a[0], b[0]),
+    Math.min(a[1], b[1]),
+    Math.max(a[0], b[0]),
+    Math.max(a[1], b[1]),
+  ];
+  const width = Math.max(256, Math.min(2048, Math.floor(params.width ?? 1024)));
+  const height = Math.max(
+    256,
+    Math.min(2048, Math.round(width * ((te[3] - te[1]) / Math.max(1e-6, te[2] - te[0]))))
+  );
+  const info = await readExportXyzZoomInfo(tilesAbsDir);
+  if (!info.zooms.length) {
+    return { ok: false, error: '타일 줌 폴더가 없습니다.' };
+  }
+  const resX = (te[2] - te[0]) / width;
+  const needed = Math.ceil(Math.log2((2 * MERC_ORIGIN) / (EXPORT_XYZ_TILE_PX * resX)));
+  const z =
+    info.zooms.find((zz) => zz >= needed) ?? info.zooms[info.zooms.length - 1]!;
+
+  const { createCanvas, loadImage } = await import('@napi-rs/canvas');
+  const canvas = createCanvas(width, height);
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+
+  const n = 2 ** z;
+  const span = (2 * MERC_ORIGIN) / n;
+  const clampIdx = (v: number) => Math.max(0, Math.min(n - 1, v));
+  const x0 = clampIdx(Math.floor((te[0] + MERC_ORIGIN) / span));
+  const x1 = clampIdx(Math.floor((te[2] + MERC_ORIGIN) / span));
+  const y0 = clampIdx(Math.floor((MERC_ORIGIN - te[3]) / span));
+  const y1 = clampIdx(Math.floor((MERC_ORIGIN - te[1]) / span));
+  const xs = info.xsByZoom.get(z) ?? new Set<number>();
+  const resY = (te[3] - te[1]) / height;
+
+  const jobs: Array<Promise<void>> = [];
+  for (let x = x0; x <= x1; x++) {
+    if (!xs.has(x)) continue;
+    for (let y = y0; y <= y1; y++) {
+      const base = path.join(tilesAbsDir, String(z), String(x));
+      const candidates = [
+        path.join(base, `${y}.jpg`),
+        path.join(base, `${y}.jpeg`),
+        path.join(base, `${y}.png`),
+      ];
+      jobs.push(
+        (async () => {
+          for (const file of candidates) {
+            try {
+              const buf = await fsPromises.readFile(file);
+              const img = await loadImage(buf);
+              const dx0 = Math.round((x * span - MERC_ORIGIN - te[0]) / resX);
+              const dx1 = Math.round(((x + 1) * span - MERC_ORIGIN - te[0]) / resX);
+              const dy0 = Math.round((te[3] - (MERC_ORIGIN - y * span)) / resY);
+              const dy1 = Math.round((te[3] - (MERC_ORIGIN - (y + 1) * span)) / resY);
+              ctx.drawImage(img, dx0, dy0, dx1 - dx0, dy1 - dy0);
+              return;
+            } catch {
+              /* try next ext */
+            }
+          }
+        })()
+      );
+    }
+  }
+  await Promise.all(jobs);
+  const buffer = canvas.toBuffer('image/png');
+  if (buffer.length < 800) {
+    return { ok: false, error: '합성된 영상이 비어 있습니다.' };
+  }
+  const safe = String(params.aerialId)
+    .replace(/[\\/:*?"<>|]+/g, '_')
+    .replace(/\s+/g, '_')
+    .slice(0, 80) || 'aerial';
+  return {
+    ok: true,
+    buffer,
+    entryName: `배경영상/${safe}.png`,
+  };
+}
+

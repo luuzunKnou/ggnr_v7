@@ -357,26 +357,48 @@ function boxesOverlap(
   return !(a.maxX < b.minX || a.minX > b.maxX || a.maxY < b.minY || a.minY > b.maxY);
 }
 
+/** 내보내기용 — 세션 없이 digital_map 하위 폴더명만 */
+async function listDigitalMapFolderNames(): Promise<string[]> {
+  const root = rootDir();
+  if (!existsSync(root)) return [];
+  try {
+    const entries = await fs.readdir(root, { withFileTypes: true });
+    return entries.filter((e) => e.isDirectory()).map((e) => e.name);
+  } catch {
+    return [];
+  }
+}
+
 /**
  * EPSG:5181 bbox와 겹치는 수치지형도 DXF 목록.
- * 축척 폴더는 숫자 최소 폴더 우선, 없으면 전체 폴더.
+ * - folderNames 지정: 해당 폴더만
+ * - 미지정: 축척 폴더는 숫자 최소 폴더 우선, 없으면 전체 폴더
  */
 export async function collectDigitalMapFilesIntersectingBbox5181(
-  bbox5181: [number, number, number, number]
+  bbox5181: [number, number, number, number],
+  opts?: { folderNames?: string[] | null }
 ): Promise<DigitalMapExportFile[]> {
   const [minX, minY, maxX, maxY] = bbox5181;
   if (![minX, minY, maxX, maxY].every(Number.isFinite) || !(maxX > minX) || !(maxY > minY)) {
     return [];
   }
   const query = { minX, minY, maxX, maxY };
-  const { folders } = await listFolders({});
-  if (!folders.length) return [];
+  const folderNames = await listDigitalMapFolderNames();
+  if (!folderNames.length) return [];
 
-  const { pickSmallestNumberFolder } = await import('@/service/digitalMapElevation');
-  const preferred = pickSmallestNumberFolder(folders.map((f) => f.name));
-  const targets = preferred
-    ? folders.filter((f) => f.name === preferred)
-    : folders;
+  const wanted = (opts?.folderNames ?? [])
+    .map((n) => String(n ?? '').trim())
+    .filter(Boolean);
+  let targets: string[];
+  if (wanted.length > 0) {
+    const want = new Set(wanted);
+    targets = folderNames.filter((name) => want.has(name));
+  } else {
+    const { pickSmallestNumberFolder } = await import('@/service/digitalMapElevation');
+    const preferred = pickSmallestNumberFolder(folderNames);
+    targets = preferred ? [preferred] : folderNames;
+  }
+  if (!targets.length) return [];
 
   const { default: proj4 } = await import('proj4');
   proj4.defs(
@@ -397,10 +419,10 @@ export async function collectDigitalMapFilesIntersectingBbox5181(
   );
 
   const out: DigitalMapExportFile[] = [];
-  for (const folderInfo of targets) {
+  for (const folderName of targets) {
     let index: DigitalMapFolderIndex;
     try {
-      index = await ensureIndex(folderInfo.name, false);
+      index = await ensureIndex(folderName, false);
     } catch {
       continue;
     }
@@ -421,23 +443,33 @@ export async function collectDigitalMapFilesIntersectingBbox5181(
       };
       if (fromEpsg !== 'EPSG:5181') {
         try {
-          const a = proj4(fromEpsg, 'EPSG:5181', [sheet.minX, sheet.minY]) as [number, number];
-          const b = proj4(fromEpsg, 'EPSG:5181', [sheet.maxX, sheet.maxY]) as [number, number];
-          sheet5181 = {
-            minX: Math.min(a[0], b[0]),
-            minY: Math.min(a[1], b[1]),
-            maxX: Math.max(a[0], b[0]),
-            maxY: Math.max(a[1], b[1]),
-          };
+          const corners: Array<[number, number]> = [
+            [sheet.minX, sheet.minY],
+            [sheet.minX, sheet.maxY],
+            [sheet.maxX, sheet.minY],
+            [sheet.maxX, sheet.maxY],
+          ];
+          let sMinX = Infinity;
+          let sMinY = Infinity;
+          let sMaxX = -Infinity;
+          let sMaxY = -Infinity;
+          for (const c of corners) {
+            const p = proj4(fromEpsg, 'EPSG:5181', c) as [number, number];
+            sMinX = Math.min(sMinX, p[0]);
+            sMinY = Math.min(sMinY, p[1]);
+            sMaxX = Math.max(sMaxX, p[0]);
+            sMaxY = Math.max(sMaxY, p[1]);
+          }
+          sheet5181 = { minX: sMinX, minY: sMinY, maxX: sMaxX, maxY: sMaxY };
         } catch {
           // 변환 실패 시 원본 좌표로 비교
         }
       }
       if (!boxesOverlap(query, sheet5181)) continue;
-      const abs = fileAbs(folderInfo.name, sheet.file);
+      const abs = fileAbs(folderName, sheet.file);
       if (!existsSync(abs)) continue;
       out.push({
-        entryName: `수치지형도/${folderInfo.name}/${sheet.file}`,
+        entryName: `수치지형도/${folderName}/${sheet.file}`,
         absPath: abs,
       });
     }

@@ -46,6 +46,8 @@ type Props = {
   schema?: string | null
   /** 겹침 방지용 위치·순서 오프셋(px) */
   stackOffset?: number
+  /** 미지정 시 stackOffset>0 → detailRelated, 아니면 detailFloating */
+  zLayer?: MapUiZLayer
   /** Search 아이콘 등 — 지정 시 해당 화면 좌표에 모달 배치 */
   anchorPosition?: { top: number; left: number } | null
   /** 다른 상세를 새로 열어도 접힘 유지 */
@@ -185,6 +187,8 @@ export function WtlMappedFacilityFloating({
   /** Search 아이콘 화면 좌표 — 있으면 그 위치에 모달 오픈 */
   anchorPosition?: { top: number; left: number } | null
 }) {
+  /** 지도 기본 모달(LayerClickDetail)과 동일 티어 */
+  const facilityInfoZLayer: MapUiZLayer = 'detailFloating'
   const [row, setRow] = useState<WtlFacilityRelatedDetailRow | null>(null)
   const [bundle, setBundle] = useState<WtlDefineDisplayBundle | null>(null)
   const [loading, setLoading] = useState(true)
@@ -259,6 +263,7 @@ export function WtlMappedFacilityFloating({
         schema={target.schema}
         onClose={onClose}
         stackOffset={36}
+        zLayer={facilityInfoZLayer}
         anchorPosition={anchorPosition}
         collapsed={collapsed}
         onToggleCollapsed={onToggleCollapsed}
@@ -273,7 +278,7 @@ export function WtlMappedFacilityFloating({
       stackOffset={36}
       left={floatingLeftPx}
       anchorPosition={anchorPosition}
-      zLayer="detailRelated"
+      zLayer={facilityInfoZLayer}
       collapsed={collapsed}
       onToggleCollapsed={onToggleCollapsed}
     >
@@ -297,12 +302,15 @@ export function WtlFacilityRelatedDetailFloating({
   schema: schemaProp,
   onClose,
   stackOffset = 0,
+  zLayer: zLayerProp,
   anchorPosition = null,
   collapsed,
   onToggleCollapsed,
 }: Props) {
   const mapContext = useMapContext()
   const floatingLeftPx = (mapContext?.mapPaddingLeft ?? 0) + 20 + stackOffset
+  const zLayer: MapUiZLayer =
+    zLayerProp ?? (stackOffset > 0 ? 'detailRelated' : 'detailFloating')
   const [columnTypes, setColumnTypes] = useState<Record<string, string>>({})
   const [columnTypesReady, setColumnTypesReady] = useState(false)
 
@@ -400,7 +408,7 @@ export function WtlFacilityRelatedDetailFloating({
       stackOffset={stackOffset}
       left={floatingLeftPx}
       anchorPosition={anchorPosition}
-      zLayer={stackOffset > 0 ? 'detailRelated' : 'detailFloating'}
+      zLayer={zLayer}
       collapsed={collapsed}
       onToggleCollapsed={onToggleCollapsed}
     >

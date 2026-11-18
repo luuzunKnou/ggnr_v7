@@ -69,8 +69,8 @@ import { openLayerClickDetailBlank } from './openLayerClickDetailBlank'
 const DETAIL_WIDTH = 'min(520px, calc(100vw - 2rem))'
 const DETAIL_WIDTH_FALLBACK_PX = 520
 /** 다중 레이어 선택 목록 — 우측 보기 버튼 공간 포함 */
-const PICK_LIST_WIDTH = 'min(360px, calc(100vw - 2rem))'
-const PICK_LIST_WIDTH_FALLBACK_PX = 360
+const PICK_LIST_WIDTH = 'min(256px, calc(100vw - 2rem))'
+const PICK_LIST_WIDTH_FALLBACK_PX = 256
 /** 상세보기/간소화 보기 선택 — 브라우저 유지 */
 const DETAIL_EXPANDED_STORAGE_KEY = 'ggnr.mapLayerClickDetail.expanded'
 
@@ -100,8 +100,8 @@ const PANEL_EDGE_PAD = 8
 /** 기본정보 본문은 내용 높이 — 아래 값은 배치 추정·상한용 */
 const SIMPLE_MAIN_ESTIMATE_PX = 160
 const DETAIL_MAIN_ESTIMATE_PX = 350
-/** 하단 연관 탭 본문(지도 기본 모달 160px) + 탭바·패딩 */
-const DETAIL_RELATED_TABS_HEIGHT_PX = 160 + 48
+/** 하단 연관 탭 본문(지도 기본 모달 200px) + 탭바·패딩 */
+const DETAIL_RELATED_TABS_HEIGHT_PX = 200 + 48
 /** 헤더+푸터 대략치 — 실측 전 좌하단 등 모서리 계산용 */
 const SIMPLE_CHROME_HEIGHT_PX = 88
 /** 상세보기 배치 추정 높이 — 기본정보(추정) + 탭 + 크롬 (사분면 배치용, 실제 maxHeight와 무관) */
@@ -938,6 +938,7 @@ export function LayerClickDetailFloating({
       maxHeight={DETAIL_MAX_HEIGHT}
       defaultPosition={{ top: panelTopLeft.top, left: panelTopLeft.left }}
       flushViewportClamp={!placementAsTopLeft}
+      variant={pickListMode ? 'mapFloat' : 'default'}
       className={placementReady ? undefined : 'invisible'}
       hideHeading={false}
       headerStart={
@@ -1009,7 +1010,7 @@ export function LayerClickDetailFloating({
       headerActions={
         pickListMode && !minimized ? (
           <span
-            className="shrink-0 px-1 text-[11px] tabular-nums text-muted-foreground"
+            className="shrink-0 px-1 text-[10px] tabular-nums text-slate-500 dark:text-white/60"
             title={`${hits.length}건`}
           >
             {hits.length}건
@@ -1018,7 +1019,7 @@ export function LayerClickDetailFloating({
       }
     >
       {pickListMode ? (
-        <div className="min-h-0 flex-1 overflow-y-auto px-1 py-1 text-xs scrollbar-thin">
+        <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto overflow-x-hidden py-1">
           <ul className="m-0 list-none p-0" role="listbox" aria-label="레이어 선택">
             {hits.map((hit) => {
               const label = hitLabel(hit)
@@ -1038,35 +1039,36 @@ export function LayerClickDetailFloating({
                         setListHighlightKey(hit.key)
                       }
                     }}
-                    className={cn(
-                      'flex w-full cursor-pointer items-center gap-1 rounded px-1.5 py-1 text-left text-[12px] text-foreground hover:bg-primary/10',
-                      highlighted && 'bg-primary/15 ring-1 ring-primary/30'
-                    )}
+                    className="standard-map-float-row-hover flex w-full cursor-pointer items-center justify-between gap-2 py-0.5 pl-2 pr-2 text-left"
                   >
-                    <img
-                      src={legendSrc}
-                      alt=""
-                      className="h-5 w-5 shrink-0 rounded border border-border object-contain"
-                      onError={(e) => {
-                        e.currentTarget.style.display = 'none'
-                      }}
-                    />
-                    <span className="min-w-0 flex-1 truncate">
-                      {hit.korName ? (
-                        <>
-                          <span className="text-foreground">{hit.korName}</span>
-                          {hit.titleValue ? (
-                            <>
-                              <span className="mx-1 text-muted-foreground">|</span>
-                              <span className="text-muted-foreground">
-                                {hit.titleValue}
-                              </span>
-                            </>
-                          ) : null}
-                        </>
-                      ) : (
-                        hit.titleValue || '—'
-                      )}
+                    <span className="flex min-w-0 flex-1 items-center gap-2">
+                      <img
+                        src={legendSrc}
+                        alt=""
+                        className="h-5 w-5 shrink-0 rounded border border-slate-200 object-contain dark:border-white/20"
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none'
+                        }}
+                      />
+                      <span className="min-w-0 flex-1 truncate text-xs text-slate-700 dark:text-white/90">
+                        {hit.korName ? (
+                          <>
+                            <span>{hit.korName}</span>
+                            {hit.titleValue ? (
+                              <>
+                                <span className="mx-1 text-slate-400 dark:text-white/40">
+                                  |
+                                </span>
+                                <span className="text-slate-500 dark:text-white/60">
+                                  {hit.titleValue}
+                                </span>
+                              </>
+                            ) : null}
+                          </>
+                        ) : (
+                          hit.titleValue || '—'
+                        )}
+                      </span>
                     </span>
                     <span className="flex shrink-0 items-center gap-0.5">
                       <button
@@ -1078,7 +1080,7 @@ export function LayerClickDetailFloating({
                           setListHighlightKey(hit.key)
                           onSelectHit(hit.key)
                         }}
-                        className="inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded text-primary hover:bg-primary/10"
+                        className="standard-map-float-header-close inline-flex h-6 w-6 items-center justify-center text-primary"
                       >
                         <AppWindow className="h-3.5 w-3.5" aria-hidden />
                       </button>
@@ -1091,7 +1093,7 @@ export function LayerClickDetailFloating({
                           setListHighlightKey(hit.key)
                           openLayerClickDetailBlank(hit)
                         }}
-                        className="inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded text-primary hover:bg-primary/10"
+                        className="standard-map-float-header-close inline-flex h-6 w-6 items-center justify-center text-primary"
                       >
                         <SquareArrowOutUpRight
                           className="h-3.5 w-3.5"
@@ -1235,7 +1237,11 @@ export function LayerClickDetailFloating({
         ) : null}
       </div>
       {showUfDetailExtras && selected && !editing ? (
-        <LayerClickDetailRelatedTabs hit={selected} fields={fields} />
+        <LayerClickDetailRelatedTabs
+          hit={selected}
+          fields={fields}
+          relatedChildAsModal
+        />
       ) : null}
       {showOpenFullDetail || canToggleDetail || showEditButton || editing ? (
         <div

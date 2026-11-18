@@ -57,7 +57,11 @@ import {
 import type { WtlNetworkRow } from '../networkMap/wtlNetworkTypes'
 import { WtlFacilityDataHistoryTab } from './WtlFacilityDataHistoryTab'
 import type { WtlFacilityListRow } from './WtlFacilityListView'
-import { buildFacilityInfoByFtrIdnTarget } from '../../layerClickDetail/layerClickFacilityInfo'
+import {
+  buildFacilityInfoByFtrIdnTarget,
+  lookupFacilityByShowTitleValue,
+  shouldShowFacilityInfoSearch,
+} from '../../layerClickDetail/layerClickFacilityInfo'
 import {
   WtlFacilityRelatedDetailFloating,
   WtlMappedFacilityFloating,
@@ -135,7 +139,7 @@ type Props = {
   onDeleted?: (id: string) => void
   /** 이력 되돌리기 후 목록·상세 재조회 */
   onHistoryReverted?: () => void
-  /** 설비관리 기본정보 — 가압장명·정수장명 값 칸에 시설 정보 보기 */
+  /** 설비관리 기본정보 — 가압장명·정수장명·사업장명 값 칸에 시설 정보 보기 */
   showFacilityInfoLink?: boolean
   /** 설비관리 — data_history 이력 카드 탭 (추가·수정·삭제, agency 공개) */
   showHistoryCard?: boolean
@@ -211,15 +215,6 @@ function resolveParentFtrIdn(
   return String(row.name ?? '').trim()
 }
 
-function facilityInfoTarget(
-  fieldName: string,
-  korName: unknown,
-  ftrIdn: string,
-  schema: string
-): WtlMappedFacilityTarget | null {
-  return buildFacilityInfoByFtrIdnTarget(fieldName, korName, ftrIdn, schema)
-}
-
 export function WtlFacilityDetailPanel({
   row: rowProp,
   onClose,
@@ -245,6 +240,8 @@ export function WtlFacilityDetailPanel({
   const [relatedError, setRelatedError] = useState<string | null>(null)
   const [relatedDetail, setRelatedDetail] = useState<RelatedRow | null>(null)
   const [facilityInfo, setFacilityInfo] = useState<WtlMappedFacilityTarget | null>(null)
+  const [facilityLookupBusy, setFacilityLookupBusy] = useState(false)
+  const [facilityLookupError, setFacilityLookupError] = useState<string | null>(null)
   /** 상세 모달 접힘 — 다른 행을 열어도 유지 */
   const [detailCollapsed, setDetailCollapsed] = useState(false)
   const [editing, setEditing] = useState(false)
@@ -355,6 +352,8 @@ export function WtlFacilityDetailPanel({
     setRelatedError(null)
     setRelatedDetail(null)
     setFacilityInfo(null)
+    setFacilityLookupBusy(false)
+    setFacilityLookupError(null)
     setActiveTab('')
     setTabSelectEpoch((n) => n + 1)
 
@@ -463,6 +462,51 @@ export function WtlFacilityDetailPanel({
 
   const codesByField = bundle?.codesByField ?? {}
   const fieldsLoading = Boolean(String(row.fieldsTable ?? '').trim()) && bundle == null
+  const sourceTableKey = String(row.tableName || row.fieldsTable || '')
+    .trim()
+    .replace(/^.*\./, '')
+    .toLowerCase()
+
+  const openFacilityInfoSearch = useCallback(
+    async (
+      kind: 'byFtrIdn' | 'byNameLookup',
+      fieldKey: string,
+      korName: unknown,
+      rawValue: unknown
+    ) => {
+      setFacilityLookupError(null)
+      if (kind === 'byFtrIdn') {
+        const target = buildFacilityInfoByFtrIdnTarget(
+          fieldKey,
+          korName,
+          ftrIdn,
+          schema
+        )
+        if (!target) {
+          setFacilityLookupError('시설 정보를 찾을 수 없습니다.')
+          return
+        }
+        setFacilityInfo(target)
+        return
+      }
+      const value = rawValue != null ? String(rawValue).trim() : ''
+      setFacilityLookupBusy(true)
+      try {
+        const { target, error } = await lookupFacilityByShowTitleValue({
+          value,
+          schema,
+        })
+        if (!target) {
+          setFacilityLookupError(error || '일치하는 시설을 찾을 수 없습니다.')
+          return
+        }
+        setFacilityInfo(target)
+      } finally {
+        setFacilityLookupBusy(false)
+      }
+    },
+    [ftrIdn, schema]
+  )
 
   const editTarget = useMemo(() => {
     const table = String(row.tableName || row.fieldsTable || '')
@@ -842,6 +886,96 @@ export function WtlFacilityDetailPanel({
         return { label, value }
       })
 
+      let relatedFacility: {
+        title: string
+        attrs: FacilityReportAttrRow[]
+      } | null = null
+      if (showFacilityInfoLink && sourceTableKey) {
+        for (const f of detailFields) {
+          const key = String(f.define_field_name ?? '').trim()
+          if (!key) continue
+          const kind = shouldShowFacilityInfoSearch({
+            sourceTableKey,
+            fieldName: key,
+            korName: f.define_field_kor_name,
+            fields: allFields,
+          })
+          if (kind !== 'byNameLookup') continue
+          const raw = getRowValueByField(row.record, key)
+          const value = raw != null ? String(raw).trim() : ''
+          if (!value) continue
+          const { target } = await lookupFacilityByShowTitleValue({
+            value,
+            schema,
+          })
+          if (!target) break
+          try {
+            const res = await call('', 'POST', {
+              service: 'wtlFacilityService',
+              action: 'listFacilityRows',
+              params: {
+                table: target.table,
+                schema: target.schema || schema,
+                ftrIdn: target.ftrIdn,
+                limit: 1,
+                offset: 0,
+              },
+            })
+            const data = (res?.data ?? res) as
+              | { rows?: Array<{ record?: Record<string, unknown> }> }
+              | undefined
+            const found = Array.isArray(data?.rows) ? data.rows[0] : undefined
+            const record = found?.record
+            if (!record) break
+            const fieldsTable =
+              String(target.fieldsTable ?? target.table).trim() || target.table
+            let facBundle = peekWtlDefineDisplayBundle(fieldsTable, null)
+            if (!facBundle) {
+              facBundle = await loadWtlDefineDisplayBundle(fieldsTable, null)
+            }
+            const facFieldsRaw = facBundle?.fields ?? []
+            const facDetail =
+              selectDefineLayerDetailFields(facFieldsRaw).length > 0
+                ? selectDefineLayerDetailFields(facFieldsRaw)
+                : uniqueDefineLayerFields(facFieldsRaw).filter((ff) => {
+                    const n = String(ff.define_field_name ?? '')
+                      .trim()
+                      .toLowerCase()
+                    return n && n !== 'geom'
+                  })
+            const facCodes = facBundle?.codesByField ?? {}
+            const facColTypes = await loadColumnTypes(
+              target.table,
+              target.schema || schema
+            )
+            relatedFacility = {
+              title: target.title,
+              attrs: facDetail.map((ff) => {
+                const fk = String(ff.define_field_name ?? '').trim()
+                const flabel = getDefineFieldDisplayLabel(
+                  fk,
+                  ff.define_field_kor_name
+                )
+                const fraw = getRowValueByField(record, fk)
+                return {
+                  label: flabel,
+                  value: formatReportFieldValue(
+                    fraw,
+                    ff.define_field_type,
+                    facCodes[fk.toLowerCase()],
+                    facColTypes,
+                    fk
+                  ),
+                }
+              }),
+            }
+          } catch {
+            relatedFacility = null
+          }
+          break
+        }
+      }
+
       const sections: FacilityReportTableSection[] = []
 
       for (const tab of relatedTabs) {
@@ -1059,6 +1193,7 @@ export function WtlFacilityDetailPanel({
         layerLabel: headerLayerLabel || headerTitle,
         basicAttrs,
         sections,
+        relatedFacility,
       })
       setReportHtml(html)
     } catch {
@@ -1080,6 +1215,8 @@ export function WtlFacilityDetailPanel({
     relatedTabs,
     row,
     schema,
+    showFacilityInfoLink,
+    sourceTableKey,
   ])
 
   useEffect(() => {
@@ -1220,8 +1357,13 @@ export function WtlFacilityDetailPanel({
                     columnTypesReady
                   )
                   const codes = codesByField[key.toLowerCase()] ?? []
-                  const facilityLink = showFacilityInfoLink
-                    ? facilityInfoTarget(key, f.define_field_kor_name, ftrIdn, schema)
+                  const facilitySearch = showFacilityInfoLink
+                    ? shouldShowFacilityInfoSearch({
+                        sourceTableKey,
+                        fieldName: key,
+                        korName: f.define_field_kor_name,
+                        fields: allFields,
+                      })
                     : null
                   const boolChecked = editable
                     ? parseDefineBooleanValue(draft[key])
@@ -1234,7 +1376,7 @@ export function WtlFacilityDetailPanel({
                       <div
                         className={cn(
                           'standard-detail-attr-value standard-detail-attr-cell-border text-foreground',
-                          facilityLink && 'flex items-center gap-1',
+                          facilitySearch && 'flex items-center gap-1',
                           !editable &&
                             titleFieldName != null &&
                             key.toLowerCase() === titleFieldName.toLowerCase() &&
@@ -1314,15 +1456,27 @@ export function WtlFacilityDetailPanel({
                         ) : (
                           <span className="min-w-0 flex-1 break-all">{value}</span>
                         )}
-                        {facilityLink ? (
+                        {facilitySearch ? (
                           <button
                             type="button"
                             title="시설 정보 보기"
                             aria-label="시설 정보 보기"
-                            className="ml-auto inline-flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center rounded text-primary hover:bg-primary/10"
-                            onClick={() => setFacilityInfo(facilityLink)}
+                            disabled={facilityLookupBusy}
+                            className="ml-auto inline-flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center rounded text-primary hover:bg-primary/10 disabled:opacity-50"
+                            onClick={() =>
+                              void openFacilityInfoSearch(
+                                facilitySearch,
+                                key,
+                                f.define_field_kor_name,
+                                raw
+                              )
+                            }
                           >
-                            <Search className="h-3.5 w-3.5" aria-hidden />
+                            {facilityLookupBusy ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                            ) : (
+                              <Search className="h-3.5 w-3.5" aria-hidden />
+                            )}
                           </button>
                         ) : null}
                       </div>
@@ -1331,6 +1485,11 @@ export function WtlFacilityDetailPanel({
                 })}
               </div>
             )}
+            {facilityLookupError ? (
+              <p className="mt-2 text-[11px] text-destructive" role="alert">
+                {facilityLookupError}
+              </p>
+            ) : null}
             {editError ? (
               <p className="mt-2 text-[11px] text-destructive" role="alert">
                 {editError}
@@ -1354,7 +1513,7 @@ export function WtlFacilityDetailPanel({
                   'inline-flex h-9 shrink-0 cursor-pointer items-center justify-center gap-1 px-2 text-[11px] font-medium transition-colors',
                   id === 'dataHistory' || id === 'historyCard'
                     ? 'min-w-[7.5rem]'
-                    : 'w-[5.5rem]',
+                    : 'w-22',
                   activeTab === id
                     ? 'border-b-2 border-primary bg-primary/5 text-primary'
                     : 'border-b-2 border-transparent text-muted-foreground hover:bg-muted/50 hover:text-foreground'

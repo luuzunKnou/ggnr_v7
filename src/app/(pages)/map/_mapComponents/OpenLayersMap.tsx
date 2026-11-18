@@ -87,9 +87,15 @@ import {
 import {
   collectLayerClickDetailMatchCloseOwnedNames,
   filterIdentifyPopupExcludingOwned,
+  isIdentifyTableOwned,
   isLayerClickDetailCloseOnMatchOpened,
+  layerResultIsOwned,
 } from '../_mapContents/layerClickDetail/layerClickDetailMatchClose';
 import { useLayerClickDetail } from '../_mapContents/layerClickDetail/useLayerClickDetail';
+import {
+  WTL_FACILITY_IDENTIFY_PICK_EVENT,
+  type WtlFacilityIdentifyPickDetail,
+} from '../_mapContents/wtlAdmin/facility/useWtlFacilityMapClick';
 import { useMapContextMenu } from './hooks/useMapContextMenu';
 import { findRoadAddressByJibun, getAddressFromCoord } from './addressSearch/vworldAddressSearch';
 import { transformCoordinate } from './services/coordinateService';
@@ -1798,10 +1804,15 @@ export default function OpenLayersMap({
     w === 'dataQuery' ? 'standardList' : w
   );
   const isDataQueryIdentifyMenu = openedTokensForIdentify.includes('standardList');
+  const isWtlFacilityIdentifyMenu =
+    openedTokensForIdentify.includes('wtlFacility') ||
+    openedTokensForIdentify.includes('wtlEquipment');
   /** 기존 플로팅은 유지. 신규 오픈만 intake에서 gate로 막음 */
   const layerClickDetail = useLayerClickDetail();
   const openLayerClickDetailRef = useRef(layerClickDetail.openFromIdentify);
   openLayerClickDetailRef.current = layerClickDetail.openFromIdentify;
+  /** 시설·설비 다건 → 기본 모달 선택 시 getFacilityAtPoint용 클릭 좌표 */
+  const layerClickIdentifyCoordRef = useRef<[number, number] | null>(null);
   const [viewportSize, setViewportSize] = useState({ w: 1280, h: 720 });
   useEffect(() => {
     const update = () =>
@@ -1812,7 +1823,8 @@ export default function OpenLayersMap({
   }, []);
   const popupFeatureCount =
     popupState?.results?.reduce((s, r) => s + r.features.length, 0) ?? 0;
-  const showDataQueryIdentifyOverlay =
+  /** 데이터조회만 지도 위 Identify 팝업. 시설·설비 다건은 지도 기본 모달(레이어 선택) */
+  const showIdentifyOverlay =
     isDataQueryIdentifyMenu &&
     mapContext?.dataQueryMapPickEnabled !== false &&
     popupState != null &&
@@ -1820,7 +1832,7 @@ export default function OpenLayersMap({
     popupFeatureCount > 1;
 
   useEffect(() => {
-    if (!showDataQueryIdentifyOverlay) {
+    if (!showIdentifyOverlay) {
       setIdentifyHoverFeature(null);
       return;
     }
@@ -1833,7 +1845,7 @@ export default function OpenLayersMap({
         src?.clear();
       }
     }
-  }, [showDataQueryIdentifyOverlay, setIdentifyHoverFeature]);
+  }, [showIdentifyOverlay, setIdentifyHoverFeature]);
 
   const openDataQueryListAtRow = useCallback(
     (tableName: string, row: Record<string, unknown>) => {
@@ -2943,6 +2955,87 @@ export default function OpenLayersMap({
         clearIdentifyIntake();
         return;
       }
+
+      const isWtlFacilityMenu =
+        openedTokens.includes('wtlFacility') || openedTokens.includes('wtlEquipment');
+      if (isWtlFacilityMenu) {
+        const owned = collectLayerClickDetailMatchCloseOwnedNames(openedTokens);
+        const resolveScreenAnchor = (popup: typeof identifyIntakePopup) => {
+          let screenAnchor: { top: number; left: number } | null = null;
+          const sp = popup.screenPixel;
+          if (sp && Number.isFinite(sp.left) && Number.isFinite(sp.top)) {
+            screenAnchor = { left: sp.left, top: sp.top };
+          } else {
+            const map = mapInstanceRef.current;
+            const coord = popup.coordinate;
+            if (map && Array.isArray(coord) && coord.length >= 2) {
+              const pixel = map.getPixelFromCoordinate(coord as [number, number]);
+              const el = map.getTargetElement?.() as HTMLElement | null | undefined;
+              const rect = el?.getBoundingClientRect?.();
+              if (
+                pixel &&
+                Number.isFinite(pixel[0]) &&
+                Number.isFinite(pixel[1]) &&
+                rect
+              ) {
+                screenAnchor = {
+                  left: rect.left + pixel[0],
+                  top: rect.top + pixel[1],
+                };
+              }
+            }
+          }
+          return screenAnchor;
+        };
+
+        const coord = identifyIntakePopup.coordinate;
+        if (
+          Array.isArray(coord) &&
+          coord.length >= 2 &&
+          Number.isFinite(coord[0]) &&
+          Number.isFinite(coord[1])
+        ) {
+          layerClickIdentifyCoordRef.current = [coord[0], coord[1]];
+        } else {
+          layerClickIdentifyCoordRef.current = null;
+        }
+
+        if (totalIdentifyCount === 1) {
+          const layer = withFeat.find((r) => r.isSplitLayer) ?? withFeat[0];
+          if (!layer) {
+            clearIdentifyIntake();
+            return;
+          }
+          if (layerResultIsOwned(layer, owned)) {
+            const detail: WtlFacilityIdentifyPickDetail = {
+              tableName: layer.tableName,
+              physicalTable: layer.physicalTable ?? null,
+              coordinate: identifyIntakePopup.coordinate,
+              feature: layer.features[0]?.data ?? null,
+            };
+            window.dispatchEvent(
+              new CustomEvent(WTL_FACILITY_IDENTIFY_PICK_EVENT, { detail })
+            );
+            clearIdentifyIntake();
+            return;
+          }
+          openLayerClickDetailRef.current(
+            identifyIntakePopup,
+            resolveScreenAnchor(identifyIntakePopup)
+          );
+          clearIdentifyIntake();
+          return;
+        }
+
+        /** 다건: 지도 기본 모달(레이어 선택) — FeatureIdentifyPopup과 화면 분리하지 않음 */
+        openLayerClickDetailRef.current(
+          identifyIntakePopup,
+          resolveScreenAnchor(identifyIntakePopup)
+        );
+        clearIdentifyIntake();
+        return;
+      }
+
       if (!isRoadInfraMenu) {
         /** 자체 클릭 모달·identify 가로채기 패널·데이터조회·도로기반이 아니면 목록표시 필드 플로팅.
          * 관망·시설·설비만 열린 경우: 소유 레이어가 아닌 히트만 전역 상세로 연다. */
@@ -3599,10 +3692,10 @@ export default function OpenLayersMap({
 
       <LayerRowGeomEditHandler centerPixel={centerPixel} />
 
-      {/* 지도 중심점 마크 — 거리뷰(로드뷰) ON 시 숨김 */}
+      {/* 지도 중심점 마크 — 맵 로컬 z만(플로팅·모달 map-ui-z-* 아래). 거리뷰 ON 시 숨김 */}
       {!activeControls.includes('street-view') && (
       <div
-        className="absolute z-[5] -translate-x-1/2 -translate-y-1/2 pointer-events-none flex items-center justify-center"
+        className="absolute z-[1] -translate-x-1/2 -translate-y-1/2 pointer-events-none flex items-center justify-center"
         style={
           centerPixel
             ? { left: centerPixel.x, top: centerPixel.y }
@@ -3960,7 +4053,7 @@ export default function OpenLayersMap({
           document.body
         )}
 
-      {showDataQueryIdentifyOverlay && popupState && popupElRef.current && (
+      {showIdentifyOverlay && popupState && popupElRef.current && (
         <FeatureIdentifyPopup
           state={popupState}
           portalTarget={popupElRef.current}
@@ -3971,6 +4064,65 @@ export default function OpenLayersMap({
           onHover={setIdentifyHoverFeature}
           onSelect={(tableName, _featureIndex, feature) => {
             setIdentifyHoverFeature(null);
+            if (isWtlFacilityIdentifyMenu) {
+              const owned = collectLayerClickDetailMatchCloseOwnedNames(
+                openedTokensForIdentify
+              );
+              const layer =
+                popupState.results.find((r) => r.tableName === tableName) ?? null;
+              if (
+                isIdentifyTableOwned(
+                  tableName,
+                  layer?.physicalTable,
+                  owned
+                )
+              ) {
+                const detail: WtlFacilityIdentifyPickDetail = {
+                  tableName,
+                  physicalTable: layer?.physicalTable ?? null,
+                  coordinate: popupState.coordinate,
+                  feature,
+                };
+                window.dispatchEvent(
+                  new CustomEvent(WTL_FACILITY_IDENTIFY_PICK_EVENT, { detail })
+                );
+                closePopup();
+                return;
+              }
+              const singlePopup = {
+                ...popupState,
+                results: layer
+                  ? [
+                      {
+                        ...layer,
+                        features: [
+                          {
+                            titleValue:
+                              layer.features.find((f) => f.data === feature)
+                                ?.titleValue ?? '',
+                            data: feature,
+                          },
+                        ],
+                      },
+                    ]
+                  : [
+                      {
+                        tableName,
+                        korName: tableName,
+                        titleField: null,
+                        features: [{ titleValue: '', data: feature }],
+                      },
+                    ],
+              };
+              let screenAnchor: { top: number; left: number } | null = null;
+              const sp = popupState.screenPixel;
+              if (sp && Number.isFinite(sp.left) && Number.isFinite(sp.top)) {
+                screenAnchor = { left: sp.left, top: sp.top };
+              }
+              openLayerClickDetailRef.current(singlePopup, screenAnchor);
+              closePopup();
+              return;
+            }
             closePopup();
             openDataQueryListAtRow(tableName, feature);
           }}
@@ -4011,7 +4163,50 @@ export default function OpenLayersMap({
                   undergroundFacilityAvailableTableNames
                 }
                 writeSerEng="dataQuery"
-                onSelectHit={layerClickDetail.selectHit}
+                onSelectHit={(hitKey) => {
+                  if (isWtlFacilityIdentifyMenu) {
+                    const hit = layerClickDetail.hits.find(
+                      (h) => h.key === hitKey
+                    )
+                    if (hit) {
+                      const owned =
+                        collectLayerClickDetailMatchCloseOwnedNames(
+                          openedTokensForIdentify
+                        )
+                      const physical =
+                        hit.fieldsTable &&
+                        hit.fieldsTable.toLowerCase() !==
+                          hit.tableName.toLowerCase()
+                          ? hit.fieldsTable
+                          : null
+                      if (
+                        isIdentifyTableOwned(
+                          hit.tableName,
+                          physical,
+                          owned
+                        )
+                      ) {
+                        const coord = layerClickIdentifyCoordRef.current
+                        if (coord) {
+                          const detail: WtlFacilityIdentifyPickDetail = {
+                            tableName: hit.tableName,
+                            physicalTable: physical,
+                            coordinate: coord,
+                            feature: hit.data,
+                          }
+                          window.dispatchEvent(
+                            new CustomEvent(WTL_FACILITY_IDENTIFY_PICK_EVENT, {
+                              detail,
+                            })
+                          )
+                          layerClickDetail.close()
+                          return
+                        }
+                      }
+                    }
+                  }
+                  layerClickDetail.selectHit(hitKey)
+                }}
                 onBackToList={layerClickDetail.backToList}
                 onClose={layerClickDetail.close}
                 onDetach={(origin) => layerClickDetail.detachKeep(origin)}

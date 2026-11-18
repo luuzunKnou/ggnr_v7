@@ -16,7 +16,7 @@ type Props = {
   bodyHeightPx?: number
   /** blank 상세 등 — 맨 앞 「지도」탭 */
   mapTabContent?: ReactNode
-  /** 새 창 상세 — 현황 목록 행 클릭 시 상세를 창 안 모달로 */
+  /** 현황 목록 행 클릭 시 상세를 창 안 모달로 (지도 기본·새 창 공통) */
   relatedChildAsModal?: boolean
 }
 
@@ -28,7 +28,7 @@ export function LayerClickDetailRelatedTabs({
   hit,
   fields,
   onHistoryReverted,
-  bodyHeightPx = 160,
+  bodyHeightPx = 200,
   mapTabContent,
   relatedChildAsModal = false,
 }: Props) {

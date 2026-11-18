@@ -3425,12 +3425,23 @@ export type ExportWtlNetworkShpParams = {
   riCode?: string | null;
   supplyBlock?: string | null;
   areaWkts5181?: string[] | null;
+  /**
+   * 부가자료(수치지형도·배경)용 화면 범위 EPSG:3857.
+   * 시설 필터 bbox와 별도 — «화면 내 시설만» 해제여도 전달 가능.
+   */
+  extrasBbox?: number[] | null;
   /** ogr2ogr -t_srs (EPSG:xxxx). 미지정·비허용이면 5179 */
   targetSrs?: string | null;
-  /** 구역·화면 범위와 겹치는 수치지형도 DXF 동봉 */
+  /** 구역·화면 범위와 겹치는 수치지형도 DXF 동봉 (검색 조건만) */
   includeDigitalMap?: boolean | null;
-  /** 구역·화면 범위 WMS 배경영상 PNG 동봉 */
+  /** 선택할 수치지형도 폴더명 — 없으면 기존(최소 축척 폴더) */
+  digitalMapFolders?: string[] | null;
+  /** 수치지형도 형식 — original=DXF, png=범위 래스터 */
+  digitalMapFormat?: 'original' | 'png' | string | null;
+  /** 구역·화면 범위 자체항공영상 PNG 동봉 (검색 조건만) */
   includeBackgroundImage?: boolean | null;
+  /** 선택할 자체항공영상 id(tiles_jpg) */
+  backgroundAerialIds?: string[] | null;
 };
 
 function safeShpEntryName(raw: string): string {
@@ -3467,12 +3478,59 @@ function envelopeFromWkt5181(wkt: string): [number, number, number, number] | nu
   return [minX, minY, maxX, maxY];
 }
 
+async function bbox3857To5181(
+  bbox: number[]
+): Promise<[number, number, number, number] | null> {
+  if (bbox.length !== 4 || !bbox.every((n) => Number.isFinite(n))) return null;
+  const { default: proj4 } = await import('proj4');
+  proj4.defs(
+    'EPSG:3857',
+    '+proj=merc +a=6378137 +b=6378137 +lat_ts=0.0 +lon_0=0.0 +x_0=0.0 +y_0=0 +k=1.0 +units=m +nadgrids=@null +no_defs'
+  );
+  proj4.defs(
+    'EPSG:5181',
+    '+proj=tmerc +lat_0=38 +lon_0=127 +k=1 +x_0=200000 +y_0=500000 +ellps=GRS80 +units=m +no_defs'
+  );
+  const corners: Array<[number, number]> = [
+    [bbox[0]!, bbox[1]!],
+    [bbox[0]!, bbox[3]!],
+    [bbox[2]!, bbox[1]!],
+    [bbox[2]!, bbox[3]!],
+  ];
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const c of corners) {
+    const p = proj4('EPSG:3857', 'EPSG:5181', c) as [number, number];
+    minX = Math.min(minX, p[0]);
+    minY = Math.min(minY, p[1]);
+    maxX = Math.max(maxX, p[0]);
+    maxY = Math.max(maxY, p[1]);
+  }
+  if (!(maxX > minX) || !(maxY > minY)) return null;
+  return [minX, minY, maxX, maxY];
+}
+
+function intersectExtent5181(
+  a: [number, number, number, number],
+  b: [number, number, number, number]
+): [number, number, number, number] | null {
+  const minX = Math.max(a[0], b[0]);
+  const minY = Math.max(a[1], b[1]);
+  const maxX = Math.min(a[2], b[2]);
+  const maxY = Math.min(a[3], b[3]);
+  if (!(maxX > minX) || !(maxY > minY)) return null;
+  return [minX, minY, maxX, maxY];
+}
+
 async function resolveExportExtent5181(
   params: ExportWtlNetworkShpParams
 ): Promise<[number, number, number, number] | null> {
   const wkts = (params.areaWkts5181 ?? [])
     .map((w) => String(w ?? '').trim())
     .filter(Boolean);
+  let fromArea: [number, number, number, number] | null = null;
   if (wkts.length > 0) {
     let minX = Infinity;
     let minY = Infinity;
@@ -3487,37 +3545,33 @@ async function resolveExportExtent5181(
       maxY = Math.max(maxY, box[3]);
     }
     if (Number.isFinite(minX) && maxX > minX && maxY > minY) {
-      return [minX, minY, maxX, maxY];
+      fromArea = [minX, minY, maxX, maxY];
     }
   }
-  const bbox = Array.isArray(params.bbox) ? params.bbox.map(Number) : null;
-  if (bbox && bbox.length === 4 && bbox.every((n) => Number.isFinite(n))) {
-    const { default: proj4 } = await import('proj4');
-    proj4.defs(
-      'EPSG:3857',
-      '+proj=merc +a=6378137 +b=6378137 +lat_ts=0.0 +lon_0=0.0 +x_0=0.0 +y_0=0 +k=1.0 +units=m +nadgrids=@null +no_defs'
-    );
-    proj4.defs(
-      'EPSG:5181',
-      '+proj=tmerc +lat_0=38 +lon_0=127 +k=1 +x_0=200000 +y_0=500000 +ellps=GRS80 +units=m +no_defs'
-    );
-    const a = proj4('EPSG:3857', 'EPSG:5181', [bbox[0]!, bbox[1]!]) as [
-      number,
-      number,
-    ];
-    const b = proj4('EPSG:3857', 'EPSG:5181', [bbox[2]!, bbox[3]!]) as [
-      number,
-      number,
-    ];
-    return [
-      Math.min(a[0], b[0]),
-      Math.min(a[1], b[1]),
-      Math.max(a[0], b[0]),
-      Math.max(a[1], b[1]),
-    ];
+  const extrasRaw = Array.isArray(params.extrasBbox)
+    ? params.extrasBbox.map(Number)
+    : Array.isArray(params.bbox)
+      ? params.bbox.map(Number)
+      : null;
+  const fromBbox =
+    extrasRaw && extrasRaw.length === 4
+      ? await bbox3857To5181(extrasRaw)
+      : null;
+
+  // 구역·화면이 둘 다 있으면 교집합(과다 도엽 방지). 교집합 없으면 화면 우선.
+  if (fromArea && fromBbox) {
+    return intersectExtent5181(fromArea, fromBbox) ?? fromBbox;
   }
-  return null;
+  return fromArea ?? fromBbox ?? null;
 }
+
+/** 수치지형도 DXF 동봉 상한 — 초과 시 범위 축소 안내 */
+const WTL_SHP_DIGITAL_MAP_MAX_FILES = 40;
+
+/** 선택 범위와 겹치는 수치지형도 없음 — 클라이언트 confirm 후 제외 재시도 */
+export const WTL_SHP_DIGITAL_MAP_EMPTY_CODE = 'DIGITAL_MAP_EMPTY';
+const WTL_SHP_DIGITAL_MAP_EMPTY_MSG =
+  '선택 범위와 겹치는 수치지형도가 없습니다.\n 화면을 해당 도엽 위로 옮기거나 다른 축척 폴더를 선택하세요.';
 
 /** V6 데이터요청과 동일 — GeoServer WMS GetMap PNG (배경영상) */
 async function fetchBackgroundWmsPngs(
@@ -3611,16 +3665,57 @@ async function fetchBackgroundWmsPngs(
  */
 export async function exportWtlNetworkShpZip(
   params: ExportWtlNetworkShpParams = {}
-): Promise<{ success: boolean; zipBuffer?: Buffer; fileName?: string; error?: string }> {
+): Promise<{
+  success: boolean;
+  zipBuffer?: Buffer;
+  fileName?: string;
+  error?: string;
+  errorCode?: string;
+  warning?: string;
+}> {
   const scope: WtlNetworkExportScope =
     String(params.scope ?? 'filtered').trim() === 'all' ? 'all' : 'filtered';
   const keys = (params.layerKeys ?? []).map((k) => String(k).trim()).filter(Boolean);
-  if (keys.length === 0) return { success: false, error: '내보낼 레이어가 없습니다.' };
+  const digitalMapFolders = (params.digitalMapFolders ?? [])
+    .map((n) => String(n ?? '').trim())
+    .filter(Boolean);
+  const backgroundAerialIds = (params.backgroundAerialIds ?? [])
+    .map((n) => String(n ?? '').trim())
+    .filter(Boolean);
+  const includeDigitalMap =
+    Boolean(params.includeDigitalMap) || digitalMapFolders.length > 0;
+  const includeBackgroundImage =
+    Boolean(params.includeBackgroundImage) || backgroundAerialIds.length > 0;
+  const wantExtras = includeDigitalMap || includeBackgroundImage;
+
+  if (keys.length === 0 && !wantExtras) {
+    return { success: false, error: '내보낼 레이어가 없습니다.' };
+  }
+
+  let extent5181: [number, number, number, number] | null = null;
+  if (wantExtras) {
+    if (scope !== 'filtered') {
+      return {
+        success: false,
+        error: '수치지형도·배경영상은 «검색 조건 적용 다운로드»에서만 포함할 수 있습니다.',
+      };
+    }
+    extent5181 = await resolveExportExtent5181(params);
+    if (!extent5181) {
+      return {
+        success: false,
+        error:
+          '수치지형도·배경영상은 구역설정 또는 화면 범위(검색 조건)가 필요합니다.',
+      };
+    }
+  }
 
   const sources = parseMapSourceIds(params.mapSources)
     .map((id) => resolveWtlNetMapSource(id))
     .filter((s): s is WtlNetMapSourceDef => Boolean(s));
-  if (sources.length === 0) return { success: false, error: '레이어 그룹이 없습니다.' };
+  if (keys.length > 0 && sources.length === 0) {
+    return { success: false, error: '레이어 그룹이 없습니다.' };
+  }
 
   const materialBundle =
     scope === 'filtered' && (params.materials?.length ?? 0) > 0
@@ -3671,26 +3766,78 @@ export async function exportWtlNetworkShpZip(
     }
   }
 
-  if (exportTargets.length === 0) {
+  if (keys.length > 0 && exportTargets.length === 0) {
     return { success: false, error: '내보낼 SHP가 없습니다.' };
   }
 
-  const includeDigitalMap = Boolean(params.includeDigitalMap);
-  const includeBackgroundImage = Boolean(params.includeBackgroundImage);
-  const wantExtras = includeDigitalMap || includeBackgroundImage;
-  let extent5181: [number, number, number, number] | null = null;
-  if (wantExtras) {
-    extent5181 = await resolveExportExtent5181(params);
-    if (!extent5181) {
+  const extraFiles: Array<{ name: string; buffer: Buffer }> = [];
+  let warning: string | undefined;
+  const digitalMapFormat =
+    String(params.digitalMapFormat ?? 'original').trim().toLowerCase() === 'png'
+      ? 'png'
+      : 'original';
+
+  /** 수치지형도 — SHP 생성 전에 검사. 없으면 레이어 ZIP을 만들지 않고 중단 */
+  if (extent5181 && includeDigitalMap) {
+    try {
+      if (digitalMapFormat === 'png') {
+        const { renderDigitalMapPngForBbox5181 } = await import(
+          '@/service/digitalMapPngRender'
+        );
+        const pngs = await renderDigitalMapPngForBbox5181(extent5181, {
+          folderNames: digitalMapFolders.length > 0 ? digitalMapFolders : null,
+          width: 2048,
+        });
+        if (pngs.length === 0) {
+          return {
+            success: false,
+            error: WTL_SHP_DIGITAL_MAP_EMPTY_MSG,
+            errorCode: WTL_SHP_DIGITAL_MAP_EMPTY_CODE,
+          };
+        }
+        for (const f of pngs) {
+          extraFiles.push({ name: f.entryName, buffer: f.buffer });
+        }
+      } else {
+        const { collectDigitalMapFilesIntersectingBbox5181 } = await import(
+          '@/service/digitalMapService'
+        );
+        const dxfs = await collectDigitalMapFilesIntersectingBbox5181(
+          extent5181,
+          {
+            folderNames:
+              digitalMapFolders.length > 0 ? digitalMapFolders : null,
+          }
+        );
+        if (dxfs.length === 0) {
+          return {
+            success: false,
+            error: WTL_SHP_DIGITAL_MAP_EMPTY_MSG,
+            errorCode: WTL_SHP_DIGITAL_MAP_EMPTY_CODE,
+          };
+        }
+        if (dxfs.length > WTL_SHP_DIGITAL_MAP_MAX_FILES) {
+          const msg = `범위와 겹치는 수치지형도가 ${dxfs.length}건입니다. ${WTL_SHP_DIGITAL_MAP_MAX_FILES}건 이하가 되도록 화면 범위를 좁히거나 구역을 작게 지정하세요.`;
+          return { success: false, error: msg };
+        }
+        for (const f of dxfs) {
+          extraFiles.push({
+            name: f.entryName,
+            buffer: fs.readFileSync(f.absPath),
+          });
+        }
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.warn('[exportWtlNetworkShpZip] digitalMap', msg);
       return {
         success: false,
-        error:
-          '수치지형도·배경영상은 구역설정 또는 화면 범위(검색 조건)가 필요합니다.',
+        error: `수치지형도를 담지 못했습니다. ${msg}`,
       };
     }
   }
 
-  const multi = exportTargets.length > 1 || wantExtras;
+  const multi = exportTargets.length > 1 || wantExtras || exportTargets.length === 0;
 
   for (const { source, physicalTable, def } of exportTargets) {
     const sqlText = await buildShpExportSql(def, physicalTable, filterOpts);
@@ -3722,13 +3869,6 @@ export async function exportWtlNetworkShpZip(
     }
   }
 
-  if (parts.length === 0) {
-    return {
-      success: false,
-      error: errors[0] ?? '내보낼 SHP가 없습니다.',
-    };
-  }
-
   const stamp = (() => {
     const d = new Date();
     const p = (n: number) => String(n).padStart(2, '0');
@@ -3738,47 +3878,70 @@ export async function exportWtlNetworkShpZip(
     );
   })();
   const scopeTag = scope === 'all' ? '전체' : '조건';
-
-  const extraFiles: Array<{ name: string; buffer: Buffer }> = [];
-  if (extent5181 && includeDigitalMap) {
-    try {
-      const { collectDigitalMapFilesIntersectingBbox5181 } = await import(
-        '@/service/digitalMapService'
-      );
-      const dxfs = await collectDigitalMapFilesIntersectingBbox5181(extent5181);
-      for (const f of dxfs) {
-        extraFiles.push({
-          name: f.entryName,
-          buffer: fs.readFileSync(f.absPath),
-        });
-      }
-    } catch (e) {
-      console.warn(
-        '[exportWtlNetworkShpZip] digitalMap',
-        e instanceof Error ? e.message : e
-      );
-    }
-  }
   if (extent5181 && includeBackgroundImage) {
     try {
-      const imgs = await fetchBackgroundWmsPngs(extent5181);
-      for (const img of imgs) {
-        extraFiles.push({ name: img.entryName, buffer: img.buffer });
+      let bgCount = 0;
+      if (backgroundAerialIds.length > 0) {
+        const { renderCustomAerialPngForBbox5181 } = await import(
+          '@/service/orthophotoService'
+        );
+        for (const aerialId of backgroundAerialIds) {
+          const rendered = await renderCustomAerialPngForBbox5181({
+            aerialId,
+            bbox5181: extent5181,
+          });
+          if (!rendered.ok) {
+            console.warn(
+              '[exportWtlNetworkShpZip] background aerial',
+              aerialId,
+              rendered.error
+            );
+            continue;
+          }
+          extraFiles.push({
+            name: rendered.entryName,
+            buffer: rendered.buffer,
+          });
+          bgCount += 1;
+        }
+      } else {
+        const imgs = await fetchBackgroundWmsPngs(extent5181);
+        for (const img of imgs) {
+          extraFiles.push({ name: img.entryName, buffer: img.buffer });
+          bgCount += 1;
+        }
+      }
+      if (bgCount === 0 && backgroundAerialIds.length > 0) {
+        const msg = '선택 범위와 겹치는 배경영상(자체항공)이 없습니다.';
+        if (exportTargets.length === 0 && !includeDigitalMap) {
+          return { success: false, error: msg };
+        }
+        warning = warning ? `${warning}\n${msg}` : msg;
       }
     } catch (e) {
-      console.warn(
-        '[exportWtlNetworkShpZip] background',
-        e instanceof Error ? e.message : e
-      );
+      const msg = e instanceof Error ? e.message : String(e);
+      console.warn('[exportWtlNetworkShpZip] background', msg);
+      return {
+        success: false,
+        error: `배경영상을 담지 못했습니다. ${msg}`,
+      };
     }
   }
 
-  if (!multi) {
+  if (parts.length === 0 && extraFiles.length === 0) {
+    return {
+      success: false,
+      error: errors[0] ?? warning ?? '내보낼 파일이 없습니다.',
+    };
+  }
+
+  if (!multi && parts.length === 1 && extraFiles.length === 0) {
     const only = parts[0]!;
     return {
       success: true,
       zipBuffer: only.zipBuffer,
       fileName: `관망조회_${scopeTag}_${only.folderName}_${stamp}.zip`,
+      warning,
     };
   }
 
@@ -3804,6 +3967,10 @@ export async function exportWtlNetworkShpZip(
   return {
     success: true,
     zipBuffer: Buffer.concat(chunks),
-    fileName: `관망조회_${scopeTag}_SHP_${stamp}.zip`,
+    fileName:
+      parts.length === 0
+        ? `관망조회_${scopeTag}_부가자료_${stamp}.zip`
+        : `관망조회_${scopeTag}_SHP_${stamp}.zip`,
+    warning,
   };
 }

@@ -55,6 +55,11 @@ export interface MapFloatingPanelProps {
    * 클릭 모서리 부착 모달이 bottom gap clamp로 밀리지 않게 할 때.
    */
   flushViewportClamp?: boolean;
+  /**
+   * mapFloat: 우측 레이어 패널과 동일 surface·헤더(rounded-[5px]).
+   * default: 상세 플로팅(rounded-xl).
+   */
+  variant?: 'default' | 'mapFloat';
 }
 
 export function MapFloatingPanel({
@@ -73,7 +78,9 @@ export function MapFloatingPanel({
   pinPosition = null,
   onHeaderDoubleClick,
   flushViewportClamp = false,
+  variant = 'default',
 }: MapFloatingPanelProps) {
+  const isMapFloat = variant === 'mapFloat';
   const useLeft = defaultPosition.left != null;
   const [position, setPosition] = useState(defaultPosition);
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -322,7 +329,11 @@ export function MapFloatingPanel({
       ref={setRootRef}
       onPointerDownCapture={bringToFront}
       className={cn(
-        'flex flex-col rounded-xl border border-border bg-card/95 shadow-2xl backdrop-blur-md overflow-hidden pointer-events-auto',
+        'flex flex-col overflow-hidden pointer-events-auto',
+        isMapFloat
+          ? // 우측 패널 surface와 동일 톤·radius. opacity-90은 센터마크가 비치므로 플로팅은 불투명
+            'standard-map-float-surface !opacity-100'
+          : 'rounded-xl border border-border bg-card/95 shadow-2xl backdrop-blur-md',
         zClass,
         className
       )}
@@ -349,10 +360,20 @@ export function MapFloatingPanel({
           onHeaderDoubleClick?.()
         }}
         className={cn(
-          'flex shrink-0 items-center justify-between select-none bg-muted/40 hover:bg-muted/60',
-          pinPosition
-            ? 'cursor-pointer border-b-0 px-2 py-1'
-            : 'cursor-grab border-b border-border/60 px-3 py-1.5 active:cursor-grabbing'
+          'flex shrink-0 items-center justify-between select-none',
+          isMapFloat
+            ? cn(
+                'standard-map-float-header',
+                pinPosition
+                  ? 'cursor-pointer'
+                  : 'cursor-grab active:cursor-grabbing'
+              )
+            : cn(
+                'bg-muted/40 hover:bg-muted/60',
+                pinPosition
+                  ? 'cursor-pointer border-b-0 px-2 py-1'
+                  : 'cursor-grab border-b border-border/60 px-3 py-1.5 active:cursor-grabbing'
+              )
         )}
         onKeyDown={(e) => {
           if (e.key === ' ' || e.key === 'Enter') e.preventDefault();

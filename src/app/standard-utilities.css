@@ -28,6 +28,31 @@
   @apply flex min-h-0 flex-1 flex-col bg-background;
 }
 
+/**
+ * 지도 우측 메뉴 버튼·확장 패널(배경지도·주제도 등) 공통 표면.
+ * 라이트/다크 모두 opacity-90 — dark:opacity-100 금지(모달만 불투명해지는 원인).
+ */
+@utility standard-map-float-surface {
+  @apply rounded-[5px] border border-slate-200 bg-white/95 opacity-90 shadow-lg backdrop-blur-sm dark:border-white/10 dark:bg-black/95 dark:text-white/90;
+}
+
+/** 지도 플로팅·우측 메뉴 모달 헤더 (배경지도 그룹 헤더와 동일 톤) */
+@utility standard-map-float-header {
+  @apply flex w-full cursor-pointer items-center justify-between bg-slate-100 px-3 py-2 text-[13px] font-medium text-primary transition-colors hover:bg-slate-200 dark:bg-white/10 dark:text-white/90 dark:hover:bg-white/15 dark:hover:text-white;
+}
+
+@utility standard-map-float-header-title {
+  @apply truncate font-medium;
+}
+
+@utility standard-map-float-header-close {
+  @apply cursor-pointer rounded p-0.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-white/10 dark:hover:text-white;
+}
+
+@utility standard-map-float-row-hover {
+  @apply transition-colors hover:bg-slate-50 dark:hover:bg-white/10;
+}
+
 @utility standard-panel-header {
   @apply flex min-h-10.25 shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-1.5;
 }
@@ -45,7 +70,7 @@
 }
 
 @utility standard-detail-float-heading-min {
-  @apply flex min-w-0 max-w-[14rem] flex-1 items-center gap-1.5 pr-1;
+  @apply flex min-w-0 max-w-56 flex-1 items-center gap-1.5 pr-1;
 }
 
 @utility standard-detail-float-layer {
@@ -82,7 +107,7 @@
 
 /** 목록 패널 필터 select — villagePatrol과 동일 높이·글자, 너비만 축소 */
 @utility standard-filter-select {
-  @apply max-w-[5.5rem] shrink-0 cursor-pointer rounded-md border border-border bg-background px-2 py-1.5 text-xs text-foreground outline-none scheme-light dark:scheme-dark;
+  @apply max-w-22 shrink-0 cursor-pointer rounded-md border border-border bg-background px-2 py-1.5 text-xs text-foreground outline-none scheme-light dark:scheme-dark;
 }
 
 @utility standard-filter-chips {
@@ -116,7 +141,7 @@
 }
 
 @utility standard-table-thead {
-  @apply sticky top-0 z-[1] bg-muted;
+  @apply sticky top-0 z-1 bg-muted;
   box-shadow: 0 1px 0 0 var(--border);
 }
 
@@ -132,7 +157,7 @@
 
 /** 확장패널 내 목록 테이블 헤더 — 기본정보(attr-label)와 동일 톤 */
 @utility standard-detail-table-thead {
-  @apply sticky top-0 z-[1] bg-muted;
+  @apply sticky top-0 z-1 bg-muted;
   box-shadow: 0 1px 0 0 var(--border);
 }
 
@@ -501,7 +526,7 @@ td.standard-detail-attr-value.standard-detail-attr-value-title,
 }
 
 @utility standard-detail-address-card {
-  @apply flex min-h-[40px] w-full min-w-0 flex-1 items-center justify-start gap-1.5 rounded border border-border bg-background px-1.5 py-1.5 text-left text-[11px] font-medium leading-tight text-foreground transition-colors hover:bg-muted/50;
+  @apply flex min-h-10 w-full min-w-0 flex-1 items-center justify-start gap-1.5 rounded border border-border bg-background px-1.5 py-1.5 text-left text-[11px] font-medium leading-tight text-foreground transition-colors hover:bg-muted/50;
 }
 
 @utility standard-detail-address-card-selected {
@@ -513,7 +538,7 @@ td.standard-detail-attr-value.standard-detail-attr-value-title,
 }
 
 @utility standard-detail-address-remove-btn {
-  @apply inline-flex h-[40px] w-8 shrink-0 items-center justify-center rounded border border-border text-muted-foreground hover:bg-destructive/10 hover:text-destructive;
+  @apply inline-flex h-10 w-8 shrink-0 items-center justify-center rounded border border-border text-muted-foreground hover:bg-destructive/10 hover:text-destructive;
 }
 
 @utility standard-detail-extra-drag-hint {
@@ -533,7 +558,7 @@ td.standard-detail-attr-value.standard-detail-attr-value-title,
 }
 
 @utility standard-detail-extra-name-box {
-  @apply w-[100px] shrink-0;
+  @apply w-25 shrink-0;
 }
 
 @utility standard-detail-extra-icon-btn {
@@ -541,11 +566,11 @@ td.standard-detail-attr-value.standard-detail-attr-value-title,
 }
 
 @utility standard-detail-extra-add-btn {
-  @apply flex h-7 min-w-0 max-w-[9.5rem] flex-1 basis-0 items-center justify-center gap-1 whitespace-nowrap rounded border border-dashed border-border bg-background px-2 text-[11px] text-muted-foreground hover:bg-muted;
+  @apply flex h-7 min-w-0 max-w-38 flex-1 basis-0 items-center justify-center gap-1 whitespace-nowrap rounded border border-dashed border-border bg-background px-2 text-[11px] text-muted-foreground hover:bg-muted;
 }
 
 @utility standard-detail-extra-def-select {
-  @apply h-7 min-w-0 max-w-[9.5rem] flex-1 basis-0 rounded border border-border bg-background px-1.5 text-center text-[11px] text-muted-foreground scheme-light dark:scheme-dark;
+  @apply h-7 min-w-0 max-w-38 flex-1 basis-0 rounded border border-border bg-background px-1.5 text-center text-[11px] text-muted-foreground scheme-light dark:scheme-dark;
 }
 
 @utility standard-detail-place-wrap {
@@ -565,7 +590,7 @@ td.standard-detail-attr-value.standard-detail-attr-value-title,
 }
 
 @utility standard-detail-place-dropdown {
-  @apply absolute left-0 right-0 top-full z-30 mt-0.5 max-h-[180px] overflow-y-auto rounded border border-border bg-background shadow-md;
+  @apply absolute left-0 right-0 top-full z-30 mt-0.5 max-h-45 overflow-y-auto rounded border border-border bg-background shadow-md;
 }
 
 @utility standard-detail-place-result-btn {

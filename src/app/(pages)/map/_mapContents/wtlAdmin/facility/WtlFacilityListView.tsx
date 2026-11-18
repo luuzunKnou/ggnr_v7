@@ -64,6 +64,8 @@ type Props = {
   onExcelDownload?: () => void
   shpBusy?: boolean
   excelBusy?: boolean
+  /** 설비관리 — 관련 시설 레이어별 건수 (footer, 레이어 한글명) */
+  relatedFacilityCounts?: Array<{ label: string; total: number }> | null
 }
 
 function fallbackListFields(record: Record<string, unknown> | null): DefineFieldLike[] {
@@ -105,6 +107,7 @@ export function WtlFacilityListView({
   onShpDownload,
   onExcelDownload,
   shpBusy = false,
+  relatedFacilityCounts = null,
   excelBusy = false,
 }: Props) {
   const fieldsTableName = String(fieldsTable ?? '').trim()
@@ -214,7 +217,7 @@ export function WtlFacilityListView({
     rows.length > 0
   const sortEnabled = typeof onToggleSort === 'function'
 
-  const footerText = showLocalizeLoading || showInitialLoading
+  const listCountText = showLocalizeLoading || showInitialLoading
     ? '조회 중…'
     : loading && rows.length > 0
       ? `${rows.length} / ${total}건 · 조회 중…`
@@ -223,6 +226,15 @@ export function WtlFacilityListView({
         : rows.length < total
           ? `${rows.length} / ${total}건`
           : `${total}건`
+  const relatedFacilityText =
+    Array.isArray(relatedFacilityCounts) && relatedFacilityCounts.length > 0
+      ? relatedFacilityCounts
+          .map((c) => `${c.label} ${c.total}건`)
+          .join(' · ')
+      : ''
+  const footerText = relatedFacilityText
+    ? `${listCountText} · ${relatedFacilityText}`
+    : listCountText
 
   return (
     <div className="standard-list-body">

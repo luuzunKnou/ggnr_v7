@@ -206,10 +206,8 @@ function ThematicMapGroupSection({
     <div className="border-b border-slate-100 last:border-b-0 dark:border-white/10">
       <div
         className={cn(
-          'flex w-full items-center justify-between gap-2 py-2 pl-3 pr-4 font-medium transition-colors',
-          'bg-slate-100 text-foreground',
-          'dark:bg-white/10 dark:text-white/90',
-          (allSelected || someSelected) && 'text-primary dark:text-primary'
+          'standard-map-float-header gap-2 py-2 pl-3 pr-4',
+          !(allSelected || someSelected) && 'text-foreground'
         )}
       >
         <button
@@ -252,8 +250,7 @@ function ThematicMapGroupSection({
               <label
                 key={option.tableName}
                 className={cn(
-                  'flex cursor-pointer items-center justify-between gap-2 py-0.5 pl-2 pr-4 transition-colors',
-                  'hover:bg-slate-50 dark:hover:bg-white/10',
+                  'standard-map-float-row-hover flex cursor-pointer items-center justify-between gap-2 py-0.5 pl-2 pr-4',
                   checked && 'bg-blue-50 dark:bg-white/20'
                 )}
               >
@@ -373,13 +370,13 @@ export function ThematicMapLayerSelector({
         className
       )}
     >
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2 dark:border-white/10 dark:bg-white/5">
-        <span className="text-[13px] font-medium text-slate-800 dark:text-white/90">{title}</span>
+      <div className="standard-map-float-header shrink-0">
+        <span className="standard-map-float-header-title">{title}</span>
         {onClose ? (
           <button
             type="button"
             onClick={onClose}
-            className="rounded p-0.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-white/10 dark:hover:text-white"
+            className="standard-map-float-header-close"
             title="닫기"
             aria-label="닫기"
           >

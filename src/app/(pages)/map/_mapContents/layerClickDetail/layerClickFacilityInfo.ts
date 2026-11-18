@@ -8,12 +8,12 @@ import {
 import type { WtlMappedFacilityTarget } from '../wtlAdmin/facility/WtlFacilityRelatedDetailFloating'
 import {
   FACILITY_INFO_BY_FTR_IDN_FIELDS_BY_SOURCE,
-  FACILITY_NAME_LOOKUP_TARGETS,
   facilityNameLookupFieldsForSource,
   isFacilityDetailTargetTable,
   isFacilityInfoByFtrIdnSource,
   isFacilityNameLookupSource,
   resolveFacilityInfoByFtrIdn,
+  resolveFacilityNameLookupTargetBySuffix,
 } from './layerClickDetailRelatedConfig'
 
 type FacilityListRow = {
@@ -93,6 +93,7 @@ export function shouldShowFacilityInfoSearch(params: {
 
 /**
  * 가압장·배수지·정수장 시설명(목록 name)과 값 일치 1건 조회.
+ * 사업장명 접미(정수장·배수지·가압장)가 있으면 해당 시설만 조회.
  */
 export async function lookupFacilityByShowTitleValue(params: {
   value: string
@@ -104,8 +105,15 @@ export async function lookupFacilityByShowTitleValue(params: {
     return { target: null, error: '조회할 값이 없습니다.' }
   }
   const needle = normalizeName(value)
+  const bySuffix = resolveFacilityNameLookupTargetBySuffix(value)
+  if (!bySuffix) {
+    return {
+      target: null,
+      error: '사업장명이 정수장·배수지·가압장으로 끝나야 합니다.',
+    }
+  }
 
-  for (const t of FACILITY_NAME_LOOKUP_TARGETS) {
+  for (const t of [bySuffix]) {
     try {
       const res = await call('', 'POST', {
         service: 'wtlFacilityService',

@@ -58,6 +58,8 @@ export type MapDetailFloatingPanelProps = {
   panelRef?: Ref<HTMLDivElement | null>
   /** 클릭 모서리 부착 — 하단 gap clamp로 모서리가 밀리지 않게 */
   flushViewportClamp?: boolean
+  /** mapFloat: 우측 레이어 패널과 동일 헤더·surface */
+  variant?: 'default' | 'mapFloat'
   children: ReactNode
 }
 
@@ -92,13 +94,18 @@ export function MapDetailFloatingPanel({
   overlay,
   panelRef,
   flushViewportClamp = false,
+  variant = 'default',
   children,
 }: MapDetailFloatingPanelProps) {
+  const isMapFloat = variant === 'mapFloat'
   const layerText = String(layer ?? '').trim()
   const showLayer = Boolean(layerText && layerText !== title)
   const showTitle = !(minimized && hideTitleWhenMinimized)
   const useLeadingSlot = Boolean(headerLeading) && !minimized
   const hideDefaultHeading = hideHeading && !minimized
+  const closeBtnClass = isMapFloat
+    ? 'standard-map-float-header-close cursor-pointer'
+    : 'standard-panel-close cursor-pointer'
   const headerRef = useRef<HTMLDivElement | null>(null)
   const menuRef = useRef<HTMLDivElement | null>(null)
   const [ctxMenu, setCtxMenu] = useState<{ left: number; top: number } | null>(
@@ -161,7 +168,12 @@ export function MapDetailFloatingPanel({
         allowMinimize ? () => onMinimizedChange?.(!minimized) : undefined
       }
       flushViewportClamp={flushViewportClamp}
-      className={cn('relative bg-background backdrop-blur-none', className)}
+      variant={variant}
+      className={cn(
+        'relative',
+        !isMapFloat && 'bg-background backdrop-blur-none',
+        className
+      )}
       header={
         <div
           ref={headerRef}
@@ -172,37 +184,52 @@ export function MapDetailFloatingPanel({
           <div
             className={cn(
               'min-w-0 flex-1',
-              minimized
-                ? 'standard-detail-float-heading-min'
-                : 'standard-detail-float-heading pr-2',
+              isMapFloat
+                ? 'pr-2'
+                : minimized
+                  ? 'standard-detail-float-heading-min'
+                  : 'standard-detail-float-heading pr-2',
               hideDefaultHeading && 'hidden'
             )}
             aria-hidden={hideDefaultHeading || undefined}
           >
-            {showLayer ? (
-              <span
-                className={cn(
-                  'standard-detail-float-layer',
-                  minimized && 'max-w-[45%] shrink-0'
-                )}
-                title={layerText}
-              >
-                {layerText}
-              </span>
-            ) : null}
-            {showTitle ? (
-              <span
-                className={cn(
-                  minimized || !showLayer
-                    ? 'standard-detail-float-title'
-                    : 'standard-detail-float-title-below',
-                  minimized && 'min-w-0'
-                )}
-                title={title}
-              >
-                {title}
-              </span>
-            ) : null}
+            {isMapFloat ? (
+              showTitle ? (
+                <span
+                  className="standard-map-float-header-title"
+                  title={title}
+                >
+                  {title}
+                </span>
+              ) : null
+            ) : (
+              <>
+                {showLayer ? (
+                  <span
+                    className={cn(
+                      'standard-detail-float-layer',
+                      minimized && 'max-w-[45%] shrink-0'
+                    )}
+                    title={layerText}
+                  >
+                    {layerText}
+                  </span>
+                ) : null}
+                {showTitle ? (
+                  <span
+                    className={cn(
+                      minimized || !showLayer
+                        ? 'standard-detail-float-title'
+                        : 'standard-detail-float-title-below',
+                      minimized && 'min-w-0'
+                    )}
+                    title={title}
+                  >
+                    {title}
+                  </span>
+                ) : null}
+              </>
+            )}
           </div>
           {useLeadingSlot ? (
             <div className="flex min-w-0 flex-1 items-center gap-1 pr-2">
@@ -219,7 +246,7 @@ export function MapDetailFloatingPanel({
                 aria-label={minimized ? '펼치기' : '최소화'}
                 aria-expanded={!minimized}
                 onClick={() => onMinimizedChange?.(!minimized)}
-                className="standard-panel-close cursor-pointer"
+                className={closeBtnClass}
               >
                 {minimized ? (
                   <Square className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
@@ -232,10 +259,14 @@ export function MapDetailFloatingPanel({
               type="button"
               title="닫기"
               onClick={onClose}
-              className="standard-panel-close cursor-pointer"
+              className={closeBtnClass}
               aria-label="닫기"
             >
-              <X className="h-4 w-4" />
+              {isMapFloat && !minimized ? (
+                <span className="px-1 text-xs">닫기</span>
+              ) : (
+                <X className="h-4 w-4" />
+              )}
             </button>
           </div>
           {ctxMenu && typeof document !== 'undefined'
@@ -308,7 +339,8 @@ export function MapDetailFloatingPanel({
       {overlay}
       <div
         className={cn(
-          'flex min-h-0 flex-1 flex-col overflow-hidden bg-background',
+          'flex min-h-0 flex-1 flex-col overflow-hidden',
+          !isMapFloat && 'bg-background',
           minimized && 'hidden'
         )}
       >

@@ -80,11 +80,18 @@ export function buildWtlFacilityDetailReportHtml(args: {
   layerLabel: string
   basicAttrs: FacilityReportAttrRow[]
   sections: FacilityReportTableSection[]
+  /** 관련 시설 상세 — 있으면 2페이지 */
+  relatedFacility?: {
+    title: string
+    attrs: FacilityReportAttrRow[]
+  } | null
 }): string {
   const now = formatReportDateTime()
   const docTitle = `${args.title} 상세보고서`
   const layer = String(args.layerLabel ?? '').trim()
-  const totalPages = 1 + args.sections.length
+  const relatedFacility = args.relatedFacility ?? null
+  const relatedOffset = relatedFacility ? 1 : 0
+  const totalPages = 1 + relatedOffset + args.sections.length
   const pageClass = (idx: number, total: number) =>
     [
       'report-page',
@@ -106,10 +113,17 @@ export function buildWtlFacilityDetailReportHtml(args: {
   ${attrTwoColTable(args.basicAttrs)}
 </section>`
 
+  const relatedFacilityPage = relatedFacility
+    ? `<section class="${pageClass(1, totalPages)}">
+  <h2>2. 시설정보 상세보기 (${esc(relatedFacility.title)})</h2>
+  ${attrTwoColTable(relatedFacility.attrs)}
+</section>`
+    : ''
+
   const sectionPages = args.sections
     .map((sec, idx) => {
-      const n = idx + 2
-      return `<section class="${pageClass(idx + 1, totalPages)}">
+      const n = idx + 2 + relatedOffset
+      return `<section class="${pageClass(idx + 1 + relatedOffset, totalPages)}">
   <h2>${n}. ${esc(sec.title)}${
         sec.rows.length > 0 ? ` (${sec.rows.length})` : ''
       }</h2>
@@ -195,6 +209,7 @@ export function buildWtlFacilityDetailReportHtml(args: {
 </head>
 <body>
   ${basicPage}
+  ${relatedFacilityPage}
   ${sectionPages}
 </body>
 </html>`
