@@ -672,7 +672,7 @@ export async function resolvePnuFromParsedParts(
   if (!emdCd) {
     return { ...EMPTY_PNU_FROM_ADDRESS, originalRi: riName };
   }
-  const riCandidates = riNameLookupCandidates(riName);
+  const riCandidates = riName.trim() ? riNameLookupCandidates(riName) : [];
   let riCd: string | null = null;
   let matchedRi: string | null = null;
   for (const candidate of riCandidates) {
@@ -695,6 +695,15 @@ export async function resolvePnuFromParsedParts(
     }
     if (riCd) break;
   }
+  // 법정동·가: 리 없음 → 리코드 00 (예: 사동 606-1)
+  if (!riCd && /(?:동|가)$/u.test(emdName)) {
+    const emdDigits = String(emdCd).replace(/\D/g, '');
+    const base8 = emdDigits.slice(0, 8);
+    if (base8.length >= 8) {
+      riCd = `${base8}00`;
+      matchedRi = riName.trim() || emdName;
+    }
+  }
   if (!riCd || !matchedRi) {
     return { ...EMPTY_PNU_FROM_ADDRESS, originalRi: riName };
   }
@@ -702,7 +711,7 @@ export async function resolvePnuFromParsedParts(
     pnu: buildPnu19(riCd, { bonbun, bubun, isMountain }),
     originalRi: riName,
     matchedRi,
-    usedHangjeongToBeopjeong: matchedRi !== riName,
+    usedHangjeongToBeopjeong: Boolean(riName.trim()) && matchedRi !== riName,
   };
 }
 

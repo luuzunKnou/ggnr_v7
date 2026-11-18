@@ -6,6 +6,7 @@ import {
   Circle,
   Download,
   Landmark,
+  MapPin,
   Pentagon,
   Plus,
   RefreshCw,
@@ -29,11 +30,15 @@ import {
 } from "../../../_mapComponents/layerRowEdit";
 import { transformCoordinate } from "../../../_mapComponents/services/coordinateService";
 import { exportRoadNetworkExcel } from "./exportRoadNetworkExcel";
-import { formatRoadNetworkListTitle } from "./roadNetworkFormat";
+import {
+  formatRoadNetworkListTitle,
+  roadNetworkRowMatchesKeyword,
+} from "./roadNetworkFormat";
 import { filterRoadNetworkRowsByWkt5181 } from "./roadNetworkSpatial";
 import {
   extent3857FromRoadNetworkGeoms,
   groupRoadNetworkRows,
+  roadNetworkVisibleSiblingSegments,
   type RoadNetworkRowGroup,
 } from "./roadNetworkGroup";
 import {
@@ -45,6 +50,7 @@ import {
 } from "./roadNetworkMapSync";
 import { buildRoadNetworkSharedTableCql } from "./roadNetworkLayerId";
 import { useRoadNetworkSourceMode } from "./useRoadNetworkSourceMode";
+import { useRoadNetworkEndpointLayer } from "./useRoadNetworkEndpointLayer";
 import { useRoadNetworkUnopenedSignLayer } from "./useRoadNetworkUnopenedSignLayer";
 import {
   buildRoadNetworkUnifiedLineCql,
@@ -227,6 +233,8 @@ export function RoadNetworkListPanel({ onClose }: Props) {
   );
 
   const [showSigns, setShowSigns] = useState(true);
+  /** 군도·농어촌 기점·종점 — 버튼으로만 켬(도로망도 진입 시 기본 끔) */
+  const [showEndpoints, setShowEndpoints] = useState(false);
   /** 표지 점은 개설 구간 기준으로 찍혀 있어 미개설 필터 때는 미개설 선 위에 표지를 직접 그린다 */
   const signsOnUnopenedLines =
     sourceMode === "unified" && openStatusFilter === "미개설" && showSigns;
@@ -268,7 +276,7 @@ export function RoadNetworkListPanel({ onClose }: Props) {
     };
   }, [setVisibleLayerNames, setServiceWmsCqlByLayer]);
 
-  /** 지도 WMS 클릭 → 목록 선택 */
+  /** 지도 WMS 클릭 → 목록 선택(같은 노선번호 구간 전체 강조·화면 맞춤) */
   useEffect(() => {
     const pickRef = mapContext?.applyRoadNetworkMapPickRef;
     if (!pickRef) return;
@@ -279,13 +287,38 @@ export function RoadNetworkListPanel({ onClose }: Props) {
         prev.filter((r) => !isNewRoadNetworkRowId(r.id))
       );
       setRoadNetworkSelectedId?.(rowId);
-      setRoadNetworkWholeRoad?.(false);
+
+      const allRows = mapContext?.roadNetworkRows ?? EMPTY_ROWS;
+      const overlayRows = mapContext?.roadNetworkOverlayRows;
+      const picked =
+        allRows.find((r) => r.id === rowId) ??
+        overlayRows?.find((r) => r.id === rowId);
+      const siblings = picked
+        ? roadNetworkVisibleSiblingSegments(allRows, overlayRows, picked)
+        : [];
+      const wholeRoad = siblings.length > 1;
+      setRoadNetworkWholeRoad?.(wholeRoad);
+
+      const map = mapContext?.mapInstanceRef?.current;
+      if (!map) return;
+      const fitRows = wholeRoad && siblings.length > 0 ? siblings : picked ? [picked] : [];
+      const ext = extent3857FromRoadNetworkGeoms(fitRows.map((r) => r.geom));
+      if (!ext) return;
+      scheduleFitMapToExtent3857(map, ext, {
+        fitPadding: [...LIST_FIT_PADDING],
+        maxZoom: LIST_FIT_MAX_ZOOM,
+        applyMapViewPadding: () => mapContext?.applyMapViewPaddingRef?.current?.(),
+      });
     };
     return () => {
       pickRef.current = null;
     };
   }, [
     mapContext?.applyRoadNetworkMapPickRef,
+    mapContext?.roadNetworkRows,
+    mapContext?.roadNetworkOverlayRows,
+    mapContext?.mapInstanceRef,
+    mapContext?.applyMapViewPaddingRef,
     setRoadNetworkRows,
     setRoadNetworkSelectedId,
     setRoadNetworkWholeRoad,
@@ -500,7 +533,6 @@ export function RoadNetworkListPanel({ onClose }: Props) {
   }, [applySpatialWkt, boundaryBadges]);
 
   const items = useMemo(() => {
-    const q = keyword.trim().toLowerCase();
     return filterRoadNetworkRowsByWkt5181(rows, spatialWkt)
       .filter((row) => {
         // 미저장 신규는 목록에 표시하지 않음
@@ -509,20 +541,7 @@ export function RoadNetworkListPanel({ onClose }: Props) {
         if (openStatusFilter !== "전체" && row.openStatus !== openStatusFilter) {
           return false;
         }
-        if (!q) return true;
-        const hay = [
-          row.roadName,
-          row.roadNo,
-          row.roadType,
-          row.roadGrade ?? "",
-          row.address ?? "",
-          row.openStatus ?? "",
-          row.sect,
-          row.dept,
-        ]
-          .join(" ")
-          .toLowerCase();
-        return hay.includes(q);
+        return roadNetworkRowMatchesKeyword(row, keyword);
       })
       // 입체교차로는 목록 최하단
       .sort((a, b) => {
@@ -536,6 +555,11 @@ export function RoadNetworkListPanel({ onClose }: Props) {
     mapContext?.mapInstanceRef?.current,
     items,
     signsOnUnopenedLines
+  );
+
+  useRoadNetworkEndpointLayer(
+    mapContext?.mapInstanceRef?.current,
+    showEndpoints
   );
 
   /** 같은 노선번호 구간은 한 행 — 구간 구분은 상세 패널에서 */
@@ -611,6 +635,18 @@ export function RoadNetworkListPanel({ onClose }: Props) {
               번호표지
             </LayerRowPanelButton>
           ) : null}
+          <LayerRowPanelButton
+            type="button"
+            onClick={() => setShowEndpoints((v) => !v)}
+            title={showEndpoints ? "지도 시·종점 끄기" : "지도 시·종점 켜기"}
+            aria-pressed={showEndpoints}
+            className={cn(
+              showEndpoints && "border-primary bg-primary/10 text-primary hover:bg-primary/15"
+            )}
+          >
+            <MapPin className="h-3 w-3 shrink-0" aria-hidden />
+            시종점
+          </LayerRowPanelButton>
           <LayerRowPanelButton type="button" onClick={handleExport} title="엑셀 내보내기">
             <Download className="h-3 w-3 shrink-0" aria-hidden />
             엑셀
@@ -691,7 +727,7 @@ export function RoadNetworkListPanel({ onClose }: Props) {
                 <input
                   value={keyword}
                   onChange={(e) => setKeyword(e.target.value)}
-                  placeholder="도로명·도로번호·종류·관리기관"
+                  placeholder="도로명·번호·종류 (예: 면도 102)"
                   className="h-8 w-full rounded border border-border pl-7 pr-2.5 text-xs outline-none focus:border-primary focus:ring-2 focus:ring-primary/25"
                 />
               </div>

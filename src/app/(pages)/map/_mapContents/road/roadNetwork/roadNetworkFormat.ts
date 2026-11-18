@@ -57,6 +57,48 @@ export function formatRoadNetworkListTitle(row: RoadNetworkListTitleInput): stri
   return kind;
 }
 
+type RoadNetworkKeywordRow = RoadNetworkListTitleInput & {
+  address?: string | null;
+  openStatus?: string | null;
+  sect?: string | null;
+  dept?: string | null;
+};
+
+/**
+ * 목록 통합검색 — «면도 102»처럼 종류+번호(목록 표시명)도 찾음.
+ * 공백으로 나눈 단어는 모두 포함되어야 함(순서 무관).
+ */
+export function roadNetworkRowMatchesKeyword(
+  row: RoadNetworkKeywordRow,
+  keyword: string
+): boolean {
+  const q = keyword.trim().toLowerCase();
+  if (!q) return true;
+
+  const title = formatRoadNetworkListTitle(row).toLowerCase();
+  const titleCompact = title.replace(/\s+/g, "");
+  const hay = [
+    title,
+    titleCompact,
+    row.roadName,
+    row.roadNo,
+    row.roadType,
+    row.roadGrade ?? "",
+    row.address ?? "",
+    row.openStatus ?? "",
+    row.sect ?? "",
+    row.dept ?? "",
+  ]
+    .join(" ")
+    .toLowerCase();
+
+  const tokens = q.split(/\s+/).filter(Boolean);
+  if (tokens.length <= 1) {
+    return hay.includes(q) || titleCompact.includes(q.replace(/\s+/g, ""));
+  }
+  return tokens.every((t) => hay.includes(t));
+}
+
 /**
  * 굴곡도 등 숫자 속성 — 끝자리 불필요 0 제거, 값 0은 빈 문자열
  * 예: "1.5000" → "1.5", "2.000" → "2", "0" / "0.0" → ""
