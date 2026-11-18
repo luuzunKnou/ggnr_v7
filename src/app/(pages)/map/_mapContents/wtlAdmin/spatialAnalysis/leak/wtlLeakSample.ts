@@ -37,18 +37,30 @@ export type WtlLeakHistory = {
   label: string
   gateCount: number
   result: WtlLeakResult
+  /** 저장 계정(로그인 세션 id). 표시는 createUserName 우선 */
+  createUser: string
+  /** 저장 시점 표시명(이름 없으면 계정) */
+  createUserName: string
 }
 
-export function buildLeakHistory(result: WtlLeakResult): WtlLeakHistory {
+export function buildLeakHistory(
+  result: WtlLeakResult,
+  author?: { userId?: string | null; userName?: string | null }
+): WtlLeakHistory {
   const now = new Date()
   const pad = (n: number) => String(n).padStart(2, '0')
   const at = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`
+  const createUser = String(author?.userId ?? '').trim()
+  const createUserName =
+    String(author?.userName ?? '').trim() || createUser
   return {
     id: `leak-${Date.now()}`,
     at,
     label: `${result.snap.pipeTable === 'wtl_sply_ls' ? '급수관로' : '관로'} #${result.snap.pipeId}`,
     gateCount: result.gates.length,
     result,
+    createUser,
+    createUserName,
   }
 }
 

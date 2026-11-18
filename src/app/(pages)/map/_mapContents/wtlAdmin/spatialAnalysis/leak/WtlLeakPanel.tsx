@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { useSession } from 'next-auth/react'
 import { cn } from '@/lib/utils'
 import { useMapContext } from '../../../../_mapComponents/MapContext'
 import {
@@ -29,6 +30,14 @@ type Props = {
 
 export function WtlLeakPanel({ active = true, mapLeftPx = 0, onHandoffToOutage }: Props) {
   const mapContext = useMapContext()
+  const { data: session } = useSession()
+  const sessionAuthor = useMemo(
+    () => ({
+      userId: String(session?.user?.id ?? '').trim() || null,
+      userName: String(session?.user?.name ?? '').trim() || null,
+    }),
+    [session?.user?.id, session?.user?.name]
+  )
   const setMapFeatureIdentifyDisabled = mapContext?.setMapFeatureIdentifyDisabled
   const [history, setHistory] = useState<WtlLeakHistory[]>([])
   const [historyPage, setHistoryPage] = useState(1)
@@ -86,7 +95,6 @@ export function WtlLeakPanel({ active = true, mapLeftPx = 0, onHandoffToOutage }
   /** 선택만(지도 이동 없음) — 지도에서 제수변을 눌렀을 때 */
   const selectGate = (gate: WtlLeakGate) => {
     setSelectedGateId(gate.id)
-    setNotice(`${gate.name} 선택 · ${gate.diameter} · ${gate.address}`)
   }
 
   /** 선택 + 지도 이동 — 목록에서 제수변을 눌렀을 때 */
@@ -108,7 +116,7 @@ export function WtlLeakPanel({ active = true, mapLeftPx = 0, onHandoffToOutage }
     setAnalyzing(false)
     setNotice(
       next.gates.length > 0
-        ? `분석 완료 · 제수변 ${next.gates.length}개 · 관로 ${next.pipes.length}구간`
+        ? '분석 완료'
         : next.truncated
           ? '탐색 한도 안에서 잠글 제수변을 찾지 못했습니다.'
           : '이어진 관로에 잠글 제수변이 없습니다. 관로가 끊겨 있는지 확인하세요.'
@@ -200,12 +208,12 @@ export function WtlLeakPanel({ active = true, mapLeftPx = 0, onHandoffToOutage }
       setNotice('누수 위치를 지정해 분석한 뒤 저장할 수 있습니다.')
       return
     }
-    const row = buildLeakHistory(result)
+    const row = buildLeakHistory(result, sessionAuthor)
     setHistory((prev) => [row, ...prev])
     setHistoryPage(1)
     setHistoryId(row.id)
     setSaved(true)
-    setNotice(`분석결과 저장 · 제수변 ${result.gates.length} · 관로 ${result.pipes.length}`)
+    setNotice('분석결과 저장')
   }
 
   const historyPageCount = Math.max(1, Math.ceil(history.length / ANALYSIS_HISTORY_PAGE_SIZE))
@@ -247,9 +255,10 @@ export function WtlLeakPanel({ active = true, mapLeftPx = 0, onHandoffToOutage }
               <table className="w-full table-fixed border-collapse text-left text-[11px]">
                 <thead className="bg-muted">
                   <tr className="h-7 border-b border-border">
-                    <th className="w-[7rem] px-1.5 font-medium text-muted-foreground">일시</th>
-                    <th className="w-[6.25rem] px-1.5 font-medium text-muted-foreground">위치</th>
-                    <th className="px-1.5 font-medium text-muted-foreground">제수변</th>
+                    <th className="w-[7.25rem] px-1.5 font-medium text-muted-foreground">일시</th>
+                    <th className="w-[5.5rem] px-1.5 font-medium text-muted-foreground">위치</th>
+                    <th className="w-[5rem] px-1.5 font-medium text-muted-foreground">제수변</th>
+                    <th className="w-[4.75rem] px-1.5 font-medium text-muted-foreground">작성자</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -278,6 +287,12 @@ export function WtlLeakPanel({ active = true, mapLeftPx = 0, onHandoffToOutage }
                       >
                         {leakHistoryGateText(item)}
                       </td>
+                      <td
+                        className="truncate px-1.5 text-muted-foreground"
+                        title={item.createUserName || item.createUser || undefined}
+                      >
+                        {item.createUserName || item.createUser || '—'}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -302,7 +317,9 @@ export function WtlLeakPanel({ active = true, mapLeftPx = 0, onHandoffToOutage }
                   <span className="text-muted-foreground">
                     {' '}
                     · {snap.pipeTable === 'wtl_sply_ls' ? '급수관로' : '관로'} #{snap.pipeId}
-                    {result ? ` · 제수변 ${result.gates.length}개` : ''}
+                    {result
+                      ? ` · 제수변 ${result.gates.length}개 · 관로 ${result.pipes.length}구간`
+                      : ''}
                   </span>
                 </>
               ) : selectedGate ? (
