@@ -75,6 +75,10 @@ const nextConfig: NextConfig = {
   env: {
     BASE_PATH: basePath,
   },
+  /** 청크 업로드 본문 — 기본 10MB면 대용량 청크가 잘림 */
+  experimental: {
+    proxyClientMaxBodySize: "32mb",
+  },
   devIndicators: false,
   /**
    * Turbopack은 orthophotoService 등 대형 Node 서비스 묶을 때 FATAL panic 이 난다.

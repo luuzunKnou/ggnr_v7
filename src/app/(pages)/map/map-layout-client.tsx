@@ -123,6 +123,7 @@ import { clearUsageDataAsWmsLayers } from "./_mapContents/river/usageDataAs/usag
 import { RoadRewardListPanel } from "./_mapContents/road/roadReward/RoadRewardListPanel"
 import { RoadRewardDetailPanel } from "./_mapContents/road/roadReward/RoadRewardDetailPanel"
 import { type RoadRewardCase } from "./_mapContents/road/roadReward/roadRewardMock"
+import { UnpaidLandCompensationListPanel } from "./_mapContents/road/unpaidLandCompensation/UnpaidLandCompensationListPanel"
 import { RoadFrontageBuildingListPanel } from "./_mapContents/road/roadFrontageBuilding/RoadFrontageBuildingListPanel"
 import { RoadFrontageBuildingDetailPanel } from "./_mapContents/road/roadFrontageBuilding/RoadFrontageBuildingDetailPanel"
 import { ROAD_FRONTAGE_BUILDING_NEW_ID } from "./_mapContents/road/roadFrontageBuilding/roadFrontageBuildingMock"
@@ -596,6 +597,12 @@ const ROAD_REWARD_DETAIL_DEFAULT_WIDTH = 480
 const ROAD_REWARD_DETAIL_MIN_WIDTH = 380
 const ROAD_REWARD_DETAIL_MAX_WIDTH = 720
 
+/** serviceList `ser_eng`: unpaidLandCompensation — 미지급용지 보상 지급대장(목업) */
+const UNPAID_LAND_COMPENSATION_OPENED_KEY = "unpaidLandCompensation"
+const UNPAID_LAND_COMPENSATION_PANEL_DEFAULT_WIDTH = 1120
+const UNPAID_LAND_COMPENSATION_PANEL_MIN_WIDTH = 800
+const UNPAID_LAND_COMPENSATION_PANEL_MAX_WIDTH = 1400
+
 /** serviceList `ser_eng`: roadFrontageBuilding — 접도구역 건축물 관리대장(목업) */
 const ROAD_FRONTAGE_BUILDING_OPENED_KEY = "roadFrontageBuilding"
 const ROAD_FRONTAGE_BUILDING_PANEL_DEFAULT_WIDTH = 420
@@ -799,6 +806,7 @@ function MapLayoutContent({
   const occupationLedgerSerEng = findOpenedOccupationLedgerSerEng(openedWindows)
   const occupationLedgerOpen = Boolean(occupationLedgerSerEng)
   const roadRewardOpen = openedWindows.includes(ROAD_REWARD_OPENED_KEY)
+  const unpaidLandCompensationOpen = openedWindows.includes(UNPAID_LAND_COMPENSATION_OPENED_KEY)
   const roadFrontageBuildingOpen = openedWindows.includes(ROAD_FRONTAGE_BUILDING_OPENED_KEY)
   const roadFrontageMarkerOpen = openedWindows.includes(ROAD_FRONTAGE_MARKER_OPENED_KEY)
   const useFeeSerEng = findOpenedUseFeeSerEng(openedWindows)
@@ -1085,6 +1093,9 @@ function MapLayoutContent({
   )
   const [roadRewardPanelWidth, setRoadRewardPanelWidth] = useState(ROAD_REWARD_PANEL_DEFAULT_WIDTH)
   const [roadRewardDetailWidth, setRoadRewardDetailWidth] = useState(ROAD_REWARD_DETAIL_DEFAULT_WIDTH)
+  const [unpaidLandCompensationPanelWidth, setUnpaidLandCompensationPanelWidth] = useState(
+    UNPAID_LAND_COMPENSATION_PANEL_DEFAULT_WIDTH
+  )
   const [roadFrontageBuildingPanelWidth, setRoadFrontageBuildingPanelWidth] = useState(
     ROAD_FRONTAGE_BUILDING_PANEL_DEFAULT_WIDTH
   )
@@ -1166,6 +1177,7 @@ function MapLayoutContent({
     (occupationLedgerDetailOpen ? occupationLedgerDetailWidth : 0) +
     (roadRewardOpen ? roadRewardPanelWidth : 0) +
     (roadRewardDetailOpen ? roadRewardDetailWidth : 0) +
+    (unpaidLandCompensationOpen ? unpaidLandCompensationPanelWidth : 0) +
     (roadFrontageBuildingOpen ? roadFrontageBuildingPanelWidth : 0) +
     (roadFrontageBuildingDetailOpen ? roadFrontageBuildingDetailWidth : 0) +
     (roadFrontageMarkerOpen ? roadFrontageMarkerPanelWidth : 0) +
@@ -1292,8 +1304,11 @@ function MapLayoutContent({
     (occupationLedgerDetailOpen ? occupationLedgerDetailWidth : 0)
   const roadRewardDetailLeftPx =
     roadRewardPanelLeftPx + (roadRewardOpen ? roadRewardPanelWidth : 0)
-  const roadFrontageBuildingPanelLeftPx =
+  const unpaidLandCompensationPanelLeftPx =
     roadRewardDetailLeftPx + (roadRewardDetailOpen ? roadRewardDetailWidth : 0)
+  const roadFrontageBuildingPanelLeftPx =
+    unpaidLandCompensationPanelLeftPx +
+    (unpaidLandCompensationOpen ? unpaidLandCompensationPanelWidth : 0)
   const roadFrontageBuildingDetailLeftPx =
     roadFrontageBuildingPanelLeftPx +
     (roadFrontageBuildingOpen ? roadFrontageBuildingPanelWidth : 0)
@@ -1914,6 +1929,11 @@ function MapLayoutContent({
     setRoadRewardFocusParcelId(null)
     setRoadRewardAutoFitMap(true)
     const next = openedWindows.filter((w) => w !== ROAD_REWARD_OPENED_KEY)
+    setOpened(next)
+  }
+
+  const handleCloseUnpaidLandCompensation = () => {
+    const next = openedWindows.filter((w) => w !== UNPAID_LAND_COMPENSATION_OPENED_KEY)
     setOpened(next)
   }
 
@@ -3262,6 +3282,22 @@ function MapLayoutContent({
                     roadRewardPanelWidth +
                     (roadRewardDetailOpen ? roadRewardDetailWidth : 0)
                   }
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          {unpaidLandCompensationOpen && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={unpaidLandCompensationPanelWidth}
+                minWidth={UNPAID_LAND_COMPENSATION_PANEL_MIN_WIDTH}
+                maxWidth={UNPAID_LAND_COMPENSATION_PANEL_MAX_WIDTH}
+                leftOffsetPx={unpaidLandCompensationPanelLeftPx}
+                onWidthChange={setUnpaidLandCompensationPanelWidth}
+                serEng="unpaidLandCompensation"
+              >
+                <UnpaidLandCompensationListPanel
+                  onClose={handleCloseUnpaidLandCompensation}
                 />
               </MapSideListPanel>
             </div>
