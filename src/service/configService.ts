@@ -401,6 +401,10 @@ export function getMapConfig(_params?: unknown): {
   DATA_PORTAL_KEY: string
   dataPotalKey: string
   KAKAO_MAP_API_KEY: string
+  /** 도로명주소 검색API(addrLinkApi) 승인키 — VWorld 실패 폴백 */
+  JUSO_CONFM_KEY: string
+  /** 도로명주소 좌표API(addrCoordApi) 승인키. 없으면 JUSO_CONFM_KEY 재사용 */
+  JUSO_COORD_CONFM_KEY: string
   USE_KRAS: boolean
   USE_SEUM: boolean
 } {
@@ -413,6 +417,8 @@ export function getMapConfig(_params?: unknown): {
     DATA_PORTAL_KEY: '',
     dataPotalKey: '',
     KAKAO_MAP_API_KEY: '',
+    JUSO_CONFM_KEY: '',
+    JUSO_COORD_CONFM_KEY: '',
     USE_KRAS: false,
     USE_SEUM: true,
   }
@@ -440,6 +446,8 @@ export function getMapConfig(_params?: unknown): {
       DATA_PORTAL_KEY: dataPortalKey,
       dataPotalKey: dataPortalKey,
       KAKAO_MAP_API_KEY: vars.KAKAO_MAP_API_KEY?.trim() ?? '',
+      JUSO_CONFM_KEY: vars.JUSO_CONFM_KEY?.trim() ?? '',
+      JUSO_COORD_CONFM_KEY: vars.JUSO_COORD_CONFM_KEY?.trim() ?? '',
       /** 행망(KRAS·KOREPS) — 운영만. 묶음 전체가 실패할 때만 브이월드 */
       USE_KRAS: useHangmangKras(),
       USE_SEUM: true,

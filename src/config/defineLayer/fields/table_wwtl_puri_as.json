@@ -76,7 +76,7 @@
   },
   {
     "define_field_name": "HJD_CDE",
-    "define_field_kor_name": "행정읍면동코드",
+    "define_field_kor_name": "읍면동",
     "define_field_is_required": "false",
     "define_field_show_search": "true",
     "define_field_show_list": "true",

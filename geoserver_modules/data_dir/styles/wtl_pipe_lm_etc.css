@@ -1,6 +1,19 @@
+/* 상수관로(기타) — 선 + pip_lbl 라벨 (구 SLD TextSymbolizer 복원) */
 * {
   stroke: #FFFFFF, #E88AEB;
   stroke-width: 3, 2;
   stroke-opacity: 0.4, 1;
   z-index: 0;
+
+  label: [pip_lbl];
+  label-follow-line: true;
+  label-offset: 5;
+  font-size: 12;
+  font-fill: #FFFFFF;
+  font-weight: bold;
+  font-family: "Gulim", "Malgun Gothic", "SansSerif";
+  halo-radius: 2;
+  halo-color: #E88AEB;
+  -gt-label-group: true;
+  -gt-label-goodness-of-fit: 0;
 }

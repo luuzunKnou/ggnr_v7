@@ -18,7 +18,7 @@
                 <sld:OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="/www/symbol/water/wtl_valv_ps.png"/>
                 <sld:Format>image/png</sld:Format>
               </sld:ExternalGraphic>
-              <sld:Size>
+              <sld:Size><ogc:Function name="if_then_else"><ogc:Function name="greaterThan"><ogc:Function name="env"><ogc:Literal>ignore_scale</ogc:Literal><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>18</ogc:Literal>
                 <ogc:Function name="if_then_else">
                   <ogc:Function name="greaterThan">
                     <ogc:Function name="env">
@@ -48,7 +48,51 @@
                     <ogc:Literal>4</ogc:Literal>
                   </ogc:Function>
                 </ogc:Function>
-              </sld:Size>
+              </ogc:Function></sld:Size>
+            </sld:Graphic>
+          </sld:PointSymbolizer>
+        </sld:Rule><sld:Rule>
+          <sld:Name>Name</sld:Name>
+          <sld:Title>wtl_valv_ps</sld:Title>
+          <sld:Abstract>Abstract</sld:Abstract>
+          <sld:MinScaleDenominator>3000.0</sld:MinScaleDenominator>
+          <ogc:Filter><ogc:PropertyIsEqualTo><ogc:Function name="env"><ogc:Literal>ignore_scale</ogc:Literal><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>1</ogc:Literal></ogc:PropertyIsEqualTo></ogc:Filter><sld:PointSymbolizer>
+            <sld:Graphic>
+              <sld:ExternalGraphic>
+                <sld:OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="/www/symbol/water/wtl_valv_ps.png"/>
+                <sld:Format>image/png</sld:Format>
+              </sld:ExternalGraphic>
+              <sld:Size><ogc:Function name="if_then_else"><ogc:Function name="greaterThan"><ogc:Function name="env"><ogc:Literal>ignore_scale</ogc:Literal><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>18</ogc:Literal>
+                <ogc:Function name="if_then_else">
+                  <ogc:Function name="greaterThan">
+                    <ogc:Function name="env">
+                      <ogc:Literal>wtl_valv_ps_size</ogc:Literal>
+                      <ogc:Literal>0</ogc:Literal>
+                    </ogc:Function>
+                    <ogc:Literal>0</ogc:Literal>
+                  </ogc:Function>
+                  <ogc:Function name="env">
+                    <ogc:Literal>wtl_valv_ps_size</ogc:Literal>
+                    <ogc:Literal>16</ogc:Literal>
+                  </ogc:Function>
+                  <ogc:Function name="Categorize">
+                    <ogc:Function name="env">
+                      <ogc:Literal>wms_scale_denominator</ogc:Literal>
+                    </ogc:Function>
+                    <ogc:Literal>18</ogc:Literal>
+                    <ogc:Literal>1500</ogc:Literal>
+                    <ogc:Literal>13</ogc:Literal>
+                    <ogc:Literal>3000</ogc:Literal>
+                    <ogc:Literal>10</ogc:Literal>
+                    <ogc:Literal>5000</ogc:Literal>
+                    <ogc:Literal>7</ogc:Literal>
+                    <ogc:Literal>10000</ogc:Literal>
+                    <ogc:Literal>6</ogc:Literal>
+                    <ogc:Literal>30000</ogc:Literal>
+                    <ogc:Literal>4</ogc:Literal>
+                  </ogc:Function>
+                </ogc:Function>
+              </ogc:Function></sld:Size>
             </sld:Graphic>
           </sld:PointSymbolizer>
         </sld:Rule>

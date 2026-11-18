@@ -1,15 +1,14 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import type OLMap from 'ol/Map'
-import type BaseLayer from 'ol/layer/Base'
 import ImageLayer from 'ol/layer/Image'
 import { boundingExtent, intersects, type Extent } from 'ol/extent'
 import ImageCanvasSource from 'ol/source/ImageCanvas'
 import { withBasePath } from '@/lib/basePath'
 import { useMapContext } from '../../_mapComponents/MapContext'
 import type { DetailWondoItem, DetailWondoShown } from './detailWondoConfig'
-import { detailWondoCorners3857 } from './useDetailWondoFootprintLayer'
+import { insertDetailWondoImage } from './detailWondoLayerOrder'
+import { detailWondoCorners3857, detailWondoWorldCorners3857 } from './useDetailWondoFootprintLayer'
 
 const LAYER_PROP = 'detailWondoImageLayer'
 /** 원본 대비 이 배율보다 작게 그릴 때는 축소본 사용 */
@@ -38,16 +37,6 @@ function putOffCache(cache: Map<string, Decoded>, id: string, decoded: Decoded) 
   }
 }
 
-/** 지적도 아래(없으면 서비스 레이어 아래)에 원도를 깐다 */
-function insertBelowCadastral(map: OLMap, layer: BaseLayer) {
-  const collection = map.getLayers()
-  const arr = collection.getArray()
-  let idx = arr.findIndex((l) => l.get('cadastralLayer') === true)
-  if (idx < 0) idx = arr.findIndex((l) => l.get('serviceLayer') === true)
-  if (idx >= 0) collection.insertAt(idx, layer)
-  else collection.push(layer)
-}
-
 function reducedOf(entry: Entry): HTMLCanvasElement | null {
   const img = entry.image
   if (!img) return null
@@ -66,8 +55,7 @@ function reducedOf(entry: Entry): HTMLCanvasElement | null {
  * 위왼쪽·위오른쪽·아래왼쪽 세 모서리로 이미지 픽셀 → 화면 픽셀 변환을 만든다.
  */
 function createSource(item: DetailWondoItem, entry: Entry): ImageCanvasSource {
-  const [tl, tr, , bl] = detailWondoCorners3857(item)
-  const footprint: Extent = boundingExtent(detailWondoCorners3857(item))
+  const listed = detailWondoCorners3857(item)
   return new ImageCanvasSource({
     ratio: 1,
     canvasFunction: (extent, resolution, pixelRatio, size) => {
@@ -75,12 +63,19 @@ function createSource(item: DetailWondoItem, entry: Entry): ImageCanvasSource {
       canvas.width = Math.round(size[0])
       canvas.height = Math.round(size[1])
       const img = entry.image
-      if (!img || !intersects(extent, footprint)) return canvas
+      if (!img) return canvas
+      const corners =
+        item.world && img.naturalWidth > 0
+          ? detailWondoWorldCorners3857(item.world, img.naturalWidth, img.naturalHeight)
+          : listed
+      const footprint: Extent = boundingExtent(corners)
+      if (!intersects(extent, footprint)) return canvas
       const ctx = canvas.getContext('2d')
       if (!ctx) return canvas
 
       const k = pixelRatio / resolution
       const px = (c: [number, number]) => [(c[0] - extent[0]) * k, (extent[3] - c[1]) * k]
+      const [tl, tr, , bl] = corners
       const [x0, y0] = px(tl)
       const [x1, y1] = px(tr)
       const [x2, y2] = px(bl)
@@ -149,7 +144,7 @@ export function useDetailWondoImageLayers({ items, shown }: Options) {
       entry.layer.setOpacity(opacity)
       entry.layer.set(LAYER_PROP, true)
       entries.set(id, entry)
-      insertBelowCadastral(map, entry.layer)
+      insertDetailWondoImage(map, entry.layer)
 
       const cached = offCache.get(id)
       if (cached) {

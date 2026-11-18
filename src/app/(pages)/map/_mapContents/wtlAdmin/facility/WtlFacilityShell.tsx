@@ -247,10 +247,19 @@ export function WtlFacilityShell({
     if (!el) return
     const ro = new ResizeObserver(() => updateTabScrollState())
     ro.observe(el)
+    const onWheel = (e: WheelEvent) => {
+      if (el.scrollWidth <= el.clientWidth + 1) return
+      const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY
+      if (!delta) return
+      e.preventDefault()
+      el.scrollBy({ left: delta })
+    }
     el.addEventListener('scroll', updateTabScrollState, { passive: true })
+    el.addEventListener('wheel', onWheel, { passive: false })
     return () => {
       ro.disconnect()
       el.removeEventListener('scroll', updateTabScrollState)
+      el.removeEventListener('wheel', onWheel)
     }
   }, [listWidth, tabsKey, updateTabScrollState])
 
@@ -757,7 +766,7 @@ export function WtlFacilityShell({
           maxWidth={LIST_MAX}
           leftOffsetPx={leftOffsetPx}
           onWidthChange={setListWidth}
-          contentClassName="overflow-hidden pr-2.5"
+          contentClassName="overflow-hidden"
         >
           <div className="standard-panel-root">
             <div className="standard-panel-header">
@@ -773,7 +782,7 @@ export function WtlFacilityShell({
               </button>
             </div>
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-              <div className="standard-filter-section shrink-0 border-b-0 !pb-[13px]">
+              <div className="standard-filter-section shrink-0 border-b-1 !pb-[13px]">
                 <div className="flex items-stretch border-b border-border">
                   {showTabSlide ? (
                     <button
@@ -794,8 +803,9 @@ export function WtlFacilityShell({
                     ref={tabScrollRef}
                     className="flex min-w-0 flex-1 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
                   >
-                    {catalog.tabs.map((name) => {
-                      const enabled = isTabEnabled(name)
+                    {catalog.tabs
+                      .filter((name) => isTabEnabled(name))
+                      .map((name) => {
                       const on = tab === name
                       const label = catalog.tabLabel(name) || name
                       return (
@@ -803,16 +813,12 @@ export function WtlFacilityShell({
                           key={name}
                           type="button"
                           data-facility-tab={name}
-                          title={enabled ? label : '데이터가 없습니다'}
-                          disabled={!enabled}
+                          title={label}
                           className={cn(
-                            'h-7 shrink-0 whitespace-nowrap border-b-2 -mb-px px-2 text-center text-[11px]',
-                            !enabled && 'cursor-not-allowed opacity-40',
-                            enabled && on
+                            'h-7 shrink-0 cursor-pointer whitespace-nowrap border-b-2 -mb-px px-2 text-center text-[11px]',
+                            on
                               ? 'border-primary font-semibold text-primary'
-                              : enabled
-                                ? 'cursor-pointer border-transparent text-muted-foreground hover:text-foreground'
-                                : 'border-transparent text-muted-foreground'
+                              : 'border-transparent text-muted-foreground hover:text-foreground'
                           )}
                           onClick={() => handleTabClick(name)}
                         >
@@ -985,6 +991,8 @@ export function WtlFacilityShell({
             <WtlFacilityDetailPanel
               row={selected}
               schema={selectedSource?.schema}
+              showFacilityInfoLink={title === '설비관리' || title === '이력관리'}
+              showHistoryCard={title === '설비관리' || title === '이력관리'}
               onClose={() => {
                 setSelectedId(null)
                 setSelectedRow(null)

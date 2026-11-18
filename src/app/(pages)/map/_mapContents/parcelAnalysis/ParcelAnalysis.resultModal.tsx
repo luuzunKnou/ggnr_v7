@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject } from 'react';
 import { cn } from '@/lib/utils';
+import { MAP_UI_Z_CLASS } from '@/lib/mapUiZIndex';
 import { Button } from '@/app/shadcnComponents/ui/button';
 import {
   Dialog,
@@ -301,7 +302,6 @@ const OUTSIDE_CLICK_MOVE_THRESHOLD_PX = 5;
 const RESULT_MODAL_WIDTH = 'min(1100px, calc(100vw - 2rem))';
 const RESULT_MODAL_HEIGHT = 'min(720px, 85vh)';
 /** 지도 패널·사이드바 위 — body portal 대신 레이아웃 트리에 렌더 (캡쳐 시 유지) */
-const RESULT_MODAL_Z = 'z-[1300]';
 /** 우측 본문 최소 폭 — 모달이 좁아지면 패널 전체 가로 스크롤 */
 const RESULT_CONTENT_MIN_WIDTH_PX = 720;
 /** 건축물대장·토지현황 표 공통 최대 높이 — 초과 시 표 영역 내부 세로 스크롤 */
@@ -809,7 +809,7 @@ export function ParcelAnalysisResultModal({
   if (!open) return null;
 
   return (
-    <div className={cn('pointer-events-none fixed inset-0', RESULT_MODAL_Z)}>
+    <div className={cn('pointer-events-none fixed inset-0', MAP_UI_Z_CLASS.resultModal)}>
       <div
         className="pointer-events-auto absolute inset-0 bg-black/50"
         aria-hidden

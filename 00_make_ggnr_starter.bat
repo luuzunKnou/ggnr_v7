@@ -21,6 +21,9 @@ chcp 65001 >nul
 :: - stop previous GGNR / free app port (PORT) AFTER successful build (before nssm)
 :: - ggnr_start.bat + 00_ggnr_build_project.bat generated from project/type/port prompts
 :: - project / type / port / npm / overwrite / nssm asked once up front
+:: - unattended (GGNR_STARTER_UNATTENDED=1): project/env/port/npm from
+::   GGNR_STARTER_PROJECT, GGNR_STARTER_ENV, GGNR_STARTER_PORT, GGNR_STARTER_NPM_SYNC
+::   service re-register is always Y. prints GGNR_STARTER_BUILD_OK / GGNR_STARTER_FAIL
 :: - nssm = root\nssm\win64\nssm.exe
 :: - python/env_parts optional restore
 :: - if DO_NSSM=Y and not admin => require admin before build
@@ -52,6 +55,7 @@ if /i "%GGNR_START_NO_PAUSE%"=="1" echo [안내] 자동 진행입니다. 창은 
 echo.
 
 :: --- prompts (once) ---
+if /i "%GGNR_STARTER_UNATTENDED%"=="1" goto :prompts_unattended
 echo [입력] 아래 값을 입력하세요. 예/아니오는 Y 또는 N 입니다.
 echo.
 set /p "PROJECT_NAME=프로젝트 이름: "
@@ -116,6 +120,48 @@ if /i "%GGNR_START_NO_PAUSE%"=="1" (
   )
 )
 
+goto :prompts_done
+
+:prompts_unattended
+echo [실행] 무인 설치입니다. 질문을 건너뜁니다.
+set "PROJECT_NAME=%GGNR_STARTER_PROJECT%"
+set "ENV_NAME=%GGNR_STARTER_ENV%"
+if defined GGNR_STARTER_PORT set "APP_PORT=%GGNR_STARTER_PORT%"
+set "DO_NPM_SYNC=%GGNR_STARTER_NPM_SYNC%"
+if not defined DO_NPM_SYNC set "DO_NPM_SYNC=N"
+set "OVERWRITE=Y"
+set "DO_NSSM=Y"
+set "DO_REREG=Y"
+if not defined PROJECT_NAME (
+  echo [오류] 프로젝트 이름이 비어 있습니다.
+  goto :fail_exit
+)
+echo !PROJECT_NAME!| findstr /C:" " >nul 2>&1
+if not errorlevel 1 (
+  echo [오류] 프로젝트 이름에 공백이 있으면 안 됩니다.
+  goto :fail_exit
+)
+if not defined ENV_NAME (
+  echo [오류] 구분이 비어 있습니다.
+  goto :fail_exit
+)
+echo !ENV_NAME!| findstr /C:" " >nul 2>&1
+if not errorlevel 1 (
+  echo [오류] 구분에 공백이 있으면 안 됩니다.
+  goto :fail_exit
+)
+echo !APP_PORT!| findstr /R "^[1-9][0-9]*$" >nul 2>&1
+if errorlevel 1 (
+  echo [오류] 포트는 1부터 65535까지 숫자여야 합니다. 입력=[!APP_PORT!]
+  goto :fail_exit
+)
+if !APP_PORT! GTR 65535 (
+  echo [오류] 포트는 65535 이하여야 합니다. 입력=[!APP_PORT!]
+  goto :fail_exit
+)
+echo [안내] 지정 포트 = !APP_PORT!
+
+:prompts_done
 :: normalize Y/N
 set "DO_NPM_SYNC=!DO_NPM_SYNC: =!"
 if /i not "!DO_NPM_SYNC!"=="Y" if /i not "!DO_NPM_SYNC!"=="N" (
@@ -205,6 +251,11 @@ set "GGNR_ENV=%ENV_NAME%"
 set "PATH=%PATH%;%NODE_DIR%"
 call :run_npm_build
 if errorlevel 1 goto :fail_exit
+if /i "%GGNR_STARTER_UNATTENDED%"=="1" (
+  echo GGNR_STARTER_BUILD_OK
+  rem piped stdout: timeout refuses input redirection. ping waits without a console.
+  ping -n 4 127.0.0.1 >nul
+)
 echo.
 echo [확인] 빌드가 끝났습니다. 다음: 시작 파일 / 서비스 등록
 echo.
@@ -331,6 +382,7 @@ exit /b 0
 
 :fail_exit
 if not defined FAIL_EC set "FAIL_EC=1"
+if /i "%GGNR_STARTER_UNATTENDED%"=="1" echo GGNR_STARTER_FAIL
 echo.
 echo [종료] 오류로 멈췄습니다 ^(종료=!FAIL_EC!^). 위 메시지를 확인하세요.
 echo      서비스 등록 로그: C:\logs\nssm_install_last.log

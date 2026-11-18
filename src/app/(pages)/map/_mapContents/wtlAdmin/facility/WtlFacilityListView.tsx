@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState, type UIEvent } from 'react'
-import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react'
+import { ArrowDown, ArrowUp, ArrowUpDown, Loader2 } from 'lucide-react'
 import { formatDefineFieldDisplayValue } from '@/lib/defineLayerCodeDisplay'
 import { cn } from '@/lib/utils'
 import {
@@ -91,7 +91,19 @@ export function WtlFacilityListView({
   sorts = [],
   onToggleSort,
 }: Props) {
-  const [bundle, setBundle] = useState<WtlDefineDisplayBundle | null>(null)
+  const fieldsTableName = String(fieldsTable ?? '').trim()
+  const localizeKey = `${fieldsTableName}\0${String(fieldsTableFallback ?? '').trim()}`
+  const syncBundle = fieldsTableName
+    ? peekWtlDefineDisplayBundle(fieldsTableName, fieldsTableFallback)
+    : null
+  const [asyncBundle, setAsyncBundle] = useState<{
+    key: string
+    bundle: WtlDefineDisplayBundle
+  } | null>(null)
+  const bundle =
+    syncBundle ?? (asyncBundle?.key === localizeKey ? asyncBundle.bundle : null)
+  /** 필드 한글명·코드 한글이 오기 전에 영문 목록이 먼저 보이지 않게 */
+  const waitingLocalize = fieldsTableName.length > 0 && bundle == null
   const listScrollRef = useRef<HTMLDivElement>(null)
   /** 지도 선택 후 페이징으로 아직 안 온 행 — 이어서 받다가 스크롤 */
   const scrollTargetIdRef = useRef<string | null>(null)
@@ -136,31 +148,28 @@ export function WtlFacilityListView({
       })
       return () => cancelAnimationFrame(raf)
     }
-    if (loading || loadingMore) return
+    if (loading || loadingMore || waitingLocalize) return
     if (rows.length < total) onScrollNearEnd?.()
-  }, [selectedId, rows, total, loading, loadingMore, onScrollNearEnd])
+  }, [selectedId, rows, total, loading, loadingMore, onScrollNearEnd, waitingLocalize])
 
   useEffect(() => {
-    const table = String(fieldsTable ?? '').trim()
-    if (!table) {
-      setBundle(null)
-      return
-    }
-    const peeked = peekWtlDefineDisplayBundle(table, fieldsTableFallback)
-    if (peeked) {
-      setBundle(peeked)
-      return
-    }
+    if (!fieldsTableName) return
     let cancelled = false
-    void loadWtlDefineDisplayBundle(table, fieldsTableFallback).then((b) => {
-      if (!cancelled) setBundle(b)
+    void loadWtlDefineDisplayBundle(fieldsTableName, fieldsTableFallback).then((b) => {
+      if (cancelled) return
+      setAsyncBundle((prev) =>
+        prev?.key === localizeKey && prev.bundle === b
+          ? prev
+          : { key: localizeKey, bundle: b }
+      )
     })
     return () => {
       cancelled = true
     }
-  }, [fieldsTable, fieldsTableFallback])
+  }, [fieldsTableName, fieldsTableFallback, localizeKey])
 
   const listFields = useMemo(() => {
+    if (waitingLocalize) return []
     const all = bundle?.fields ?? []
     const selectedFields = selectDefineLayerListFields(all)
     if (selectedFields.length > 0) return selectedFields
@@ -175,16 +184,21 @@ export function WtlFacilityListView({
         .slice(0, 6)
     }
     return fallbackListFields(rows[0]?.record ?? null)
-  }, [bundle, rows])
+  }, [bundle, rows, waitingLocalize])
 
   const codesByField = bundle?.codesByField ?? {}
   const colCount = Math.max(1, listFields.length)
-  const showInitialLoading = loading && rows.length === 0
+  const showLocalizeLoading = waitingLocalize && error == null
+  const showInitialLoading = !showLocalizeLoading && loading && rows.length === 0
   const showTable =
-    showInitialLoading || error != null || listFields.length > 0 || rows.length > 0
+    showLocalizeLoading ||
+    showInitialLoading ||
+    error != null ||
+    listFields.length > 0 ||
+    rows.length > 0
   const sortEnabled = typeof onToggleSort === 'function'
 
-  const footerText = showInitialLoading
+  const footerText = showLocalizeLoading || showInitialLoading
     ? '조회 중…'
     : loading && rows.length > 0
       ? `${rows.length} / ${total}건 · 조회 중…`
@@ -197,7 +211,14 @@ export function WtlFacilityListView({
   return (
     <div className="standard-list-body">
       <div ref={listScrollRef} className="standard-list-scroll" onScroll={onListScroll}>
-        {!showTable ? (
+        {showLocalizeLoading ? (
+          <div className="standard-table-loading-cell">
+            <span className="inline-flex items-center justify-center gap-2">
+              <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
+              불러오는 중…
+            </span>
+          </div>
+        ) : !showTable ? (
           <p className="standard-table-empty">표시할 필드가 없습니다.</p>
         ) : (
           <table className="standard-list-table">

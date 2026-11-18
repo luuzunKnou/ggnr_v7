@@ -1,0 +1,41 @@
+<featureType>
+  <id>FeatureTypeInfoImpl--55857d9c:1a19abc0bff:-7603</id>
+  <name>temp_housing_plate_maint</name>
+  <nativeName>temp_housing_plate_maint</nativeName>
+  <namespace>
+    <id>NamespaceInfoImpl-4bf97568:19c4d6c3053:-7ffa</id>
+  </namespace>
+  <title>temp_housing_plate_maint</title>
+  <keywords>
+    <string>features</string>
+    <string>temp_housing_plate_maint</string>
+  </keywords>
+  <srs>EPSG:5181</srs>
+  <nativeBoundingBox>
+    <minx>340847.87919708993</minx>
+    <maxx>378226.5963471915</maxx>
+    <miny>320219.13346470497</miny>
+    <maxy>340844.730061625</maxy>
+    <crs class="projected">EPSG:5181</crs>
+  </nativeBoundingBox>
+  <latLonBoundingBox>
+    <minx>128.5694360781522</minx>
+    <maxx>128.99047968026284</maxx>
+    <miny>36.36357273051283</miny>
+    <maxy>36.555568836130526</maxy>
+    <crs>EPSG:4326</crs>
+  </latLonBoundingBox>
+  <projectionPolicy>FORCE_DECLARED</projectionPolicy>
+  <enabled>true</enabled>
+  <store class="dataStore">
+    <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff9</id>
+  </store>
+  <serviceConfiguration>false</serviceConfiguration>
+  <maxFeatures>0</maxFeatures>
+  <numDecimals>0</numDecimals>
+  <padWithZeros>false</padWithZeros>
+  <forcedDecimal>false</forcedDecimal>
+  <overridingServiceSRS>false</overridingServiceSRS>
+  <skipNumberMatched>false</skipNumberMatched>
+  <circularArcPresent>false</circularArcPresent>
+</featureType>

@@ -2172,7 +2172,9 @@ export async function createTableFromShp(params: {
   const tableName = override
     ? override.toLowerCase().startsWith('_rctmp_')
       ? `_rctmp_${safeTableName(override.slice('_rctmp_'.length))}`
-      : safeTableName(override)
+      : override.toLowerCase().startsWith('_cmp_')
+        ? `_cmp_${safeTableName(override.slice('_cmp_'.length))}`
+        : safeTableName(override)
     : shpTableNameFromRelPath(pathOrResult);
 
   try {

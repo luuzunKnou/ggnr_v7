@@ -32,7 +32,7 @@ import {
   LAND_INFO_TABLE_TEXT,
   LAND_INFO_TABLE_WRAP,
 } from './landInfoTableStyles';
-import { LAND_INFO_MODAL_Z } from './landInfoModalZ';
+import { MAP_UI_Z } from '@/lib/mapUiZIndex';
 
 const PRICE_MODAL_HEADERS = ['공시지가', '공시일자', '기준년도', '기준월', '지번', '비고'] as const;
 
@@ -545,9 +545,8 @@ export function LandInfoParcelPanel({
         }}
       >
         <DialogContent
-          overlayClassName={LAND_INFO_MODAL_Z}
+          layerZIndex={MAP_UI_Z.nestedDialog}
           className={cn(
-            LAND_INFO_MODAL_Z,
             'flex max-h-[86vh] min-w-0 flex-col gap-0 overflow-hidden border-border bg-card p-0 text-card-foreground',
             PARCEL_LAND_MODAL_SIZE_CLASS
           )}

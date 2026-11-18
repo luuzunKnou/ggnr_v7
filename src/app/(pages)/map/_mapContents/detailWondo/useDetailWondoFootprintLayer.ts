@@ -23,6 +23,7 @@ import {
   type DetailWondoCoord,
   type DetailWondoItem,
 } from './detailWondoConfig'
+import { insertDetailWondoFootprint } from './detailWondoLayerOrder'
 
 const LAYER_PROP = 'detailWondoFootprintLayer'
 /** 이 해상도(m/px) 이하에서만 원도 이름 라벨 */
@@ -35,6 +36,22 @@ function to3857(c: DetailWondoCoord): [number, number] {
 
 export function detailWondoCorners3857(item: DetailWondoItem): [number, number][] {
   return [item.topLeft, item.topRight, item.bottomRight, item.bottomLeft].map(to3857)
+}
+
+/** 월드파일 + 실제 이미지 크기 → 화면 좌표. 겹쳐 그릴 때 목록의 대략 도곽보다 정확하다 */
+export function detailWondoWorldCorners3857(
+  world: [number, number, number, number, number, number],
+  width: number,
+  height: number
+): [number, number][] {
+  const [A, D, B, E, C, F] = world
+  const at = (col: number, row: number): DetailWondoCoord => [A * col + B * row + C, D * col + E * row + F]
+  return [
+    at(-0.5, -0.5),
+    at(width - 0.5, -0.5),
+    at(width - 0.5, height - 0.5),
+    at(-0.5, height - 0.5),
+  ].map(to3857)
 }
 
 function createStyle(getPicked: () => Set<string>, getShown: () => Set<string>) {
@@ -134,14 +151,14 @@ export function useDetailWondoFootprintLayer({
     const layer = new VectorLayer({
       source,
       declutter: true,
-      zIndex: 70,
       style: createStyle(
         () => pickedRef.current,
         () => shownRef.current
       ),
     })
     layer.set(LAYER_PROP, true)
-    map.addLayer(layer)
+    // 원도 이미지보다 아래 — 표시 중 원도 위에 도곽 점선이 덮이지 않게 함
+    insertDetailWondoFootprint(map, layer)
     sourceRef.current = source
 
     const handleClick = (evt: MapBrowserEvent<PointerEvent>) => {

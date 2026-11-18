@@ -202,7 +202,7 @@
   {
     "define_field_name": "ROAD_DV",
     "define_field_kor_name": "보차도 구분",
-    "define_field_type": "TEXT",
+    "define_field_type": "CODE",
     "define_field_idx": 999999,
     "define_field_is_required": false,
     "define_field_show_search": false,

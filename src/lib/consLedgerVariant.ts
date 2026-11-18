@@ -38,7 +38,8 @@ export const CONS_LEDGER_VARIANTS: Record<ConsLedgerKind, ConsLedgerVariant> = {
     openedKey: 'constructionLedger',
     title: '상수도 공사대장',
     mainTable: 'wtl_cons_as',
-    soloTable: 'wtl_cons_solo_as',
+    /** 업로드된 공사구역. wtl_cons_solo_as 는 의성 DB에 없음 */
+    soloTable: 'wtl_cons_as_solo',
     soloAddressFields: ['rd_addr', 'address'],
     defaultConsCode: 'WTL_000001',
   },
@@ -48,7 +49,8 @@ export const CONS_LEDGER_VARIANTS: Record<ConsLedgerKind, ConsLedgerVariant> = {
     openedKey: 'sewerConstructionLedger',
     title: '하수도 공사대장',
     mainTable: 'swl_cons_as',
-    soloTable: 'swl_cons_solo_as',
+    /** 업로드된 공사구역. swl_cons_solo_as 는 의성 DB에 없음 */
+    soloTable: 'swl_cons_as_solo',
     soloAddressFields: ['rd_addr', 'address'],
     defaultConsCode: 'SWL_000001',
   },

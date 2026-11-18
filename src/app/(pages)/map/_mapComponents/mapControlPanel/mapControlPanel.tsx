@@ -26,7 +26,7 @@ import { cn } from "@/lib/utils"
 import { useShootingRequestUiEnabled } from "@/app/(pages)/map/_mapContents/shootingRequest/useShootingRequestUiEnabled"
 import {
   isUavFamilySystemKey,
-  isUavUlsanProject,
+  isUavUsProject,
 } from "@/app/(pages)/map/_mapContents/shootingRequest/shootingRequestUiFlag"
 
 // 패널 아이템 타입 정의
@@ -251,7 +251,7 @@ export function mapControlGroupsForSystem(
   systemKey: string,
   projectName?: string
 ): MapControlGroup[] {
-  if (isUavUlsanProject(projectName) || isUavFamilySystemKey(systemKey)) {
+  if (isUavUsProject(projectName) || isUavFamilySystemKey(systemKey)) {
     return defaultMapControlGroups
   }
   return defaultMapControlGroups.map((g) => ({

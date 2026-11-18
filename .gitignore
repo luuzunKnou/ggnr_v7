@@ -22,6 +22,8 @@
 
 # CAD 미리보기 작업 파일 (roadDocCadPreviewPng)
 /.cad-preview-work/
+# 레이어 CAD 다운로드 잡/임시 파일
+/.cad-export-jobs/
 
 # misc
 .DS_Store

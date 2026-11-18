@@ -56,10 +56,13 @@ import * as integrationService from './integrationService';
 import * as fileConverterService from './fileConverterService';
 import * as pdfToJpgService from './pdfToJpgService';
 import * as shpToDxfService from './shpToDxfService';
+import * as layerCadExportService from './layerCadExportService';
+import * as layerCompareService from './layerCompareService';
 import * as ocrMigrationService from './ocrMigrationService';
 import * as layerRowService from './layerRowService';
 import * as layerExtraService from './layerExtraService';
 import * as gcpService from './gcpService';
+import * as cadastralControlPointService from './cadastralControlPointService';
 import * as mapAnalyseService from './mapAnalyseService';
 import * as elevationService from './elevationService';
 import * as floodRiskService from './floodRiskService';
@@ -93,7 +96,12 @@ import * as systemControlService from './systemControlService';
 import * as splitLayerService from './splitLayerService';
 import * as dashboardStatsService from './dashboardStatsService';
 import * as detailWondoService from './detailWondoService';
+import * as digitalMapService from './digitalMapService';
+import * as drawingDisplayService from './drawingDisplayService';
+import * as landArchiveService from './landArchiveService';
 import * as individualLandPriceService from './individualLandPriceService';
+import * as realTransactionPriceService from './realTransactionPriceService';
+import * as smallPublicService from './smallPublicService';
 
 export {
   configService,
@@ -153,10 +161,13 @@ export {
   fileConverterService,
   pdfToJpgService,
   shpToDxfService,
+  layerCadExportService,
+  layerCompareService,
   ocrMigrationService,
   layerRowService,
   layerExtraService,
   gcpService,
+  cadastralControlPointService,
   mapAnalyseService,
   elevationService,
   floodRiskService,
@@ -187,5 +198,10 @@ export {
   splitLayerService,
   dashboardStatsService,
   detailWondoService,
+  digitalMapService,
+  drawingDisplayService,
+  landArchiveService,
   individualLandPriceService,
+  realTransactionPriceService,
+  smallPublicService,
 };

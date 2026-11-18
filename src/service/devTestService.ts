@@ -33,7 +33,10 @@ import {
 } from '@/lib/geoserverStyles/buildSldFromEnvTemplate';
 import {
   buildElevationContourCss,
+  buildElevationSplitCssByLayerName,
   ELEVATION_LAYER_NAME,
+  ELEVATION_SPLIT_LAYER_NAMES,
+  elevationSplitKindFromLayerName,
 } from '@/lib/geoserverStyles/elevationContourStyle';
 import { normalizeDefineTableSource, dedupeDefineLayerTablesByName } from '@/lib/defineLayerTablesNormalize';
 import {
@@ -591,6 +594,140 @@ const GEOSERVER_AUTH = Buffer.from('admin:geoserver', 'utf8').toString('base64')
 /** 작업공간 ggnr의 namespace URI. workspace 생성 시 GeoServer가 부여하는 값과 동일 — PostGIS 저장소에도 명시해야 Web UI NamespacePanel이 정상 동작 */
 const GEOSERVER_NAMESPACE_URI = 'http://ggnr';
 
+/**
+ * 이 프로젝트 관례 EPSG:5181 = Korea 2000 / Central Belt (false northing 500000).
+ * 공식 EPSG:5181(Unified, FN 600000)과 다름. GeoServer user_projections 에도 동일 WKT를 둔다.
+ */
+const EPSG_5181_WKT =
+  'PROJCS["Korea 2000 / Central Belt",GEOGCS["Korea 2000",DATUM["Geocentric_datum_of_Korea",SPHEROID["GRS 1980",6378137.0,298.257222101],TOWGS84[0,0,0,0,0,0,0]],PRIMEM["Greenwich",0.0],UNIT["degree",0.017453292519943295]],PROJECTION["Transverse_Mercator"],PARAMETER["latitude_of_origin",38.0],PARAMETER["central_meridian",127.0],PARAMETER["scale_factor",1.0],PARAMETER["false_easting",200000.0],PARAMETER["false_northing",500000.0],UNIT["metre",1.0],AUTHORITY["EPSG","5181"]]';
+
+function geoServerUserProjectionsEpsgPath(): string {
+  return path.join(process.cwd(), 'geoserver_modules', 'data_dir', 'user_projections', 'epsg.properties');
+}
+
+/**
+ * data_dir/user_projections/epsg.properties 에 5181 정의가 없으면 추가.
+ * GeoServer는 기동 시 이 파일을 읽으므로, 새로 쓴 뒤에는 지도서버 재시작이 필요하다.
+ */
+export function ensureGeoServerEpsg5181Properties(): { path: string; written: boolean } {
+  const fp = geoServerUserProjectionsEpsgPath();
+  fs.mkdirSync(path.dirname(fp), { recursive: true });
+  let existing = '';
+  try {
+    existing = fs.readFileSync(fp, 'utf8');
+  } catch {
+    existing = '';
+  }
+  if (/(^|[\r\n])\s*5181\s*=/.test(existing)) {
+    return { path: fp, written: false };
+  }
+  const header =
+    '# Custom EPSG overrides. Restart GeoServer after edit.\n' +
+    '# 5181 = Korea 2000 / Central Belt (FN 500000) — project convention.\n';
+  const line = `5181=${EPSG_5181_WKT}\n`;
+  const next = existing.trim() ? `${existing.replace(/\s*$/, '')}\n${line}` : `${header}${line}`;
+  fs.writeFileSync(fp, next, 'utf8');
+  return { path: fp, written: true };
+}
+
+type GeoServerBbox = {
+  minx: number;
+  maxx: number;
+  miny: number;
+  maxy: number;
+  crs: string;
+};
+
+async function loadLayerBboxesForPublish(
+  schema: string,
+  table: string
+): Promise<{ native: GeoServerBbox; latLon: GeoServerBbox } | null> {
+  const sch = String(schema).replace(/"/g, '""');
+  const tbl = String(table).replace(/"/g, '""');
+  try {
+    const res = await db.execute(
+      sql.raw(`
+        SELECT
+          ST_XMin(ext) AS xmin, ST_YMin(ext) AS ymin, ST_XMax(ext) AS xmax, ST_YMax(ext) AS ymax,
+          ST_XMin(llext) AS ll_xmin, ST_YMin(llext) AS ll_ymin,
+          ST_XMax(llext) AS ll_xmax, ST_YMax(llext) AS ll_ymax
+        FROM (
+          SELECT
+            ST_Extent(geom) AS ext,
+            ST_Extent(ST_Transform(geom, 4326)) AS llext
+          FROM "${sch}"."${tbl}"
+          WHERE geom IS NOT NULL
+        ) s
+      `)
+    );
+    const row = (res.rows as Array<Record<string, unknown>>)[0];
+    if (!row || row.xmin == null || row.ll_xmin == null) return null;
+    const n = (v: unknown) => Number(v);
+    if (![row.xmin, row.ymin, row.xmax, row.ymax, row.ll_xmin, row.ll_ymin, row.ll_xmax, row.ll_ymax].every((v) => Number.isFinite(n(v)))) {
+      return null;
+    }
+    return {
+      native: {
+        minx: n(row.xmin),
+        miny: n(row.ymin),
+        maxx: n(row.xmax),
+        maxy: n(row.ymax),
+        crs: 'EPSG:5181',
+      },
+      latLon: {
+        minx: n(row.ll_xmin),
+        miny: n(row.ll_ymin),
+        maxx: n(row.ll_xmax),
+        maxy: n(row.ll_ymax),
+        crs: 'EPSG:4326',
+      },
+    };
+  } catch {
+    return null;
+  }
+}
+
+function buildFeatureTypePublishBody(params: {
+  name: string;
+  nativeName: string;
+  cqlFilter?: string;
+  bboxes?: { native: GeoServerBbox; latLon: GeoServerBbox } | null;
+}) {
+  return {
+    featureType: {
+      name: params.name,
+      nativeName: params.nativeName,
+      enabled: true,
+      srs: 'EPSG:5181',
+      nativeCRS: EPSG_5181_WKT,
+      projectionPolicy: 'FORCE_DECLARED',
+      ...(params.bboxes
+        ? {
+            nativeBoundingBox: params.bboxes.native,
+            latLonBoundingBox: params.bboxes.latLon,
+          }
+        : {}),
+      ...(params.cqlFilter ? { cqlFilter: params.cqlFilter } : {}),
+    },
+  };
+}
+
+function featureTypeCreateErrorMessage(status: number, text: string): string {
+  const body = String(text ?? '').trim();
+  const srsMissing =
+    /mis-configured/i.test(body) ||
+    /NoSuchAuthorityCodeException/i.test(body) ||
+    /No code ["']?EPSG:5181/i.test(body);
+  if (srsMissing) {
+    return (
+      `FeatureType 생성 실패: ${status} EPSG:5181 좌표계를 지도서버가 모릅니다. ` +
+      `geoserver_modules/data_dir/user_projections/epsg.properties 를 확인한 뒤 지도서버를 재시작하고 다시 발행하세요.` +
+      (body ? ` (${body.slice(0, 240)})` : '')
+    );
+  }
+  return `FeatureType 생성 실패: ${status} ${body}`;
+}
+
 /** PostGIS 데이터 스토어 REST body 공통 생성. host/port/database/user/passwd(동적, env) + namespace/dbtype 등 PostGIS 고정 파라미터(정적) 포함 */
 function buildPostgisDataStoreBody(
   name: string,
@@ -971,6 +1108,8 @@ export async function getGeoServerLayerList(params: {
 
 /** 백업 테이블명 예: roadUseLedger_BAK20260423 (`_BAK` + 선택 숫자로 끝남, 대소문자 무시) */
 const LAYER_BACKUP_TABLE_NAME_RE = /_bak\d*$/i;
+/** 레이어비교·SHP 정합성·스키마 재생성 임시 테이블 — 목록에서 제외 */
+const LAYER_TEMP_TABLE_NAME_RE = /^_(cmp_|sync_|rctmp_)/i;
 
 /**
  * layer, public_layer 스키마의 geometry 테이블 목록 조회
@@ -996,7 +1135,11 @@ export async function getLayerTableList() {
         table: r.f_table_name,
         geometryColumn: r.f_geometry_column,
       }))
-      .filter((r) => !LAYER_BACKUP_TABLE_NAME_RE.test(String(r.table ?? '')));
+      .filter(
+        (r) =>
+          !LAYER_BACKUP_TABLE_NAME_RE.test(String(r.table ?? '')) &&
+          !LAYER_TEMP_TABLE_NAME_RE.test(String(r.table ?? ''))
+      );
     return { success: true, tables };
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -1194,15 +1337,14 @@ export async function createGeoServerLayers(params: {
         continue;
       }
 
-      const ftBody = {
-        featureType: {
-          name: publishName,
-          nativeName: sourceTable.table,
-          enabled: true,
-          srs: 'EPSG:5181',
-          ...(divQuery ? { cqlFilter: divQuery } : {}),
-        },
-      };
+      ensureGeoServerEpsg5181Properties();
+      const bboxes = await loadLayerBboxesForPublish(sourceTable.schema, sourceTable.table);
+      const ftBody = buildFeatureTypePublishBody({
+        name: publishName,
+        nativeName: sourceTable.table,
+        cqlFilter: divQuery || undefined,
+        bboxes,
+      });
 
       const ftRes = await geoserverFetch(
         baseUrl,
@@ -1274,7 +1416,7 @@ export async function createGeoServerLayers(params: {
         failed.push({
           schema: sourceTable.schema,
           table: defineLayerName,
-          error: `${ftRes.status} ${text}`,
+          error: featureTypeCreateErrorMessage(ftRes.status, text),
         });
       }
     }
@@ -1412,15 +1554,14 @@ export async function createOrUpdateGeoServerLayer(params: {
       }
     }
 
-    const ftBody = {
-      featureType: {
-        name: layerName,
-        nativeName: sourceTable.table,
-        enabled: true,
-        srs: 'EPSG:5181',
-        ...(divQuery ? { cqlFilter: divQuery } : {}),
-      },
-    };
+    ensureGeoServerEpsg5181Properties();
+    const bboxes = await loadLayerBboxesForPublish(sourceTable.schema, sourceTable.table);
+    const ftBody = buildFeatureTypePublishBody({
+      name: layerName,
+      nativeName: sourceTable.table,
+      cqlFilter: divQuery || undefined,
+      bboxes,
+    });
 
     const ftRes = await geoserverFetch(
       baseUrl,
@@ -1430,7 +1571,7 @@ export async function createOrUpdateGeoServerLayer(params: {
 
     if (!ftRes.ok) {
       const text = await ftRes.text();
-      return { success: false as const, error: `FeatureType 생성 실패: ${ftRes.status} ${text}` };
+      return { success: false as const, error: featureTypeCreateErrorMessage(ftRes.status, text) };
     }
 
     if (divQuery) {
@@ -2285,42 +2426,89 @@ export type StyleApplyResult =
   | { success: true; layerName?: string; styleName?: string; created?: boolean }
   | { success: false; error: string; uploaded?: true };
 
+async function uploadElevationCssStyle(params: {
+  url: string;
+  workspace: string;
+  layerName: string;
+  cssBody: string;
+  /** 레이어가 아직 없으면 스타일만 올리고 링크는 생략 */
+  linkIfLayerExists?: boolean;
+}): Promise<StyleApplyResult> {
+  const { url: baseUrl, workspace, layerName, cssBody } = params;
+  const linkIfLayerExists = params.linkIfLayerExists !== false;
+
+  let created = false;
+  if (!dataDirCssMatches(layerName, cssBody)) {
+    const putRes = await putGeoServerCssStyle({ url: baseUrl, name: layerName, cssBody });
+    if (!putRes.success) {
+      return { success: false, error: putRes.error ?? '등고선 스타일 업로드 실패' };
+    }
+    created = putRes.created === true;
+  }
+
+  if (linkIfLayerExists) {
+    const layerRes = await geoserverFetch(
+      baseUrl,
+      `/rest/workspaces/${workspace}/layers/${encodeURIComponent(layerName)}.json`
+    );
+    if (layerRes.ok) {
+      const setRes = await setLayerDefaultStyle({
+        url: baseUrl,
+        workspace,
+        layerName,
+        styleName: layerName,
+      });
+      if (!setRes.success) {
+        return {
+          success: false,
+          error: setRes.error ?? '레이어 기본 스타일 지정 실패',
+          uploaded: true as const,
+        };
+      }
+    }
+  }
+
+  return {
+    success: true,
+    layerName,
+    styleName: layerName,
+    created,
+  };
+}
+
 export async function applyElevationContourStyle(
   params: { url?: string; workspace?: string } = {}
 ): Promise<StyleApplyResult> {
   const baseUrl = resolveGeoServerFetchBase(params?.url);
   const workspace = params?.workspace?.trim() || 'ggnr';
-  const layerName = ELEVATION_LAYER_NAME;
-  const cssBody = buildElevationContourCss();
 
   try {
-    let created = false;
-    if (!dataDirCssMatches(layerName, cssBody)) {
-      const putRes = await putGeoServerCssStyle({ url: baseUrl, name: layerName, cssBody });
-      if (!putRes.success) {
-        return { success: false, error: putRes.error ?? '등고선 스타일 업로드 실패' };
-      }
-      created = putRes.created === true;
-    }
-
-    const setRes = await setLayerDefaultStyle({
+    const parentRes = await uploadElevationCssStyle({
       url: baseUrl,
       workspace,
-      layerName,
-      styleName: layerName,
+      layerName: ELEVATION_LAYER_NAME,
+      cssBody: buildElevationContourCss(),
     });
-    if (!setRes.success) {
-      return {
-        success: false,
-        error: setRes.error ?? '레이어 기본 스타일 지정 실패',
-        uploaded: true as const,
-      };
+    if (!parentRes.success) return parentRes;
+
+    let created = parentRes.created === true;
+    for (const splitName of ELEVATION_SPLIT_LAYER_NAMES) {
+      const cssBody = buildElevationSplitCssByLayerName(splitName);
+      if (!cssBody) continue;
+      const splitRes = await uploadElevationCssStyle({
+        url: baseUrl,
+        workspace,
+        layerName: splitName,
+        cssBody,
+      });
+      if (!splitRes.success) return splitRes;
+      if (splitRes.created) created = true;
     }
 
     return {
       success: true,
-      layerName,
-      styleName: layerName,
+      layerName: ELEVATION_LAYER_NAME,
+      styleName: ELEVATION_LAYER_NAME,
       created,
     };
   } catch (e: unknown) {
@@ -3178,6 +3366,33 @@ export async function applyDefaultStyleToLayer(params: {
       return { success: true as const, layerName, styleName: layerName, created };
     };
 
+    // elevation·분할 자식은 기존 스타일이 있어도 도면 관례 CSS로 강제 동기화
+    if (layerName === ELEVATION_LAYER_NAME || elevationSplitKindFromLayerName(layerName)) {
+      const cssBody =
+        layerName === ELEVATION_LAYER_NAME
+          ? buildElevationContourCss()
+          : buildElevationSplitCssByLayerName(layerName);
+      if (!cssBody) {
+        return { success: false, error: '등고선 분할 스타일 본문을 만들 수 없습니다.' };
+      }
+      const elevRes = await uploadElevationCssStyle({
+        url: baseUrl,
+        workspace,
+        layerName,
+        cssBody,
+        linkIfLayerExists: true,
+      });
+      if (!elevRes.success) return elevRes;
+      const renderRes = await verifyLayerStyleRender(
+        baseUrl,
+        workspace,
+        layerName,
+        ftInfo.latLonBoundingBox
+      );
+      if (!renderRes.ok) return { success: false, error: renderRes.error, uploaded: true };
+      return elevRes;
+    }
+
     if (await geoServerStyleExists(baseUrl, layerName)) {
       return linkStyle(false);
     }
@@ -3187,11 +3402,6 @@ export async function applyDefaultStyleToLayer(params: {
         return { success: false, error: regRes.error ?? '기존 스타일 파일 등록 실패' };
       }
       return linkStyle(false);
-    }
-
-    // elevation은 Material Tone 단색 대신 등고선 분류·축척 CSS 고정
-    if (layerName === ELEVATION_LAYER_NAME) {
-      return applyElevationContourStyle({ url: baseUrl, workspace });
     }
 
     const attrNames = new Set(

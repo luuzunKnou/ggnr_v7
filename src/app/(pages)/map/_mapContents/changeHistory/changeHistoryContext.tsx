@@ -59,7 +59,7 @@ type ChangeHistoryContextValue = {
   drawToolbarAnchor: ChangeHistoryDrawToolbarAnchor | null;
   setDrawToolbarAnchor: (anchor: ChangeHistoryDrawToolbarAnchor | null) => void;
   clearDrawToolbarAnchor: () => void;
-  /** 데이터조회와 동일 레이어 그룹 (기본도 그룹 제외) */
+  /** 데이터조회와 동일 — 현재 시스템 layerGroupList ∪ 미소속(공통), 기본도 제외 */
   layerGroups: ChangeHistoryLayerGroup[];
   layersLoaded: boolean;
   layerIds: Set<string>;
@@ -95,6 +95,8 @@ function defaultSelectedDate() {
 
 /** 배경 정사는 기본 포함 — 목록에서 「기본도」 그룹은 숨김 */
 const HIDDEN_LAYER_GROUPS = new Set(['기본도']);
+/** 데이터 조회와 동일 — road 시스템 미사용 시 숨김 */
+const CHANGE_HISTORY_GROUPS_REQUIRE_ROAD = new Set(['도로점용허가']);
 
 type DefineTableMeta = {
   define_table_name?: string;
@@ -105,24 +107,42 @@ type DefineTableMeta = {
   define_table_div_query?: string;
 };
 
-/** 데이터조회(AttributeQueryUI)와 동일 소스로 레이어 그룹 구성 */
-function useChangeHistoryLayerCatalog(isOpen: boolean) {
+type SysRow = { sys_key?: string; layerGroupList?: string[] };
+
+/** 데이터조회(AttributeQueryUI)와 동일 — DB+메타 + 현재 시스템 layerGroupList 필터 */
+function useChangeHistoryLayerCatalog(isOpen: boolean, systemKey: string) {
   const [groups, setGroups] = useState<ChangeHistoryLayerGroup[]>([]);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      setGroups([]);
+      setLoaded(false);
+      return;
+    }
 
     let cancelled = false;
+    setLoaded(false);
+
     const dbPromise = call('', 'POST', {
       service: 'devTestService',
       action: 'getLayerTableList',
       params: {},
     });
     const metaPromise = fetch('/api/config/defineLayer').then((r) => r.json());
+    const sysAllPromise = call('', 'POST', {
+      service: 'configService',
+      action: 'getSystemListAll',
+      params: {},
+    });
+    const sysEnabledPromise = call('', 'POST', {
+      service: 'configService',
+      action: 'getSystemList',
+      params: {},
+    });
 
-    Promise.all([dbPromise, metaPromise])
-      .then(([dbRes, metaRes]) => {
+    Promise.all([dbPromise, metaPromise, sysAllPromise, sysEnabledPromise])
+      .then(([dbRes, metaRes, sysAllRes, sysEnabledRes]) => {
         if (cancelled) return;
         const dbData = dbRes?.data ?? dbRes;
         const tables: { schema?: string; table: string }[] = Array.isArray(dbData?.tables)
@@ -133,6 +153,44 @@ function useChangeHistoryLayerCatalog(isOpen: boolean) {
             .filter((t) => (t.schema || 'layer').toLowerCase() === 'layer')
             .map((t) => t.table.toLowerCase())
         );
+
+        const allSystems: SysRow[] = Array.isArray((sysAllRes?.data ?? sysAllRes)?.systems)
+          ? ((sysAllRes?.data ?? sysAllRes).systems as SysRow[])
+          : [];
+        const enabledSystems: SysRow[] = Array.isArray((sysEnabledRes?.data ?? sysEnabledRes)?.systems)
+          ? ((sysEnabledRes?.data ?? sysEnabledRes).systems as SysRow[])
+          : [];
+        const enabledSysKeys = new Set(
+          enabledSystems.map((s) => String(s.sys_key ?? '').trim().toLowerCase()).filter(Boolean)
+        );
+        const hideRoadOccGroups = enabledSysKeys.size > 0 && !enabledSysKeys.has('road');
+
+        const assignedGroups = new Set<string>();
+        for (const s of [...allSystems, ...enabledSystems]) {
+          for (const g of Array.isArray(s.layerGroupList) ? s.layerGroupList : []) {
+            const name = String(g ?? '').trim();
+            if (name) assignedGroups.add(name);
+          }
+        }
+
+        const currentKey = systemKey.trim().toLowerCase();
+        const currentSys =
+          enabledSystems.find((s) => String(s.sys_key ?? '').trim().toLowerCase() === currentKey) ??
+          allSystems.find((s) => String(s.sys_key ?? '').trim().toLowerCase() === currentKey);
+        const currentSystemGroups = new Set(
+          (Array.isArray(currentSys?.layerGroupList) ? currentSys!.layerGroupList! : [])
+            .map((g) => String(g ?? '').trim())
+            .filter(Boolean)
+        );
+
+        /** 미소속(공통) ∪ 현재 시스템 소속. 시스템 미선택 시 전체 */
+        const isGroupVisible = (groupName: string) => {
+          if (HIDDEN_LAYER_GROUPS.has(groupName)) return false;
+          if (hideRoadOccGroups && CHANGE_HISTORY_GROUPS_REQUIRE_ROAD.has(groupName)) return false;
+          if (!currentKey) return true;
+          if (!assignedGroups.has(groupName)) return true;
+          return currentSystemGroups.has(groupName);
+        };
 
         const metaArr: DefineTableMeta[] = Array.isArray(metaRes?.data) ? metaRes.data : [];
         const metaMap = new Map<string, DefineTableMeta>();
@@ -156,7 +214,7 @@ function useChangeHistoryLayerCatalog(isOpen: boolean) {
         }
 
         const pushItem = (groupName: string, item: Item) => {
-          if (HIDDEN_LAYER_GROUPS.has(groupName)) return;
+          if (!isGroupVisible(groupName)) return;
           if (!groupMap.has(groupName)) {
             groupMap.set(groupName, []);
             groupOrder.push(groupName);
@@ -198,7 +256,6 @@ function useChangeHistoryLayerCatalog(isOpen: boolean) {
         }
 
         const next: ChangeHistoryLayerGroup[] = groupOrder
-          .filter((gName) => !HIDDEN_LAYER_GROUPS.has(gName))
           .map((gName) => ({
             id: gName,
             title: gName,
@@ -218,7 +275,7 @@ function useChangeHistoryLayerCatalog(isOpen: boolean) {
     return () => {
       cancelled = true;
     };
-  }, [isOpen]);
+  }, [isOpen, systemKey]);
 
   return {
     groups: isOpen ? groups : [],
@@ -310,7 +367,11 @@ export function ChangeHistoryProvider({ children }: { children: ReactNode }) {
     setDrawToolbarAnchorState(null);
   }, []);
 
-  const { groups: layerGroups, loaded: layersLoaded } = useChangeHistoryLayerCatalog(isOpen);
+  const systemKeyFromUrl = (searchParams.get('system') ?? '').trim();
+  const { groups: layerGroups, loaded: layersLoaded } = useChangeHistoryLayerCatalog(
+    isOpen,
+    systemKeyFromUrl
+  );
 
   const {
     emdOptions: boundaryEmdOptions,

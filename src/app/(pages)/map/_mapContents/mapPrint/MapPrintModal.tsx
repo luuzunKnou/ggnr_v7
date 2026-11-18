@@ -6,6 +6,7 @@ import { useSession } from 'next-auth/react';
 import { AuthSessionProvider } from '@/app/providers';
 import tables from '@/config/defineLayer/tables.json';
 import { BackgroundMapSelector, type BackgroundMapGroup } from '@/app/(pages)/map/_mapComponents/mapControlPanel/backgroundMapSelector';
+import { isAerialBackgroundId } from '@/app/(pages)/map/_mapComponents/layerFactory/backgroundLayerFactory';
 import {
   DEFAULT_PRINT_COLOR,
   type MapPrintSidePanel,
@@ -73,6 +74,9 @@ function MapPrintModalView({ open, onClose, snapshot, backgroundMapGroups }: Pro
   const [activeTool, setActiveTool] = useState<MapPrintTool>(null);
   const [sidePanel, setSidePanel] = useState<MapPrintSidePanel>(null);
   const [backgroundMapId, setBackgroundMapId] = useState(snapshot?.backgroundMapId ?? 'aerial-vworld');
+  const [backgroundLabelVisible, setBackgroundLabelVisible] = useState(
+    snapshot?.backgroundLabelVisible ?? true
+  );
   const [visibleNames, setVisibleNames] = useState<Set<string>>(
     () => new Set(snapshot?.visibleLayerNames ?? [])
   );
@@ -108,6 +112,7 @@ function MapPrintModalView({ open, onClose, snapshot, backgroundMapGroups }: Pro
   useEffect(() => {
     if (!open || !snapshot) return;
     setBackgroundMapId(snapshot.backgroundMapId);
+    setBackgroundLabelVisible(snapshot.backgroundLabelVisible ?? isAerialBackgroundId(snapshot.backgroundMapId));
     setVisibleNames(new Set(snapshot.visibleLayerNames));
     setVisibleCadastral(setFromSnapshot(snapshot.visibleCadastralLayerNames));
     setVisibleBuildingRoad(setFromSnapshot(snapshot.visibleBuildingRoadLayerNames));
@@ -132,11 +137,17 @@ function MapPrintModalView({ open, onClose, snapshot, backgroundMapGroups }: Pro
     setPrintedAt(formatPrintDateTime());
   }, [open, snapshot]);
 
+  const handlePrintBackgroundChange = useCallback((id: string) => {
+    setBackgroundMapId(id);
+    setBackgroundLabelVisible(isAerialBackgroundId(id));
+  }, []);
+
   const { map, mapReady } = useMapPrintMap(
     mapHostRef,
     open,
     snapshot,
     backgroundMapId,
+    backgroundLabelVisible,
     visibleNames,
     activeLayerControls,
     visibleCadastral,
@@ -297,7 +308,9 @@ function MapPrintModalView({ open, onClose, snapshot, backgroundMapGroups }: Pro
               <BackgroundMapSelector
                 groups={backgroundMapGroups}
                 value={backgroundMapId}
-                onValueChange={setBackgroundMapId}
+                onValueChange={handlePrintBackgroundChange}
+                labelVisible={backgroundLabelVisible}
+                onLabelVisibleChange={setBackgroundLabelVisible}
               />
             </div>
           )}

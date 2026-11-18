@@ -76,7 +76,7 @@ const PORTAL_LINKS: Record<string, string> = {
   board: '/library',
 }
 
-/** BASE_PATH(/uav_ulsan)로 프로젝트 추정 — API 응답 전에 공통 메뉴가 비지 않게 */
+/** BASE_PATH(/uav_us)로 프로젝트 추정 — API 응답 전에 공통 메뉴가 비지 않게 */
 function projectHintFromBasePath(): string {
   const base = getBasePath().replace(/^\/+|\/+$/g, '')
   return base || ''

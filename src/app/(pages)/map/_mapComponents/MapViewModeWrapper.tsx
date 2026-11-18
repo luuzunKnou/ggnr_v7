@@ -22,6 +22,7 @@ import {
   defaultBackgroundMapGroups,
   type BackgroundMapGroup,
 } from './mapControlPanel/backgroundMapSelector';
+import { isAerialBackgroundId } from './layerFactory/backgroundLayerFactory';
 import { patchPersistedBackgroundMap } from './hooks/useMapStatePersist';
 import { DEFAULT_CAMERA_HEIGHT_3D } from './config/mapDefaults';
 import { MapSplitLayout } from './mapSplit/MapSplitLayout';
@@ -221,6 +222,7 @@ export default function MapViewModeWrapper({
       if (mapContext?.mapBackgroundMapIdRef) {
         mapContext.mapBackgroundMapIdRef.current = value;
       }
+      mapContext?.setMapBackgroundLabelVisible?.(isAerialBackgroundId(value));
       patchPersistedBackgroundMap(value, projectName);
     },
     [mapContext, projectName]
@@ -434,6 +436,8 @@ export default function MapViewModeWrapper({
                         groups={backgroundMapGroups3d}
                         value={cesiumBackgroundMapId}
                         onValueChange={applyBackgroundChoice}
+                        labelVisible={mapContext?.mapBackgroundLabelVisible ?? true}
+                        onLabelVisibleChange={mapContext?.setMapBackgroundLabelVisible}
                       />
                     </div>
                   )}
