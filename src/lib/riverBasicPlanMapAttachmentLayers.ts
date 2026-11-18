@@ -137,16 +137,44 @@ export function riverBasicPlanRiverNameFilterableLayers(tab: RiverBasicPlanTab):
   ];
 }
 
-/** GeoServer CQL — 선택 하천만 표시 */
-export function buildRiverBasicPlanRiverNameCql(riverName: string): string {
-  const v = String(riverName ?? '').trim().replace(/'/g, "''");
-  if (!v) return 'INCLUDE';
-  return `river_name='${v}'`;
-}
-
 /** CQL 문자열 리터럴 */
 function cqlQuote(raw: string): string {
   return `'${String(raw ?? '').trim().replace(/'/g, "''")}'`;
+}
+
+/**
+ * GeoServer CQL — 선택 하천만 표시.
+ * 같은 하천명이 여러 코드로 나뉠 때는 river_code 로 한 건만 남긴다.
+ */
+export function buildRiverBasicPlanRiverNameCql(
+  riverName: string,
+  riverCode?: string | null
+): string {
+  const name = String(riverName ?? '').trim();
+  if (!name) return 'INCLUDE';
+  const parts = [`river_name=${cqlQuote(name)}`];
+  const code = String(riverCode ?? '').trim();
+  if (code) parts.push(`river_code=${cqlQuote(code)}`);
+  return parts.join(' AND ');
+}
+
+export type RiverBasicPlanRiverIdentity = {
+  riverName: string;
+  riverCode?: string | null;
+};
+
+/** 여러 하천 식별 — 이름만 같으면 코드로 구분 */
+function buildRiverBasicPlanRiversIdentityCql(
+  rivers: readonly RiverBasicPlanRiverIdentity[]
+): string | null {
+  const clauses: string[] = [];
+  for (const r of rivers) {
+    const cql = buildRiverBasicPlanRiverNameCql(r.riverName, r.riverCode);
+    if (cql === 'INCLUDE') continue;
+    clauses.push(`(${cql})`);
+  }
+  if (clauses.length === 0) return null;
+  return [...new Set(clauses)].join(' OR ');
 }
 
 /**
@@ -156,11 +184,12 @@ function cqlQuote(raw: string): string {
 export function buildRiverBasicPlanMapCqlByLayer(
   tab: RiverBasicPlanTab,
   riverName: string,
-  plan?: { planYear?: string; planName?: string; planLen?: string } | null
+  plan?: { planYear?: string; planName?: string; planLen?: string } | null,
+  riverCode?: string | null
 ): Record<string, string> | null {
   const name = String(riverName ?? '').trim();
   if (!name) return null;
-  const riverCql = buildRiverBasicPlanRiverNameCql(name);
+  const riverCql = buildRiverBasicPlanRiverNameCql(name, riverCode);
   if (riverCql === 'INCLUDE') return null;
   const out: Record<string, string> = {};
   for (const layer of riverBasicPlanRiverNameFilterableLayers(tab)) {
@@ -189,15 +218,18 @@ export function buildRiverBasicPlanMapCqlByLayer(
 /**
  * 보고서 하나에 속한 여러 하천을 함께 보여 줄 레이어별 CQL.
  * 기본계획(AS)은 그 보고서(연도·계획명)만 남겨, 같은 하천의 다른 보고서 구역은 보이지 않게 함.
+ * 하천 인자는 이름 문자열 또는 { riverName, riverCode }.
  */
 export function buildRiverBasicPlanReportRiversCqlByLayer(
   tab: RiverBasicPlanTab,
-  riverNames: readonly string[],
+  rivers: readonly (string | RiverBasicPlanRiverIdentity)[],
   plan: { planYear?: string; planName?: string }
 ): Record<string, string> | null {
-  const names = [...new Set(riverNames.map((n) => String(n ?? '').trim()).filter(Boolean))];
-  if (names.length === 0) return null;
-  const riverCql = `river_name IN (${names.map(cqlQuote).join(',')})`;
+  const identities: RiverBasicPlanRiverIdentity[] = rivers.map((r) =>
+    typeof r === 'string' ? { riverName: r } : r
+  );
+  const riverCql = buildRiverBasicPlanRiversIdentityCql(identities);
+  if (!riverCql) return null;
   const out: Record<string, string> = {};
   for (const layer of riverBasicPlanRiverNameFilterableLayers(tab)) {
     out[layer] = riverCql;
@@ -214,9 +246,10 @@ export function buildRiverBasicPlanReportRiversCqlByLayer(
 /** 선택 하천·탭에 대한 레이어별 CQL 맵 (비우면 null) */
 export function buildRiverBasicPlanRiverNameCqlByLayer(
   tab: RiverBasicPlanTab,
-  riverName: string
+  riverName: string,
+  riverCode?: string | null
 ): Record<string, string> | null {
-  return buildRiverBasicPlanMapCqlByLayer(tab, riverName, null);
+  return buildRiverBasicPlanMapCqlByLayer(tab, riverName, null, riverCode);
 }
 
 /**

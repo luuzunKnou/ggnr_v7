@@ -1,0 +1,14 @@
+{
+  "project": "ggnr_ad",
+  "env": "dev",
+  "table": "building_number_plate",
+  "schema": "layer",
+  "createdAt": "2026-11-09T10:21:29.114Z",
+  "sourceFile": "//192.168.127.11/사업수행_개발/020 사업별 수급자료 v2/안동 공간정보/수급/260915_도로명 관련자료/건물번호판 보수 요청(정비포함 2026. 9. 7.).xlsx",
+  "defineTablesTouched": true,
+  "defineFieldsPath": "d:/20260608 ggnr_v7/src/config/defineLayer/fields/table_building_number_plate.json",
+  "geoserverPublished": true,
+  "inserted": 476,
+  "withGeom": 443,
+  "withoutGeom": 33
+}

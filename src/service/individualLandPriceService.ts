@@ -156,19 +156,95 @@ function latestPerYearSql(extraWhere = ''): string {
 }
 
 /**
- * 지번 검색어 → 필지번호 조건. «12», «12-3», «산5», «산5-1», 19자리 필지번호.
- * 반환 값은 필지번호 정규식(대장구분·본번·부번 자리)
+ * 필지번호 → 화면 지번(산·본번[-부번]). 네이버처럼 문자열 앞자리 검색에 쓴다.
  */
-function lotKeywordPattern(keyword: string): string | null {
+function pnuLotLabelSql(pnuExpr: string): string {
+  return `(
+    CASE WHEN substr(${pnuExpr}, 11, 1) = '2' THEN '산' ELSE '' END
+    || COALESCE(NULLIF(ltrim(substr(${pnuExpr}, 12, 4), '0'), ''), '0')
+    || CASE
+         WHEN COALESCE(NULLIF(ltrim(substr(${pnuExpr}, 16, 4), '0'), ''), '0') = '0' THEN ''
+         ELSE '-' || ltrim(substr(${pnuExpr}, 16, 4), '0')
+       END
+  )`;
+}
+
+type LotKeyword =
+  | { kind: 'pnu'; pnu: string }
+  /** prefix: 표시 지번 앞자리. «247-2» → 247-20·247-23 / «2» → 2·209·2-1 */
+  | { kind: 'prefix'; mountainOnly: boolean; prefix: string };
+
+/**
+ * 지번 검색어 파싱. «12», «12-3», «247-2», «산5», 19자리 필지번호.
+ * 부번까지 넣어도 표시 지번 문자열 앞자리로 거른다(네이버 지도와 동일).
+ */
+function parseLotKeyword(keyword: string): LotKeyword | null {
   const kw = keyword.replace(/\s+/g, '');
   if (!kw) return null;
-  if (/^\d{19}$/.test(kw)) return `^${kw}$`;
-  const m = kw.match(/^(산)?(\d{1,4})(?:-(\d{1,4}))?$/u);
+  if (/^\d{19}$/.test(kw)) return { kind: 'pnu', pnu: kw };
+  const m = kw.match(/^(산)?(\d{1,4})(?:-(\d{0,4}))?$/u);
   if (!m) return null;
-  const ledger = m[1] ? '2' : '[0-9]';
-  const bon = m[2]!.padStart(4, '0');
-  const bub = m[3] != null ? m[3].padStart(4, '0') : '[0-9]{4}';
-  return `^[0-9]{10}${ledger}${bon}${bub}$`;
+  const mountainOnly = Boolean(m[1]);
+  const bon = m[2]!.replace(/^0+/, '') || '0';
+  const prefix =
+    m[3] === undefined ? `${bon}` : `${bon}-${m[3]}`;
+  return { kind: 'prefix', mountainOnly, prefix };
+}
+
+/** 지번 조건을 args에 붙이고 WHERE 조각을 반환. 실패 시 null */
+function appendLotKeywordSql(lotKw: string, args: unknown[]): string | null {
+  const parsed = parseLotKeyword(lotKw);
+  if (!parsed) return null;
+  const pnu = 'btrim(t.pnu)';
+  if (parsed.kind === 'pnu') {
+    args.push(parsed.pnu);
+    return `AND ${pnu} = $${args.length}`;
+  }
+  const label = pnuLotLabelSql(pnu);
+  if (parsed.mountainOnly) {
+    args.push(`산${parsed.prefix}%`);
+    return `AND length(${pnu}) >= 19 AND ${label} LIKE $${args.length}`;
+  }
+  args.push(`${parsed.prefix}%`);
+  const iGeneral = args.length;
+  args.push(`산${parsed.prefix}%`);
+  const iSan = args.length;
+  return `AND length(${pnu}) >= 19 AND (${label} LIKE $${iGeneral} OR ${label} LIKE $${iSan})`;
+}
+
+/**
+ * 검색어를 소재지·지번으로 나눈다.
+ * «삼산동», «5», «산5-1», «삼산동 5», «삼산동5», «운흥동247-2» 지원.
+ * (목록 입력은 공백을 제거해 보내므로 붙여 쓴 형태도 처리한다.)
+ */
+function splitLocationAndLotKeyword(keyword: string): { locationKw: string; lotKw: string } {
+  const trimmed = keyword.trim();
+  if (!trimmed) return { locationKw: '', lotKw: '' };
+
+  const spaced = trimmed.match(/^(.+?)\s+(산?\d{1,4}(?:-\d{0,4})?)$/u);
+  if (spaced) {
+    return {
+      locationKw: spaced[1]!.replace(/\s+/g, ''),
+      lotKw: spaced[2]!,
+    };
+  }
+
+  const compact = trimmed.replace(/\s+/g, '');
+  if (parseLotKeyword(compact)) {
+    return { locationKw: '', lotKw: compact };
+  }
+
+  /** «삼산동5»·«운흥동247-2»·«삼산동산5» — 끝의 지번만 분리. «산» 단독은 임야 접두라 제외 */
+  const m = compact.match(/^(.+?)((?:산)\d{1,4}(?:-\d{0,4})?|\d{1,4}(?:-\d{0,4})?)$/u);
+  if (m) {
+    const loc = m[1]!;
+    const lot = m[2]!;
+    if (/[가-힣]/.test(loc) && loc !== '산') {
+      return { locationKw: loc, lotKw: lot };
+    }
+  }
+
+  return { locationKw: compact, lotKw: '' };
 }
 
 let yearsCache: { at: number; years: LandPriceYear[] } | null = null;
@@ -294,20 +370,25 @@ async function appendEmdKeywordWhere(
   }
   const keyword = str(params.keyword);
   if (keyword) {
-    const lotPattern = lotKeywordPattern(keyword);
-    if (lotPattern) {
-      args.push(lotPattern);
-      priceWhere.push(`AND btrim(t.pnu) ~ $${args.length}`);
-    } else {
-      const prefixes = await locationPrefixesForKeyword(year, keyword);
+    const { locationKw, lotKw } = splitLocationAndLotKeyword(keyword);
+    if (locationKw) {
+      const prefixes = await locationPrefixesForKeyword(year, locationKw);
       if (!prefixes.length) {
         priceWhere.push('AND false');
-      } else {
-        const parts = prefixes.map((p) => {
-          args.push(`${p}%`);
-          return `btrim(t.pnu) LIKE $${args.length}`;
-        });
-        priceWhere.push(`AND (${parts.join(' OR ')})`);
+        return priceWhere;
+      }
+      const parts = prefixes.map((p) => {
+        args.push(`${p}%`);
+        return `btrim(t.pnu) LIKE $${args.length}`;
+      });
+      priceWhere.push(`AND (${parts.join(' OR ')})`);
+    }
+    if (lotKw) {
+      const lotSql = appendLotKeywordSql(lotKw, args);
+      if (lotSql) {
+        priceWhere.push(lotSql);
+      } else if (!locationKw) {
+        priceWhere.push('AND false');
       }
     }
   }

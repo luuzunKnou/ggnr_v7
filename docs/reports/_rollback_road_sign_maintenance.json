@@ -1,0 +1,17 @@
+{
+  "project": "ggnr_ad",
+  "env": "dev",
+  "table": "road_sign_maintenance",
+  "schema": "layer",
+  "createdAt": "2026-11-09T10:24:34.594Z",
+  "sourceFile": "//192.168.127.11/사업수행_개발/020 사업별 수급자료 v2/안동 공간정보/수급/260915_도로명 관련자료/유지보수 내역.xlsx",
+  "inserted": 249,
+  "withGeom": 246,
+  "withoutGeom": 3,
+  "byKind": {
+    "도로명판": 86,
+    "기초번호판": 10,
+    "임시주택건물번호판": 153
+  },
+  "geoserverPublished": true
+}

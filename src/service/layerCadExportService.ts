@@ -13,6 +13,12 @@ import iconv from 'iconv-lite';
 import { sql } from 'drizzle-orm';
 import { db } from '@/database/db';
 import { convertDxfFileToDwg, isQcadDwgConverterAvailable } from '@/lib/dwgToDxf';
+import {
+  readGeoServerCssFillColor,
+  readGeoServerCssStrokeColor,
+  readGeoServerPointSymbolFillColor,
+  readGeoServerSldEnvStrokeColor,
+} from '@/lib/geoserverStyleFillColor';
 
 export type LayerCadFormat = 'dxf' | 'dwg';
 
@@ -111,16 +117,135 @@ const MAX_LAYERS = 10;
 const PER_LAYER_TIMEOUT_MS = 5 * 60 * 1000;
 /** 레이어당 라벨 상한(전수 표시, 폭주 방지용) */
 const MAX_LABELS_PER_LAYER = 100_000;
-/** 선 왼쪽 직교 오프셋(m) — 선과 글자 겹침 완화 */
-const LABEL_LINE_OFFSET_M = 1.2;
-/** 글자 높이(m, EPSG:5181) — 전수 표시용으로 축소 */
+/** 선과 글자 사이 여백(m) */
+const LABEL_LINE_GAP_M = 0.3;
+/** 글자 높이(m, EPSG:5181) — 기본값 */
 const LABEL_TEXT_HEIGHT = 1.6;
+/** 겹침 시 단계적으로 줄이는 글자 높이(m). 첫 값이 기본 */
+const LABEL_TEXT_HEIGHT_STEPS = [LABEL_TEXT_HEIGHT, 1.2, 0.9] as const;
+/** 라벨 충돌 판정 여유(m) */
+const LABEL_COLLIDE_PAD_M = 0.15;
+/** 충돌 검사용 격자 크기(m) */
+const LABEL_GRID_CELL_M = 25;
+/** 선 위 라벨 후보 위치(0~1). 앞쪽일수록 우선 */
+const LABEL_LINE_FRACTIONS = [0.5, 0.35, 0.65, 0.2, 0.8] as const;
 /** 가로 비율(group 41) — 1보다 크면 살짝 굵게 보임 */
 const LABEL_WIDTH_FACTOR = 1.25;
 /** 라벨 글자색 검정 */
 const LABEL_FILL_COLOR = 0x000000;
-/** 관로 선 색 #E98D44 (지도 SLD stroke) */
-const LAYER_STROKE_COLOR = 0xe98d44;
+/** GeoServer 스타일 색을 못 읽을 때 */
+const LAYER_STROKE_FALLBACK = 0x888888;
+/**
+ * CAD에서 POINT는 PDMODE=0이면 안 보임 → CIRCLE로 치환할 반경(m, EPSG:5181)
+ */
+const POINT_MARKER_RADIUS_M = 2.0;
+
+function hexToDxfTrueColor(hex: string): number | null {
+  const raw = String(hex ?? '').trim().replace(/^#/, '');
+  if (!/^[0-9A-Fa-f]{3}$|^[0-9A-Fa-f]{6}$/.test(raw)) return null;
+  const full =
+    raw.length === 3
+      ? `${raw[0]}${raw[0]}${raw[1]}${raw[1]}${raw[2]}${raw[2]}`
+      : raw;
+  const n = Number.parseInt(full, 16);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** data_dir/styles CSS·SLD·포인트 심볼 색 → DXF TrueColor */
+function resolveGeoServerLayerTrueColor(styleOrTableName: string): number {
+  const name = String(styleOrTableName ?? '').trim().toLowerCase();
+  if (!name) return LAYER_STROKE_FALLBACK;
+  const hex =
+    readGeoServerCssStrokeColor(name) ??
+    readGeoServerSldEnvStrokeColor(name) ??
+    readGeoServerPointSymbolFillColor(name) ??
+    readGeoServerCssFillColor(name);
+  if (!hex) {
+    console.warn(`[layerCadExport] GeoServer 색 없음 → fallback: ${name}`);
+    return LAYER_STROKE_FALLBACK;
+  }
+  const color = hexToDxfTrueColor(hex);
+  if (color == null) {
+    console.warn(`[layerCadExport] GeoServer 색 파싱 실패 ${name}: ${hex}`);
+    return LAYER_STROKE_FALLBACK;
+  }
+  console.log(`[layerCadExport] GeoServer 색 ${name} = ${hex}`);
+  return color;
+}
+
+/**
+ * AutoCAD 기본 POINT 표시는 꺼져 있는 경우가 많아 CIRCLE로 바꿔 보이게 한다.
+ */
+function convertDxfPointsToCircles(
+  content: string,
+  radiusM: number = POINT_MARKER_RADIUS_M
+): string {
+  const nl = content.includes('\r\n') ? '\r\n' : '\n';
+  const lines = content.split(/\r?\n/);
+  const out: string[] = [];
+  let converted = 0;
+  let i = 0;
+  while (i < lines.length) {
+    const code = (lines[i] ?? '').trim();
+    const value = lines[i + 1] ?? '';
+    if (i + 1 >= lines.length) {
+      out.push(lines[i] ?? '');
+      break;
+    }
+    if (code === '0' && value.trim() === 'POINT') {
+      const entity: Array<[string, string]> = [[lines[i] ?? '', value]];
+      i += 2;
+      while (i + 1 < lines.length) {
+        const c = (lines[i] ?? '').trim();
+        const v = lines[i + 1] ?? '';
+        if (c === '0') break;
+        entity.push([lines[i] ?? '', v]);
+        i += 2;
+      }
+      let layer = '0';
+      let x = '';
+      let y = '';
+      let handle = '';
+      let color420 = '';
+      for (const [cRaw, v] of entity) {
+        const c = cRaw.trim();
+        if (c === '8') layer = v.trim();
+        else if (c === '5') handle = v.trim();
+        else if (c === '10') x = v.trim();
+        else if (c === '20') y = v.trim();
+        else if (c === '420') color420 = v.trim();
+      }
+      if (Number.isFinite(Number(x)) && Number.isFinite(Number(y))) {
+        out.push(padCode(0), 'CIRCLE');
+        if (handle) out.push(padCode(5), handle);
+        out.push(padCode(100), 'AcDbEntity', padCode(8), layer);
+        if (color420) out.push(padCode(420), color420);
+        out.push(
+          padCode(100),
+          'AcDbCircle',
+          padCode(10),
+          x,
+          padCode(20),
+          y,
+          padCode(30),
+          '0.0',
+          padCode(40),
+          String(radiusM)
+        );
+        converted += 1;
+        continue;
+      }
+      for (const [c, v] of entity) out.push(c, v);
+      continue;
+    }
+    out.push(lines[i] ?? '', value);
+    i += 2;
+  }
+  if (converted > 0) {
+    console.log(`[layerCadExport] POINT→CIRCLE ${converted}개 (r=${radiusM}m)`);
+  }
+  return out.join(nl);
+}
 
 function getDbConfig(): { host: string; port: number; database: string; user: string; password: string } {
   return {
@@ -267,7 +392,14 @@ function geomExpr5181(schema: 'layer' | 'public_layer'): string {
   return `ST_MakeValid(ST_Force2D(CASE WHEN ST_SRID(geom) = 0 THEN ST_SetSRID(geom, 5181) ELSE ST_Transform(geom, 5181) END))`;
 }
 
-type CadLabelPoint = { x: number; y: number; text: string; angleDeg: number };
+/** 배치 완료된 라벨 — x,y는 TEXT 삽입점(좌하단 기준) */
+type CadLabelPoint = { x: number; y: number; text: string; angleDeg: number; height: number };
+
+/** 라벨 후보 위치(선 위 한 지점) + 접선 방위각(북 기준 시계, 도) */
+type LabelCandidate = { x: number; y: number; az: number };
+
+/** 피처 1건의 라벨 원본 — 배치 전 */
+type RawLabel = { text: string; isLine: boolean; len: number; cands: LabelCandidate[] };
 
 /** PostGIS 방위각(북 기준 시계) → DXF TEXT 각도(+X 기준 반시계), 뒤집히지 않게 보정 */
 function azimuthToDxfTextAngle(azDeg: number): number {
@@ -287,7 +419,7 @@ async function fetchLabelPoints(params: {
   tableName: string;
   labelField: string;
   bbox: LayerCadBbox | null;
-}): Promise<CadLabelPoint[]> {
+}): Promise<RawLabel[]> {
   const field = sanitizeFieldName(params.labelField);
   if (!field) return [];
   const table = sanitizeTableName(params.tableName);
@@ -304,90 +436,279 @@ async function fetchLabelPoints(params: {
     whereExtra = ` AND ST_Intersects(${g}, ST_MakeEnvelope(${minX}, ${minY}, ${maxX}, ${maxY}, 5181))`;
   }
 
-  /** 선: 중점 + 접선 각도 + 직교 오프셋. 면/점: PointOnSurface. 라벨 값 있는 피처 전부. */
+  /**
+   * 선: 후보 위치(여러 지점) 좌표 + 접선 방위각 + 길이. 면/점: PointOnSurface 1곳.
+   * 최종 배치(겹침 회피)는 placeLabels에서 한다. 라벨 값 있는 피처 전부.
+   */
+  const fracSelect = LABEL_LINE_FRACTIONS.map((f, i) => {
+    const lo = Math.max(0, f - 0.01);
+    const hi = Math.min(1, f + 0.01);
+    return `
+        ST_X(ST_LineInterpolatePoint(line_geom, ${f})) AS x${i},
+        ST_Y(ST_LineInterpolatePoint(line_geom, ${f})) AS y${i},
+        degrees(ST_Azimuth(
+          ST_LineInterpolatePoint(line_geom, ${lo}),
+          ST_LineInterpolatePoint(line_geom, ${hi})
+        )) AS az${i}`;
+  }).join(',');
+
   const q = `
     SELECT
-      ST_X(pt) AS x,
-      ST_Y(pt) AS y,
       lbl AS text,
-      az_deg
+      is_line,
+      len,
+      CASE WHEN NOT is_line THEN ST_X(ST_PointOnSurface(g)) END AS px,
+      CASE WHEN NOT is_line THEN ST_Y(ST_PointOnSurface(g)) END AS py,
+      ${fracSelect.replace(/line_geom/g, 'CASE WHEN is_line THEN line_geom END')}
     FROM (
       SELECT
+        g,
+        lbl,
+        line_geom IS NOT NULL AND NOT ST_IsEmpty(line_geom) AS is_line,
         CASE
-          WHEN mid_pt IS NOT NULL AND is_line THEN
-            ST_Translate(
-              mid_pt,
-              ${LABEL_LINE_OFFSET_M} * -cos(radians(az_deg)),
-              ${LABEL_LINE_OFFSET_M} * sin(radians(az_deg))
-            )
-          ELSE mid_pt
-        END AS pt,
-        az_deg,
-        lbl
+          WHEN line_geom IS NOT NULL AND NOT ST_IsEmpty(line_geom) THEN ST_Length(line_geom)
+          ELSE 0
+        END AS len,
+        line_geom
       FROM (
         SELECT
+          g,
           CASE
-            WHEN line_geom IS NOT NULL AND NOT ST_IsEmpty(line_geom) THEN
-              ST_LineInterpolatePoint(line_geom, 0.5)
-            WHEN g IS NULL OR ST_IsEmpty(g) THEN NULL
-            ELSE ST_PointOnSurface(g)
-          END AS mid_pt,
-          CASE
-            WHEN line_geom IS NOT NULL AND NOT ST_IsEmpty(line_geom) AND ST_Length(line_geom) > 0 THEN
-              degrees(
-                ST_Azimuth(
-                  ST_LineInterpolatePoint(line_geom, GREATEST(0.0, 0.5 - 0.01)),
-                  ST_LineInterpolatePoint(line_geom, LEAST(1.0, 0.5 + 0.01))
-                )
-              )
-            ELSE 90
-          END AS az_deg,
-          lbl,
-          is_line
+            WHEN GeometryType(g) IN ('LINESTRING', 'MULTILINESTRING') THEN
+              ST_GeometryN(ST_LineMerge(g), 1)
+            ELSE NULL
+          END AS line_geom,
+          lbl
         FROM (
           SELECT
-            g,
-            GeometryType(g) IN ('LINESTRING', 'MULTILINESTRING') AS is_line,
-            CASE
-              WHEN GeometryType(g) IN ('LINESTRING', 'MULTILINESTRING') THEN
-                ST_GeometryN(ST_LineMerge(g), 1)
-              ELSE NULL
-            END AS line_geom,
-            lbl
-          FROM (
-            SELECT
-              ${g} AS g,
-              NULLIF(TRIM(CAST(${fieldRef} AS text)), '') AS lbl
-            FROM ${schemaRef}.${tableRef}
-            WHERE geom IS NOT NULL
-              AND NOT ST_IsEmpty(geom)
-              AND ${fieldRef} IS NOT NULL
-              AND TRIM(CAST(${fieldRef} AS text)) <> ''
-              ${whereExtra}
-          ) s
-        ) m
-      ) u
-    ) t
-    WHERE pt IS NOT NULL AND lbl IS NOT NULL
+            ${g} AS g,
+            NULLIF(TRIM(CAST(${fieldRef} AS text)), '') AS lbl
+          FROM ${schemaRef}.${tableRef}
+          WHERE geom IS NOT NULL
+            AND NOT ST_IsEmpty(geom)
+            AND ${fieldRef} IS NOT NULL
+            AND TRIM(CAST(${fieldRef} AS text)) <> ''
+            ${whereExtra}
+        ) s
+        WHERE g IS NOT NULL AND NOT ST_IsEmpty(g)
+      ) m
+    ) u
+    WHERE lbl IS NOT NULL
     LIMIT ${MAX_LABELS_PER_LAYER}
   `;
 
   const res = await db.execute(sql.raw(q));
   const list = (res.rows ?? []) as Record<string, unknown>[];
-  const out: CadLabelPoint[] = [];
+  const raws: RawLabel[] = [];
   for (const row of list) {
-    const x = Number(row.x);
-    const y = Number(row.y);
     const text = sanitizeDxfText(String(row.text ?? ''));
-    const az = Number(row.az_deg);
-    if (!Number.isFinite(x) || !Number.isFinite(y) || !text) continue;
-    const angleDeg = Number.isFinite(az) ? azimuthToDxfTextAngle(az) : 0;
-    out.push({ x, y, text, angleDeg });
+    if (!text) continue;
+    const isLine = row.is_line === true || row.is_line === 't';
+    const len = Number(row.len);
+    const cands: LabelCandidate[] = [];
+    if (isLine) {
+      for (let i = 0; i < LABEL_LINE_FRACTIONS.length; i++) {
+        const x = Number(row[`x${i}`]);
+        const y = Number(row[`y${i}`]);
+        if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+        const azRaw = row[`az${i}`];
+        const az = azRaw == null ? NaN : Number(azRaw);
+        cands.push({ x, y, az: Number.isFinite(az) ? az : 90 });
+      }
+    } else {
+      const x = Number(row.px);
+      const y = Number(row.py);
+      if (Number.isFinite(x) && Number.isFinite(y)) cands.push({ x, y, az: 90 });
+    }
+    if (!cands.length) continue;
+    raws.push({ text, isLine, len: Number.isFinite(len) ? len : 0, cands });
   }
+  return raws;
+}
+
+/** 글자 폭 추정(m): 한글·CJK 1.0, 공백 0.35, 그 외 0.65 × 높이 × 가로비율 */
+function estimateTextWidth(text: string, height: number): number {
+  let em = 0;
+  for (const ch of text) {
+    const code = ch.codePointAt(0) ?? 0;
+    if (ch === ' ') em += 0.35;
+    else if (code >= 0x2e80) em += 1;
+    else em += 0.65;
+  }
+  return em * height * LABEL_WIDTH_FACTOR;
+}
+
+type LabelRect = { cx: number; cy: number; ux: number; uy: number; hw: number; hh: number };
+
+/** 회전 사각형 충돌 검사(SAT) + 격자 해시. 전체 레이어 공통으로 사용 */
+class LabelCollisionIndex {
+  private readonly cells = new Map<string, LabelRect[]>();
+
+  private static extents(r: LabelRect): { ex: number; ey: number } {
+    return {
+      ex: Math.abs(r.ux) * r.hw + Math.abs(r.uy) * r.hh,
+      ey: Math.abs(r.uy) * r.hw + Math.abs(r.ux) * r.hh,
+    };
+  }
+
+  private static overlap(a: LabelRect, b: LabelRect): boolean {
+    const axes: [number, number][] = [
+      [a.ux, a.uy],
+      [-a.uy, a.ux],
+      [b.ux, b.uy],
+      [-b.uy, b.ux],
+    ];
+    const dx = b.cx - a.cx;
+    const dy = b.cy - a.cy;
+    for (const [lx, ly] of axes) {
+      const ra =
+        a.hw * Math.abs(a.ux * lx + a.uy * ly) + a.hh * Math.abs(-a.uy * lx + a.ux * ly);
+      const rb =
+        b.hw * Math.abs(b.ux * lx + b.uy * ly) + b.hh * Math.abs(-b.uy * lx + b.ux * ly);
+      if (Math.abs(dx * lx + dy * ly) > ra + rb) return false;
+    }
+    return true;
+  }
+
+  private cellRange(r: LabelRect): { x0: number; x1: number; y0: number; y1: number } {
+    const { ex, ey } = LabelCollisionIndex.extents(r);
+    const c = LABEL_GRID_CELL_M;
+    return {
+      x0: Math.floor((r.cx - ex) / c),
+      x1: Math.floor((r.cx + ex) / c),
+      y0: Math.floor((r.cy - ey) / c),
+      y1: Math.floor((r.cy + ey) / c),
+    };
+  }
+
+  /** 겹치는 기존 라벨 수 (limit 이상이면 조기 종료) */
+  countOverlaps(r: LabelRect, limit = Number.POSITIVE_INFINITY): number {
+    const { x0, x1, y0, y1 } = this.cellRange(r);
+    const seen = new Set<LabelRect>();
+    let count = 0;
+    for (let ix = x0; ix <= x1; ix++) {
+      for (let iy = y0; iy <= y1; iy++) {
+        const list = this.cells.get(`${ix},${iy}`);
+        if (!list) continue;
+        for (const other of list) {
+          if (seen.has(other)) continue;
+          seen.add(other);
+          if (LabelCollisionIndex.overlap(r, other)) {
+            count++;
+            if (count >= limit) return count;
+          }
+        }
+      }
+    }
+    return count;
+  }
+
+  add(r: LabelRect): void {
+    const { x0, x1, y0, y1 } = this.cellRange(r);
+    for (let ix = x0; ix <= x1; ix++) {
+      for (let iy = y0; iy <= y1; iy++) {
+        const key = `${ix},${iy}`;
+        const list = this.cells.get(key);
+        if (list) list.push(r);
+        else this.cells.set(key, [r]);
+      }
+    }
+  }
+}
+
+/**
+ * 겹침 회피 배치 (생략 없음).
+ * 짧은 관로(선택지 적음)부터 → 후보 위치(선 위 여러 지점 × 좌/우) → 글자 높이 단계 축소.
+ * 끝까지 겹치면 최소 높이에서 겹침이 가장 적은 위치에 둔다.
+ */
+function placeLabels(raws: RawLabel[], index: LabelCollisionIndex): CadLabelPoint[] {
+  const order = raws.map((_, i) => i).sort((a, b) => raws[a].len - raws[b].len);
+  const out: CadLabelPoint[] = new Array(raws.length);
+  const heightUsed = new Map<number, number>();
+  let forced = 0;
+
+  const buildRect = (
+    cand: LabelCandidate,
+    side: number,
+    height: number,
+    width: number,
+    angleDeg: number
+  ): { rect: LabelRect; x: number; y: number } => {
+    const off = side * (height / 2 + LABEL_LINE_GAP_M);
+    const azRad = (cand.az * Math.PI) / 180;
+    const cx = cand.x + off * -Math.cos(azRad);
+    const cy = cand.y + off * Math.sin(azRad);
+    const th = (angleDeg * Math.PI) / 180;
+    const ux = Math.cos(th);
+    const uy = Math.sin(th);
+    const rect: LabelRect = {
+      cx,
+      cy,
+      ux,
+      uy,
+      hw: width / 2 + LABEL_COLLIDE_PAD_M,
+      hh: height / 2 + LABEL_COLLIDE_PAD_M,
+    };
+    /** TEXT 삽입점은 좌하단(좌측 기준선) → 중심에서 환산 */
+    const x = cx - ux * (width / 2) + uy * (height / 2);
+    const y = cy - uy * (width / 2) - ux * (height / 2);
+    return { rect, x, y };
+  };
+
+  for (const idx of order) {
+    const raw = raws[idx];
+    const sides = raw.isLine ? [1, -1] : [0, 1, -1];
+    let placed: CadLabelPoint | null = null;
+    let fallback: { rect: LabelRect; point: CadLabelPoint; overlaps: number } | null = null;
+
+    for (let s = 0; s < LABEL_TEXT_HEIGHT_STEPS.length && !placed; s++) {
+      const height = LABEL_TEXT_HEIGHT_STEPS[s];
+      const width = estimateTextWidth(raw.text, height);
+      const isLastStep = s === LABEL_TEXT_HEIGHT_STEPS.length - 1;
+      for (const cand of raw.cands) {
+        const angleDeg = azimuthToDxfTextAngle(cand.az);
+        for (const side of sides) {
+          const { rect, x, y } = buildRect(cand, side, height, width, angleDeg);
+          const point: CadLabelPoint = { x, y, text: raw.text, angleDeg, height };
+          if (isLastStep) {
+            const overlaps = index.countOverlaps(rect);
+            if (overlaps === 0) {
+              index.add(rect);
+              placed = point;
+              heightUsed.set(height, (heightUsed.get(height) ?? 0) + 1);
+              break;
+            }
+            if (!fallback || overlaps < fallback.overlaps) {
+              fallback = { rect, point, overlaps };
+            }
+          } else if (index.countOverlaps(rect, 1) === 0) {
+            index.add(rect);
+            placed = point;
+            heightUsed.set(height, (heightUsed.get(height) ?? 0) + 1);
+            break;
+          }
+        }
+        if (placed) break;
+      }
+    }
+
+    if (!placed && fallback) {
+      index.add(fallback.rect);
+      placed = fallback.point;
+      forced++;
+      heightUsed.set(placed.height, (heightUsed.get(placed.height) ?? 0) + 1);
+    }
+    if (placed) out[idx] = placed;
+  }
+
+  const summary = [...heightUsed.entries()]
+    .sort((a, b) => b[0] - a[0])
+    .map(([h, n]) => `${h}m:${n}`)
+    .join(', ');
   console.log(
-    `[layerCadExport] labels ${params.schema}.${table}.${field}: ${out.length}건 (전수, 높이 ${LABEL_TEXT_HEIGHT}m)`
+    `[layerCadExport] label placement ${raws.length}건 (높이별 ${summary || '-'}, 겹침 불가피 ${forced}건)`
   );
-  return out;
+  return out.filter(Boolean);
 }
 
 /** DXF TEXT 한 개 (검정, 가로비율로 살짝 굵게) */
@@ -451,6 +772,7 @@ function buildDxfTextEntities(
         y: p.y,
         text: p.text,
         angleDeg: p.angleDeg,
+        height: p.height,
         color: LABEL_FILL_COLOR,
       })
     );
@@ -483,11 +805,11 @@ function ensureDwgCodePageAnsi949(content: string, nl: string): string {
   );
 }
 
-/** SLD stroke #E98D44 — 해당 레이어 도형에 TrueColor가 없으면 넣음 */
+/** 해당 레이어 도형에 TrueColor가 없으면 넣음 */
 function applyLayerStrokeTrueColor(
   content: string,
   layerNames: string[],
-  color: number = LAYER_STROKE_COLOR
+  color: number
 ): string {
   if (!layerNames.length) return content;
   const wanted = new Set(layerNames.map((n) => n.toLowerCase()));
@@ -507,19 +829,31 @@ function applyLayerStrokeTrueColor(
   return out.join(nl);
 }
 
+function applyStrokeColorsByLayer(content: string, layerNames: string[]): string {
+  let out = content;
+  for (const name of layerNames) {
+    out = applyLayerStrokeTrueColor(out, [name], resolveGeoServerLayerTrueColor(name));
+  }
+  return out;
+}
+
 /**
- * SLD stroke 색 적용 + TEXT를 ENTITIES에 삽입.
+ * GeoServer 등록 색 적용 + POINT→CIRCLE + TEXT 삽입.
  * 저장은 CP949(ANSI_949).
  */
 async function finalizeDxfWithLabelsAndStyle(
   dxfAbs: string,
-  params: { entitiesBlock?: string; strokeLayerNames: string[] }
+  params: {
+    entitiesBlock?: string;
+    strokeLayerNames: string[];
+  }
 ): Promise<void> {
   const buf = await fsPromises.readFile(dxfAbs);
   let content = readDxfAsText(buf);
   const nl = content.includes('\r\n') ? '\r\n' : '\n';
 
-  content = applyLayerStrokeTrueColor(content, params.strokeLayerNames);
+  content = convertDxfPointsToCircles(content);
+  content = applyStrokeColorsByLayer(content, params.strokeLayerNames);
 
   const entitiesBlock = (params.entitiesBlock ?? '').trim();
   if (entitiesBlock) {
@@ -660,48 +994,80 @@ async function exportOneLayerToShp(params: {
   return { ok: true };
 }
 
-async function appendShpToDxf(params: {
+/**
+ * DXF 드라이버는 -update/-append 로 새 CAD 레이어를 만들지 못한다.
+ * 레이어마다 단독 DXF를 만든 뒤 ENTITIES를 합친다.
+ */
+function extractDxfEntitiesInner(content: string): string {
+  const entitiesStartRe =
+    /(^|\r?\n)[ \t]*0[ \t]*\r?\n[ \t]*SECTION[ \t]*\r?\n[ \t]*2[ \t]*\r?\n[ \t]*ENTITIES[ \t]*(?=\r?\n)/i;
+  const startMatch = entitiesStartRe.exec(content);
+  if (!startMatch) {
+    throw new Error('DXF ENTITIES 섹션을 찾지 못했습니다.');
+  }
+  const afterHeader = startMatch.index + startMatch[0].length;
+  const endSecRe = /\r?\n[ \t]*0[ \t]*\r?\n[ \t]*ENDSEC[ \t]*(?=\r?\n)/i;
+  const rest = content.slice(afterHeader);
+  const endMatch = endSecRe.exec(rest);
+  if (!endMatch) {
+    throw new Error('DXF ENTITIES ENDSEC를 찾지 못했습니다.');
+  }
+  return rest.slice(0, endMatch.index).replace(/^\r?\n/, '').replace(/\r?\n$/, '');
+}
+
+async function mergeDxfEntitiesFromFile(baseDxfAbs: string, addDxfAbs: string): Promise<void> {
+  const baseBuf = await fsPromises.readFile(baseDxfAbs);
+  const addBuf = await fsPromises.readFile(addDxfAbs);
+  let base = readDxfAsText(baseBuf);
+  const add = readDxfAsText(addBuf);
+  const nl = base.includes('\r\n') ? '\r\n' : '\n';
+  const addInner = extractDxfEntitiesInner(add).replace(/\r?\n/g, nl);
+  if (!addInner.trim()) return;
+
+  const entitiesStartRe =
+    /(^|\r?\n)[ \t]*0[ \t]*\r?\n[ \t]*SECTION[ \t]*\r?\n[ \t]*2[ \t]*\r?\n[ \t]*ENTITIES[ \t]*(?=\r?\n)/i;
+  const startMatch = entitiesStartRe.exec(base);
+  if (!startMatch) {
+    throw new Error('합칠 대상 DXF에서 ENTITIES를 찾지 못했습니다.');
+  }
+  const afterHeader = startMatch.index + startMatch[0].length;
+  const endSecRe = /\r?\n[ \t]*0[ \t]*\r?\n[ \t]*ENDSEC[ \t]*(?=\r?\n)/i;
+  const rest = base.slice(afterHeader);
+  const endMatch = endSecRe.exec(rest);
+  if (!endMatch) {
+    throw new Error('합칠 대상 DXF에서 ENDSEC를 찾지 못했습니다.');
+  }
+  const insertAt = afterHeader + endMatch.index;
+  base = `${base.slice(0, insertAt)}${nl}${addInner}${base.slice(insertAt)}`;
+  await fsPromises.writeFile(baseDxfAbs, encodeDxfCp949(base));
+}
+
+/** SHP → 단독 DXF (항상 새 파일). Layer 필드로 CAD 레이어명 지정 */
+async function writeShpToDxf(params: {
   shpAbs: string;
   dxfAbs: string;
   layerName: string;
-  isFirst: boolean;
   cmd: string;
   prefix: string[];
   env: NodeJS.ProcessEnv;
 }): Promise<void> {
-  const { shpAbs, dxfAbs, layerName, isFirst, cmd, prefix, env } = params;
+  const { shpAbs, dxfAbs, layerName, cmd, prefix, env } = params;
   const layerRef = ogrSqlLayerRef(path.parse(shpAbs).name);
-  const ogrArgs = isFirst
-    ? [
-        '-f',
-        'DXF',
-        dxfAbs,
-        shpAbs,
-        '-oo',
-        'ENCODING=CP949',
-        '-nln',
-        layerName,
-        '-dsco',
-        'INSUNITS=METERS',
-        '-dsco',
-        'MEASUREMENT=METRIC',
-        '-sql',
-        `SELECT FID FROM ${layerRef}`,
-      ]
-    : [
-        '-update',
-        '-append',
-        '-f',
-        'DXF',
-        dxfAbs,
-        shpAbs,
-        '-oo',
-        'ENCODING=CP949',
-        '-nln',
-        layerName,
-        '-sql',
-        `SELECT FID FROM ${layerRef}`,
-      ];
+  const safeLayer = layerName.replace(/'/g, "''");
+  const ogrArgs = [
+    '-f',
+    'DXF',
+    dxfAbs,
+    shpAbs,
+    '-oo',
+    'ENCODING=CP949',
+    '-dsco',
+    'INSUNITS=METERS',
+    '-dsco',
+    'MEASUREMENT=METRIC',
+    '-sql',
+    `SELECT '${safeLayer}' AS Layer FROM ${layerRef}`,
+  ];
   const execArgs = prefix.length > 0 ? [...prefix, ...ogrArgs] : ogrArgs;
   const runEnv: NodeJS.ProcessEnv = {
     ...env,
@@ -785,6 +1151,8 @@ export async function exportLayersToCad(params: {
   const labelBlocks: string[] = [];
   /** QGIS처럼 도형과 동일한 레이어명에 TEXT를 넣는다 */
   let textHandle = 0x10000;
+  /** 선택 레이어 전체 라벨이 서로 겹치지 않도록 공용 충돌 인덱스 */
+  const labelIndex = new LabelCollisionIndex();
 
   try {
     let dxfStarted = false;
@@ -801,30 +1169,46 @@ export async function exportLayersToCad(params: {
           env: baseEnv,
         });
         if (!shpResult.ok) {
+          console.warn(`[layerCadExport] skip ${layer.tableName}: ${shpResult.reason}`);
           skipped.push({ tableName: layer.tableName, reason: shpResult.reason });
           continue;
         }
         const geomLayerName = sanitizeDxfLayerName(layer.tableName);
-        await appendShpToDxf({
-          shpAbs: outShp,
-          dxfAbs,
-          layerName: geomLayerName,
-          isFirst: !dxfStarted,
-          cmd,
-          prefix,
-          env: baseEnv,
-        });
-        dxfStarted = true;
+        if (!dxfStarted) {
+          await writeShpToDxf({
+            shpAbs: outShp,
+            dxfAbs,
+            layerName: geomLayerName,
+            cmd,
+            prefix,
+            env: baseEnv,
+          });
+          dxfStarted = true;
+        } else {
+          const partDxf = path.join(tmpRoot, `${geomLayerName}.part.dxf`);
+          await writeShpToDxf({
+            shpAbs: outShp,
+            dxfAbs: partDxf,
+            layerName: geomLayerName,
+            cmd,
+            prefix,
+            env: baseEnv,
+          });
+          await mergeDxfEntitiesFromFile(dxfAbs, partDxf);
+          await fsPromises.rm(partDxf, { force: true }).catch(() => {});
+        }
         included.push(layer.tableName);
+        console.log(`[layerCadExport] included ${layer.tableName} → CAD layer ${geomLayerName}`);
 
         if (layer.labelField) {
           try {
-            const points = await fetchLabelPoints({
+            const raws = await fetchLabelPoints({
               schema: layer.schema,
               tableName: layer.tableName,
               labelField: layer.labelField,
               bbox,
             });
+            const points = placeLabels(raws, labelIndex);
             if (points.length) {
               const built = buildDxfTextEntities(geomLayerName, points, textHandle);
               textHandle = built.nextHandle;
@@ -851,6 +1235,7 @@ export async function exportLayersToCad(params: {
         }
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
+        console.error(`[layerCadExport] fail ${layer.tableName}:`, msg.slice(0, 300));
         skipped.push({ tableName: layer.tableName, reason: msg.slice(0, 300) });
       }
     }

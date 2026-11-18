@@ -115,3 +115,22 @@ export function resolveEntityStyle(
 
   return { strokeCss, fillRgba, strokeWidth: lw };
 }
+
+/** 레이어 ACI(또는 TrueColor) → 지도용 stroke CSS (lite GeoJSON용) */
+export function strokeCssFromAcadIndex(colorIndex: number | null | undefined): string {
+  const DEFAULT_RGB = 0x1e293b;
+  if (colorIndex == null || !Number.isFinite(colorIndex)) {
+    return trueColorToRgbCss(DEFAULT_RGB);
+  }
+  const abs = Math.abs(Math.floor(colorIndex));
+  let rgb: number = DEFAULT_RGB;
+  if (abs > 0 && abs < 256) {
+    const fromAci = getAcadColor(abs);
+    if (typeof fromAci === "number") rgb = fromAci >>> 0;
+  } else if (abs >= 256) {
+    // TrueColor 저장값으로 온 경우
+    rgb = abs >>> 0;
+  }
+  rgb = adaptCadColorForLightMap(rgb, abs < 256 ? abs : undefined);
+  return trueColorToRgbCss(rgb);
+}

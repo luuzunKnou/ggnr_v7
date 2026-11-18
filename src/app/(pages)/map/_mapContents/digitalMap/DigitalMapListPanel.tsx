@@ -7,12 +7,7 @@ import {
   MAP_LAYER_PANEL_MAX_H_CLASS,
   MAP_LAYER_PANEL_SURFACE_CLASS,
 } from '../../_mapComponents/mapControlPanel/mapLayerPanelLayout';
-
-export type DigitalMapFolderRow = {
-  name: string;
-  dxfCount: number;
-  indexed: boolean;
-};
+import type { DigitalMapFolderRow } from './useDigitalMapTileLayer';
 
 type Props = {
   folders: DigitalMapFolderRow[];
