@@ -40,6 +40,57 @@ export function to3857Coords(coords: [number, number][]): Pt[] {
   });
 }
 
+/** 노선 시점·종점 — 첫 구간 기점 / 마지막 구간 종점 */
+export function routeEndsFromSegments(segments: BikeRoadSegment[]): {
+  startPoint: string;
+  endPoint: string;
+} {
+  if (segments.length === 0) {
+    return { startPoint: "", endPoint: "" };
+  }
+  const first = segments[0]!;
+  const last = segments[segments.length - 1]!;
+  return {
+    startPoint: first.startName.trim(),
+    endPoint: last.endName.trim(),
+  };
+}
+
+/**
+ * 엑셀처럼 구간이 이어질 때 — 직전 구간의 종점명.
+ * 양측(R/L)은 같은 종점이므로 마지막 행 기준.
+ */
+export function previousSegmentEndName(segments: BikeRoadSegment[]): string {
+  if (segments.length === 0) return "";
+  return segments[segments.length - 1]!.endName.trim();
+}
+
+/** 다음 구간 그리기 시작점 — 직전 구간 선의 끝 좌표 */
+export function previousSegmentEndLonLat(
+  segments: BikeRoadSegment[]
+): [number, number] | null {
+  if (segments.length === 0) return null;
+  // 양측이면 R(또는 C) 중심/우측 선 끝을 이어붙임
+  const preferred =
+    [...segments].reverse().find((s) => s.side === "R" || s.side === "C") ??
+    segments[segments.length - 1]!;
+  const coords =
+    preferred.centerLineCoords && preferred.centerLineCoords.length >= 2
+      ? preferred.centerLineCoords
+      : preferred.lineCoords;
+  if (!coords || coords.length < 2) return null;
+  const end = coords[coords.length - 1]!;
+  return [end[0], end[1]];
+}
+
+/** 새 구간 기점 = 직전 종점(있으면), 없으면 방금 찍은 주소 */
+export function chainStartName(
+  segments: BikeRoadSegment[],
+  geocodedStart: string
+): string {
+  return previousSegmentEndName(segments) || geocodedStart.trim();
+}
+
 /** 구간 라인들을 이은 표시용 합본 (첫 유효 구간 기준) */
 export function mergeRouteLineCoords(
   segments: BikeRoadSegment[]

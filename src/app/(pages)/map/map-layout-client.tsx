@@ -1923,19 +1923,29 @@ function MapLayoutContent({
   const handleAddBikeRoad = () => {
     const draft = createEmptyBikeRoadRoute()
     setBikeRoadRoutes((prev) => [
-      draft,
       ...prev.filter((r) => !isNewBikeRoadRouteId(r.id)),
+      draft,
     ])
     setBikeRoadSelectedId(draft.id)
   }
 
   const handleSaveBikeRoad = (next: BikeRoadRoute) => {
     setBikeRoadRoutes((prev) => {
-      // 임시 신규·동일 id 제거 후 저장본을 맨 앞에
-      const rest = prev.filter(
-        (r) => !isNewBikeRoadRouteId(r.id) && r.id !== next.id
-      )
-      return [next, ...rest]
+      // 목록 순서 유지 — 맨 앞으로 끌어오지 않음
+      const byId = prev.findIndex((r) => r.id === next.id)
+      if (byId >= 0) {
+        const copy = [...prev]
+        copy[byId] = next
+        return copy
+      }
+      // 신규 저장: 임시 id 자리를 정식 id로 교체
+      const draftIdx = prev.findIndex((r) => isNewBikeRoadRouteId(r.id))
+      if (draftIdx >= 0) {
+        const copy = [...prev]
+        copy[draftIdx] = next
+        return copy.filter((r, i) => i === draftIdx || !isNewBikeRoadRouteId(r.id))
+      }
+      return [...prev, next]
     })
     setBikeRoadSelectedId(next.id)
   }

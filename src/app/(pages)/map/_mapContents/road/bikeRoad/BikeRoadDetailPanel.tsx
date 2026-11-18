@@ -26,7 +26,12 @@ import { BikeRoadLocationMap } from "./BikeRoadLocationMap";
 import { BikeRoadSegmentDrawBanner } from "./BikeRoadSegmentDrawBanner";
 import { BikeRoadSegmentListSection } from "./BikeRoadSegmentListSection";
 import { titleFromDirection } from "./bikeRoadDirection";
-import { mergeRouteLineCoords } from "./bikeRoadSegmentGeom";
+import {
+  mergeRouteLineCoords,
+  previousSegmentEndLonLat,
+  previousSegmentEndName,
+  routeEndsFromSegments,
+} from "./bikeRoadSegmentGeom";
 import {
   bikeRoadSerialPrefix,
   isNewBikeRoadRouteId,
@@ -166,27 +171,34 @@ export function BikeRoadDetailPanel({ route, onClose, onSave, onDelete }: Props)
   const attrValues = attrEditing ? draft : routeToDraft(route);
   const drawPrefix = bikeRoadSerialPrefix(draftSegments);
   const drawNextIndex = draftSegments.length + 1;
+  const chainFromLonLat = previousSegmentEndLonLat(draftSegments);
+  const chainStartName = previousSegmentEndName(draftSegments);
 
   const segmentDraw = useBikeRoadSegmentDraw({
     active: attrEditing && drawMode != null,
     mode: drawMode,
     routePrefix: drawPrefix,
     nextIndex1: drawNextIndex,
+    chainFromLonLat,
+    chainStartName: chainStartName || null,
     onComplete: (result) => {
       setDraftSegments((list) => {
         const next = [...list, ...result.segments];
         const merged = mergeRouteLineCoords(next);
-        const first = next[0];
-        const last = next[next.length - 1];
-        // 지도·위치도에 바로 보이게 저장(수정 모드는 유지)
-        onSave({
+        const ends = routeEndsFromSegments(next);
+        const payload = {
           ...route,
           segments: next,
           lineCoords: merged.length >= 2 ? merged : route.lineCoords,
-          startLabel:
-            route.startLabel.trim() || first?.startName?.trim() || route.startLabel,
-          endLabel: route.endLabel.trim() || last?.endName?.trim() || route.endLabel,
+          startPoint: ends.startPoint || route.startPoint,
+          endPoint: ends.endPoint || route.endPoint,
+          startLabel: ends.startPoint || route.startLabel,
+          endLabel: ends.endPoint || route.endLabel,
           locationMapUrl: undefined,
+        };
+        // 부모(MapLayout) setState는 이 updater 동기 구간 밖에서
+        queueMicrotask(() => {
+          onSave(payload);
         });
         return next;
       });
@@ -194,6 +206,27 @@ export function BikeRoadDetailPanel({ route, onClose, onSave, onDelete }: Props)
     },
     onCancel: () => setDrawMode(null),
   });
+
+  /** 구간 추가·삭제·기점/종점 수정 시 → 속성 시점·종점 실시간 반영 */
+  useEffect(() => {
+    if (!attrEditing) return;
+    const ends = routeEndsFromSegments(draftSegments);
+    setDraft((d) => {
+      if (d.startPoint === ends.startPoint && d.endPoint === ends.endPoint) {
+        return d;
+      }
+      return {
+        ...d,
+        startPoint: ends.startPoint,
+        endPoint: ends.endPoint,
+      };
+    });
+  }, [
+    attrEditing,
+    draftSegments.length,
+    draftSegments[0]?.startName,
+    draftSegments[draftSegments.length - 1]?.endName,
+  ]);
 
   const imagePreviewItems = useMemo<ServiceFilePreviewItem[]>(
     () =>
@@ -262,19 +295,19 @@ export function BikeRoadDetailPanel({ route, onClose, onSave, onDelete }: Props)
       kind,
       totalLength: draft.totalLength.trim(),
       direction: draft.direction.trim(),
-      startPoint: draft.startPoint.trim(),
-      endPoint: draft.endPoint.trim(),
       bridges: draft.bridges.trim(),
       subway: draft.subway.trim(),
       remark: draft.remark.trim(),
+      startPoint: draft.startPoint.trim() || firstSeg?.startName?.trim() || "",
+      endPoint: draft.endPoint.trim() || lastSeg?.endName?.trim() || "",
       startLabel:
-        route.startLabel.trim() ||
+        draft.startPoint.trim() ||
         firstSeg?.startName?.trim() ||
-        draft.startPoint.trim(),
+        route.startLabel.trim(),
       endLabel:
-        route.endLabel.trim() ||
+        draft.endPoint.trim() ||
         lastSeg?.endName?.trim() ||
-        draft.endPoint.trim(),
+        route.endLabel.trim(),
       pathStyle: pathStyleFromKind(kind),
       segments,
       lineCoords: mergedLine.length >= 2 ? mergedLine : route.lineCoords,
@@ -292,7 +325,24 @@ export function BikeRoadDetailPanel({ route, onClose, onSave, onDelete }: Props)
       ? `${target.serialNo}${target.routeName ? ` · ${target.routeName}` : ""}`
       : "구간";
     if (!window.confirm(`「${label}」을(를) 목록에서 뺄까요?`)) return;
-    setDraftSegments((list) => list.filter((s) => s.id !== segmentId));
+    setDraftSegments((list) => {
+      const next = list.filter((s) => s.id !== segmentId);
+      const merged = mergeRouteLineCoords(next);
+      const ends = routeEndsFromSegments(next);
+      queueMicrotask(() => {
+        onSave({
+          ...route,
+          segments: next,
+          lineCoords: merged.length >= 2 ? merged : [],
+          startPoint: ends.startPoint,
+          endPoint: ends.endPoint,
+          startLabel: ends.startPoint || route.startLabel,
+          endLabel: ends.endPoint || route.endLabel,
+          locationMapUrl: undefined,
+        });
+      });
+      return next;
+    });
   };
 
   const handleChangeSegment = (

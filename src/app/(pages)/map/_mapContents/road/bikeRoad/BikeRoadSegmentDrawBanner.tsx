@@ -44,7 +44,7 @@ export function BikeRoadSegmentDrawBanner({
           구간 추가 · {mode === "both" ? "양측" : "편측"}
         </span>
         <span className="text-[11px] tabular-nums text-muted-foreground">
-          점 {pointCount}
+          {pointCount < 2 ? "미완성" : `획 ${pointCount - 1}`}
         </span>
         <div className="ml-auto flex items-center gap-1">
           <button
@@ -52,7 +52,7 @@ export function BikeRoadSegmentDrawBanner({
             className={btn}
             disabled={busy || pointCount === 0}
             onClick={onUndo}
-            title="마지막 점 지우기"
+            title="마지막 드래그 지우기"
           >
             <Undo2 className="h-3.5 w-3.5" />
             되돌리기
@@ -76,7 +76,7 @@ export function BikeRoadSegmentDrawBanner({
         <p className="text-[11px] leading-snug text-muted-foreground">{notice}</p>
       ) : (
         <p className="text-[11px] leading-snug text-muted-foreground">
-          도로구간 위에서 기점·경유·종점을 순서대로 찍으세요.
+          도로 위에서 눌러 드래그하세요. 두 점 계산 없이 그린 모양이 구간이 됩니다.
         </p>
       )}
     </div>
