@@ -3,14 +3,21 @@
 import { useEffect } from 'react';
 import type { Map } from 'ol';
 
+export type MapContextMenuPayload = {
+  coordinate: [number, number];
+  viewProjection: string;
+  screenX: number;
+  screenY: number;
+};
+
 /**
- * 지도 우클릭 시 좌표·뷰 좌표계를 콜백으로 전달.
- * 팝업은 콜백에서 context 등으로 패널을 띄우는 방식 사용.
+ * 지도 우클릭 시 좌표·뷰 좌표계·화면 좌표를 콜백으로 전달.
+ * 팝업은 콜백에서 context 등으로 메뉴·패널을 띄우는 방식 사용.
  */
 export function useMapContextMenu(
   map: Map | null,
   mapReady: boolean,
-  onContextMenu: (coordinate: [number, number], viewProjection: string) => void
+  onContextMenu: (payload: MapContextMenuPayload) => void
 ) {
   useEffect(() => {
     if (!mapReady || !map) return;
@@ -29,7 +36,12 @@ export function useMapContextMenu(
       const view = map.getView();
       const viewProjection = view.getProjection()?.getCode() ?? 'EPSG:3857';
 
-      onContextMenu(coordinate as [number, number], viewProjection);
+      onContextMenu({
+        coordinate: coordinate as [number, number],
+        viewProjection,
+        screenX: evt.clientX,
+        screenY: evt.clientY,
+      });
     };
 
     const viewport = map.getViewport();

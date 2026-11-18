@@ -15,6 +15,7 @@ import ComplaintDetail from "./_mapComponents/complaint/ComplaintDetail"
 import ComplaintAdd from "./_mapComponents/complaint/ComplaintAdd"
 import { MAP_FLOATING_DETAIL_CLOSE_EVENT } from "./_mapComponents/mapFloatingDetailEvent"
 import AddressInfoDetail from "./_mapComponents/AddressInfoDetail"
+import MapRightClickMenu from "./_mapComponents/mapRightClick/MapRightClickMenu"
 import { RiverBasicPlanListPanel } from "./_mapContents/river/riverBasicPlan/RiverBasicPlanListPanel"
 import {
   RiverBasicPlanDetailPanel,
@@ -4540,6 +4541,7 @@ function MapLayoutContent({
               </SerWriteAccessProvider>
 
               <AddressInfoDetail />
+              <MapRightClickMenu />
             </div>
             <div className="pointer-events-auto">
               <UserAccountProtoPanel

@@ -23,3 +23,22 @@ export interface AddressInfoPanelProps {
   buildingName?: string | null;
   loading?: boolean;
 }
+
+/** 주소 문자열로 외부 지도 검색 */
+export function openExternalMapByAddress(
+  provider: 'naver' | 'kakao' | 'google',
+  address: string
+) {
+  const q = String(address ?? '').trim();
+  if (!q || q === '-') {
+    window.alert('검색할 주소가 없습니다.');
+    return;
+  }
+  const enc = encodeURIComponent(q);
+  const urls = {
+    naver: `https://map.naver.com/p/search/${enc}`,
+    kakao: `https://map.kakao.com/?q=${enc}`,
+    google: `https://www.google.com/maps/search/?api=1&query=${enc}`,
+  } as const;
+  window.open(urls[provider], '_blank', 'noopener,noreferrer');
+}
