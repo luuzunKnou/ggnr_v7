@@ -1,5 +1,9 @@
 /** odor_ph Index 대시보드 목업 — 통신율·등급·경보·읍면동·포인트 */
 
+import { MOCK_ODOR_SENSORS_FROM_DB } from '@/service/odorSensorMock'
+
+export { MOCK_ODOR_SENSORS_FROM_DB }
+
 export type OdorGrade = 1 | 2 | 3 | 4 | 5;
 
 export type OdorGradeStatus = 'normal' | 'caution' | 'warning';
@@ -49,35 +53,6 @@ export type OdorGradePointMock = {
   label: string;
   agency: string;
 };
-
-/**
- * odor_ph DB `odor_linkage.odor_sensor` 스냅샷 (2026-11-16 조회).
- * 런타임 조회 실패·타 프로젝트 미리보기 시 동일 구조로 목업.
- */
-export const MOCK_ODOR_SENSORS_FROM_DB: ReadonlyArray<{
-  sensorKey: number;
-  agency: string;
-  sensorNm: string;
-  sensorKorNm: string;
-}> = [
-  { sensorKey: 1, agency: '가람환경기술', sensorNm: 'A1', sensorKorNm: '제동꽃집' },
-  { sensorKey: 2, agency: '가람환경기술', sensorNm: 'A2', sensorKorNm: '순자수산' },
-  { sensorKey: 3, agency: '가람환경기술', sensorNm: 'A3', sensorKorNm: '선산회식당' },
-  { sensorKey: 4, agency: '가람환경기술', sensorNm: 'A4', sensorKorNm: '동남대게수산' },
-  { sensorKey: 5, agency: '가람환경기술', sensorNm: 'A5', sensorKorNm: '운하 회/대게식당' },
-  { sensorKey: 6, agency: '가람환경기술', sensorNm: 'A6', sensorKorNm: '새마을금고' },
-  { sensorKey: 7, agency: '가람환경기술', sensorNm: 'A7', sensorKorNm: '케렌시아' },
-  { sensorKey: 8, agency: '가람환경기술', sensorNm: 'A8', sensorKorNm: '만물상회' },
-  { sensorKey: 9, agency: '가람환경기술', sensorNm: 'A9', sensorKorNm: '산체상회' },
-  { sensorKey: 10, agency: '가람환경기술', sensorNm: 'A10', sensorKorNm: '경안상회' },
-  { sensorKey: 11, agency: '가람환경기술', sensorNm: 'A11', sensorKorNm: '연지건어물' },
-  { sensorKey: 12, agency: '가람환경기술', sensorNm: 'A12', sensorKorNm: '미도건어물' },
-  { sensorKey: 13, agency: '가람환경기술', sensorNm: 'A13', sensorKorNm: '포항수산냉동' },
-  { sensorKey: 14, agency: '가람환경기술', sensorNm: 'A14', sensorKorNm: '오라수산' },
-  { sensorKey: 15, agency: '가람환경기술', sensorNm: 'A15', sensorKorNm: '공영주차장' },
-  { sensorKey: 16, agency: '디오솔류션', sensorNm: '1', sensorKorNm: '영일대 #1' },
-  { sensorKey: 17, agency: '디오솔류션', sensorNm: '4', sensorKorNm: '영일대 #4' },
-];
 
 /** @deprecated MOCK_ODOR_SENSORS_FROM_DB 기반 집계 사용 */
 export const MOCK_FALLBACK_AGENCIES: AgencyCommRateMock[] = [
@@ -376,8 +351,8 @@ export function buildDashboardGradeMock(sensors: SensorLike[]): {
           agency: s.agency,
           sensorNm: s.sensorNm,
           sensorKorNm: s.sensorKorNm,
-          lon: null,
-          lat: null,
+          lon: s.lon,
+          lat: s.lat,
         }));
   const deviceTotal = source.length;
 

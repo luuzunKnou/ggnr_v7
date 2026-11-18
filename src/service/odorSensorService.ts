@@ -1,9 +1,8 @@
 /**
  * 악취 센서 (odor_linkage.odor_sensor) — odor_ph Index 대시보드용
+ * 런타임은 odor_ph DB 스냅샷 목업만 사용 (타 프로젝트·DB 미접속 시 동일).
  */
-import { db } from '@/database/db';
-import { odorSensor } from '@/database/schema';
-import { asc, sql } from 'drizzle-orm';
+import { MOCK_ODOR_SENSORS_FROM_DB } from './odorSensorMock';
 
 export type OdorSensorListItem = {
   sensorKey: number;
@@ -16,32 +15,21 @@ export type OdorSensorListItem = {
   lat: number | null;
 };
 
-/** 센서 목록 (키·기관·센서명·한글명·좌표) */
+/** odor_ph DB 스냅샷 목업 → 목록 형식 */
+function mockSensors(): OdorSensorListItem[] {
+  return MOCK_ODOR_SENSORS_FROM_DB.map((s) => ({
+    sensorKey: s.sensorKey,
+    agency: s.agency,
+    sensorNm: s.sensorNm,
+    sensorKorNm: s.sensorKorNm,
+    lon: s.lon,
+    lat: s.lat,
+  }));
+}
+
+/** 센서 목록 (키·기관·센서명·한글명·좌표) — 목업 */
 export async function listSensors(
   _params: Record<string, unknown> = {}
 ): Promise<OdorSensorListItem[]> {
-  const rows = await db
-    .select({
-      sensorKey: odorSensor.sensorKey,
-      agency: odorSensor.agency,
-      sensorNm: odorSensor.sensorNm,
-      sensorKorNm: odorSensor.sensorKorNm,
-      lon: sql<string | null>`CASE WHEN ${odorSensor.geom} IS NULL THEN NULL ELSE ST_X(ST_Transform(${odorSensor.geom}, 4326)) END`,
-      lat: sql<string | null>`CASE WHEN ${odorSensor.geom} IS NULL THEN NULL ELSE ST_Y(ST_Transform(${odorSensor.geom}, 4326)) END`,
-    })
-    .from(odorSensor)
-    .orderBy(asc(odorSensor.agency), asc(odorSensor.sensorKey));
-
-  return rows.map((r) => {
-    const lon = r.lon != null && r.lon !== '' ? Number(r.lon) : null;
-    const lat = r.lat != null && r.lat !== '' ? Number(r.lat) : null;
-    return {
-      sensorKey: r.sensorKey,
-      agency: r.agency ?? null,
-      sensorNm: r.sensorNm ?? null,
-      sensorKorNm: r.sensorKorNm ?? null,
-      lon: lon != null && Number.isFinite(lon) ? lon : null,
-      lat: lat != null && Number.isFinite(lat) ? lat : null,
-    };
-  });
+  return mockSensors();
 }

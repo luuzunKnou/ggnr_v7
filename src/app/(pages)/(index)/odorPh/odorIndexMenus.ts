@@ -8,6 +8,7 @@ export const ODOR_INDEX_MENUS = [
   { id: 'home', label: '홈', icon: Home },
   { id: 'controlMap', label: '관제 지도' },
   { id: 'alertList', label: '경보 목록' },
+  { id: 'alertView2', label: '경보보기2' },
   { id: 'complaintManage', label: '민원 관리' },
   { id: 'actionHistory', label: '조치 내역' },
   { id: 'reportView', label: '보고서 조회' },
@@ -24,7 +25,7 @@ export const ODOR_INDEX_MENU_GROUPS: readonly AdminConsoleMenuGroup[] = [
     id: 'monitoring',
     label: '모니터링',
     icon: Monitor,
-    menuIds: ['controlMap', 'alertList'],
+    menuIds: ['controlMap', 'alertList', 'alertView2'],
   },
   {
     id: 'complaintHistory',
@@ -48,6 +49,8 @@ export function getOdorIndexMenuDescription(menuId: string): string {
       return '관제 지도로 이동해 센서·경계·경보를 확인합니다'
     case 'alertList':
       return '악취, 장애 경보 목록입니다'
+    case 'alertView2':
+      return '지도 경보 보기와 동일한 목업 목록·인지·이력입니다'
     case 'complaintManage':
       return '악취 관련 민원을 조회·관리합니다 (목업)'
     case 'actionHistory':

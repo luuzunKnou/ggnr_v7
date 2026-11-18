@@ -10,6 +10,7 @@ import {
   OdorIndexAlertContent,
   type AlertDetailOpenSignal,
 } from '@/app/(pages)/(index)/odorPh/OdorIndexAlertContent'
+import { OdorIndexAlertView2Content } from '@/app/(pages)/(index)/odorPh/OdorIndexAlertView2Content'
 import { OdorIndexControlMapContent } from '@/app/(pages)/(index)/odorPh/OdorIndexControlMapContent'
 import { OdorIndexPlaceholderPanel } from '@/app/(pages)/(index)/odorPh/OdorIndexPlaceholderPanel'
 import {
@@ -140,6 +141,9 @@ export function OdorIndexConsole({ title, sensors, footerAddr, footerRss, querie
               case 'alertList':
                 body = <OdorIndexAlertContent openDetailSignal={alertDetailSignal} />
                 break
+              case 'alertView2':
+                body = <OdorIndexAlertView2Content onClose={() => goMenu('home')} />
+                break
               case 'complaintManage':
                 body = (
                   <OdorIndexPlaceholderPanel
@@ -175,7 +179,7 @@ export function OdorIndexConsole({ title, sensors, footerAddr, footerRss, querie
               default:
                 body = null
             }
-            const showQueryTime = id !== 'alertList'
+            const showQueryTime = id !== 'alertList' && id !== 'alertView2'
             return (
               <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
                 {showQueryTime ? (
