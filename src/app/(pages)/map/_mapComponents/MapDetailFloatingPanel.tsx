@@ -1,7 +1,14 @@
 'use client'
 
-import type { ReactNode, Ref } from 'react'
-import { Minus, Square, X } from 'lucide-react'
+import { useEffect, useRef, useState, type ReactNode, type Ref } from 'react'
+import { createPortal } from 'react-dom'
+import {
+  AppWindow,
+  Minus,
+  Square,
+  SquareArrowOutUpRight,
+  X,
+} from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { MapUiZLayer } from '@/lib/mapUiZIndex'
 import {
@@ -33,6 +40,10 @@ export type MapDetailFloatingPanelProps = {
   headerActions?: ReactNode
   /** 펼침·최소화 모두 최소화·닫기 왼쪽에 표시 (위치 이동 등) */
   headerActionsAlways?: ReactNode
+  /** 헤더 우클릭 — 화면에서 보기(플로팅 분리) */
+  onHeaderOpenInScreen?: () => void
+  /** 헤더 우클릭 — 새 창으로 보기(blank) */
+  onHeaderOpenInNewWindow?: () => void
   pinPosition?: { top: number; left: number } | null
   focusToken?: number
   onActivate?: () => void
@@ -67,6 +78,8 @@ export function MapDetailFloatingPanel({
   hideHeading = false,
   headerActions,
   headerActionsAlways,
+  onHeaderOpenInScreen,
+  onHeaderOpenInNewWindow,
   pinPosition = null,
   focusToken,
   onActivate,
@@ -86,6 +99,52 @@ export function MapDetailFloatingPanel({
   const showTitle = !(minimized && hideTitleWhenMinimized)
   const useLeadingSlot = Boolean(headerLeading) && !minimized
   const hideDefaultHeading = hideHeading && !minimized
+  const headerRef = useRef<HTMLDivElement | null>(null)
+  const menuRef = useRef<HTMLDivElement | null>(null)
+  const [ctxMenu, setCtxMenu] = useState<{ left: number; top: number } | null>(
+    null
+  )
+
+  const showScreenItem = Boolean(onHeaderOpenInScreen)
+  const showBlankItem = Boolean(onHeaderOpenInNewWindow)
+  const showCtxMenu =
+    allowMinimize || showScreenItem || showBlankItem
+
+  useEffect(() => {
+    if (!ctxMenu) return
+    const close = (e: MouseEvent) => {
+      const t = e.target as Node | null
+      if (menuRef.current?.contains(t)) return
+      setCtxMenu(null)
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setCtxMenu(null)
+    }
+    window.addEventListener('mousedown', close, true)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('mousedown', close, true)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [ctxMenu])
+
+  const handleHeaderContextMenu = (e: React.MouseEvent) => {
+    if (!showCtxMenu) return
+    e.preventDefault()
+    e.stopPropagation()
+    const pad = 8
+    const menuW = 180
+    const menuH = 120
+    const left = Math.min(
+      Math.max(pad, e.clientX),
+      Math.max(pad, window.innerWidth - menuW - pad)
+    )
+    const top = Math.min(
+      Math.max(pad, e.clientY),
+      Math.max(pad, window.innerHeight - menuH - pad)
+    )
+    setCtxMenu({ left, top })
+  }
 
   return (
     <MapFloatingPanel
@@ -104,10 +163,15 @@ export function MapDetailFloatingPanel({
       flushViewportClamp={flushViewportClamp}
       className={cn('relative bg-background backdrop-blur-none', className)}
       header={
-        <>
+        <div
+          ref={headerRef}
+          className="flex min-w-0 flex-1 items-center justify-between gap-1"
+          onContextMenu={handleHeaderContextMenu}
+        >
           {headerStart}
           <div
             className={cn(
+              'min-w-0 flex-1',
               minimized
                 ? 'standard-detail-float-heading-min'
                 : 'standard-detail-float-heading pr-2',
@@ -174,7 +238,71 @@ export function MapDetailFloatingPanel({
               <X className="h-4 w-4" />
             </button>
           </div>
-        </>
+          {ctxMenu && typeof document !== 'undefined'
+            ? createPortal(
+                <div
+                  ref={menuRef}
+                  role="menu"
+                  className="fixed z-[10050] min-w-[11rem] rounded-md border border-border bg-background py-1 text-xs shadow-lg"
+                  style={{ left: ctxMenu.left, top: ctxMenu.top }}
+                >
+                  {allowMinimize ? (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      title={minimized ? '펼치기' : '최소화'}
+                      className="flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-left text-foreground hover:bg-primary/10"
+                      onClick={() => {
+                        setCtxMenu(null)
+                        onMinimizedChange?.(!minimized)
+                      }}
+                    >
+                      {minimized ? (
+                        <Square className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                      ) : (
+                        <Minus className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                      )}
+                      {minimized ? '펼치기' : '최소화'}
+                    </button>
+                  ) : null}
+                  {showScreenItem ? (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      title="화면에서 보기"
+                      className="flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-left text-foreground hover:bg-primary/10"
+                      onClick={() => {
+                        setCtxMenu(null)
+                        onHeaderOpenInScreen?.()
+                      }}
+                    >
+                      <AppWindow className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                      화면에서 보기
+                    </button>
+                  ) : null}
+                  {showBlankItem ? (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      title="새 창으로 보기"
+                      className="flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-left text-foreground hover:bg-primary/10"
+                      onClick={() => {
+                        setCtxMenu(null)
+                        onHeaderOpenInNewWindow?.()
+                      }}
+                    >
+                      <SquareArrowOutUpRight
+                        className="h-3.5 w-3.5 shrink-0"
+                        aria-hidden
+                      />
+                      새 창으로 보기
+                    </button>
+                  ) : null}
+                </div>,
+                document.body
+              )
+            : null}
+        </div>
       }
     >
       {overlay}

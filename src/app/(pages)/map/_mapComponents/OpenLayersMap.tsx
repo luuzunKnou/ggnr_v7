@@ -1111,6 +1111,8 @@ export default function OpenLayersMap({
       const next = prev.filter(
         (item) =>
           item !== 'reset-measurements' &&
+          item !== DETAIL_WONDO_CONTROL_ID &&
+          item !== DIGITAL_MAP_CONTROL_ID &&
           !MEASUREMENT_IDS.includes(item)
       );
       return next.includes('background-map') ? next : [...next, 'background-map'];
@@ -3218,11 +3220,18 @@ export default function OpenLayersMap({
   const togglePanelLayer = (id: PanelLayerId) => {
     const opening = openSubPanel !== id;
     if (opening) {
-      // 배경지도·드론영상과 배타. 퇴장 애니와 목록 slide-in이 겹치면 두 번 깜빡이므로 즉시 닫음
+      // 배경지도·드론영상·세부원도·수치지형도와 배타. 퇴장 애니와 목록 slide-in이 겹치면 두 번 깜빡이므로 즉시 닫음
       setIsBackgroundPanelExiting(false);
       setAerialPanelOpen(false);
       setIsAerialViewPanelExiting(false);
-      setActiveControls((prev) => prev.filter((x) => x !== 'background-map'));
+      setActiveControls((prev) =>
+        prev.filter(
+          (x) =>
+            x !== 'background-map' &&
+            x !== DETAIL_WONDO_CONTROL_ID &&
+            x !== DIGITAL_MAP_CONTROL_ID
+        )
+      );
     }
     setOpenSubPanel((prev) => (prev === id ? null : id));
     if (id === 'land-category') {
@@ -3283,7 +3292,14 @@ export default function OpenLayersMap({
         setIsBackgroundPanelExiting(false);
         setIsAerialViewPanelExiting(false);
         setAerialPanelOpen(true);
-        setActiveControls((prev) => prev.filter((item) => item !== 'background-map'));
+        setActiveControls((prev) =>
+          prev.filter(
+            (item) =>
+              item !== 'background-map' &&
+              item !== DETAIL_WONDO_CONTROL_ID &&
+              item !== DIGITAL_MAP_CONTROL_ID
+          )
+        );
       }
       return;
     }
@@ -3380,10 +3396,27 @@ export default function OpenLayersMap({
     setOpenSubPanel(null);
 
     // 체크한 원도·수치지형도가 있으면 패널이 닫혀도 버튼이 켜져 보이므로 실제 패널 열림으로 토글
+    // 지적도·건물도로·배경지도·드론영상·서로(원도↔수치지형도)와 배타
     if (id === DETAIL_WONDO_CONTROL_ID || id === DIGITAL_MAP_CONTROL_ID) {
-      setActiveControls((prev) =>
-        prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
-      );
+      const panelOpen = activeControls.includes(id);
+      if (panelOpen) {
+        setActiveControls((prev) => prev.filter((item) => item !== id));
+      } else {
+        const peer =
+          id === DETAIL_WONDO_CONTROL_ID ? DIGITAL_MAP_CONTROL_ID : DETAIL_WONDO_CONTROL_ID;
+        setIsBackgroundPanelExiting(false);
+        setAerialPanelOpen(false);
+        setIsAerialViewPanelExiting(false);
+        setActiveControls((prev) => {
+          const cleaned = prev.filter(
+            (item) =>
+              item !== id &&
+              item !== peer &&
+              item !== 'background-map'
+          );
+          return [...cleaned, id];
+        });
+      }
       return;
     }
 
@@ -3407,7 +3440,12 @@ export default function OpenLayersMap({
         setAerialPanelOpen(false);
         setIsAerialViewPanelExiting(false);
         setActiveControls((prev) => {
-          const withoutPeer = prev.filter((item) => item !== 'aerial-view');
+          const withoutPeer = prev.filter(
+            (item) =>
+              item !== 'aerial-view' &&
+              item !== DETAIL_WONDO_CONTROL_ID &&
+              item !== DIGITAL_MAP_CONTROL_ID
+          );
           return withoutPeer.includes(id) ? withoutPeer : [...withoutPeer, id];
         });
       }
@@ -3420,7 +3458,14 @@ export default function OpenLayersMap({
         setIsBackgroundPanelExiting(false);
         setIsAerialViewPanelExiting(false);
         setAerialPanelOpen(true);
-        setActiveControls((prev) => prev.filter((item) => item !== 'background-map'));
+        setActiveControls((prev) =>
+          prev.filter(
+            (item) =>
+              item !== 'background-map' &&
+              item !== DETAIL_WONDO_CONTROL_ID &&
+              item !== DIGITAL_MAP_CONTROL_ID
+          )
+        );
       }
     } else {
       // 단일 선택 항목: 배타적 토글
@@ -3967,6 +4012,7 @@ export default function OpenLayersMap({
                 }
                 writeSerEng="dataQuery"
                 onSelectHit={layerClickDetail.selectHit}
+                onBackToList={layerClickDetail.backToList}
                 onClose={layerClickDetail.close}
                 onDetach={(origin) => layerClickDetail.detachKeep(origin)}
                 onSelectedUpdated={(hit) => {
@@ -3975,11 +4021,10 @@ export default function OpenLayersMap({
               />
             ) : null}
             {layerClickDetail.keptModals.map((kept) => {
-              const selected =
-                kept.hits.find((h) => h.key === kept.selectedKey) ??
-                kept.hits[0] ??
-                null
-              if (!selected) return null
+              if (kept.hits.length === 0) return null
+              const selected = kept.selectedKey
+                ? kept.hits.find((h) => h.key === kept.selectedKey) ?? null
+                : null
               return (
                 <LayerClickDetailFloating
                   key={kept.key}
@@ -4004,6 +4049,9 @@ export default function OpenLayersMap({
                   }
                   onSelectHit={(hitKey) =>
                     layerClickDetail.selectKeepHit(kept.key, hitKey)
+                  }
+                  onBackToList={() =>
+                    layerClickDetail.backKeepToList(kept.key)
                   }
                   onClose={() => layerClickDetail.closeKeep(kept.key)}
                 />

@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useMemo } from 'react'
+import { useCallback, useMemo, type ReactNode } from 'react'
 import type { DefineFieldLike } from '../../_mapComponents/standard/defineLayerRowUtils'
 import {
   WtlNetworkDetailRelatedTabs,
@@ -13,6 +13,11 @@ type Props = {
   hit: LayerClickHit
   fields: DefineFieldLike[]
   onHistoryReverted?: () => void
+  bodyHeightPx?: number
+  /** blank 상세 등 — 맨 앞 「지도」탭 */
+  mapTabContent?: ReactNode
+  /** 새 창 상세 — 현황 목록 행 클릭 시 상세를 창 안 모달로 */
+  relatedChildAsModal?: boolean
 }
 
 /**
@@ -23,6 +28,9 @@ export function LayerClickDetailRelatedTabs({
   hit,
   fields,
   onHistoryReverted,
+  bodyHeightPx = 160,
+  mapTabContent,
+  relatedChildAsModal = false,
 }: Props) {
   const item = useMemo(() => layerClickHitToNetworkRow(hit), [hit])
   const onRelatedMapLayer = useCallback((_next: WtlNetworkDetailRelatedOverlay) => {
@@ -35,7 +43,9 @@ export function LayerClickDetailRelatedTabs({
       fields={fields}
       onRelatedMapLayer={onRelatedMapLayer}
       onHistoryReverted={onHistoryReverted}
-      bodyHeightPx={160}
+      bodyHeightPx={bodyHeightPx}
+      mapTabContent={mapTabContent}
+      relatedChildAsModal={relatedChildAsModal}
     />
   )
 }

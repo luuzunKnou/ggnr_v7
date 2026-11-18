@@ -36,11 +36,23 @@ export type LayerClickScreenAnchor = { top: number; left: number }
 export type LayerClickKeptEntry = {
   key: string
   hits: LayerClickHit[]
-  selectedKey: string
+  /** null = 다중 hit 목록 단계 */
+  selectedKey: string | null
   anchor: LayerClickScreenAnchor | null
   stackIndex: number
   focusToken: number
   minimized: boolean
+}
+
+/** 남은 hit 기준으로 선택 키 결정 — 다중·선택 소실 시 목록(null) */
+function resolveSelectedKeyAfterFilter(
+  nextHits: LayerClickHit[],
+  cur: string | null
+): string | null {
+  if (nextHits.length === 0) return null
+  if (cur && nextHits.some((h) => h.key === cur)) return cur
+  if (nextHits.length === 1) return nextHits[0]!.key
+  return null
 }
 
 function flattenIdentifyHits(popup: IdentifyPopupState): LayerClickHit[] {
@@ -134,7 +146,8 @@ export function useLayerClickDetail(opts?: {
         return
       }
       setHits(nextHits)
-      setSelectedKey(nextHits[0]!.key)
+      // 1건 → 바로 상세, 2건 이상 → 목록(선택 null)
+      setSelectedKey(nextHits.length === 1 ? nextHits[0]!.key : null)
       // 최소화 유지 — 식별·데이터만 바뀌어도 자동 펼침 금지
       if (
         screenAnchor &&
@@ -152,13 +165,20 @@ export function useLayerClickDetail(opts?: {
   )
 
   const selected = useMemo(
-    () => hits.find((h) => h.key === selectedKey) ?? hits[0] ?? null,
+    () => (selectedKey ? hits.find((h) => h.key === selectedKey) ?? null : null),
     [hits, selectedKey]
   )
 
   const selectHit = useCallback((key: string) => {
     if (forceClosedRef.current) return
     setSelectedKey(key)
+    setFocusToken((t) => t + 1)
+  }, [])
+
+  /** 다중 상세 → 레이어 선택 목록 */
+  const backToList = useCallback(() => {
+    if (forceClosedRef.current) return
+    setSelectedKey(null)
     setFocusToken((t) => t + 1)
   }, [])
 
@@ -244,6 +264,20 @@ export function useLayerClickDetail(opts?: {
     )
   }, [])
 
+  const backKeepToList = useCallback((modalKey: string) => {
+    setKeptModals((prev) =>
+      prev.map((m) =>
+        m.key === modalKey
+          ? {
+              ...m,
+              selectedKey: null,
+              focusToken: m.focusToken + 1,
+            }
+          : m
+      )
+    )
+  }, [])
+
   const closeMatchingHits = useCallback(
     (payload: LayerClickDetailMatchClosePayload) => {
       const tables = new Set(
@@ -271,10 +305,7 @@ export function useLayerClickDetail(opts?: {
       setHits((prev) => {
         const next = filterHits(prev)
         if (next.length === prev.length) return prev
-        setSelectedKey((cur) => {
-          if (cur && next.some((h) => h.key === cur)) return cur
-          return next[0]?.key ?? null
-        })
+        setSelectedKey((cur) => resolveSelectedKeyAfterFilter(next, cur))
         if (next.length === 0) setMinimized(false)
         return next
       })
@@ -283,13 +314,10 @@ export function useLayerClickDetail(opts?: {
           .map((m) => {
             const nextHits = filterHits(m.hits)
             if (nextHits.length === 0) return null
-            const selectedStill = nextHits.some((h) => h.key === m.selectedKey)
             return {
               ...m,
               hits: nextHits,
-              selectedKey: selectedStill
-                ? m.selectedKey
-                : nextHits[0]!.key,
+              selectedKey: resolveSelectedKeyAfterFilter(nextHits, m.selectedKey),
             }
           })
           .filter((m): m is LayerClickKeptEntry => m != null)
@@ -309,7 +337,7 @@ export function useLayerClickDetail(opts?: {
       window.removeEventListener(LAYER_CLICK_DETAIL_MATCH_CLOSE_EVENT, onMatchClose)
   }, [closeMatchingHits])
 
-  const open = hits.length > 0 && selected != null && !forceClosed
+  const open = hits.length > 0 && !forceClosed
 
   return {
     open,
@@ -323,11 +351,13 @@ export function useLayerClickDetail(opts?: {
     keptModals,
     openFromIdentify,
     selectHit,
+    backToList,
     patchSelectedHit,
     detachKeep,
     closeKeep,
     setKeepMinimized,
     selectKeepHit,
+    backKeepToList,
     close,
     closeAll,
   }

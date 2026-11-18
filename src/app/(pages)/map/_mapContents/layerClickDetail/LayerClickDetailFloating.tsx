@@ -10,12 +10,12 @@ import {
   useState,
 } from 'react'
 import {
+  AppWindow,
   ChevronLeft,
-  ChevronRight,
   Crosshair,
-  ExternalLink,
   Pin,
   Search,
+  SquareArrowOutUpRight,
 } from 'lucide-react'
 import { call } from '@/lib/api'
 import { useSerWriteAccess } from '@/hooks/useSerWriteAccess'
@@ -32,6 +32,7 @@ import {
   MAP_DETAIL_FLOAT_MINIMIZED_WIDTH,
   computeMapDetailDockPin,
 } from '../../_mapComponents/mapDetailFloatingDock'
+import { getLegendUrl } from '../../_mapComponents/hooks/useFeatureIdentify'
 import { cn } from '@/lib/utils'
 import {
   getDefineFieldDisplayLabel,
@@ -63,9 +64,13 @@ import {
   shouldShowFacilityInfoSearch,
 } from './layerClickFacilityInfo'
 import { resolveWtlNetworkRowEditTarget } from '../wtlAdmin/networkMap/WtlNetworkMapAttachmentSection'
+import { openLayerClickDetailBlank } from './openLayerClickDetailBlank'
 
-const DETAIL_WIDTH = 'min(600px, calc(100vw - 2rem))'
-const DETAIL_WIDTH_FALLBACK_PX = 600
+const DETAIL_WIDTH = 'min(520px, calc(100vw - 2rem))'
+const DETAIL_WIDTH_FALLBACK_PX = 520
+/** 다중 레이어 선택 목록 — 우측 보기 버튼 공간 포함 */
+const PICK_LIST_WIDTH = 'min(360px, calc(100vw - 2rem))'
+const PICK_LIST_WIDTH_FALLBACK_PX = 360
 /** 상세보기/간소화 보기 선택 — 브라우저 유지 */
 const DETAIL_EXPANDED_STORAGE_KEY = 'ggnr.mapLayerClickDetail.expanded'
 
@@ -104,7 +109,6 @@ const DETAIL_PANEL_HEIGHT_PX =
   DETAIL_MAIN_ESTIMATE_PX + DETAIL_RELATED_TABS_HEIGHT_PX + SIMPLE_CHROME_HEIGHT_PX
 /** 상세·간소화 공통 화면 상한 — 내용이 적으면 줄어들고, 많으면 이 안에서 속성 스크롤 */
 const DETAIL_MAX_HEIGHT = 'min(92vh, calc(100vh - 1.5rem))'
-const PANEL_W_ESTIMATE_PX = DETAIL_WIDTH_FALLBACK_PX
 const PANEL_H_ESTIMATE_PX = SIMPLE_MAIN_ESTIMATE_PX + SIMPLE_CHROME_HEIGHT_PX
 
 /**
@@ -146,6 +150,8 @@ type Props = {
   viewportW: number
   viewportH: number
   onSelectHit: (key: string) => void
+  /** 다중 상세 → 레이어 선택 목록 */
+  onBackToList?: () => void
   onClose: () => void
   onActivate?: () => void
   /** 새 창으로 분리된 킵 모달 */
@@ -232,6 +238,7 @@ export function LayerClickDetailFloating({
   viewportW,
   viewportH,
   onSelectHit,
+  onBackToList,
   onClose,
   onActivate,
   kept = false,
@@ -266,6 +273,8 @@ export function LayerClickDetailFloating({
   const [facilityLookupError, setFacilityLookupError] = useState<string | null>(
     null
   )
+  /** 다중 목록 하이라이트만 — 상세 전환과 분리 */
+  const [listHighlightKey, setListHighlightKey] = useState<string | null>(null)
   /**
    * 상세 펼침·모달 오픈 직후 레이아웃 이동으로 Search가 오클릭되는 것 방지.
    * Date.now() 이전까지 시설 상세보기 클릭 무시.
@@ -284,9 +293,15 @@ export function LayerClickDetailFloating({
     return false
   })
   const viewModeKey = !forceListOnly && detailExpanded ? 'd' : 's'
+  const pickListModeEarly = hits.length > 1 && !selected
+  const panelWEstimatePx = pickListModeEarly
+    ? PICK_LIST_WIDTH_FALLBACK_PX
+    : DETAIL_WIDTH_FALLBACK_PX
   const panelHEstimatePx =
-    viewModeKey === 'd' ? DETAIL_PANEL_HEIGHT_PX : PANEL_H_ESTIMATE_PX
-  const estW = Math.min(PANEL_W_ESTIMATE_PX, Math.max(160, viewportW - 32))
+    viewModeKey === 'd' && !pickListModeEarly
+      ? DETAIL_PANEL_HEIGHT_PX
+      : PANEL_H_ESTIMATE_PX
+  const estW = Math.min(panelWEstimatePx, Math.max(160, viewportW - 32))
   const estH = Math.min(panelHEstimatePx, Math.max(120, viewportH - 32))
   const [panelSize, setPanelSize] = useState({ w: estW, h: estH })
   /**
@@ -355,6 +370,16 @@ export function LayerClickDetailFloating({
     // 목록 클릭으로 모달이 커서 아래 뜰 때 잔여 클릭이 Search로 가는 것 방지
     armFacilitySearchGuard(500)
   }, [selected?.key, open])
+
+  useEffect(() => {
+    if (!open || selected) {
+      setListHighlightKey(null)
+      return
+    }
+    setListHighlightKey((prev) =>
+      prev && hits.some((h) => h.key === prev) ? prev : hits[0]?.key ?? null
+    )
+  }, [open, selected, hits])
 
   const toggleDetailExpanded = () => {
     if (forceListOnly) return
@@ -866,25 +891,25 @@ export function LayerClickDetailFloating({
     )
   }
 
-  if (!open || !selected) return null
+  const handleBackToList = () => {
+    if (editing) cancelEdit()
+    if (minimized) onMinimizedChange(false)
+    onBackToList?.()
+  }
+
+  if (!open || hits.length === 0) return null
 
   const multi = hits.length > 1
-  const hitIndex = multi ? hits.findIndex((h) => h.key === selected.key) : -1
-  const multiHitMinimized = minimized && multi
-  const firstHitLayerKor = multiHitMinimized
-    ? String(hits[0]?.korName ?? '').trim() || selected.korName || '레이어'
-    : ''
-  const layerLine = String(selected.korName ?? '').trim()
-  const titleLine = multiHitMinimized
-    ? `${firstHitLayerKor || '레이어'} 외 ${hits.length - 1}건`
+  const pickListMode = multi && !selected
+  const layerLine = selected ? String(selected.korName ?? '').trim() : ''
+  // 상세(단일·다중): 현재 선택 레이어 제목. 목록 최소화만 N건
+  const titleLine = pickListMode
+    ? minimized
+      ? `${hits.length}건`
+      : '레이어 선택'
     : headerShowTitleValue || '—'
   const showLayer =
-    !multiHitMinimized && Boolean(layerLine && layerLine !== titleLine)
-
-  const selectHitByKey = (nextKey: string | undefined) => {
-    if (!nextKey || nextKey === selected.key) return
-    onSelectHit(nextKey)
-  }
+    !pickListMode && Boolean(layerLine && layerLine !== titleLine)
 
   const placementReady = placementAsTopLeft || settledTopLeft != null || minimized
 
@@ -908,67 +933,40 @@ export function LayerClickDetailFloating({
       focusToken={focusToken}
       onActivate={handleActivate}
       panelRef={panelRef}
-      width={DETAIL_WIDTH}
+      width={pickListMode ? PICK_LIST_WIDTH : DETAIL_WIDTH}
       minimizedWidth={MAP_DETAIL_FLOAT_MINIMIZED_WIDTH}
       maxHeight={DETAIL_MAX_HEIGHT}
       defaultPosition={{ top: panelTopLeft.top, left: panelTopLeft.left }}
       flushViewportClamp={!placementAsTopLeft}
       className={placementReady ? undefined : 'invisible'}
-      hideHeading={multi}
+      hideHeading={false}
       headerStart={
-        kept ? (
-          <span
-            className="mr-1 inline-flex shrink-0 items-center text-primary"
-            title="분리된 창"
-            aria-label="분리된 창"
-          >
-            <Pin className="h-3.5 w-3.5" aria-hidden />
-          </span>
-        ) : null
-      }
-      headerLeading={
-        multi ? (
-          <>
-            <select
-              className="h-7 min-w-0 max-w-[14rem] flex-1 cursor-pointer rounded border border-border bg-background px-1.5 text-[11px] text-foreground outline-none focus:border-primary"
-              value={selected.key}
-              title="상세보기 선택"
-              aria-label="상세보기 선택"
-              onChange={(e) => {
-                selectHitByKey(e.target.value)
-              }}
-            >
-              {hits.map((hit) => (
-                <option key={hit.key} value={hit.key}>
-                  {hitLabel(hit)}
-                </option>
-              ))}
-            </select>
+        <>
+          {multi && selected && onBackToList ? (
             <button
               type="button"
-              title="이전"
-              aria-label="이전 상세"
-              disabled={hitIndex <= 0}
-              onClick={() => selectHitByKey(hits[hitIndex - 1]?.key)}
-              className="standard-panel-close cursor-pointer disabled:pointer-events-none disabled:opacity-40"
+              title="레이어 선택으로"
+              aria-label="레이어 선택으로"
+              onClick={handleBackToList}
+              className="standard-panel-close mr-0.5 cursor-pointer"
             >
               <ChevronLeft className="h-4 w-4" aria-hidden />
             </button>
-            <button
-              type="button"
-              title="다음"
-              aria-label="다음 상세"
-              disabled={hitIndex < 0 || hitIndex >= hits.length - 1}
-              onClick={() => selectHitByKey(hits[hitIndex + 1]?.key)}
-              className="standard-panel-close cursor-pointer disabled:pointer-events-none disabled:opacity-40"
+          ) : null}
+          {kept ? (
+            <span
+              className="mr-1 inline-flex shrink-0 items-center text-primary"
+              title="분리된 창"
+              aria-label="분리된 창"
             >
-              <ChevronRight className="h-4 w-4" aria-hidden />
-            </button>
-          </>
-        ) : null
+              <Pin className="h-3.5 w-3.5" aria-hidden />
+            </span>
+          ) : null}
+        </>
       }
+      headerLeading={null}
       headerActionsAlways={
-        <>
+        selected ? (
           <button
             type="button"
             title="위치 이동"
@@ -983,41 +981,132 @@ export function LayerClickDetailFloating({
             <Crosshair className="h-3.5 w-3.5" aria-hidden />
             {minimized ? null : '위치 이동'}
           </button>
-          {!kept && !minimized && onDetach ? (
-            <button
-              type="button"
-              title="새 창 보기"
-              aria-label="새 창 보기"
-              onClick={() => {
-                const el = panelRef.current
-                const rect = el?.getBoundingClientRect()
-                const origin =
-                  rect && rect.width > 0 && rect.height > 0
-                    ? {
-                        top: Math.round(rect.top),
-                        left: Math.round(rect.left),
-                      }
-                    : undefined
-                onDetach(origin)
-              }}
-              className="standard-panel-close cursor-pointer"
-            >
-              <ExternalLink className="h-3.5 w-3.5" aria-hidden />
-            </button>
-          ) : null}
-        </>
+        ) : null
+      }
+      onHeaderOpenInScreen={
+        selected && !kept && onDetach
+          ? () => {
+              const el = panelRef.current
+              const rect = el?.getBoundingClientRect()
+              const origin =
+                rect && rect.width > 0 && rect.height > 0
+                  ? {
+                      top: Math.round(rect.top),
+                      left: Math.round(rect.left),
+                    }
+                  : undefined
+              onDetach(origin)
+            }
+          : undefined
+      }
+      onHeaderOpenInNewWindow={
+        selected
+          ? () => {
+              openLayerClickDetailBlank(selected, fields)
+            }
+          : undefined
       }
       headerActions={
-        multi ? (
+        pickListMode && !minimized ? (
           <span
             className="shrink-0 px-1 text-[11px] tabular-nums text-muted-foreground"
-            title={`${hits.length}건 선택됨`}
+            title={`${hits.length}건`}
           >
-            {hits.length}건 선택됨
+            {hits.length}건
           </span>
         ) : null
       }
     >
+      {pickListMode ? (
+        <div className="min-h-0 flex-1 overflow-y-auto px-1 py-1 text-xs scrollbar-thin">
+          <ul className="m-0 list-none p-0" role="listbox" aria-label="레이어 선택">
+            {hits.map((hit) => {
+              const label = hitLabel(hit)
+              const legendSrc = getLegendUrl(hit.tableName)
+              const highlighted = listHighlightKey === hit.key
+              return (
+                <li key={hit.key} className="m-0 p-0">
+                  <div
+                    role="option"
+                    aria-selected={highlighted}
+                    title={label}
+                    tabIndex={0}
+                    onClick={() => setListHighlightKey(hit.key)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        setListHighlightKey(hit.key)
+                      }
+                    }}
+                    className={cn(
+                      'flex w-full cursor-pointer items-center gap-1 rounded px-1.5 py-1 text-left text-[12px] text-foreground hover:bg-primary/10',
+                      highlighted && 'bg-primary/15 ring-1 ring-primary/30'
+                    )}
+                  >
+                    <img
+                      src={legendSrc}
+                      alt=""
+                      className="h-5 w-5 shrink-0 rounded border border-border object-contain"
+                      onError={(e) => {
+                        e.currentTarget.style.display = 'none'
+                      }}
+                    />
+                    <span className="min-w-0 flex-1 truncate">
+                      {hit.korName ? (
+                        <>
+                          <span className="text-foreground">{hit.korName}</span>
+                          {hit.titleValue ? (
+                            <>
+                              <span className="mx-1 text-muted-foreground">|</span>
+                              <span className="text-muted-foreground">
+                                {hit.titleValue}
+                              </span>
+                            </>
+                          ) : null}
+                        </>
+                      ) : (
+                        hit.titleValue || '—'
+                      )}
+                    </span>
+                    <span className="flex shrink-0 items-center gap-0.5">
+                      <button
+                        type="button"
+                        title="화면에서 보기"
+                        aria-label="화면에서 보기"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setListHighlightKey(hit.key)
+                          onSelectHit(hit.key)
+                        }}
+                        className="inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded text-primary hover:bg-primary/10"
+                      >
+                        <AppWindow className="h-3.5 w-3.5" aria-hidden />
+                      </button>
+                      <button
+                        type="button"
+                        title="새 창으로 보기"
+                        aria-label="새 창으로 보기"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setListHighlightKey(hit.key)
+                          openLayerClickDetailBlank(hit)
+                        }}
+                        className="inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded text-primary hover:bg-primary/10"
+                      >
+                        <SquareArrowOutUpRight
+                          className="h-3.5 w-3.5"
+                          aria-hidden
+                        />
+                      </button>
+                    </span>
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+        </div>
+      ) : (
+        <>
       <div
         className={cn(
           'px-3 py-2 text-xs',
@@ -1224,6 +1313,8 @@ export function LayerClickDetailFloating({
           </div>
         </div>
       ) : null}
+        </>
+      )}
     </MapDetailFloatingPanel>
     {facilityInfo ? (
       <WtlMappedFacilityFloating

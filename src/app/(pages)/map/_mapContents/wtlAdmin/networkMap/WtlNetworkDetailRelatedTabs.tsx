@@ -1,7 +1,14 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Gauge, History, Paperclip } from 'lucide-react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react'
+import { Gauge, History, Map as MapIcon, Paperclip } from 'lucide-react'
 import GeoJSON from 'ol/format/GeoJSON'
 import VectorLayer from 'ol/layer/Vector'
 import VectorSource from 'ol/source/Vector'
@@ -9,6 +16,7 @@ import { Circle as CircleStyle, Fill, Stroke, Style } from 'ol/style'
 import { call } from '@/lib/api'
 import { formatDefineFieldDisplayValue } from '@/lib/defineLayerCodeDisplay'
 import { cn } from '@/lib/utils'
+import { WtlFacilityRelatedDetailFloating } from '../facility/WtlFacilityRelatedDetailFloating'
 import { loadWimsStatus } from '@/app/(pages)/map/_mapComponents/landInfo/wimsClient'
 import { useMapContext } from '../../../_mapComponents/MapContext'
 import {
@@ -60,9 +68,16 @@ type Props = {
   onHistoryReverted?: () => void
   /** 탭 본문 높이(px). 기본 250 — 지도 기본 모달은 더 낮게 */
   bodyHeightPx?: number
+  /** 있으면 맨 앞 「지도」탭 */
+  mapTabContent?: ReactNode
+  /**
+   * true면 현황 목록 행 클릭 시 지도 이동 대신
+   * 해당 행 상세를 현재 창 안 모달로 연다 (새 창 상세용).
+   */
+  relatedChildAsModal?: boolean
 }
 
-type ActiveTab = 'attach' | 'dataHistory' | 'wimsHistory' | string
+type ActiveTab = 'map' | 'attach' | 'dataHistory' | 'wimsHistory' | string
 
 function resolveOgcFid(item: WtlNetworkRow): number | null {
   const record = item.record
@@ -104,8 +119,13 @@ export function WtlNetworkDetailRelatedTabs({
   onRelatedMapLayer,
   onHistoryReverted,
   bodyHeightPx = 250,
+  mapTabContent,
+  relatedChildAsModal = false,
 }: Props) {
+  const hasMapTab = mapTabContent != null
   const mapContext = useMapContext()
+  const [relatedDetail, setRelatedDetail] = useState<RelatedRow | null>(null)
+  const [relatedDetailCollapsed, setRelatedDetailCollapsed] = useState(false)
   const parentKey = useMemo(() => {
     const fromLayer = String(item.layerKey ?? '')
       .trim()
@@ -201,6 +221,11 @@ export function WtlNetworkDetailRelatedTabs({
 
   const handleRowClick = useCallback(
     (row: RelatedRow, idx: number) => {
+      if (relatedChildAsModal) {
+        setSelectedIdx(idx)
+        setRelatedDetail(row)
+        return
+      }
       if (selectedIdx === idx) {
         clearRowHighlight()
         focusParentOnMap()
@@ -236,6 +261,7 @@ export function WtlNetworkDetailRelatedTabs({
       focusParentOnMap,
       mapContext?.applyMapViewPaddingRef,
       mapContext?.mapInstanceRef,
+      relatedChildAsModal,
       selectedIdx,
     ]
   )
@@ -301,9 +327,11 @@ export function WtlNetworkDetailRelatedTabs({
   }, [parentKey, itemId, clearRowHighlight])
 
   const tabItems = useMemo(() => {
-    const out: { id: ActiveTab; label: string }[] = [
-      { id: 'attach', label: '첨부파일' },
-    ]
+    const out: { id: ActiveTab; label: string }[] = []
+    if (hasMapTab) {
+      out.push({ id: 'map', label: '지도' })
+    }
+    out.push({ id: 'attach', label: '첨부파일' })
     for (const tab of relatedTabs) {
       out.push({ id: tab.table, label: tab.label })
     }
@@ -312,7 +340,7 @@ export function WtlNetworkDetailRelatedTabs({
     }
     out.push({ id: 'dataHistory', label: '데이터 이력관리' })
     return out
-  }, [relatedTabs, showWimsTab])
+  }, [hasMapTab, relatedTabs, showWimsTab])
 
   useEffect(() => {
     const first = tabItems[0]?.id
@@ -332,6 +360,7 @@ export function WtlNetworkDetailRelatedTabs({
 
   useEffect(() => {
     if (
+      active === 'map' ||
       active === 'attach' ||
       active === 'dataHistory' ||
       active === 'wimsHistory' ||
@@ -346,7 +375,9 @@ export function WtlNetworkDetailRelatedTabs({
 
   useEffect(() => {
     clearRowHighlight()
+    setRelatedDetail(null)
     if (
+      active === 'map' ||
       active === 'attach' ||
       active === 'dataHistory' ||
       active === 'wimsHistory' ||
@@ -436,10 +467,28 @@ export function WtlNetworkDetailRelatedTabs({
   }, [listBundle])
 
   const codesByField = listBundle?.codesByField ?? {}
+  const activeRelatedLabel =
+    relatedTabs.find((t) => t.table === active)?.label ?? '현황'
 
   return (
     <div className="flex shrink-0 flex-col border-t border-border">
       <div className="flex shrink-0 overflow-x-auto border-b border-border px-2">
+        {hasMapTab ? (
+          <button
+            type="button"
+            title="지도"
+            className={cn(
+              'inline-flex h-9 w-[5.5rem] shrink-0 cursor-pointer items-center justify-center gap-1 border-b-2 px-2 text-[11px] font-medium pointer-events-auto',
+              active === 'map'
+                ? 'border-primary bg-primary/5 text-primary'
+                : 'border-transparent text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+            )}
+            onClick={() => setActive('map')}
+          >
+            <MapIcon className="h-3 w-3 shrink-0" aria-hidden />
+            <span className="truncate">지도</span>
+          </button>
+        ) : null}
         <button
           type="button"
           title="첨부파일"
@@ -505,7 +554,11 @@ export function WtlNetworkDetailRelatedTabs({
         className="shrink-0 overflow-hidden px-3 pb-2 pt-1"
         style={{ height: Math.max(80, bodyHeightPx) }}
       >
-        {active === 'attach' ? (
+        {active === 'map' && hasMapTab ? (
+          <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-card p-1">
+            {mapTabContent}
+          </div>
+        ) : active === 'attach' ? (
           <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-card">
             <WtlNetworkMapAttachmentSection item={item} fields={fields} />
           </div>
@@ -564,37 +617,49 @@ export function WtlNetworkDetailRelatedTabs({
                     </tr>
                   </thead>
                   <tbody>
-                    {listRows.map((row, ri) => (
-                      <tr
-                        key={row.ogcFid ?? `r-${ri}`}
-                        className={cn(
-                          'standard-list-row',
-                          selectedIdx === ri && 'standard-list-row-selected'
-                        )}
-                        title="지도에서 위치 확인"
-                        onClick={() => handleRowClick(row, ri)}
-                      >
-                        {listFields.map((f, fi) => {
-                          const key = String(f.define_field_name ?? '').trim()
-                          const raw = getRowValueByField(row.record, key)
-                          const value = formatDefineFieldDisplayValue(
-                            raw,
-                            f.define_field_type,
-                            codesByField[key.toLowerCase()],
-                            '—'
-                          )
-                          return (
-                            <td
-                              key={`${row.ogcFid ?? ri}-${key || fi}`}
-                              className="standard-table-td-compact"
-                              title={value}
-                            >
-                              {value}
-                            </td>
-                          )
-                        })}
-                      </tr>
-                    ))}
+                    {listRows.map((row, ri) => {
+                      const selected =
+                        relatedChildAsModal && relatedDetail != null
+                          ? (row.ogcFid != null &&
+                              relatedDetail.ogcFid === row.ogcFid) ||
+                            (row.ogcFid == null && relatedDetail === row)
+                          : selectedIdx === ri
+                      return (
+                        <tr
+                          key={row.ogcFid ?? `r-${ri}`}
+                          className={cn(
+                            'standard-list-row',
+                            selected && 'standard-list-row-selected'
+                          )}
+                          title={
+                            relatedChildAsModal
+                              ? '상세보기'
+                              : '지도에서 위치 확인'
+                          }
+                          onClick={() => handleRowClick(row, ri)}
+                        >
+                          {listFields.map((f, fi) => {
+                            const key = String(f.define_field_name ?? '').trim()
+                            const raw = getRowValueByField(row.record, key)
+                            const value = formatDefineFieldDisplayValue(
+                              raw,
+                              f.define_field_type,
+                              codesByField[key.toLowerCase()],
+                              '—'
+                            )
+                            return (
+                              <td
+                                key={`${row.ogcFid ?? ri}-${key || fi}`}
+                                className="standard-table-td-compact"
+                                title={value}
+                              >
+                                {value}
+                              </td>
+                            )
+                          })}
+                        </tr>
+                      )
+                    })}
                   </tbody>
                 </table>
               )}
@@ -602,6 +667,23 @@ export function WtlNetworkDetailRelatedTabs({
           </div>
         )}
       </div>
+      {relatedChildAsModal && relatedDetail ? (
+        <WtlFacilityRelatedDetailFloating
+          title={activeRelatedLabel}
+          row={relatedDetail}
+          bundle={listBundle}
+          table={activeTable}
+          schema="layer"
+          onClose={() => {
+            setRelatedDetail(null)
+            setSelectedIdx(null)
+          }}
+          collapsed={relatedDetailCollapsed}
+          onToggleCollapsed={() =>
+            setRelatedDetailCollapsed((v) => !v)
+          }
+        />
+      ) : null}
     </div>
   )
 }

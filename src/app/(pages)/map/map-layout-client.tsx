@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo, Suspense } from "react"
 import { createPortal } from "react-dom"
-import { useRouter, useSearchParams } from "next/navigation"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { X } from "lucide-react"
 import Map3DDataPanel from "./_mapComponents/Map3DDataPanel"
 import { HangulSearchIme } from "./_mapComponents/hangulIme/HangulSearchIme"
@@ -224,6 +224,10 @@ import {
 } from "./_mapContents/odorAlert/odorAlertConfig"
 import { OdorAlertShell } from "./_mapContents/odorAlert/OdorAlert.shell"
 import { OdorAlertPopupHost } from "./_mapContents/odorAlert/OdorAlertPopupHost"
+import {
+  ODOR_DASHBOARD_OPENED_KEY,
+} from "./_mapContents/odorDashboard/odorDashboardConfig"
+import { OdorDashboardShell } from "./_mapContents/odorDashboard/OdorDashboard.shell"
 import { FmsLinkageListPanel } from "./_mapContents/fmsLinkage/FmsLinkageListPanel"
 import { FmsLinkageDetailPanel } from "./_mapContents/fmsLinkage/FmsLinkageDetailPanel"
 import { isFmsOpenedToken } from "@/lib/fmsLinkage/fmsBinding"
@@ -840,6 +844,7 @@ function MapLayoutContent({
   const smallPublicInspectionOpen = openedWindows.includes(SMALL_PUBLIC_INSPECTION_OPENED_KEY)
   const smallPublicPlanOpen = openedWindows.includes(SMALL_PUBLIC_PLAN_OPENED_KEY)
   const smallPublicBudgetOpen = openedWindows.includes(SMALL_PUBLIC_BUDGET_OPENED_KEY)
+  const odorDashboardOpen = openedWindows.includes(ODOR_DASHBOARD_OPENED_KEY)
   const odorAlertOpen = openedWindows.includes(ODOR_ALERT_OPENED_KEY)
   const worksRegisterOpen = openedWindows.includes(WORKS_REGISTER_OPENED_KEY)
   const wtlAdminEmptySerEng = findOpenedWtlAdminEmptySerEng(openedWindows)
@@ -959,6 +964,7 @@ function MapLayoutContent({
   const [smallPublicInspectionTotalWidth, setSmallPublicInspectionTotalWidth] = useState(0)
   const [smallPublicPlanTotalWidth, setSmallPublicPlanTotalWidth] = useState(0)
   const [smallPublicBudgetTotalWidth, setSmallPublicBudgetTotalWidth] = useState(0)
+  const [odorDashboardTotalWidth, setOdorDashboardTotalWidth] = useState(0)
   const [odorAlertTotalWidth, setOdorAlertTotalWidth] = useState(0)
   const [worksRegisterTotalWidth, setWorksRegisterTotalWidth] = useState(0)
   const [wtlAdminEmptyTotalWidth, setWtlAdminEmptyTotalWidth] = useState(0)
@@ -1273,6 +1279,7 @@ function MapLayoutContent({
     (developmentChargeDetailOpen ? developmentChargeDetailWidth : 0) +
     (riverIllegalOccupationOpen ? riverIllegalOccupationPanelWidth : 0) +
     (riverIllegalOccupationDetailOpen ? riverIllegalOccupationDetailWidth : 0) +
+    (odorDashboardOpen ? odorDashboardTotalWidth : 0) +
     (odorAlertOpen ? odorAlertTotalWidth : 0)
   const searchBarOffset = {
     leftPx: SIDEBAR_WIDTH + totalListPanelWidth + SEARCH_BAR_MARGIN,
@@ -1473,9 +1480,11 @@ function MapLayoutContent({
   const riverIllegalOccupationDetailLeftPx =
     riverIllegalOccupationPanelLeftPx +
     (riverIllegalOccupationOpen ? riverIllegalOccupationPanelWidth : 0)
-  const odorAlertPanelLeftPx =
+  const odorDashboardPanelLeftPx =
     riverIllegalOccupationDetailLeftPx +
     (riverIllegalOccupationDetailOpen ? riverIllegalOccupationDetailWidth : 0)
+  const odorAlertPanelLeftPx =
+    odorDashboardPanelLeftPx + (odorDashboardOpen ? odorDashboardTotalWidth : 0)
   const mapPaddingLeft = SIDEBAR_WIDTH + totalListPanelWidth
   /** 패딩은 useLayoutEffect — 자식 useEffect(도로대장 fit 등)보다 먼저 적용되어야 함.
    * 거리뷰 ON일 때만 맵 중심(A)을 새 센터마크 위치에 맞춤.
@@ -2145,9 +2154,19 @@ function MapLayoutContent({
     setOpened(next)
   }
 
+  const handleCloseOdorDashboard = () => {
+    setOdorDashboardTotalWidth(0)
+    setOpened(openedWindows.filter((w) => w !== ODOR_DASHBOARD_OPENED_KEY))
+  }
+
   const handleCloseOdorAlert = () => {
     setOdorAlertTotalWidth(0)
     setOpened(openedWindows.filter((w) => w !== ODOR_ALERT_OPENED_KEY))
+  }
+
+  const handleOpenOdorAlertFromDashboard = () => {
+    setOdorDashboardTotalWidth(0)
+    setOpened([ODOR_ALERT_OPENED_KEY])
   }
 
   const handleCloseFmsLinkage = () => {
@@ -2359,6 +2378,10 @@ function MapLayoutContent({
   useEffect(() => {
     if (!worksRegisterOpen) setWorksRegisterTotalWidth(0)
   }, [worksRegisterOpen])
+
+  useEffect(() => {
+    if (!odorDashboardOpen) setOdorDashboardTotalWidth(0)
+  }, [odorDashboardOpen])
 
   useEffect(() => {
     if (!odorAlertOpen) setOdorAlertTotalWidth(0)
@@ -4418,6 +4441,14 @@ function MapLayoutContent({
               </MapSideListPanel>
             </div>
           )}
+          {odorDashboardOpen && (
+            <OdorDashboardShell
+              leftOffsetPx={odorDashboardPanelLeftPx}
+              onTotalWidthChange={setOdorDashboardTotalWidth}
+              onClose={handleCloseOdorDashboard}
+              onOpenAlertList={handleOpenOdorAlertFromDashboard}
+            />
+          )}
           {odorAlertOpen && (
             <OdorAlertShell
               leftOffsetPx={odorAlertPanelLeftPx}
@@ -4679,6 +4710,10 @@ function MapLayoutContent({
   )
 }
 
+function isLayerClickDetailBlankPath(pathname: string | null | undefined): boolean {
+  return String(pathname ?? "").includes("/map/layer-click-detail")
+}
+
 export default function MapLayoutClient({
   children,
   indexLogoSrc,
@@ -4688,6 +4723,11 @@ export default function MapLayoutClient({
   indexLogoSrc: string
   projectName?: string
 }) {
+  const pathname = usePathname()
+  if (isLayerClickDetailBlankPath(pathname)) {
+    return <>{children}</>
+  }
+
   return (
     <MapContextProvider>
       <ParcelAnalysisProvider>
