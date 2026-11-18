@@ -758,6 +758,8 @@ export type SldConditionalSymbol = {
   /** 예: SA200 */
   value: string
   symbolUrl: string
+  /** 해당 Rule Graphic `<Size>`(픽셀). 없으면 생략 */
+  size?: number
 }
 
 /**
@@ -776,6 +778,9 @@ export function parseSldConditionalSymbols(sld: string): SldConditionalSymbol[] 
     if (!href) continue
     const symbolUrl = normalizeGeoServerSymbolUrl(href)
     if (!symbolUrl) continue
+    const title = sldRuleTitle(rule)
+    const env = sldEnvDefaults(rule)
+    const ruleSize = sldPointMarkSize(rule, env, title) ?? sldGraphicSize(rule)
 
     const eqBlocks = [
       ...rule.matchAll(
@@ -796,7 +801,12 @@ export function parseSldConditionalSymbols(sld: string): SldConditionalSymbol[] 
       const key = `${property}=${value}|${symbolUrl}`
       if (seen.has(key)) continue
       seen.add(key)
-      out.push({ property, value, symbolUrl })
+      out.push({
+        property,
+        value,
+        symbolUrl,
+        ...(ruleSize != null && ruleSize > 0 ? { size: ruleSize } : {}),
+      })
     }
   }
   return out

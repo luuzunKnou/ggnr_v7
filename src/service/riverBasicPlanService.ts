@@ -892,6 +892,14 @@ export async function loadJijukOwnGbn(pnus: string[]): Promise<Map<string, strin
   return out;
 }
 
+/** 클라이언트용 — Map은 JSON 직렬화가 안 되어 Record로 반환 */
+export async function getJijukOwnGbnByPnus(params?: {
+  pnus?: string[];
+}): Promise<{ byPnu: Record<string, string> }> {
+  const map = await loadJijukOwnGbn(params?.pnus ?? []);
+  return { byPnu: Object.fromEntries(map) };
+}
+
 /**
  * 하천명·탭(지방/소하천)에 해당하는 색인도 전체 피처의 3857 bbox.
  * (기본계획 polygon extent가 아닌, 색인도 도형 기준)
