@@ -398,6 +398,8 @@ export function getMapConfig(_params?: unknown): {
   OPENAI_API_KEY: string
   SAFEMAP_API_KEY: string
   SAFETYDATA_API_KEY: string
+  /** 한강홍수통제소(HRFCO) — 침수현황 클라이언트 직접 호출 */
+  FLOOD_API_KEY: string
   DATA_PORTAL_KEY: string
   dataPotalKey: string
   KAKAO_MAP_API_KEY: string
@@ -414,6 +416,7 @@ export function getMapConfig(_params?: unknown): {
     OPENAI_API_KEY: '',
     SAFEMAP_API_KEY: '',
     SAFETYDATA_API_KEY: '',
+    FLOOD_API_KEY: '',
     DATA_PORTAL_KEY: '',
     dataPotalKey: '',
     KAKAO_MAP_API_KEY: '',
@@ -443,6 +446,7 @@ export function getMapConfig(_params?: unknown): {
       OPENAI_API_KEY: vars.OPENAI_API_KEY?.trim() ?? '',
       SAFEMAP_API_KEY: safemapKey,
       SAFETYDATA_API_KEY: vars.SAFETYDATA_API_KEY?.trim() ?? '',
+      FLOOD_API_KEY: vars.FLOOD_API_KEY?.trim() ?? '',
       DATA_PORTAL_KEY: dataPortalKey,
       dataPotalKey: dataPortalKey,
       KAKAO_MAP_API_KEY: vars.KAKAO_MAP_API_KEY?.trim() ?? '',
