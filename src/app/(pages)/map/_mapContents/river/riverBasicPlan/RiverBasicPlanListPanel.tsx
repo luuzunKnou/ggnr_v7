@@ -64,8 +64,8 @@ const AXIS_OPTIONS: {
   desc: string;
   icon: ComponentType<{ className?: string }>;
 }[] = [
-  { axis: "byPlan", label: "보고서 기준", desc: "보고서 묶음별", icon: Files },
   { axis: "byRiver", label: "하천 기준", desc: "하천 이름별", icon: Waves },
+  { axis: "byPlan", label: "보고서 기준", desc: "보고서 묶음별", icon: Files },
 ];
 
 function defaultLayersForTab(tab: RiverType): readonly string[] {
@@ -416,7 +416,7 @@ export function RiverBasicPlanListPanel({
       {!axisReady ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-2 px-4 py-8">
           <p className="text-sm text-muted-foreground text-center">
-            위에서 «보고서 기준» 또는 «하천 기준»을 고르세요.
+            위에서 «하천 기준» 또는 «보고서 기준»을 고르세요.
           </p>
         </div>
       ) : (

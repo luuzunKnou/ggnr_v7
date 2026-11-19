@@ -20,7 +20,11 @@ import {
   RiverBasicPlanDetailPanel,
   type RiverBasicPlanPreferredPlan,
 } from "./_mapContents/river/riverBasicPlan/RiverBasicPlanDetailPanel"
-import type { RiverBasicPlanListAxis } from "./_mapContents/river/riverBasicPlan/RiverBasicPlanScopeModal"
+import {
+  readRiverBasicPlanListAxis,
+  writeRiverBasicPlanListAxis,
+  type RiverBasicPlanListAxis,
+} from "./_mapContents/river/riverBasicPlan/RiverBasicPlanScopeModal"
 import { RiverBasicPlanMapDrawingFromMapHandler } from "./_mapContents/river/riverBasicPlan/RiverBasicPlanMapDrawingFromMapHandler"
 import { RoadLedgerListPanel } from "./_mapContents/road/roadLedger/RoadLedgerListPanel"
 import { RoadLedgerDetailPanel } from "./_mapContents/road/roadLedger/RoadLedgerDetailPanel"
@@ -1565,10 +1569,12 @@ function MapLayoutContent({
     setRiverBasicPlanSelectedRiver?.(selectedRiverName)
   }, [setRiverBasicPlanPanelOpen, setRiverBasicPlanSelectedRiver, riverBasicPlanOpen, selectedRiverName])
 
-  /** 기본계획 열릴 때 보고서 기준. 닫히면 초기화 */
+  /** 기본계획 열릴 때 마지막 기준(없으면 하천). 닫히면 초기화 */
   useEffect(() => {
     if (riverBasicPlanOpen) {
-      if (riverBasicPlanListAxis == null) setRiverBasicPlanListAxis("byPlan")
+      if (riverBasicPlanListAxis == null) {
+        setRiverBasicPlanListAxis(readRiverBasicPlanListAxis())
+      }
     } else {
       setRiverBasicPlanListAxis(null)
       setRiverPlanTab("river")
@@ -1946,6 +1952,7 @@ function MapLayoutContent({
 
   const handleRiverBasicPlanSelectAxis = (axis: RiverBasicPlanListAxis) => {
     setRiverBasicPlanListAxis(axis)
+    writeRiverBasicPlanListAxis(axis)
     setRiverBasicPlanPreferredPlan(null)
     setSelectedRiverName("")
   }
