@@ -52,6 +52,9 @@ export function WorkUnitMediaUploadDialog({
     starting ||
     isAerialMediaUploading(kind, folderName) ||
     job?.status === 'uploading';
+  const largeFileBytes = files.reduce((s, f) => s + (f.size || 0), 0);
+  const showLargeFileHint =
+    (kind === 'ortho' || kind === 'satellite') && largeFileBytes >= 1024 * 1024 * 1024;
 
   useEffect(() => {
     if (!open) return;
@@ -170,6 +173,13 @@ export function WorkUnitMediaUploadDialog({
                 </li>
               ))}
             </ul>
+          ) : null}
+
+          {showLargeFileHint ? (
+            <p className="rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[10px] leading-relaxed text-amber-950">
+              용량이 매우 큽니다. 웹 업로드는 가능하지만 시간이 오래 걸릴 수 있습니다. 가능하면
+              자료 폴더에 직접 복사한 뒤 등록하는 편이 안정적입니다.
+            </p>
           ) : null}
 
           {job && (job.status === 'uploading' || job.status === 'done' || job.status === 'failed') ? (

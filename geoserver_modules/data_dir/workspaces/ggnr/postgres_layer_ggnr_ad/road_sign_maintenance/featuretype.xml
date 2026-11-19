@@ -1,0 +1,41 @@
+<featureType>
+  <id>FeatureTypeInfoImpl-5c01895a:1a1bf451190:-7e98</id>
+  <name>road_sign_maintenance</name>
+  <nativeName>road_sign_maintenance</nativeName>
+  <namespace>
+    <id>NamespaceInfoImpl-4bf97568:19c4d6c3053:-7ffa</id>
+  </namespace>
+  <title>유지보수내역</title>
+  <keywords>
+    <string>features</string>
+    <string>road_sign_maintenance</string>
+  </keywords>
+  <srs>EPSG:5181</srs>
+  <nativeBoundingBox>
+    <minx>330170.4375</minx>
+    <maxx>378226.625</maxx>
+    <miny>320219.125</miny>
+    <maxy>348036.3125</maxy>
+    <crs class="projected">EPSG:5181</crs>
+  </nativeBoundingBox>
+  <latLonBoundingBox>
+    <minx>128.45049559631119</minx>
+    <maxx>128.99214406419486</maxx>
+    <miny>36.36357264897173</miny>
+    <maxy>36.62186822921852</maxy>
+    <crs>EPSG:4326</crs>
+  </latLonBoundingBox>
+  <projectionPolicy>FORCE_DECLARED</projectionPolicy>
+  <enabled>true</enabled>
+  <store class="dataStore">
+    <id>DataStoreInfoImpl-5c01895a:1a1bf451190:-7eb6</id>
+  </store>
+  <serviceConfiguration>false</serviceConfiguration>
+  <maxFeatures>0</maxFeatures>
+  <numDecimals>0</numDecimals>
+  <padWithZeros>false</padWithZeros>
+  <forcedDecimal>false</forcedDecimal>
+  <overridingServiceSRS>false</overridingServiceSRS>
+  <skipNumberMatched>false</skipNumberMatched>
+  <circularArcPresent>false</circularArcPresent>
+</featureType>
