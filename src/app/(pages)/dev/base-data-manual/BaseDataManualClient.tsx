@@ -7,10 +7,23 @@ import { InlineCode } from '../install-manual/InlineCode';
 
 const SECTIONS = [
   { id: 'contour', label: '고도(등고선)' },
+  { id: 'contour_link', label: '- 시스템 연계로 가져오기' },
+  { id: 'contour_manual', label: '- 수작업 가져오기' },
   { id: 'kais', label: '건설•도로' },
+  { id: 'kais_link', label: '- 시스템 연계로 가져오기' },
+  { id: 'kais_manual', label: '- 수작업 가져오기' },
+  { id: 'indexSlide', label: 'INDEX 슬라이드' },
+  { id: 'indexSlide_text', label: '- 문구 수정' },
+  { id: 'indexSlide_image', label: '- 이미지 수정' },
+  { id: 'logo', label: '파비콘 및 로고' },
+  { id: 'logo_favicon', label: '- 파비콘' },
+  { id: 'logo_mark', label: '- 로고' },
 ] as const;
 
+const SUB_LIST =
+  'list-decimal space-y-6 pl-5 [&>li]:text-base [&>li]:font-semibold [&>li>*:not(h2)]:text-xs [&>li>*:not(h2)]:font-normal';
 const STEP_LIST = 'list-decimal space-y-3 pl-5';
+const SUB_HEADING = 'inline scroll-mt-4 text-base font-semibold';
 
 function CodeBlock({ children }: { children: string }) {
   const [copied, setCopied] = useState(false);
@@ -69,17 +82,24 @@ export function BaseDataManualClient() {
           aria-label="목차"
           style={{ display: 'flex', flexDirection: 'column', gap: 20 }}
         >
-          {SECTIONS.map((sec) => (
-            <button
-              key={sec.id}
-              type="button"
-              title={sec.label}
-              onClick={() => scrollToSection(sec.id)}
-              className="block w-full cursor-pointer rounded-sm py-1 pl-2.5 pr-1 text-left text-xs font-medium leading-snug text-foreground hover:bg-primary/5 hover:text-primary"
-            >
-              {sec.label}
-            </button>
-          ))}
+          {SECTIONS.map((sec) => {
+            const isSub = sec.label.startsWith('- ');
+            return (
+              <button
+                key={sec.id}
+                type="button"
+                title={sec.label}
+                onClick={() => scrollToSection(sec.id)}
+                className={`block w-full cursor-pointer rounded-sm py-1 pr-1 text-left text-xs leading-snug hover:bg-primary/5 hover:text-primary ${
+                  isSub
+                    ? 'pl-4 font-normal text-muted-foreground'
+                    : 'pl-2.5 font-medium text-foreground'
+                }`}
+              >
+                {sec.label}
+              </button>
+            );
+          })}
         </nav>
       </aside>
 
@@ -88,7 +108,22 @@ export function BaseDataManualClient() {
           <article className="mx-auto max-w-3xl space-y-10 text-sm leading-relaxed">
             <section id="contour" className="scroll-mt-4 space-y-3">
               <h1 className="text-xl font-semibold">고도(등고선)</h1>
-              <ul className={STEP_LIST}>
+              <ul className={SUB_LIST}>
+                <li className="space-y-3">
+                  <h2 id="contour_link" className={SUB_HEADING}>
+                    시스템 연계로 가져오기
+                  </h2>
+                  <p>
+                    개발자 메뉴 &gt; 시스템 연계 &gt; GNMS &gt; 등고선에서 시군구 경계로 잘라 파일을
+                    받는다. 시군구 경계가 없으면 받을 수 없다. 파일을 받지 못하면 아래 수작업
+                    가져오기로 받는다.
+                  </p>
+                </li>
+                <li className="space-y-3">
+                  <h2 id="contour_manual" className={SUB_HEADING}>
+                    수작업 가져오기
+                  </h2>
+                  <ul className={STEP_LIST}>
                 <li>브이월드 &gt; 공간정보 다운로드 &gt; 등고선(지도-고도) 다운로드</li>
                 <li>필요 지역 대해 다운로드</li>
                 <li>
@@ -121,12 +156,29 @@ export function BaseDataManualClient() {
                   layer, path 필드 삭제: 레이어 우클릭 &gt; 속성 테이블 &gt; 상단 연필(편집 모드) &gt;
                   필드 속성 삭제 &gt; 저장
                 </li>
+                  </ul>
+                </li>
               </ul>
             </section>
 
             <section id="kais" className="scroll-mt-4 space-y-3">
               <h1 className="text-xl font-semibold">건설•도로</h1>
-              <ul className={STEP_LIST}>
+              <ul className={SUB_LIST}>
+                <li className="space-y-3">
+                  <h2 id="kais_link" className={SUB_HEADING}>
+                    시스템 연계로 가져오기
+                  </h2>
+                  <p>
+                    개발자 메뉴 &gt; 시스템 연계 &gt; GNMS &gt; KAIS 기초(경북)에서 시군구 코드로
+                    파일을 받는다. 포항처럼 하나의 시가 여러 시군구 코드로 나뉘어 있으면 필터되지
+                    않아 파일을 주지 않을 수 있다. 그 경우 아래 수작업 가져오기로 받는다.
+                  </p>
+                </li>
+                <li className="space-y-3">
+                  <h2 id="kais_manual" className={SUB_HEADING}>
+                    수작업 가져오기
+                  </h2>
+                  <ul className={STEP_LIST}>
                 <li>
                   폴더 위치
                   <div className="mt-1">
@@ -142,6 +194,83 @@ export function BaseDataManualClient() {
                   <p>
                     - public_layer.sgg의 <InlineCode>adm_sect_cd</InlineCode> 참고
                   </p>
+                </li>
+                  </ul>
+                </li>
+              </ul>
+            </section>
+
+            <section id="indexSlide" className="scroll-mt-4 space-y-3">
+              <h1 className="text-xl font-semibold">INDEX 슬라이드</h1>
+              <ul className={SUB_LIST}>
+                <li className="space-y-3">
+                  <h2 id="indexSlide_text" className={SUB_HEADING}>
+                    문구 수정
+                  </h2>
+                  <p>
+                    INDEX 화면 슬라이드 제목·설명은{' '}
+                    <InlineCode>src/config/indexSliderSlides.json</InlineCode>을 수정하면 된다.
+                  </p>
+                  <ul className={STEP_LIST}>
+                    <li>
+                      프로젝트 이름과 같은 키가 있으면 그 문구를 쓴다. 없으면{' '}
+                      <InlineCode>default</InlineCode>를 쓴다.
+                    </li>
+                    <li>
+                      <InlineCode>title</InlineCode>은 제목, <InlineCode>content</InlineCode>는 설명이다.
+                    </li>
+                  </ul>
+                </li>
+                <li className="space-y-3">
+                  <h2 id="indexSlide_image" className={SUB_HEADING}>
+                    이미지 수정
+                  </h2>
+                  <p>
+                    슬라이드 이미지는 <InlineCode>public/image/indexImage</InlineCode> 폴더에 둔다.
+                  </p>
+                  <ul className={STEP_LIST}>
+                    <li>
+                      파일명은 프로젝트명과 번호로 구성. 예:{' '}
+                      <InlineCode>odor_ph_01.jpg</InlineCode> ~ <InlineCode>odor_ph_04.jpg</InlineCode>
+                    </li>
+                    
+                  </ul>
+                </li>
+              </ul>
+            </section>
+
+            <section id="logo" className="scroll-mt-4 space-y-3">
+              <h1 className="text-xl font-semibold">파비콘 및 로고</h1>
+              <ul className={SUB_LIST}>
+                <li className="space-y-3">
+                  <h2 id="logo_favicon" className={SUB_HEADING}>
+                    파비콘
+                  </h2>
+                  <p>
+                    브라우저 탭 아이콘이다. <InlineCode>public/favicon.ico</InlineCode> 파일을 두면
+                    된다.
+                  </p>
+                  <ul className={STEP_LIST}>
+                    <li>
+                      파일명은 프로젝트명 뒤에 <InlineCode>_favicon</InlineCode>를 붙인다. 예:{' '}
+                      <InlineCode>odor_ph_favicon.ico</InlineCode>
+                    </li>
+                  </ul>
+                </li>
+                <li className="space-y-3">
+                  <h2 id="logo_mark" className={SUB_HEADING}>
+                    로고
+                  </h2>
+                  <p>
+                    화면 헤더 등에 쓰는 로고다. <InlineCode>public/image/logo</InlineCode> 폴더에
+                    두면 된다.
+                  </p>
+                  <ul className={STEP_LIST}>
+                    <li>
+                      파일명은 프로젝트명 뒤에 <InlineCode>_logo</InlineCode>를 붙인다. 예:{' '}
+                      <InlineCode>odor_ph_logo.svg</InlineCode>
+                    </li>
+                  </ul>
                 </li>
               </ul>
             </section>

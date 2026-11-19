@@ -2,11 +2,23 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { Map as OlMap } from 'ol';
-import { isJijukJibunLabelVisible, isJijukVisibleAtView } from '../layerFactory/boundaryLayerFactory';
+import { ZoomIn } from 'lucide-react';
+import {
+  CADASTRAL_LAYERS,
+  JIJUK_JIBUN_LABEL_MAX_SCALE_DENOMINATOR,
+  JIJUK_STROKE_MAX_SCALE_DENOMINATOR,
+  isJijukJibunLabelVisible,
+  isJijukVisibleAtView,
+} from '../layerFactory/boundaryLayerFactory';
 import {
   GEOM_EDIT_HINT_BELOW_SEARCH_GAP,
   useSearchBarOffset,
 } from '../../searchBarOffsetContext';
+
+/** GeoServer SLD 0.28mm 픽셀 기준 → OL resolution */
+const SLD_PIXEL_SIZE_M = 0.00028;
+/** 임계값 바로 안쪽으로 살짝 더 확대 */
+const VISIBLE_SCALE_MARGIN = 0.98;
 
 type Props = {
   map: OlMap | null;
@@ -130,7 +142,37 @@ export function CadastralZoomHint({
     return () => window.removeEventListener('resize', updatePlacement);
   }, [show, leftPx, inputBottomPx]);
 
+  const zoomToVisibleScale = () => {
+    if (!map || unavailableText || hiddenLabels.length === 0) return;
+    const view = map.getView();
+    const needLabel = hiddenLabels.includes('공시지가');
+    const needStroke = hiddenLabels.includes('지적');
+    const maxScale = needLabel
+      ? JIJUK_JIBUN_LABEL_MAX_SCALE_DENOMINATOR
+      : JIJUK_STROKE_MAX_SCALE_DENOMINATOR;
+    let targetRes = maxScale * SLD_PIXEL_SIZE_M * VISIBLE_SCALE_MARGIN;
+
+    if (needStroke) {
+      const minZoom =
+        CADASTRAL_LAYERS.find((l) => l.tableName === 'jijuk')?.minZoom ?? 16;
+      const resAtMinExclusive = view.getResolutionForZoom(minZoom + 0.01);
+      if (resAtMinExclusive != null) {
+        targetRes = Math.min(targetRes, resAtMinExclusive);
+      }
+    }
+
+    const current = view.getResolution();
+    if (current != null && current <= targetRes) return;
+    view.animate({ resolution: targetRes, duration: 400 });
+  };
+
   if (!show) return null;
+
+  const hintText = unavailableText
+    ? unavailableText
+    : `${hiddenLabels.join('·')}${
+        hiddenLabels[hiddenLabels.length - 1] === '지적' ? '이' : '가'
+      } 보이는 축척까지 지도를 확대해 주세요`;
 
   return (
     <div
@@ -143,13 +185,19 @@ export function CadastralZoomHint({
     >
       <div
         ref={hintRef}
-        className="max-w-[min(420px,calc(100vw-2rem))] rounded-[5px] border border-amber-200 bg-amber-50/95 px-3 py-1.5 text-[12px] font-medium text-amber-900 shadow-md whitespace-nowrap"
+        className="flex max-w-[min(420px,calc(100vw-2rem))] items-center gap-1 rounded-[5px] border border-amber-200 bg-amber-50/95 px-3 py-1.5 text-[12px] font-medium text-amber-900 shadow-md whitespace-nowrap"
       >
-        {unavailableText
-          ? unavailableText
-          : `${hiddenLabels.join('·')}${
-              hiddenLabels[hiddenLabels.length - 1] === '지적' ? '이' : '가'
-            } 보이는 축척까지 지도를 확대해 주세요`}
+        <span>{hintText}</span>
+        {!unavailableText && (
+          <button
+            type="button"
+            title="지적이 보이는 축척으로 확대"
+            className="pointer-events-auto inline-flex shrink-0 cursor-pointer items-center justify-center rounded p-0.5 text-amber-900 hover:bg-amber-200/50"
+            onClick={zoomToVisibleScale}
+          >
+            <ZoomIn className="h-3.5 w-3.5" aria-hidden />
+          </button>
+        )}
       </div>
     </div>
   );

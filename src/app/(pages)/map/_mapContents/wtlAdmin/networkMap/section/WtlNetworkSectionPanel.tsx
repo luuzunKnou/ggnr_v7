@@ -1,8 +1,8 @@
 'use client'
 
-import { useState } from 'react'
-import { ChevronUp, X } from 'lucide-react'
-import { MapFloatingPanel } from '../../../../_mapComponents/MapFloatingPanel'
+import { useEffect, useState } from 'react'
+import { MapDetailFloatingPanel } from '../../../../_mapComponents/MapDetailFloatingPanel'
+import { MAP_DETAIL_FLOAT_MINIMIZED_WIDTH } from '../../../../_mapComponents/mapDetailFloatingDock'
 import { cn } from '@/lib/utils'
 import type { SectionTab } from './useWtlNetworkSection'
 import type {
@@ -14,8 +14,13 @@ import type {
 import type { SectionSupplyElevRow } from './useWtlNetworkSection'
 import { WtlNetworkSectionThreeJsTab } from './WtlNetworkSectionThreeJsTab'
 import { WtlNetworkSectionChart } from './wtlNetworkSectionChart'
-import { SectionFeatureLegendSkeleton } from './wtlNetworkSectionLegend'
+import {
+  SectionFeatureLegendSkeleton,
+  type LongPipeLegendItem,
+} from './wtlNetworkSectionLegend'
 import { SECTION_PANEL_BODY_CLASS } from './wtlNetworkSectionLayout'
+
+const SECTION_PANEL_WIDTH = 'min(1100px, calc(100vw - 2rem))'
 
 type Props = {
   open: boolean
@@ -35,8 +40,15 @@ type Props = {
   supplyAreaLines?: SectionSupplyAreaLine[]
   supplyAreaBands?: SectionSupplyBandSegment[]
   supplyElevComposition?: SectionSupplyElevRow[]
+  minimized?: boolean
+  pinPosition?: { top: number; left: number } | null
+  onMinimizedChange?: (minimized: boolean) => void
   onClose: () => void
   onRedraw: () => void
+  /** 데이터 범례 항목 — 시설목록 행 선택과 동일 */
+  onLegendItemSelect?: (item: LongPipeLegendItem) => void
+  /** 범례 체크 해제로 선택 해제 시 지도 하이라이트도 끔 */
+  onLegendHighlightClear?: () => void
 }
 
 export function WtlNetworkSectionPanel({
@@ -57,10 +69,22 @@ export function WtlNetworkSectionPanel({
   supplyAreaLines: _supplyAreaLines = [],
   supplyAreaBands = [],
   supplyElevComposition = [],
+  minimized = false,
+  pinPosition = null,
+  onMinimizedChange,
   onClose,
   onRedraw,
+  onLegendItemSelect,
+  onLegendHighlightClear,
 }: Props) {
-  const [collapsed, setCollapsed] = useState(false)
+  /** 3D는 첫 진입 후 유지 — 탭 전환마다 씬·조회 재생성 방지 (횡·종단 캐시와 동일 의도) */
+  const [keepThreeJs, setKeepThreeJs] = useState(tab === 'threejs')
+  useEffect(() => {
+    if (tab === 'threejs') setKeepThreeJs(true)
+  }, [tab])
+  useEffect(() => {
+    if (!lineReady) setKeepThreeJs(false)
+  }, [lineReady])
 
   if (!open) return null
 
@@ -71,113 +95,76 @@ export function WtlNetworkSectionPanel({
         ? '절단 깊이축의 지반고·관로·시설과 표고별 구역·분구·블록 구성을 봅니다.'
         : '절단 구간 지형과 관로·시설을 3D로 확인합니다.'
 
+  const sectionTitle = lineReady
+    ? `절단선 ${totalLengthM.toFixed(0)} m`
+    : '절단선 기준 단면'
+
   return (
-    <MapFloatingPanel
-      viewport
-      zLayer="detailFloating"
-      width="min(1100px, calc(100vw - 2rem))"
+    <MapDetailFloatingPanel
+      layer="단면도"
+      title={sectionTitle}
+      hideTitleWhenMinimized
+      minimized={minimized}
+      onMinimizedChange={onMinimizedChange}
+      onClose={onClose}
+      pinPosition={pinPosition}
+      width={SECTION_PANEL_WIDTH}
+      minimizedWidth={MAP_DETAIL_FLOAT_MINIMIZED_WIDTH}
       maxHeight="94vh"
       defaultPosition={{ top: 72, right: 24 }}
-      className="bg-background backdrop-blur-none"
-      header={
-        <>
-          <button
-            type="button"
-            title={collapsed ? '펼치기' : '접기'}
-            aria-label={collapsed ? '펼치기' : '접기'}
-            aria-expanded={!collapsed}
-            onClick={() => setCollapsed((v) => !v)}
-            className="standard-panel-close mr-2 cursor-pointer"
-          >
-            <ChevronUp
-              className={cn('h-4 w-4', collapsed && 'rotate-180')}
-              aria-hidden
-            />
-          </button>
-          <div className="min-w-0 flex-1 pr-2">
-            <div className="truncate text-sm font-semibold text-foreground">단면도</div>
-            <div className="truncate text-[11px] text-muted-foreground">
-              {lineReady
-                ? `절단선 ${totalLengthM.toFixed(0)} m · 시설 ${features.length}건`
-                : '절단선 기준 단면'}
-            </div>
-          </div>
-          <button
-            type="button"
-            className="inline-flex h-7 shrink-0 cursor-pointer items-center rounded border border-border px-2 text-[11px] text-foreground hover:bg-muted"
-            title="다시 그리기"
-            onClick={onRedraw}
-          >
-            다시 그리기
-          </button>
-          <button
-            type="button"
-            className="standard-panel-close ml-1 cursor-pointer"
-            title="닫기"
-            aria-label="닫기"
-            onClick={onClose}
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </>
+      headerActions={
+        <button
+          type="button"
+          className="inline-flex h-7 shrink-0 cursor-pointer items-center rounded border border-border px-2 text-[11px] text-foreground hover:bg-muted"
+          title="다시 그리기"
+          onClick={onRedraw}
+        >
+          다시 그리기
+        </button>
       }
     >
-      <div
-        className={cn(
-          'flex min-h-0 flex-1 flex-col',
-          collapsed && 'hidden'
-        )}
-      >
-        <div className="flex shrink-0 gap-1 border-b border-border px-3 pt-2">
-          {(
-            [
-              { id: 'crossChart' as const, label: '횡단면도' },
-              { id: 'longChart' as const, label: '종단면도' },
-              { id: 'threejs' as const, label: 'ThreeJs' },
-            ] as const
-          ).map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              title={t.label}
-              className={cn(
-                'cursor-pointer border-b-2 px-3 py-1.5 text-[12px] font-medium',
-                tab === t.id
-                  ? 'border-primary text-primary'
-                  : 'border-transparent text-muted-foreground hover:text-foreground'
-              )}
-              onClick={() => onTabChange(t.id)}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
+      <div className="flex shrink-0 gap-1 border-b border-border px-3 pt-2">
+        {(
+          [
+            { id: 'crossChart' as const, label: '횡단면도' },
+            { id: 'longChart' as const, label: '종단면도' },
+            { id: 'threejs' as const, label: '3D' },
+          ] as const
+        ).map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            title={t.label}
+            className={cn(
+              'cursor-pointer border-b-2 px-3 py-1.5 text-xs font-medium',
+              tab === t.id
+                ? 'border-primary text-primary'
+                : 'border-transparent text-muted-foreground hover:text-foreground'
+            )}
+            onClick={() => onTabChange(t.id)}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
 
-        <div className={cn('overflow-hidden p-3', SECTION_PANEL_BODY_CLASS)}>
-          {tab === 'threejs' ? (
-            !lineReady || !line3857 || line3857.length < 2 ? (
-              <p className="py-10 text-center text-[12px] text-muted-foreground">
-                절단선 데이터가 없습니다.
-              </p>
-            ) : (
-              <WtlNetworkSectionThreeJsTab
-                line3857={line3857}
-                enabledKeys={enabledKeys}
-              />
-            )
-          ) : loading ? (
+      <div className={cn('overflow-hidden p-3', SECTION_PANEL_BODY_CLASS)}>
+        {tab !== 'threejs' ? (
+          loading ? (
             <div className="flex h-full min-h-0 gap-2 overflow-hidden rounded border-2 border-border bg-background p-2">
               <div className="flex min-h-0 min-w-0 flex-1 items-center justify-center">
-                <p className="text-center text-[12px] text-muted-foreground">
+                <p className="text-center text-xs text-muted-foreground">
                   등고·시설 조회 중…
                 </p>
               </div>
               <SectionFeatureLegendSkeleton />
             </div>
           ) : error ? (
-            <p className="py-10 text-center text-[12px] text-destructive">{error}</p>
+            <p className="py-10 text-center text-xs text-destructive">
+              {error}
+            </p>
           ) : !lineReady ? (
-            <p className="py-10 text-center text-[12px] text-muted-foreground">
+            <p className="py-10 text-center text-xs text-muted-foreground">
               절단선 데이터가 없습니다.
             </p>
           ) : (
@@ -190,14 +177,39 @@ export function WtlNetworkSectionPanel({
               totalLengthM={totalLengthM}
               supplyAreaBands={supplyAreaBands}
               supplyElevComposition={supplyElevComposition}
+              onLegendItemSelect={onLegendItemSelect}
+              onLegendHighlightClear={onLegendHighlightClear}
             />
-          )}
-        </div>
+          )
+        ) : !lineReady || !line3857 || line3857.length < 2 ? (
+          <p className="py-10 text-center text-xs text-muted-foreground">
+            절단선 데이터가 없습니다.
+          </p>
+        ) : null}
 
-        <div className="shrink-0 border-t border-border px-3 py-2 text-[11px] text-muted-foreground">
-          {footer}
-        </div>
+        {(keepThreeJs || tab === 'threejs') &&
+        lineReady &&
+        line3857 &&
+        line3857.length >= 2 ? (
+          <div
+            className={cn(
+              'h-full min-h-0',
+              tab !== 'threejs' && 'hidden'
+            )}
+            aria-hidden={tab !== 'threejs'}
+          >
+            <WtlNetworkSectionThreeJsTab
+              line3857={line3857}
+              enabledKeys={enabledKeys}
+              onLegendItemSelect={onLegendItemSelect}
+            />
+          </div>
+        ) : null}
       </div>
-    </MapFloatingPanel>
+
+      <div className="shrink-0 border-t border-border px-3 py-2 text-[11px] text-muted-foreground">
+        {footer}
+      </div>
+    </MapDetailFloatingPanel>
   )
 }

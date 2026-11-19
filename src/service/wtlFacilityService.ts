@@ -6,7 +6,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { sql } from 'drizzle-orm';
 import db from '@/database/db';
-import { buildCodeKeywordInClauses } from '@/lib/defineLayerCodeKeyword';
+import {
+  buildCodeKeywordInClauses,
+  buildCodeLabelSortJoin,
+  isDefineCodeFieldType,
+} from '@/lib/defineLayerCodeKeyword';
+import { exportLayerTableToShp } from '@/service/shpUploadService';
 
 export type WtlFacilitySource = {
   group: string;
@@ -607,8 +612,18 @@ export async function listFacilityRows(params: {
   );
   const total = Number((countRes.rows?.[0] as { c?: number } | undefined)?.c ?? 0) || 0;
 
+  const fieldTypeByName = new Map<string, unknown>();
+  for (const f of defineFields) {
+    const fn = asStr(f.define_field_name);
+    if (!fn) continue;
+    fieldTypeByName.set(fn.toLowerCase(), f.define_field_type);
+  }
+
   const orderParts: string[] = [];
+  const sortJoins: string[] = [];
   const seenSortCols = new Set<string>();
+  let codeSortIdx = 0;
+  let userSortCount = 0;
   for (const s of rawSorts) {
     const field = String(s?.field ?? '').trim();
     if (!field || GEOM_COLS.has(field.toLowerCase())) continue;
@@ -616,13 +631,36 @@ export async function listFacilityRows(params: {
     if (!col || seenSortCols.has(col.toLowerCase())) continue;
     seenSortCols.add(col.toLowerCase());
     const dir = String(s?.dir ?? '').trim().toLowerCase() === 'desc' ? 'DESC' : 'ASC';
-    orderParts.push(`t."${col.replace(/"/g, '""')}" ${dir} NULLS LAST`);
-    if (orderParts.length >= 5) break;
+    const colQ = col.replace(/"/g, '""');
+    const isCode = isDefineCodeFieldType(fieldTypeByName.get(field.toLowerCase()));
+    if (isCode) {
+      const join = buildCodeLabelSortJoin({
+        fieldsTable,
+        fieldName: field,
+        physicalCol: col,
+        alias: `csort${codeSortIdx}`,
+        esc,
+      });
+      if (join) {
+        sortJoins.push(join.joinSql);
+        orderParts.push(`${join.orderExpr} ${dir} NULLS LAST`);
+        // 동일 한글명·미매핑 코드 안정 정렬
+        orderParts.push(`t."${colQ}" ${dir} NULLS LAST`);
+        codeSortIdx += 1;
+        userSortCount += 1;
+        if (userSortCount >= 5) break;
+        continue;
+      }
+    }
+    orderParts.push(`t."${colQ}" ${dir} NULLS LAST`);
+    userSortCount += 1;
+    if (userSortCount >= 5) break;
   }
   if (ogcCol && !seenSortCols.has(ogcCol.toLowerCase())) {
     orderParts.push(`t."${ogcCol.replace(/"/g, '""')}" ASC`);
   }
   const orderSql = orderParts.length > 0 ? orderParts.join(', ') : '1';
+  const joinSql = sortJoins.length > 0 ? `\n       ${sortJoins.join('\n       ')}` : '';
 
   const dataRes = await db.execute(
     sql.raw(
@@ -631,7 +669,7 @@ export async function listFacilityRows(params: {
          (${nameExpr}) AS name,
          ${geomSel} AS geom,
          ${recordSel} AS record
-       FROM "${safeSchema}"."${safeTable}" t
+       FROM "${safeSchema}"."${safeTable}" t${joinSql}
        WHERE ${whereSql}
        ORDER BY ${orderSql}
        LIMIT ${limit} OFFSET ${offset}`
@@ -787,5 +825,81 @@ export async function getFacilityAtPoint(params: {
       relatedParentKey,
       layerKey: relatedParentKey || table,
     },
+  };
+}
+
+/**
+ * 시설·설비 목록 현재 필터(키워드·위치)에 맞는 행만 SHP zip.
+ * listFacilityRows로 식별자를 모은 뒤 ogr2ogr SQL로 보낸다.
+ */
+export async function exportFacilityShpZip(params: {
+  table?: string;
+  schema?: string;
+  keyword?: string;
+  areaWkts5181?: string[] | null;
+  targetSrs?: string | null;
+} = {}): Promise<{
+  success: boolean;
+  zipBuffer?: Buffer;
+  fileName?: string;
+  error?: string;
+}> {
+  const table = String(params.table ?? '')
+    .trim()
+    .toLowerCase();
+  const schemaRaw = String(params.schema ?? 'layer')
+    .trim()
+    .toLowerCase();
+  const schema = schemaRaw === 'public_layer' ? 'public_layer' : 'layer';
+  if (!table) return { success: false, error: 'table이 필요합니다.' };
+
+  const pageSize = 2000;
+  let offset = 0;
+  const ids: number[] = [];
+  let total = Number.POSITIVE_INFINITY;
+  while (offset < total) {
+    const page = await listFacilityRows({
+      table,
+      schema,
+      keyword: params.keyword,
+      areaWkts5181: params.areaWkts5181,
+      limit: pageSize,
+      offset,
+    });
+    total = page.total;
+    for (const row of page.rows) {
+      if (row.ogcFid != null && Number.isFinite(row.ogcFid)) ids.push(row.ogcFid);
+    }
+    if (page.rows.length === 0) break;
+    offset += page.rows.length;
+    if (offset >= total) break;
+  }
+  if (ids.length === 0) {
+    return { success: false, error: '내보낼 시설이 없습니다.' };
+  }
+
+  const safeSchema = schema.replace(/"/g, '""');
+  const safeTable = table.replace(/"/g, '""');
+  const idList = ids.join(',');
+  const sql = `SELECT * FROM "${safeSchema}"."${safeTable}" WHERE ogc_fid IN (${idList})`;
+  const result = await exportLayerTableToShp({
+    tableName: table,
+    schema,
+    sql,
+    layerName: table,
+    targetSrs: params.targetSrs,
+    output: 'zip',
+  });
+  if (!result.success || !result.zipBuffer) {
+    return { success: false, error: result.error ?? 'SHP 보내기 실패' };
+  }
+  const stamp = new Date()
+    .toISOString()
+    .replace(/[-:TZ.]/g, '')
+    .slice(0, 14);
+  return {
+    success: true,
+    zipBuffer: result.zipBuffer,
+    fileName: `시설목록_${table}_${stamp}.zip`,
   };
 }

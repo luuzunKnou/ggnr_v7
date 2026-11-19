@@ -82,6 +82,13 @@ const FLOOD_TRACE_DEPTH_LEGEND: { label: string; color: string }[] = [
   { label: '6등급(3.0m 이상)', color: '#9FA8DA' },
 ];
 
+/** 물놀이 관리지역 — IF_0044 표시 색 (일반=초록, 중점=#1C94D8, 위험=빨강) */
+const WATER_PLAY_MANAGED_LEGEND: { label: string; color: string }[] = [
+  { label: '일반지역', color: '#0EA54B' },
+  { label: '중점관리지역', color: '#1C94D8' },
+  { label: '위험지역', color: '#DC2626' },
+];
+
 /** WMS 단일 이미지 로드 → 프로그레스 UI 대상 */
 const SAFEMAP_WMS_PROGRESS_LAYER_IDS = new Set([
   'floodRiverLocal',
@@ -734,6 +741,7 @@ export function SafetyMapLayerPanel({ onClose }: Props) {
     visible.floodRiverLocal === true || visible.floodRiverNational === true;
   const showLandslideLegend = visible.landslideRisk === true;
   const showFloodTraceLegend = visible.moisFloodTrace === true;
+  const showWaterPlayLegend = visible.waterPlayManaged === true;
 
   return (
     <div className="standard-panel-root overflow-hidden">
@@ -912,6 +920,27 @@ export function SafetyMapLayerPanel({ onClose }: Props) {
             <p className="mb-2 text-[11px] font-semibold text-foreground">침수흔적도 범례 (침수심)</p>
             <ul className="grid grid-cols-2 gap-x-3 gap-y-1.5">
               {FLOOD_TRACE_DEPTH_LEGEND.map((row) => (
+                <li key={row.label} className="flex min-w-0 items-center gap-2.5">
+                  <span
+                    className="h-4 w-5 shrink-0 rounded-[3px] border border-border/80 shadow-sm"
+                    style={{ backgroundColor: row.color }}
+                    aria-hidden
+                  />
+                  <span className="min-w-0 text-[11px] leading-snug text-muted-foreground">{row.label}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+
+        {showWaterPlayLegend ? (
+          <div
+            className="shrink-0 border-t border-border bg-background px-3 py-2.5"
+            aria-label="물놀이 관리지역 범례"
+          >
+            <p className="mb-2 text-[11px] font-semibold text-foreground">물놀이 관리지역 범례</p>
+            <ul className="grid grid-cols-3 gap-x-2.5 gap-y-1.5">
+              {WATER_PLAY_MANAGED_LEGEND.map((row) => (
                 <li key={row.label} className="flex min-w-0 items-center gap-2.5">
                   <span
                     className="h-4 w-5 shrink-0 rounded-[3px] border border-border/80 shadow-sm"

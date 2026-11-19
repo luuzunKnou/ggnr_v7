@@ -1,0 +1,41 @@
+<featureType>
+  <id>FeatureTypeInfoImpl--62fd8cac:1a1cd6b9dbe:-7b74</id>
+  <name>wtl_photo_ps</name>
+  <nativeName>wtl_photo_ps</nativeName>
+  <namespace>
+    <id>NamespaceInfoImpl-4bf97568:19c4d6c3053:-7ffa</id>
+  </namespace>
+  <title>wtl_photo_ps</title>
+  <keywords>
+    <string>features</string>
+    <string>wtl_photo_ps</string>
+  </keywords>
+  <srs>EPSG:5181</srs>
+  <nativeBoundingBox>
+    <minx>331170.081889609</minx>
+    <maxx>363688.1329208752</maxx>
+    <miny>305266.29228747345</miny>
+    <maxy>328632.08896399714</maxy>
+    <crs class="projected">EPSG:5181</crs>
+  </nativeBoundingBox>
+  <latLonBoundingBox>
+    <minx>128.45911934751985</minx>
+    <maxx>128.82560391424954</maxx>
+    <miny>36.231469856038856</miny>
+    <maxy>36.44692677547254</maxy>
+    <crs>EPSG:4326</crs>
+  </latLonBoundingBox>
+  <projectionPolicy>FORCE_DECLARED</projectionPolicy>
+  <enabled>true</enabled>
+  <store class="dataStore">
+    <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff9</id>
+  </store>
+  <serviceConfiguration>false</serviceConfiguration>
+  <maxFeatures>0</maxFeatures>
+  <numDecimals>0</numDecimals>
+  <padWithZeros>false</padWithZeros>
+  <forcedDecimal>false</forcedDecimal>
+  <overridingServiceSRS>false</overridingServiceSRS>
+  <skipNumberMatched>false</skipNumberMatched>
+  <circularArcPresent>false</circularArcPresent>
+</featureType>

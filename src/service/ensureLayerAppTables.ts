@@ -20,6 +20,7 @@
  * - 도로 업무편람: rd_work_target_review, rd_hbook_mat
  * - 개별공시지가 필지 메모: land_price_memo
  * - 시설 이력: public.data_history (구 safedata_history rename)
+ * - 악취 연계(odor_ph): odor_linkage.odor_sensor
  */
 import { db, pool } from '@/database/db';
 import { sql } from 'drizzle-orm';
@@ -153,6 +154,23 @@ async function ensureSchemaLayer(): Promise<void> {
 async function ensureSchemaNextGenLinkage(): Promise<void> {
   if (await schemaExists('next_gen_linkage')) return;
   await db.execute(sql.raw(`CREATE SCHEMA IF NOT EXISTS next_gen_linkage`));
+}
+
+async function ensureSchemaOdorLinkage(): Promise<void> {
+  if (await schemaExists('odor_linkage')) return;
+  try {
+    await pool.query(`CREATE SCHEMA IF NOT EXISTS odor_linkage AUTHORIZATION odor_ph`);
+  } catch (e: unknown) {
+    if (await schemaExists('odor_linkage')) return;
+    const code = pgErrCode(e);
+    if (code === '42P06' || code === '42501') return;
+    throw e;
+  }
+  try {
+    await db.execute(sql.raw(`COMMENT ON SCHEMA odor_linkage IS '악취 관련 연계 정보'`));
+  } catch {
+    /* comment optional */
+  }
 }
 
 async function ensureSchemaLandLinkage(): Promise<void> {
@@ -1936,6 +1954,42 @@ export async function ensureNextGenLinkageTables(result?: EnsureResult): Promise
   return out;
 }
 
+const ODOR_SENSOR_SQL = `
+CREATE TABLE IF NOT EXISTS odor_linkage.odor_sensor (
+  sensor_key serial4 NOT NULL,
+  agency varchar NULL,
+  sensor_nm varchar NULL,
+  sensor_kor_nm varchar NULL,
+  geom geometry(Point, 5181) NULL,
+  CONSTRAINT odor_sensor_pk PRIMARY KEY (sensor_key)
+);
+CREATE INDEX IF NOT EXISTS odor_sensor_geom_gix ON odor_linkage.odor_sensor USING GIST (geom);
+COMMENT ON TABLE odor_linkage.odor_sensor IS '악취 센서';
+COMMENT ON COLUMN odor_linkage.odor_sensor.sensor_key IS '센서 키';
+COMMENT ON COLUMN odor_linkage.odor_sensor.agency IS '기관';
+COMMENT ON COLUMN odor_linkage.odor_sensor.sensor_nm IS '센서명';
+COMMENT ON COLUMN odor_linkage.odor_sensor.sensor_kor_nm IS '센서 한글명';
+COMMENT ON COLUMN odor_linkage.odor_sensor.geom IS '위치';
+`;
+
+/** 악취 연계 odor_linkage.odor_sensor (odor_ph 전용) */
+export async function ensureOdorLinkageTables(result?: EnsureResult): Promise<EnsureResult> {
+  const out: EnsureResult = result ?? { created: [], moved: [], existed: [], errors: [] };
+  try {
+    await ensureSchemaOdorLinkage();
+    await ensureNamedSchemaTable({
+      schema: 'odor_linkage',
+      table: 'odor_sensor',
+      createSql: ODOR_SENSOR_SQL,
+      result: out,
+    });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    out.errors.push(`odor_linkage: ${msg}`);
+  }
+  return out;
+}
+
 /** 기존 memo_* 테이블에 주소 컬럼 보강 */
 async function ensureMemoAddressColumn(tableName: string, result: EnsureResult): Promise<void> {
   const fq = `layer.${tableName}`;
@@ -2610,6 +2664,9 @@ export async function ensureLayerAppTables(): Promise<EnsureResult> {
     await ensureConsAlertSettingTable(result);
     await ensureRoadWorkHandbookTables(result);
     await ensureLandPriceMemoTable(result);
+    if ((process.env.GGNR_PROJECT ?? '').trim() === 'odor_ph') {
+      await ensureOdorLinkageTables(result);
+    }
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     result.errors.push(msg);

@@ -35,7 +35,7 @@
                   <sld:CssParameter name="fill-opacity">
                     <ogc:Function name="env">
                       <ogc:Literal>wtl_puri_dt_ps_fill_opacity</ogc:Literal>
-                      <ogc:Literal>1</ogc:Literal>
+                      <ogc:Literal>0.5</ogc:Literal>
                     </ogc:Function>
                   </sld:CssParameter>
                 </sld:Fill>
@@ -62,13 +62,13 @@
                   <ogc:Function name="greaterThan">
                     <ogc:Function name="env">
                       <ogc:Literal>wtl_puri_dt_ps_size</ogc:Literal>
-                      <ogc:Literal>0</ogc:Literal>
+                      <ogc:Literal>18</ogc:Literal>
                     </ogc:Function>
                     <ogc:Literal>0</ogc:Literal>
                   </ogc:Function>
                   <ogc:Function name="env">
                     <ogc:Literal>wtl_puri_dt_ps_size</ogc:Literal>
-                    <ogc:Literal>16</ogc:Literal>
+                    <ogc:Literal>18</ogc:Literal>
                   </ogc:Function>
                   <ogc:Function name="Categorize">
                     <ogc:Function name="env">
@@ -119,7 +119,7 @@
               <sld:CssParameter name="font-size">
                 <ogc:Function name="env">
                   <ogc:Literal>wtl_puri_dt_ps_label_size</ogc:Literal>
-                  <ogc:Literal>0</ogc:Literal>
+                  <ogc:Literal>14</ogc:Literal>
                 </ogc:Function>
               </sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>

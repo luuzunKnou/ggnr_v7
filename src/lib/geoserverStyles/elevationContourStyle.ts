@@ -10,6 +10,7 @@
  * 도면 관례: 계=굵은 실선·고도 라벨, 주=가는 실선, 간=긴 파선, 조=짧은 점선
  * 색: 갈색(세피아) 계열, 계만 조금 더 진하게
  * 축척: >10만 숨김 → ≤5만 계·주 동시 → ≤1만 간·조·기타
+ * ignore_scale=1(검색바 «변경 X»)이면 축척 임계 무시하고 전 등급 표시 (wtl_fire_ps와 동일 ENV)
  */
 
 export const ELEVATION_LAYER_NAME = "elevation"
@@ -77,6 +78,16 @@ function indexLabelBlock(strokeColor: string): string {
   -gt-label-group: true;`
 }
 
+/** WMS ENV ignore_scale=1 일 때 축척 밖 규칙 (소방시설 SLD MinScale+env 필터와 동일) */
+const IGNORE_SCALE_ON = `[env('ignore_scale', '0') = '1']`
+
+function strokeBody(stroke: string, width: number, dasharray?: string): string {
+  const dash = dasharray ? `\n  stroke-dasharray: ${dasharray};` : ""
+  return `  stroke: ${stroke};
+  stroke-width: ${width};
+  stroke-opacity: ${STROKE_OPACITY};${dash}`
+}
+
 function strokeRule(
   maxSd: number,
   stroke: string,
@@ -84,11 +95,14 @@ function strokeRule(
   opts?: { dasharray?: string; filter?: string }
 ): string {
   const filter = opts?.filter ? ` ${opts.filter}` : ""
-  const dash = opts?.dasharray ? `\n  stroke-dasharray: ${opts.dasharray};` : ""
+  const body = strokeBody(stroke, width, opts?.dasharray)
+  // 축척 안: 항상 / 축척 밖: ignore_scale=1 만 (중복 심볼 방지)
   return `[@sd <= ${maxSd}]${filter} {
-  stroke: ${stroke};
-  stroke-width: ${width};
-  stroke-opacity: ${STROKE_OPACITY};${dash}
+${body}
+}
+
+[@sd > ${maxSd}] ${IGNORE_SCALE_ON}${filter} {
+${body}
 }`
 }
 
@@ -116,8 +130,12 @@ ${strokeRule(ELEVATION_SD_DETAIL, STROKE_JO, WIDTH_JO, {
     dasharray: "2 3",
   })}
 
-/* 라벨 — 계곡선 고도만 */
+/* 라벨 — 계곡선 고도만 (ignore_scale 시 축척 밖도) */
 [@sd <= ${ELEVATION_SD_GYE}] ${FILTER_GYE} {
+${indexLabelBlock(STROKE_GYE)}
+}
+
+[@sd > ${ELEVATION_SD_GYE}] ${IGNORE_SCALE_ON} ${FILTER_GYE} {
 ${indexLabelBlock(STROKE_GYE)}
 }
 `
@@ -140,10 +158,14 @@ export function elevationSplitKindFromLayerName(layerName: string): ElevationSpl
 export function buildElevationSplitCss(kind: ElevationSplitKind): string {
   switch (kind) {
     case "ctd001":
-      return `/* elevation_ctd001 계곡선 — @sd <= ${ELEVATION_SD_GYE} */
+      return `/* elevation_ctd001 계곡선 — @sd <= ${ELEVATION_SD_GYE} (+ ignore_scale) */
 ${strokeRule(ELEVATION_SD_GYE, STROKE_GYE, WIDTH_GYE)}
 
 [@sd <= ${ELEVATION_SD_GYE}] {
+${indexLabelBlock(STROKE_GYE)}
+}
+
+[@sd > ${ELEVATION_SD_GYE}] ${IGNORE_SCALE_ON} {
 ${indexLabelBlock(STROKE_GYE)}
 }
 `

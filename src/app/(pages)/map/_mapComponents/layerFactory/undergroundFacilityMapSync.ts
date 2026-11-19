@@ -10,6 +10,13 @@ export function sameStringSet(a: Set<string>, b: Set<string>): boolean {
   return true;
 }
 
+/** Set 내용 시그니처 — 참조가 바뀌어도 내용이 같으면 effect deps 안정 */
+export function stringSetSignature(s: Set<string> | null | undefined): string {
+  if (s == null) return '';
+  if (s.size === 0) return '\0';
+  return [...s].sort().join('\0');
+}
+
 /** 데이터 조회 켜진 레이어 중 지하시설물 카탈로그에 있는 테이블만 */
 export function pickUndergroundFacilityFromVisible(
   visibleLayerNames: Set<string>,

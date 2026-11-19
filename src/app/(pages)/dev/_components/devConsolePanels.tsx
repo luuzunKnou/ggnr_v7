@@ -111,7 +111,7 @@ export const DEV_MENU_GROUPS: readonly AdminConsoleMenuGroup[] = [
   },
   {
     id: "manualList",
-    label: "메뉴얼 목록",
+    label: "매뉴얼 목록",
     icon: Book,
     menuIds: ["installManual", "baseDataManual"],
   },

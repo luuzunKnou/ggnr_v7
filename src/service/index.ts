@@ -33,7 +33,7 @@ import * as roadVideoTrackService from './roadVideoTrackService';
 import * as roadNetworkService from './roadNetworkService';
 import * as wtlNetworkService from './wtlNetworkService';
 import * as wtlFacilityService from './wtlFacilityService';
-import * as swlNetworkService from './swlNetworkService';
+import * as wtlRequestService from './wtlRequestService';
 import * as wtlOutageService from './wtlOutageService';
 import * as wtlLeakService from './wtlLeakService';
 import * as wtlSupplyPathService from './wtlSupplyPathService';
@@ -100,6 +100,7 @@ import * as digitalMapService from './digitalMapService';
 import * as drawingDisplayService from './drawingDisplayService';
 import * as landArchiveService from './landArchiveService';
 import * as individualLandPriceService from './individualLandPriceService';
+import * as odorSensorService from './odorSensorService';
 import * as realTransactionPriceService from './realTransactionPriceService';
 import * as smallPublicService from './smallPublicService';
 
@@ -138,7 +139,7 @@ export {
   roadNetworkService,
   wtlNetworkService,
   wtlFacilityService,
-  swlNetworkService,
+  wtlRequestService,
   wtlOutageService,
   wtlLeakService,
   wtlSupplyPathService,
@@ -202,6 +203,7 @@ export {
   drawingDisplayService,
   landArchiveService,
   individualLandPriceService,
+  odorSensorService,
   realTransactionPriceService,
   smallPublicService,
 };

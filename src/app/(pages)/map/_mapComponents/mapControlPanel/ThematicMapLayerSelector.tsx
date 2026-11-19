@@ -1,8 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSession } from 'next-auth/react';
 import { ChevronDown, ChevronRight, X } from 'lucide-react';
 import { Switch } from '@/app/shadcnComponents/ui/switch';
+import { isSuperUser } from '@/lib/auth/superUser';
 import { cn } from '@/lib/utils';
 import { getLegendGraphicUrl } from '../layerFactory/serviceLayerFactory';
 import {
@@ -10,7 +12,11 @@ import {
   type ThematicMapLayerGroup,
   type ThematicMapLayerOption,
 } from '../layerFactory/thematicMapLayerFactory';
-import { MAP_LAYER_PANEL_MAX_H_CLASS, MAP_LAYER_PANEL_SURFACE_CLASS } from './mapLayerPanelLayout';
+import {
+  MAP_LAYER_PANEL_MAX_H_CLASS,
+  MAP_LAYER_PANEL_SURFACE_CLASS,
+  layerHoverTitle,
+} from './mapLayerPanelLayout';
 
 const FALLBACK_LEGEND_COLOR = 'rgb(148,163,184)';
 
@@ -158,22 +164,39 @@ function ThematicLegendIcon({
   );
 }
 
+function matchesLayerSearch(option: ThematicMapLayerOption, q: string): boolean {
+  if (!q) return true;
+  const layer = String(option.layerName ?? '').toLowerCase();
+  const table = String(option.tableName ?? '').toLowerCase();
+  const parent = String(option.parentTableName ?? '').toLowerCase();
+  return layer.includes(q) || table.includes(q) || (!!parent && parent.includes(q));
+}
+
 function ThematicMapGroupSection({
   group,
   selectedTableNames,
   onToggle,
   onToggleGroup,
   defaultExpanded = false,
+  forceExpanded = false,
   showGroupBulk = true,
+  showEngInTitle = false,
 }: {
   group: ThematicMapLayerGroup;
   selectedTableNames: Set<string>;
   onToggle: (tableName: string, checked: boolean) => void;
   onToggleGroup: (tableNames: string[], checked: boolean) => void;
   defaultExpanded?: boolean;
+  /** 검색 중이면 카테고리 펼침 유지 */
+  forceExpanded?: boolean;
   showGroupBulk?: boolean;
+  showEngInTitle?: boolean;
 }) {
-  const [isExpanded, setIsExpanded] = useState(defaultExpanded);
+  const [isExpanded, setIsExpanded] = useState(defaultExpanded || forceExpanded);
+  /** 검색 중 펼침 · 검색 초기화(x) 시 전부 접힘 */
+  useEffect(() => {
+    setIsExpanded(forceExpanded);
+  }, [forceExpanded]);
   const selectedCount = group.layers.filter((l) => selectedTableNames.has(l.tableName)).length;
   const allSelected = selectedCount === group.layers.length && group.layers.length > 0;
   const someSelected = selectedCount > 0 && !allSelected;
@@ -183,10 +206,8 @@ function ThematicMapGroupSection({
     <div className="border-b border-slate-100 last:border-b-0 dark:border-white/10">
       <div
         className={cn(
-          'flex w-full items-center justify-between gap-2 py-2 pl-3 pr-4 font-medium transition-colors',
-          'bg-slate-100 text-foreground',
-          'dark:bg-white/10 dark:text-white/90',
-          (allSelected || someSelected) && 'text-primary dark:text-primary'
+          'standard-map-float-header gap-2 py-2 pl-3 pr-4',
+          !(allSelected || someSelected) && 'text-foreground'
         )}
       >
         <button
@@ -229,8 +250,7 @@ function ThematicMapGroupSection({
               <label
                 key={option.tableName}
                 className={cn(
-                  'flex cursor-pointer items-center justify-between gap-2 py-0.5 pl-2 pr-4 transition-colors',
-                  'hover:bg-slate-50 dark:hover:bg-white/10',
+                  'standard-map-float-row-hover flex cursor-pointer items-center justify-between gap-2 py-0.5 pl-2 pr-4',
                   checked && 'bg-blue-50 dark:bg-white/20'
                 )}
               >
@@ -246,7 +266,11 @@ function ThematicMapGroupSection({
                         ? 'font-medium text-primary'
                         : 'text-slate-700 dark:text-white/90'
                     )}
-                    title={option.layerName}
+                    title={layerHoverTitle(
+                      option.layerName,
+                      option.tableName,
+                      showEngInTitle
+                    )}
                   >
                     {option.layerName}
                   </span>
@@ -291,10 +315,26 @@ export function ThematicMapLayerSelector({
   title = '주제도',
   showBulkActions = true,
 }: ThematicMapLayerSelectorProps) {
+  const { data: session } = useSession();
+  const showEngInTitle = isSuperUser(session?.user?.id);
+  const [searchQuery, setSearchQuery] = useState('');
+  const searchNorm = searchQuery.trim().toLowerCase();
+  const isSearching = searchNorm.length > 0;
+
   const allTableNames = useMemo(
     () => groups.flatMap((g) => g.layers.map((l) => l.tableName)),
     [groups]
   );
+
+  const filteredGroups = useMemo(() => {
+    if (!isSearching) return groups;
+    return groups
+      .map((g) => ({
+        ...g,
+        layers: g.layers.filter((l) => matchesLayerSearch(l, searchNorm)),
+      }))
+      .filter((g) => g.layers.length > 0);
+  }, [groups, isSearching, searchNorm]);
 
   const toggle = (tableName: string, checked: boolean) => {
     const next = new Set(selectedTableNames);
@@ -330,19 +370,31 @@ export function ThematicMapLayerSelector({
         className
       )}
     >
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2 dark:border-white/10 dark:bg-white/5">
-        <span className="text-[13px] font-medium text-slate-800 dark:text-white/90">{title}</span>
+      <div className="standard-map-float-header shrink-0">
+        <span className="standard-map-float-header-title">{title}</span>
         {onClose ? (
           <button
             type="button"
             onClick={onClose}
-            className="rounded p-0.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-white/10 dark:hover:text-white"
+            className="standard-map-float-header-close"
             title="닫기"
             aria-label="닫기"
           >
             <X className="h-3.5 w-3.5" />
           </button>
         ) : null}
+      </div>
+
+      <div className="shrink-0 border-b border-slate-100 px-2 py-1.5 dark:border-white/10">
+        <input
+          type="search"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="레이어 검색"
+          title="레이어 검색"
+          aria-label="레이어 검색"
+          className="h-7 w-full rounded border border-slate-200 bg-white px-2 text-[11px] text-slate-800 outline-none placeholder:text-slate-400 focus:border-primary dark:border-white/20 dark:bg-black/40 dark:text-white/90 dark:placeholder:text-white/40"
+        />
       </div>
 
       {showBulkActions ? (
@@ -369,15 +421,21 @@ export function ThematicMapLayerSelector({
           <div className="px-3 py-3 text-[11px] leading-snug text-slate-500 dark:text-white/60">
             표시할 레이어가 없습니다.
           </div>
+        ) : filteredGroups.length === 0 ? (
+          <div className="px-3 py-3 text-[11px] leading-snug text-slate-500 dark:text-white/60">
+            검색 결과가 없습니다.
+          </div>
         ) : (
-          groups.map((group) => (
+          filteredGroups.map((group) => (
             <ThematicMapGroupSection
               key={group.id}
               group={group}
               selectedTableNames={selectedTableNames}
               onToggle={toggle}
               onToggleGroup={toggleGroup}
+              forceExpanded={isSearching}
               showGroupBulk={showBulkActions}
+              showEngInTitle={showEngInTitle}
             />
           ))
         )}

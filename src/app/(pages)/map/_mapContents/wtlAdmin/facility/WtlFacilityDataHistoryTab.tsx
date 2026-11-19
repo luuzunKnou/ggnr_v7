@@ -414,22 +414,22 @@ export function WtlFacilityDataHistoryTab({
             ) : (
               <div className="overflow-hidden rounded border border-border">
                 <table className="w-full text-xs">
-                  <thead>
-                    <tr className="bg-muted">
-                      <th className="border-b border-border px-2 py-1.5 text-left font-medium">
+                  <thead className="standard-detail-table-thead">
+                    <tr>
+                      <th className="standard-detail-table-th standard-table-th-left">
                         속성
                       </th>
                       {isCompare ? (
                         <>
-                          <th className="border-b border-border px-2 py-1.5 text-left font-medium">
+                          <th className="standard-detail-table-th standard-table-th-left">
                             변경 전
                           </th>
-                          <th className="border-b border-border px-2 py-1.5 text-left font-medium">
+                          <th className="standard-detail-table-th standard-table-th-left">
                             변경 후
                           </th>
                         </>
                       ) : (
-                        <th className="border-b border-border px-2 py-1.5 text-left font-medium">
+                        <th className="standard-detail-table-th standard-table-th-left">
                           값
                         </th>
                       )}

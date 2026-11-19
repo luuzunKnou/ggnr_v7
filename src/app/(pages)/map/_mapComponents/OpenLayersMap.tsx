@@ -39,6 +39,7 @@ import {
   mirrorUndergroundFacilityIntoVisible,
   pickUndergroundFacilityFromVisible,
   sameStringSet,
+  stringSetSignature,
 } from './layerFactory/undergroundFacilityMapSync';
 import { useThematicMapCatalog } from './hooks/useThematicMapCatalog';
 import { useOwnershipCatalog } from './hooks/useOwnershipCatalog';
@@ -78,6 +79,23 @@ import { useMapInteractions } from './hooks/useMapInteractions';
 import { useFeatureIdentify } from './hooks/useFeatureIdentify';
 import { useFeatureIdentifyHoverHighlight } from './hooks/useFeatureIdentifyHoverHighlight';
 import { FeatureIdentifyPopup } from './FeatureIdentifyPopup';
+import { LayerClickDetailFloating } from '../_mapContents/layerClickDetail/LayerClickDetailFloating';
+import {
+  hasNonMatchCloseBlockedOpened,
+  isLayerClickDetailBlockedByPanelFlags,
+} from '../_mapContents/layerClickDetail/layerClickDetailGate';
+import {
+  collectLayerClickDetailMatchCloseOwnedNames,
+  filterIdentifyPopupExcludingOwned,
+  isIdentifyTableOwned,
+  isLayerClickDetailCloseOnMatchOpened,
+  layerResultIsOwned,
+} from '../_mapContents/layerClickDetail/layerClickDetailMatchClose';
+import { useLayerClickDetail } from '../_mapContents/layerClickDetail/useLayerClickDetail';
+import {
+  WTL_FACILITY_IDENTIFY_PICK_EVENT,
+  type WtlFacilityIdentifyPickDetail,
+} from '../_mapContents/wtlAdmin/facility/useWtlFacilityMapClick';
 import { useMapContextMenu } from './hooks/useMapContextMenu';
 import { findRoadAddressByJibun, getAddressFromCoord } from './addressSearch/vworldAddressSearch';
 import { transformCoordinate } from './services/coordinateService';
@@ -588,7 +606,7 @@ export default function OpenLayersMap({
     groups: undergroundFacilityGroups,
     availableLayerTableNames: undergroundFacilityAvailableTableNames,
     loading: undergroundFacilityCatalogLoading,
-  } = useUndergroundFacilityCatalog();
+  } = useUndergroundFacilityCatalog(systemKeyFromUrl);
   const {
     layers: buildingRoadPanelLayers,
     availableLayerTableNames: buildingRoadAvailableTableNames,
@@ -858,16 +876,31 @@ export default function OpenLayersMap({
     });
   }, [ownershipCatalogLoading, ownershipAvailableTableNames]);
 
-  // 지하시설물 가용 목록으로 선택 정리
+  // 지하시설물 가용 목록으로 패널 선택·데이터조회 정리 (시스템 필터 반영, catalog 준비 후)
   useEffect(() => {
     if (undergroundFacilityCatalogLoading) return;
+    const available = undergroundFacilityAvailableTableNames;
     setVisibleUndergroundFacilityLayerNames((prev) => {
       if (prev == null) return prev;
-      const next = new Set(
-        [...prev].filter((t) => undergroundFacilityAvailableTableNames.has(t))
-      );
+      const next = new Set([...prev].filter((t) => available.has(t)));
       if (next.size === prev.size && [...next].every((t) => prev.has(t))) return prev;
       return next;
+    });
+    // 복원·타 시스템에 있던 UF가 visible에 남아 있으면 현재 시스템 가용분만 유지
+    const ufAllNames = new Set(UNDERGROUND_FACILITY_LAYERS.map((l) => l.tableName));
+    const setVisible = mapContextRef.current?.setVisibleLayerNames;
+    if (!setVisible) return;
+    setVisible((prev) => {
+      let changed = false;
+      const next = new Set<string>();
+      for (const name of prev) {
+        if (ufAllNames.has(name) && !available.has(name)) {
+          changed = true;
+          continue;
+        }
+        next.add(name);
+      }
+      return changed ? next : prev;
     });
   }, [undergroundFacilityCatalogLoading, undergroundFacilityAvailableTableNames]);
 
@@ -1084,6 +1117,8 @@ export default function OpenLayersMap({
       const next = prev.filter(
         (item) =>
           item !== 'reset-measurements' &&
+          item !== DETAIL_WONDO_CONTROL_ID &&
+          item !== DIGITAL_MAP_CONTROL_ID &&
           !MEASUREMENT_IDS.includes(item)
       );
       return next.includes('background-map') ? next : [...next, 'background-map'];
@@ -1153,14 +1188,94 @@ export default function OpenLayersMap({
   const visibleLayerNames = mapContext?.visibleLayerNames ?? EMPTY_LAYER_NAME_SET;
   const setVisibleLayerNames = mapContext?.setVisibleLayerNames;
 
-  // 데이터 조회 → 지하시설물 선택 동기화
+  /** Set 참조 churn으로 양방향 sync가 무한 돌지 않도록 내용 시그니처만 deps */
+  const ufAvailableSig = useMemo(
+    () => stringSetSignature(undergroundFacilityAvailableTableNames),
+    [undergroundFacilityAvailableTableNames]
+  );
+  /** visible 전체 비움 vs 비-UF만 남음 구분 — 둘 다 pick 이 비어도 시그니처가 같으면 마지막 off 누락 */
+  const visibleUfPickSig = useMemo(() => {
+    if (visibleLayerNames.size === 0) return '';
+    return stringSetSignature(
+      pickUndergroundFacilityFromVisible(
+        visibleLayerNames,
+        undergroundFacilityAvailableTableNames
+      )
+    );
+  }, [visibleLayerNames, undergroundFacilityAvailableTableNames]);
+  const undergroundPanelSig = useMemo(
+    () =>
+      visibleUndergroundFacilityLayerNames == null
+        ? ''
+        : stringSetSignature(visibleUndergroundFacilityLayerNames),
+    [visibleUndergroundFacilityLayerNames]
+  );
+
+  const undergroundFacilityAvailableRef = useRef(undergroundFacilityAvailableTableNames);
+  undergroundFacilityAvailableRef.current = undergroundFacilityAvailableTableNames;
+
+  // 관망조회 → 지하시설물 패널·visible 직접 반영 (양방향 effect 루프와 분리)
+  useEffect(() => {
+    const syncRef = mapContextRef.current?.syncUndergroundFromNetworkRef;
+    if (!syncRef) return;
+    syncRef.current = (wanted, managed) => {
+      const available = undergroundFacilityAvailableRef.current;
+      setVisibleUndergroundFacilityLayerNames((prev) => {
+        const next = new Set(prev ?? []);
+        for (const n of managed) {
+          if (available.has(n)) next.delete(n);
+        }
+        for (const n of wanted) {
+          if (available.has(n)) next.add(n);
+        }
+        if (prev != null && sameStringSet(prev, next)) return prev;
+        return next;
+      });
+      const setVisible = mapContextRef.current?.setVisibleLayerNames;
+      if (setVisible) {
+        setVisible((prev) => {
+          const next = new Set(prev);
+          for (const n of managed) next.delete(n);
+          for (const n of wanted) next.add(n);
+          if (sameStringSet(prev, next)) return prev;
+          return next;
+        });
+      }
+      const anyOn = [...wanted].some((n) => available.has(n));
+      if (anyOn) {
+        setActiveControls((prev) =>
+          prev.includes('underground-facility') ? prev : [...prev, 'underground-facility']
+        );
+      }
+    };
+    return () => {
+      syncRef.current = null;
+    };
+  }, []);
+
+  // 데이터 조회(·관망조회) visible → 지하시설물 선택 동기화
   useEffect(() => {
     if (!restored || undergroundFacilityCatalogLoading) return;
-    // visible 전무 → 지하시설물도 끔 (전체 끄기·관망 동기화)
+    // visible 전체 비움(서비스 메뉴 전환 clearServiceMenuLayerState 등):
+    // 지하시설물 패널·WMS는 유지하고, visible에도 다시 넣어 메뉴 언마운트 후에도 남긴다.
+    // 패널을 비우는 경우는 syncUnderground / allLayersOff 등 직접 호출 경로.
+    // null→empty 변환은 하지 않음(미오픈 패널 건드려 루프·부수효과).
     if (visibleLayerNames.size === 0) {
-      setVisibleUndergroundFacilityLayerNames((prev) =>
-        prev != null && prev.size === 0 ? prev : new Set()
-      );
+      const selected = visibleUndergroundFacilityLayerNames;
+      if (
+        selected != null &&
+        selected.size > 0 &&
+        setVisibleLayerNames
+      ) {
+        setVisibleLayerNames((prev) => {
+          if (prev.size > 0) return prev;
+          return mirrorUndergroundFacilityIntoVisible(
+            prev,
+            undergroundFacilityAvailableTableNames,
+            selected
+          );
+        });
+      }
       return;
     }
     const fromVisible = pickUndergroundFacilityFromVisible(
@@ -1188,12 +1303,8 @@ export default function OpenLayersMap({
     setActiveControls((prev) =>
       prev.includes('underground-facility') ? prev : [...prev, 'underground-facility']
     );
-  }, [
-    restored,
-    undergroundFacilityCatalogLoading,
-    visibleLayerNames,
-    undergroundFacilityAvailableTableNames,
-  ]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- content signatures
+  }, [restored, undergroundFacilityCatalogLoading, visibleUfPickSig, ufAvailableSig]);
 
   // 지하시설물 → 데이터 조회 선택 동기화
   useEffect(() => {
@@ -1207,11 +1318,12 @@ export default function OpenLayersMap({
         selected
       )
     );
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- content signatures
   }, [
     restored,
     undergroundFacilityCatalogLoading,
-    visibleUndergroundFacilityLayerNames,
-    undergroundFacilityAvailableTableNames,
+    undergroundPanelSig,
+    ufAvailableSig,
     setVisibleLayerNames,
   ]);
 
@@ -1511,12 +1623,23 @@ export default function OpenLayersMap({
     visibleThematicLayerNames,
     thematicCatalogLoading ? null : thematicAvailableTableNames
   );
+  const networkMapSuppressUfDraw = useMemo(() => {
+    const sig = mapContext?.networkMapSuppressUfTableNamesSig ?? 0;
+    void sig;
+    const ref = mapContext?.networkMapSuppressUfTableNamesRef;
+    if (!ref || ref.current.size === 0) return null;
+    return new Set(ref.current);
+  }, [
+    mapContext?.networkMapSuppressUfTableNamesSig,
+    mapContext?.networkMapSuppressUfTableNamesRef,
+  ]);
   useUndergroundFacilityLayerSync(
     mapInstanceRef.current,
     mapReady,
     activeControls,
     visibleUndergroundFacilityLayerNames,
-    undergroundFacilityCatalogLoading ? null : undergroundFacilityAvailableTableNames
+    undergroundFacilityCatalogLoading ? null : undergroundFacilityAvailableTableNames,
+    networkMapSuppressUfDraw
   );
 
   const safetyMapLayerVisibility = mapContext?.safetyMapLayerVisibility ?? {};
@@ -1638,23 +1761,25 @@ export default function OpenLayersMap({
   );
 
   // 지도 클릭 → 도형 검색. 측정·도형 그리기·도형편집·CCTV·도로망 점찍기·메모 위치 찍기 중에는 식별 비활성
+  const identifyDisabled =
+    roadCctvPanelOpen ||
+    (mapContext?.safetyFacPanelOpen ?? false) ||
+    (mapContext?.complaintPanelOpen ?? false) ||
+    (mapContext?.memoPanelOpen ?? false) ||
+    (mapContext?.groundwaterPermitPanelOpen ?? false) ||
+    (mapContext?.roadRewardPanelOpen ?? false) ||
+    (mapContext?.roadLedgerVideoOpen ?? false) ||
+    !!layerRowGeomEdit ||
+    !!spatialDrawRequest ||
+    roadNetworkPointPickActive ||
+    roadFrontageMarkerPointPickActive ||
+    (mapContext?.mapDrawInputSuspended ?? false) ||
+    activeControls.some((id) => MEASUREMENT_IDS.includes(id));
   const { popupState, popupElRef, closePopup } = useFeatureIdentify(
     mapInstanceRef.current,
     mapReady,
     visibleLayerNames,
-    roadCctvPanelOpen ||
-      (mapContext?.safetyFacPanelOpen ?? false) ||
-      (mapContext?.complaintPanelOpen ?? false) ||
-      (mapContext?.memoPanelOpen ?? false) ||
-      (mapContext?.groundwaterPermitPanelOpen ?? false) ||
-      (mapContext?.roadRewardPanelOpen ?? false) ||
-      (mapContext?.roadLedgerVideoOpen ?? false) ||
-      !!layerRowGeomEdit ||
-      !!spatialDrawRequest ||
-      roadNetworkPointPickActive ||
-      roadFrontageMarkerPointPickActive ||
-      (mapContext?.mapDrawInputSuspended ?? false) ||
-      activeControls.some((id) => MEASUREMENT_IDS.includes(id)),
+    identifyDisabled,
     serviceWmsCqlByLayer,
     mapContext?.suppressMapIdentifyUntilRef ?? null,
   );
@@ -1679,9 +1804,27 @@ export default function OpenLayersMap({
     w === 'dataQuery' ? 'standardList' : w
   );
   const isDataQueryIdentifyMenu = openedTokensForIdentify.includes('standardList');
+  const isWtlFacilityIdentifyMenu =
+    openedTokensForIdentify.includes('wtlFacility') ||
+    openedTokensForIdentify.includes('wtlEquipment');
+  /** 기존 플로팅은 유지. 신규 오픈만 intake에서 gate로 막음 */
+  const layerClickDetail = useLayerClickDetail();
+  const openLayerClickDetailRef = useRef(layerClickDetail.openFromIdentify);
+  openLayerClickDetailRef.current = layerClickDetail.openFromIdentify;
+  /** 시설·설비 다건 → 기본 모달 선택 시 getFacilityAtPoint용 클릭 좌표 */
+  const layerClickIdentifyCoordRef = useRef<[number, number] | null>(null);
+  const [viewportSize, setViewportSize] = useState({ w: 1280, h: 720 });
+  useEffect(() => {
+    const update = () =>
+      setViewportSize({ w: window.innerWidth, h: window.innerHeight });
+    update();
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, []);
   const popupFeatureCount =
     popupState?.results?.reduce((s, r) => s + r.features.length, 0) ?? 0;
-  const showDataQueryIdentifyOverlay =
+  /** 데이터조회만 지도 위 Identify 팝업. 시설·설비 다건은 지도 기본 모달(레이어 선택) */
+  const showIdentifyOverlay =
     isDataQueryIdentifyMenu &&
     mapContext?.dataQueryMapPickEnabled !== false &&
     popupState != null &&
@@ -1689,7 +1832,7 @@ export default function OpenLayersMap({
     popupFeatureCount > 1;
 
   useEffect(() => {
-    if (!showDataQueryIdentifyOverlay) {
+    if (!showIdentifyOverlay) {
       setIdentifyHoverFeature(null);
       return;
     }
@@ -1702,7 +1845,7 @@ export default function OpenLayersMap({
         src?.clear();
       }
     }
-  }, [showDataQueryIdentifyOverlay, setIdentifyHoverFeature]);
+  }, [showIdentifyOverlay, setIdentifyHoverFeature]);
 
   const openDataQueryListAtRow = useCallback(
     (tableName: string, row: Record<string, unknown>) => {
@@ -2812,7 +2955,146 @@ export default function OpenLayersMap({
         clearIdentifyIntake();
         return;
       }
+
+      const isWtlFacilityMenu =
+        openedTokens.includes('wtlFacility') || openedTokens.includes('wtlEquipment');
+      if (isWtlFacilityMenu) {
+        const owned = collectLayerClickDetailMatchCloseOwnedNames(openedTokens);
+        const resolveScreenAnchor = (popup: typeof identifyIntakePopup) => {
+          let screenAnchor: { top: number; left: number } | null = null;
+          const sp = popup.screenPixel;
+          if (sp && Number.isFinite(sp.left) && Number.isFinite(sp.top)) {
+            screenAnchor = { left: sp.left, top: sp.top };
+          } else {
+            const map = mapInstanceRef.current;
+            const coord = popup.coordinate;
+            if (map && Array.isArray(coord) && coord.length >= 2) {
+              const pixel = map.getPixelFromCoordinate(coord as [number, number]);
+              const el = map.getTargetElement?.() as HTMLElement | null | undefined;
+              const rect = el?.getBoundingClientRect?.();
+              if (
+                pixel &&
+                Number.isFinite(pixel[0]) &&
+                Number.isFinite(pixel[1]) &&
+                rect
+              ) {
+                screenAnchor = {
+                  left: rect.left + pixel[0],
+                  top: rect.top + pixel[1],
+                };
+              }
+            }
+          }
+          return screenAnchor;
+        };
+
+        const coord = identifyIntakePopup.coordinate;
+        if (
+          Array.isArray(coord) &&
+          coord.length >= 2 &&
+          Number.isFinite(coord[0]) &&
+          Number.isFinite(coord[1])
+        ) {
+          layerClickIdentifyCoordRef.current = [coord[0], coord[1]];
+        } else {
+          layerClickIdentifyCoordRef.current = null;
+        }
+
+        if (totalIdentifyCount === 1) {
+          const layer = withFeat.find((r) => r.isSplitLayer) ?? withFeat[0];
+          if (!layer) {
+            clearIdentifyIntake();
+            return;
+          }
+          if (layerResultIsOwned(layer, owned)) {
+            const detail: WtlFacilityIdentifyPickDetail = {
+              tableName: layer.tableName,
+              physicalTable: layer.physicalTable ?? null,
+              coordinate: identifyIntakePopup.coordinate,
+              feature: layer.features[0]?.data ?? null,
+            };
+            window.dispatchEvent(
+              new CustomEvent(WTL_FACILITY_IDENTIFY_PICK_EVENT, { detail })
+            );
+            clearIdentifyIntake();
+            return;
+          }
+          openLayerClickDetailRef.current(
+            identifyIntakePopup,
+            resolveScreenAnchor(identifyIntakePopup)
+          );
+          clearIdentifyIntake();
+          return;
+        }
+
+        /** 다건: 지도 기본 모달(레이어 선택) — FeatureIdentifyPopup과 화면 분리하지 않음 */
+        openLayerClickDetailRef.current(
+          identifyIntakePopup,
+          resolveScreenAnchor(identifyIntakePopup)
+        );
+        clearIdentifyIntake();
+        return;
+      }
+
       if (!isRoadInfraMenu) {
+        /** 자체 클릭 모달·identify 가로채기 패널·데이터조회·도로기반이 아니면 목록표시 필드 플로팅.
+         * 관망·시설·설비만 열린 경우: 소유 레이어가 아닌 히트만 전역 상세로 연다. */
+        const panelBlocked = isLayerClickDetailBlockedByPanelFlags({
+          riverBasicPlanPanelOpen: mapContext.riverBasicPlanPanelOpen,
+          usageDataAsPanelOpen: mapContext.usageDataAsPanelOpen,
+          roadNetworkPanelOpen: mapContext.roadNetworkPanelOpen,
+          riverIllegalOccupationPanelOpen: mapContext.riverIllegalOccupationPanelOpen,
+          roadFrontageBuildingPanelOpen: mapContext.roadFrontageBuildingPanelOpen,
+          roadFrontageMarkerPanelOpen: mapContext.roadFrontageMarkerPanelOpen,
+          occupationLedgerPanelOpen: mapContext.occupationLedgerPanelOpen,
+          useFeePanelOpen: mapContext.useFeePanelOpen,
+          roadLedgerPanelOpen: mapContext.roadLedgerPanelOpen,
+          fmsLinkagePanelOpen: mapContext.fmsLinkagePanelOpen,
+        });
+        const otherBlocked = hasNonMatchCloseBlockedOpened(openedTokens);
+        if (!panelBlocked && !otherBlocked) {
+          let popupForDetail = identifyIntakePopup;
+          if (isLayerClickDetailCloseOnMatchOpened(openedTokens)) {
+            const owned = collectLayerClickDetailMatchCloseOwnedNames(openedTokens);
+            const filtered = filterIdentifyPopupExcludingOwned(
+              identifyIntakePopup,
+              owned
+            );
+            if (!filtered) {
+              clearIdentifyIntake();
+              return;
+            }
+            popupForDetail = filtered;
+          }
+          const map = mapInstanceRef.current;
+          const coord = popupForDetail.coordinate;
+          let screenAnchor: { top: number; left: number } | null = null;
+          const sp = popupForDetail.screenPixel;
+          if (
+            sp &&
+            Number.isFinite(sp.left) &&
+            Number.isFinite(sp.top)
+          ) {
+            /** 실제 마우스 client 좌표 — 모달 모서리 기준 */
+            screenAnchor = { left: sp.left, top: sp.top };
+          } else if (map && Array.isArray(coord) && coord.length >= 2) {
+            const pixel = map.getPixelFromCoordinate(coord as [number, number]);
+            const el = map.getTargetElement?.() as HTMLElement | null | undefined;
+            const rect = el?.getBoundingClientRect?.();
+            if (
+              pixel &&
+              Number.isFinite(pixel[0]) &&
+              Number.isFinite(pixel[1]) &&
+              rect
+            ) {
+              screenAnchor = {
+                left: rect.left + pixel[0],
+                top: rect.top + pixel[1],
+              };
+            }
+          }
+          openLayerClickDetailRef.current(popupForDetail, screenAnchor);
+        }
         clearIdentifyIntake();
         return;
       }
@@ -3031,11 +3313,18 @@ export default function OpenLayersMap({
   const togglePanelLayer = (id: PanelLayerId) => {
     const opening = openSubPanel !== id;
     if (opening) {
-      // 배경지도·드론영상과 배타. 퇴장 애니와 목록 slide-in이 겹치면 두 번 깜빡이므로 즉시 닫음
+      // 배경지도·드론영상·세부원도·수치지형도와 배타. 퇴장 애니와 목록 slide-in이 겹치면 두 번 깜빡이므로 즉시 닫음
       setIsBackgroundPanelExiting(false);
       setAerialPanelOpen(false);
       setIsAerialViewPanelExiting(false);
-      setActiveControls((prev) => prev.filter((x) => x !== 'background-map'));
+      setActiveControls((prev) =>
+        prev.filter(
+          (x) =>
+            x !== 'background-map' &&
+            x !== DETAIL_WONDO_CONTROL_ID &&
+            x !== DIGITAL_MAP_CONTROL_ID
+        )
+      );
     }
     setOpenSubPanel((prev) => (prev === id ? null : id));
     if (id === 'land-category') {
@@ -3096,7 +3385,14 @@ export default function OpenLayersMap({
         setIsBackgroundPanelExiting(false);
         setIsAerialViewPanelExiting(false);
         setAerialPanelOpen(true);
-        setActiveControls((prev) => prev.filter((item) => item !== 'background-map'));
+        setActiveControls((prev) =>
+          prev.filter(
+            (item) =>
+              item !== 'background-map' &&
+              item !== DETAIL_WONDO_CONTROL_ID &&
+              item !== DIGITAL_MAP_CONTROL_ID
+          )
+        );
       }
       return;
     }
@@ -3193,10 +3489,27 @@ export default function OpenLayersMap({
     setOpenSubPanel(null);
 
     // 체크한 원도·수치지형도가 있으면 패널이 닫혀도 버튼이 켜져 보이므로 실제 패널 열림으로 토글
+    // 지적도·건물도로·배경지도·드론영상·서로(원도↔수치지형도)와 배타
     if (id === DETAIL_WONDO_CONTROL_ID || id === DIGITAL_MAP_CONTROL_ID) {
-      setActiveControls((prev) =>
-        prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
-      );
+      const panelOpen = activeControls.includes(id);
+      if (panelOpen) {
+        setActiveControls((prev) => prev.filter((item) => item !== id));
+      } else {
+        const peer =
+          id === DETAIL_WONDO_CONTROL_ID ? DIGITAL_MAP_CONTROL_ID : DETAIL_WONDO_CONTROL_ID;
+        setIsBackgroundPanelExiting(false);
+        setAerialPanelOpen(false);
+        setIsAerialViewPanelExiting(false);
+        setActiveControls((prev) => {
+          const cleaned = prev.filter(
+            (item) =>
+              item !== id &&
+              item !== peer &&
+              item !== 'background-map'
+          );
+          return [...cleaned, id];
+        });
+      }
       return;
     }
 
@@ -3220,7 +3533,12 @@ export default function OpenLayersMap({
         setAerialPanelOpen(false);
         setIsAerialViewPanelExiting(false);
         setActiveControls((prev) => {
-          const withoutPeer = prev.filter((item) => item !== 'aerial-view');
+          const withoutPeer = prev.filter(
+            (item) =>
+              item !== 'aerial-view' &&
+              item !== DETAIL_WONDO_CONTROL_ID &&
+              item !== DIGITAL_MAP_CONTROL_ID
+          );
           return withoutPeer.includes(id) ? withoutPeer : [...withoutPeer, id];
         });
       }
@@ -3233,7 +3551,14 @@ export default function OpenLayersMap({
         setIsBackgroundPanelExiting(false);
         setIsAerialViewPanelExiting(false);
         setAerialPanelOpen(true);
-        setActiveControls((prev) => prev.filter((item) => item !== 'background-map'));
+        setActiveControls((prev) =>
+          prev.filter(
+            (item) =>
+              item !== 'background-map' &&
+              item !== DETAIL_WONDO_CONTROL_ID &&
+              item !== DIGITAL_MAP_CONTROL_ID
+          )
+        );
       }
     } else {
       // 단일 선택 항목: 배타적 토글
@@ -3367,10 +3692,10 @@ export default function OpenLayersMap({
 
       <LayerRowGeomEditHandler centerPixel={centerPixel} />
 
-      {/* 지도 중심점 마크 — 거리뷰(로드뷰) ON 시 숨김 */}
+      {/* 지도 중심점 마크 — 맵 로컬 z만(플로팅·모달 map-ui-z-* 아래). 거리뷰 ON 시 숨김 */}
       {!activeControls.includes('street-view') && (
       <div
-        className="absolute z-[5] -translate-x-1/2 -translate-y-1/2 pointer-events-none flex items-center justify-center"
+        className="absolute z-[1] -translate-x-1/2 -translate-y-1/2 pointer-events-none flex items-center justify-center"
         style={
           centerPixel
             ? { left: centerPixel.x, top: centerPixel.y }
@@ -3728,7 +4053,7 @@ export default function OpenLayersMap({
           document.body
         )}
 
-      {showDataQueryIdentifyOverlay && popupState && popupElRef.current && (
+      {showIdentifyOverlay && popupState && popupElRef.current && (
         <FeatureIdentifyPopup
           state={popupState}
           portalTarget={popupElRef.current}
@@ -3739,11 +4064,197 @@ export default function OpenLayersMap({
           onHover={setIdentifyHoverFeature}
           onSelect={(tableName, _featureIndex, feature) => {
             setIdentifyHoverFeature(null);
+            if (isWtlFacilityIdentifyMenu) {
+              const owned = collectLayerClickDetailMatchCloseOwnedNames(
+                openedTokensForIdentify
+              );
+              const layer =
+                popupState.results.find((r) => r.tableName === tableName) ?? null;
+              if (
+                isIdentifyTableOwned(
+                  tableName,
+                  layer?.physicalTable,
+                  owned
+                )
+              ) {
+                const detail: WtlFacilityIdentifyPickDetail = {
+                  tableName,
+                  physicalTable: layer?.physicalTable ?? null,
+                  coordinate: popupState.coordinate,
+                  feature,
+                };
+                window.dispatchEvent(
+                  new CustomEvent(WTL_FACILITY_IDENTIFY_PICK_EVENT, { detail })
+                );
+                closePopup();
+                return;
+              }
+              const singlePopup = {
+                ...popupState,
+                results: layer
+                  ? [
+                      {
+                        ...layer,
+                        features: [
+                          {
+                            titleValue:
+                              layer.features.find((f) => f.data === feature)
+                                ?.titleValue ?? '',
+                            data: feature,
+                          },
+                        ],
+                      },
+                    ]
+                  : [
+                      {
+                        tableName,
+                        korName: tableName,
+                        titleField: null,
+                        features: [{ titleValue: '', data: feature }],
+                      },
+                    ],
+              };
+              let screenAnchor: { top: number; left: number } | null = null;
+              const sp = popupState.screenPixel;
+              if (sp && Number.isFinite(sp.left) && Number.isFinite(sp.top)) {
+                screenAnchor = { left: sp.left, top: sp.top };
+              }
+              openLayerClickDetailRef.current(singlePopup, screenAnchor);
+              closePopup();
+              return;
+            }
             closePopup();
             openDataQueryListAtRow(tableName, feature);
           }}
         />
       )}
+
+      {(() => {
+        const layerClickDockLeft = mapPaddingLeft + 8
+        const minimizedDockKeys: string[] = []
+        if (layerClickDetail.open && layerClickDetail.minimized) {
+          minimizedDockKeys.push('primary')
+        }
+        for (const kept of layerClickDetail.keptModals) {
+          if (kept.minimized) minimizedDockKeys.push(kept.key)
+        }
+        const dockIndexOf = (key: string) =>
+          minimizedDockKeys.indexOf(key)
+        return (
+          <>
+            {layerClickDetail.open ? (
+              <LayerClickDetailFloating
+                key={layerClickDetail.placementToken}
+                open={layerClickDetail.open}
+                hits={layerClickDetail.hits}
+                selected={layerClickDetail.selected}
+                minimized={layerClickDetail.minimized}
+                onMinimizedChange={layerClickDetail.setMinimized}
+                focusToken={layerClickDetail.focusToken}
+                anchorLeftPx={
+                  layerClickDetail.anchor?.left ?? mapPaddingLeft + 56
+                }
+                anchorTopPx={layerClickDetail.anchor?.top ?? 72}
+                viewportW={viewportSize.w}
+                viewportH={viewportSize.h}
+                dockIndex={Math.max(0, dockIndexOf('primary'))}
+                dockLeftStartPx={layerClickDockLeft}
+                undergroundFacilityTableNames={
+                  undergroundFacilityAvailableTableNames
+                }
+                writeSerEng="dataQuery"
+                onSelectHit={(hitKey) => {
+                  if (isWtlFacilityIdentifyMenu) {
+                    const hit = layerClickDetail.hits.find(
+                      (h) => h.key === hitKey
+                    )
+                    if (hit) {
+                      const owned =
+                        collectLayerClickDetailMatchCloseOwnedNames(
+                          openedTokensForIdentify
+                        )
+                      const physical =
+                        hit.fieldsTable &&
+                        hit.fieldsTable.toLowerCase() !==
+                          hit.tableName.toLowerCase()
+                          ? hit.fieldsTable
+                          : null
+                      if (
+                        isIdentifyTableOwned(
+                          hit.tableName,
+                          physical,
+                          owned
+                        )
+                      ) {
+                        const coord = layerClickIdentifyCoordRef.current
+                        if (coord) {
+                          const detail: WtlFacilityIdentifyPickDetail = {
+                            tableName: hit.tableName,
+                            physicalTable: physical,
+                            coordinate: coord,
+                            feature: hit.data,
+                          }
+                          window.dispatchEvent(
+                            new CustomEvent(WTL_FACILITY_IDENTIFY_PICK_EVENT, {
+                              detail,
+                            })
+                          )
+                          layerClickDetail.close()
+                          return
+                        }
+                      }
+                    }
+                  }
+                  layerClickDetail.selectHit(hitKey)
+                }}
+                onBackToList={layerClickDetail.backToList}
+                onClose={layerClickDetail.close}
+                onDetach={(origin) => layerClickDetail.detachKeep(origin)}
+                onSelectedUpdated={(hit) => {
+                  layerClickDetail.patchSelectedHit(hit)
+                }}
+              />
+            ) : null}
+            {layerClickDetail.keptModals.map((kept) => {
+              if (kept.hits.length === 0) return null
+              const selected = kept.selectedKey
+                ? kept.hits.find((h) => h.key === kept.selectedKey) ?? null
+                : null
+              return (
+                <LayerClickDetailFloating
+                  key={kept.key}
+                  open
+                  kept
+                  placementAsTopLeft
+                  hits={kept.hits}
+                  selected={selected}
+                  minimized={kept.minimized}
+                  onMinimizedChange={(next) =>
+                    layerClickDetail.setKeepMinimized(kept.key, next)
+                  }
+                  focusToken={kept.focusToken}
+                  anchorLeftPx={kept.anchor?.left ?? mapPaddingLeft + 56}
+                  anchorTopPx={kept.anchor?.top ?? 72}
+                  viewportW={viewportSize.w}
+                  viewportH={viewportSize.h}
+                  dockIndex={Math.max(0, dockIndexOf(kept.key))}
+                  dockLeftStartPx={layerClickDockLeft}
+                  undergroundFacilityTableNames={
+                    undergroundFacilityAvailableTableNames
+                  }
+                  onSelectHit={(hitKey) =>
+                    layerClickDetail.selectKeepHit(kept.key, hitKey)
+                  }
+                  onBackToList={() =>
+                    layerClickDetail.backKeepToList(kept.key)
+                  }
+                  onClose={() => layerClickDetail.closeKeep(kept.key)}
+                />
+              )
+            })}
+          </>
+        )
+      })()}
 
       <MapPrintModal
         open={printOpen}

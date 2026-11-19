@@ -1301,7 +1301,7 @@
   },
   {
     "define_field_name": "pip_lbl1",
-    "define_field_kor_name": "pip_lbl1",
+    "define_field_kor_name": "관라벨1",
     "define_field_type": "TEXT",
     "define_field_idx": 17,
     "define_field_is_required": false,
@@ -1326,7 +1326,7 @@
   },
   {
     "define_field_name": "pip_lbl2",
-    "define_field_kor_name": "pip_lbl2",
+    "define_field_kor_name": "관라벨2",
     "define_field_type": "TEXT",
     "define_field_idx": 18,
     "define_field_is_required": false,
@@ -1351,7 +1351,7 @@
   },
   {
     "define_field_name": "org_idn",
-    "define_field_kor_name": "org_idn",
+    "define_field_kor_name": "기관관리번호",
     "define_field_type": "TEXT",
     "define_field_idx": 19,
     "define_field_is_required": false,
@@ -1376,7 +1376,7 @@
   },
   {
     "define_field_name": "adp_idn",
-    "define_field_kor_name": "adp_idn",
+    "define_field_kor_name": "처리구역관리번호",
     "define_field_type": "TEXT",
     "define_field_idx": 20,
     "define_field_is_required": false,
@@ -1401,7 +1401,7 @@
   },
   {
     "define_field_name": "adr_idn",
-    "define_field_kor_name": "adr_idn",
+    "define_field_kor_name": "배수구역관리번호",
     "define_field_type": "TEXT",
     "define_field_idx": 21,
     "define_field_is_required": false,
@@ -1426,7 +1426,7 @@
   },
   {
     "define_field_name": "gbn_cde",
-    "define_field_kor_name": "gbn_cde",
+    "define_field_kor_name": "조사구분",
     "define_field_type": "TEXT",
     "define_field_idx": 22,
     "define_field_is_required": false,
@@ -1451,7 +1451,7 @@
   },
   {
     "define_field_name": "ist_yyy",
-    "define_field_kor_name": "ist_yyy",
+    "define_field_kor_name": "설치년도",
     "define_field_type": "TEXT",
     "define_field_idx": 23,
     "define_field_is_required": false,
@@ -1476,7 +1476,7 @@
   },
   {
     "define_field_name": "rmk_exp",
-    "define_field_kor_name": "rmk_exp",
+    "define_field_kor_name": "비고1",
     "define_field_type": "TEXT",
     "define_field_idx": 24,
     "define_field_is_required": false,
@@ -1501,7 +1501,7 @@
   },
   {
     "define_field_name": "aeg_cde",
-    "define_field_kor_name": "aeg_cde",
+    "define_field_kor_name": "측구구분",
     "define_field_type": "TEXT",
     "define_field_idx": 25,
     "define_field_is_required": false,
@@ -1526,7 +1526,7 @@
   },
   {
     "define_field_name": "ins_ymd",
-    "define_field_kor_name": "ins_ymd",
+    "define_field_kor_name": "입력일자",
     "define_field_type": "TEXT",
     "define_field_idx": 26,
     "define_field_is_required": false,
@@ -1551,7 +1551,7 @@
   },
   {
     "define_field_name": "ins_usr",
-    "define_field_kor_name": "ins_usr",
+    "define_field_kor_name": "입력자",
     "define_field_type": "TEXT",
     "define_field_idx": 27,
     "define_field_is_required": false,
@@ -1576,7 +1576,7 @@
   },
   {
     "define_field_name": "mod_ymd",
-    "define_field_kor_name": "mod_ymd",
+    "define_field_kor_name": "최종수정일자",
     "define_field_type": "TEXT",
     "define_field_idx": 28,
     "define_field_is_required": false,
@@ -1601,7 +1601,7 @@
   },
   {
     "define_field_name": "mod_usr",
-    "define_field_kor_name": "mod_usr",
+    "define_field_kor_name": "최종수정자",
     "define_field_type": "TEXT",
     "define_field_idx": 29,
     "define_field_is_required": false,
@@ -1626,7 +1626,7 @@
   },
   {
     "define_field_name": "remark",
-    "define_field_kor_name": "remark",
+    "define_field_kor_name": "비고",
     "define_field_type": "TEXT",
     "define_field_idx": 30,
     "define_field_is_required": false,

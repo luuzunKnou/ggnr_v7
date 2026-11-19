@@ -18,6 +18,11 @@ import {
   getOccupationLedgerBindingByTable,
   isOccupationLedgerTableName,
 } from '@/lib/occupationLedgerBinding';
+import {
+  isPgBooleanDataType,
+  normalizePgDataType,
+} from '@/lib/defineBooleanField';
+import { parseDefineBooleanValue } from '@/lib/defineLayerCodeDisplay';
 
 const DEFAULT_SCHEMA = 'layer';
 const FMS_FACILITY_READ_ONLY_ERROR = '안전점검 시설물은 조회만 가능합니다.';
@@ -271,6 +276,74 @@ async function getTableColumns(schema: string, table: string): Promise<string[]>
   return (res.rows as { name?: string }[])
     .map((r) => String(r?.name ?? '').trim())
     .filter(Boolean);
+}
+
+/** 컬럼명(소문자) → information_schema.data_type */
+async function getTableColumnTypeMap(
+  schema: string,
+  table: string
+): Promise<Map<string, string>> {
+  const res = await db.execute(
+    sql.raw(
+      `SELECT column_name AS name, data_type AS data_type, udt_name AS udt
+       FROM information_schema.columns
+       WHERE table_schema='${esc(schema)}' AND table_name='${esc(table)}'
+       ORDER BY ordinal_position`
+    )
+  );
+  const out = new Map<string, string>();
+  for (const row of res.rows as {
+    name?: string;
+    data_type?: string;
+    udt?: string;
+  }[]) {
+    const name = String(row?.name ?? '')
+      .trim()
+      .toLowerCase();
+    if (!name) continue;
+    const dataType = normalizePgDataType(row?.data_type);
+    const udt = normalizePgDataType(row?.udt);
+    out.set(name, dataType || udt);
+  }
+  return out;
+}
+
+/**
+ * 물리 테이블 컬럼 자료형 목록 — 상세 BOOLEAN 체크박스 판별용.
+ */
+export async function listTableColumnTypes(params: {
+  table?: string;
+  schema?: string;
+} = {}): Promise<{
+  columns: Array<{ name: string; dataType: string }>;
+  error?: string;
+}> {
+  const tableGuess = String(params?.table ?? '')
+    .trim()
+    .toLowerCase();
+  if (!tableGuess) return { columns: [], error: 'table이 필요합니다.' };
+  const schema = resolveSchema(params?.schema);
+  const table = await resolveLayerPhysicalRelName(schema, tableGuess);
+  if (!table) return { columns: [], error: '테이블을 찾을 수 없습니다.' };
+  const typeMap = await getTableColumnTypeMap(schema, table);
+  return {
+    columns: [...typeMap.entries()].map(([name, dataType]) => ({
+      name,
+      dataType,
+    })),
+  };
+}
+
+/** UPDATE/INSERT 값 SQL — boolean 컬럼은 TRUE/FALSE로 형변환 */
+function sqlValueForColumn(
+  val: string | null,
+  dataType: string | undefined
+): string {
+  if (val == null) return 'NULL';
+  if (isPgBooleanDataType(dataType)) {
+    return parseDefineBooleanValue(val) ? 'TRUE' : 'FALSE';
+  }
+  return `'${esc(val)}'`;
 }
 
 function findColumnName(columns: string[], field: string): string | null {
@@ -1064,6 +1137,7 @@ export async function updateTableRowByKey(params: {
 
   const columns = await getTableColumns(schema, table);
   if (!columns.length) return { success: false, error: '컬럼 정보를 찾을 수 없습니다.' };
+  const columnTypes = await getTableColumnTypeMap(schema, table);
 
   let keyField = resolveKeyField(tableGuess, params?.keyField);
   if (!keyField || !findColumnName(columns, keyField)) {
@@ -1107,7 +1181,9 @@ export async function updateTableRowByKey(params: {
         : Object.keys(oldData ?? {}).find((k) => k.toLowerCase() === col.toLowerCase());
     const oldVal = normalizeChangeValue(oldKey != null ? oldData?.[oldKey] : undefined);
     if (val === oldVal) continue;
-    setParts.push(val == null ? `${quoteIdent(col)} = NULL` : `${quoteIdent(col)} = '${esc(val)}'`);
+    const dataType = columnTypes.get(col.toLowerCase());
+    // boolean 컬럼: TRUE/FALSE 형변환. varchar: 'true'/'false' 문자열 유지
+    setParts.push(`${quoteIdent(col)} = ${sqlValueForColumn(val, dataType)}`);
   }
 
   if (geomClear) {
@@ -1265,6 +1341,7 @@ export async function insertTableRow(params: {
 
   const columnMeta = await getColumnMetaList(schema, table);
   if (!columnMeta.length) return { success: false, error: '컬럼 정보를 찾을 수 없습니다.' };
+  const columnTypes = await getTableColumnTypeMap(schema, table);
 
   let keyField = resolveKeyField(tableGuess, params?.keyField);
   if (!keyField || !findColumnName(columnMeta.map((c) => c.name), keyField)) {
@@ -1297,7 +1374,7 @@ export async function insertTableRow(params: {
     }
     const val = normalizeChangeValue(rawVal);
     insertCols.push(quoteIdent(col));
-    insertVals.push(val == null ? 'NULL' : `'${esc(val)}'`);
+    insertVals.push(sqlValueForColumn(val, columnTypes.get(col.toLowerCase())));
     insertedColSet.add(col.toLowerCase());
   }
 

@@ -1,24 +1,5 @@
-@mode "Flat";
-@transform "vec:PointStacker(cellSize:84, outputBBOX:env('wms_bbox'), outputWidth:env('wms_width'), outputHeight:env('wms_height'))";
-
-[count > 1] {
-  mark: symbol(circle);
-  mark-size: 24;
-  :mark {
-    fill: #EA580C;
-    stroke: #FFFFFF;
-    stroke-width: 2;
-    fill-opacity: 1;
-    stroke-opacity: 1;
-  };
-  label: [count];
-  font-size: 12;
-  font-fill: #FFFFFF;
-  font-weight: bold;
-  font-family: "Nanum Gothic", "Malgun Gothic", "SansSerif";
-  label-anchor: 0.5 0.5;
-}
-
+/* 구조함 위치 점 — PointStacker/count 제거(레이어에 count 속성 없어 GetMap ServiceException)
+ * 방사선 대피소와 동일: 단일 SVG 심볼 */
 * {
   mark: url("/www/symbol/safety/water_play_box.svg");
   mark-mime: "image/svg+xml";

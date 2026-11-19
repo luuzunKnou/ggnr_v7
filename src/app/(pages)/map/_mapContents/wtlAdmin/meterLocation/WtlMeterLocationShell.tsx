@@ -4,16 +4,11 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Loader2, Printer, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { call } from '@/lib/api'
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/app/shadcnComponents/ui/dialog'
 import { useResolvedThemeSafe } from '@/app/(pages)/(index)/theme-provider'
 import { MapSideListPanel } from '../../../_mapComponents/MapSideListPanel'
+import { MapFloatingPanel } from '../../../_mapComponents/MapFloatingPanel'
 import { useMapContext } from '../../../_mapComponents/MapContext'
+import { COMPLAINT_DETAIL_PANEL_DEFAULT_TOP } from '../../../_mapComponents/complaint/complaintPanelLayout'
 import type { PreferRegion } from '../../../_mapComponents/addressSearch/vworldAddressSearch'
 import { clusterMeterZones } from './clusterMeterZones'
 import {
@@ -26,10 +21,14 @@ import {
   type MeterBulkCandidate,
 } from './MeterBulkAddModal'
 import { MeterNumberSuggestInput } from './MeterNumberSuggestInput'
-import { buildMeterLocationReportHtml } from './meterLocationReport'
+import {
+  buildMeterLocationReportHtml,
+  type MeterReportPageOrientation,
+} from './meterLocationReport'
 import { createMeterZoneCaptureSession } from './meterLocationZoneCapture'
 import { useMeterParcelLayer } from './useMeterParcelLayer'
-import { useWtlMeterWmsLayer } from './useWtlMeterWmsLayer'
+import { useWtlMeterIndexLayer } from './useWtlMeterIndexLayer'
+import { useWtlMeterLocationHighlight } from './useWtlMeterLocationHighlight'
 
 const btnPrimary =
   'inline-flex h-7 items-center gap-1 rounded border border-primary bg-primary px-2 text-[11px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50'
@@ -73,6 +72,8 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
   const [printing, setPrinting] = useState(false)
   const [reportOpen, setReportOpen] = useState(false)
   const [reportHtml, setReportHtml] = useState('')
+  const [reportPageOrientation, setReportPageOrientation] =
+    useState<MeterReportPageOrientation>('portrait')
   const [reportProgress, setReportProgress] = useState<{
     done: number
     total: number
@@ -109,6 +110,7 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
     cancelPrintCapture()
     setReportOpen(false)
     setReportHtml('')
+    setReportPageOrientation('portrait')
     setReportProgress(null)
     setPrinting(false)
   }
@@ -194,13 +196,19 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
     selectedZoneId,
     zones
   )
-  useWtlMeterWmsLayer(rows, selectedZoneId, zones)
+  useWtlMeterIndexLayer(rows, selectedZoneId, zones)
 
   const rowById = useMemo(() => {
     const map = new Map<string, MeterLocateResult>()
     for (const row of rows) map.set(row.id, row)
     return map
   }, [rows])
+
+  const focusedRow = useMemo(
+    () => (focusId ? rowById.get(focusId) ?? null : null),
+    [focusId, rowById]
+  )
+  useWtlMeterLocationHighlight(focusedRow)
 
   const counts = useMemo(() => {
     const pnuSet = new Set<string>()
@@ -367,6 +375,7 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
       const reportZones: Array<{
         zoneLabel: string
         meters: Array<{ meterNo: string; address: string }>
+        parcelCount: number
         mapDataUrl: string | null
         mapCaptureStatus: 'ok' | 'failed'
         mapCaptureReason: string
@@ -400,12 +409,19 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
           meterNo: r.input,
           address: addressOf(r),
         }))
+        const zoneParcelSet = new Set<string>()
+        for (const row of zoneRows) {
+          const pnu = String(row.pnu ?? '').replace(/\D/g, '').slice(0, 19)
+          if (pnu) zoneParcelSet.add(pnu)
+        }
         const points = zoneRows
-          .filter((r) => r.point4326)
-          .map((r) => ({
-            label: r.input,
-            point4326: r.point4326 as [number, number],
-            pnu: r.pnu,
+          .map((r, idx) => ({ row: r, index: idx + 1 }))
+          .filter(({ row }) => Boolean(row.point4326))
+          .map(({ row, index }) => ({
+            label: row.input,
+            point4326: row.point4326 as [number, number],
+            pnu: row.pnu,
+            index,
           }))
         const captured = zone.extent3857
           ? await session.captureZone(zone.extent3857, points, abort.signal)
@@ -419,6 +435,7 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
         reportZones[i] = {
           zoneLabel: zone.label,
           meters,
+          parcelCount: zoneParcelSet.size,
           mapDataUrl: captured.dataUrl,
           mapCaptureStatus: captured.status,
           mapCaptureReason: captured.reason,
@@ -474,13 +491,47 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
     doc.documentElement.classList.toggle('dark', theme === 'dark')
   }, [theme, reportHtml, reportOpen])
 
+  /** iframe 리로드 없이 @page 방향만 교체 */
+  const applyOrientationToReportIframe = (
+    orientation: MeterReportPageOrientation
+  ) => {
+    const doc = reportIframeRef.current?.contentDocument
+    if (!doc) return
+    const size =
+      orientation === 'landscape' ? 'A4 landscape' : 'A4 portrait'
+    const label = orientation === 'landscape' ? 'A4 가로' : 'A4 세로'
+    for (const el of doc.querySelectorAll('style')) {
+      const text = el.textContent ?? ''
+      if (!/@page\s*\{/.test(text)) continue
+      el.textContent = text.replace(
+        /@page\s*\{[^}]*\}/m,
+        `@page{\n    size:${size};\n    margin:12mm;\n  }`
+      )
+      break
+    }
+    for (const span of doc.querySelectorAll('.meta-row span')) {
+      const t = span.textContent ?? ''
+      if (!/계량기위치 · 구역별 목록 · A4/.test(t)) continue
+      span.textContent = `계량기위치 · 구역별 목록 · ${label}`
+      break
+    }
+  }
+
+  const setReportOrientation = (next: MeterReportPageOrientation) => {
+    setReportPageOrientation(next)
+    applyOrientationToReportIframe(next)
+  }
+
   const printReportFromModal = () => {
     if (printing || !reportHtml) return
     const win = reportIframeRef.current?.contentWindow
     if (!win) return
+    applyOrientationToReportIframe(reportPageOrientation)
     win.focus()
     win.print()
   }
+
+  const reportFloatingLeftPx = (mapContext?.mapPaddingLeft ?? 0) + 56
 
   return (
     <div className="pointer-events-auto shrink-0">
@@ -565,11 +616,11 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
               </button>
               <button
                 type="button"
-                title="지우기"
+                title="초기화"
                 onClick={handleClear}
                 className="standard-detail-hdr-btn shrink-0"
               >
-                지우기
+                초기화
               </button>
             </div>
             {notice ? (
@@ -594,13 +645,14 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
             <div className="standard-list-scroll">
               <table className="standard-list-table">
                 <colgroup>
-                  <col className="w-[3rem]" />
-                  <col className="w-20" />
+                  <col className="w-16" />
+                  <col className="w-24" />
+                  <col className="w-12" />
                   <col />
                 </colgroup>
                 <thead className="standard-table-thead">
                   <tr>
-                    <th className="standard-table-th w-[6.5rem] min-w-[6.5rem] !max-w-none !overflow-visible whitespace-nowrap text-center">
+                    <th className="standard-table-th w-28 min-w-28 !max-w-none !overflow-visible whitespace-nowrap text-center">
                       <span className="inline-flex shrink-0 items-center justify-center gap-1 whitespace-nowrap">
                         <input
                           ref={reportAllRef}
@@ -619,8 +671,11 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
                         보고서
                       </span>
                     </th>
-                    <th className="standard-table-th standard-table-th-left w-20 !max-w-none whitespace-nowrap">
+                    <th className="standard-table-th standard-table-th-left w-24 !max-w-none whitespace-nowrap">
                       구역
+                    </th>
+                    <th className="standard-table-th w-12 whitespace-nowrap text-center">
+                      번호
                     </th>
                     <th className="standard-table-th standard-table-th-left">
                       계량기 목록
@@ -630,7 +685,7 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
                 <tbody>
                   {bulkLoading ? (
                     <tr>
-                      <td colSpan={3} className="standard-table-empty">
+                      <td colSpan={4} className="standard-table-empty">
                         <span className="inline-flex items-center justify-center gap-2">
                           <Loader2
                             className="h-4 w-4 shrink-0 animate-spin text-primary"
@@ -642,7 +697,7 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
                     </tr>
                   ) : rows.length === 0 ? (
                     <tr>
-                      <td colSpan={3} className="standard-table-empty">
+                      <td colSpan={4} className="standard-table-empty">
                         표시 결과가 없습니다.
                       </td>
                     </tr>
@@ -651,6 +706,7 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
                       zone.rowIds.map((rowId, idx) => {
                         const row = rowById.get(rowId)
                         if (!row) return null
+                        const visitNo = idx + 1
                         const zoneSelected = selectedZoneId === zone.zoneId
                         const zoneHovered = hoverZoneId === zone.zoneId
                         const meterSelected = focusId === row.id
@@ -679,7 +735,7 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
                               <>
                                 <td
                                   rowSpan={zone.rowIds.length}
-                                  className="standard-table-td-text w-[6.5rem] min-w-[6.5rem] !max-w-none !overflow-visible whitespace-nowrap border-r border-border text-center align-top"
+                                  className="standard-table-td-text w-32 min-w-32 !max-w-none !overflow-visible whitespace-nowrap border-r border-border text-center align-top"
                                 >
                                   <input
                                     type="checkbox"
@@ -708,7 +764,7 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
                                       : zone.label
                                   }
                                   className={cn(
-                                    'standard-table-td-text align-top font-medium transition-colors border-r border-border',
+                                    'standard-table-td-text align-top font-normal transition-colors border-r border-border',
                                     zone.navigable
                                       ? 'cursor-pointer'
                                       : 'cursor-default text-muted-foreground'
@@ -730,10 +786,26 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
                                     )
                                   }
                                 >
-                                  {zone.label}
+                                  <span className="block leading-snug">
+                                    {zone.label}
+                                  </span>
+                                  <span className="mt-0.5 block text-[11px] font-normal leading-snug text-muted-foreground">
+                                    (총 {zone.rowIds.length}건)
+                                  </span>
                                 </td>
                               </>
                             ) : null}
+                            <td
+                              className="standard-table-td-text w-12 border-r border-border text-center tabular-nums transition-colors"
+                              style={
+                                meterCellBg
+                                  ? { backgroundColor: meterCellBg }
+                                  : undefined
+                              }
+                              title={`방문 번호 ${visitNo}`}
+                            >
+                              {visitNo}
+                            </td>
                             <td
                               className="p-0 transition-colors"
                               style={
@@ -751,8 +823,8 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
                                 disabled={row.status === 'miss'}
                                 title={
                                   row.detail
-                                    ? `${row.input} ${row.detail}`
-                                    : row.input
+                                    ? `${visitNo}. ${row.input} ${row.detail}`
+                                    : `${visitNo}. ${row.input}`
                                 }
                                 onClick={() => handleMeterClick(row)}
                                 className={cn(
@@ -789,82 +861,135 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
         existingKeys={existingKeys}
       />
 
-      <Dialog
-        open={reportOpen}
-        onOpenChange={(open) => {
-          if (!open) {
-            closeReportModal()
-            return
-          }
-          setReportOpen(true)
-        }}
-      >
-        <DialogContent className="flex max-h-[min(90vh,900px)] w-[min(56rem,calc(100vw-1.5rem))] max-w-none flex-col gap-0 overflow-hidden bg-background p-0 text-foreground scheme-light dark:scheme-dark sm:max-w-none sm:rounded-lg">
-          <DialogHeader className="shrink-0 border-b border-border px-4 py-3 text-left">
-            <DialogTitle className="text-base font-semibold text-foreground">
-              계량기위치 보고서
-            </DialogTitle>
-          </DialogHeader>
-          <div className="min-h-0 flex-1 bg-background">
-            {reportHtml ? (
-              <iframe
-                ref={reportIframeRef}
-                title="계량기위치 보고서 미리보기"
-                className="h-[min(70vh,720px)] w-full border-0 bg-background"
-                onLoad={(e) => {
-                  const doc = e.currentTarget.contentDocument
-                  if (!doc?.documentElement) return
-                  doc.documentElement.classList.toggle(
-                    'dark',
-                    document.documentElement.classList.contains('dark')
-                  )
-                }}
-                srcDoc={reportHtml}
-              />
-            ) : (
-              <div
-                className="flex h-[min(70vh,720px)] flex-col items-center justify-center gap-3 px-6"
-                aria-live="polite"
-              >
-                <p className="text-sm font-medium text-foreground">
-                  {reportProgress
-                    ? `지도 캡처 중… (${reportProgress.done} / ${reportProgress.total})`
-                    : '보고서 준비 중…'}
-                </p>
-                {printing ? (
-                  <p className="text-xs text-muted-foreground">
-                    닫기를 누르면 캡처가 취소됩니다.
-                  </p>
-                ) : null}
+      {reportOpen ? (
+        <MapFloatingPanel
+          viewport
+          zLayer="detailFloating"
+          width="min(56rem, calc(100vw - 1.5rem))"
+          maxHeight="min(90vh, 900px)"
+          className="bg-background backdrop-blur-none"
+          defaultPosition={{
+            top: COMPLAINT_DETAIL_PANEL_DEFAULT_TOP,
+            left: reportFloatingLeftPx,
+          }}
+          header={
+            <>
+              <div className="standard-detail-float-heading pr-2">
+                <span
+                  className="standard-detail-float-title"
+                  title="계량기위치 보고서"
+                >
+                  계량기위치 보고서
+                </span>
               </div>
-            )}
+              <button
+                type="button"
+                title={printing ? '캡처 취소 후 닫기' : '닫기'}
+                aria-label="닫기"
+                onClick={closeReportModal}
+                className="standard-panel-close cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </>
+          }
+        >
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
+            <div className="min-h-0 flex-1 bg-background">
+              {reportHtml ? (
+                <iframe
+                  ref={reportIframeRef}
+                  title="계량기위치 보고서 미리보기"
+                  className="h-[min(70vh,720px)] w-full border-0 bg-background"
+                  onLoad={(e) => {
+                    const doc = e.currentTarget.contentDocument
+                    if (!doc?.documentElement) return
+                    doc.documentElement.classList.toggle(
+                      'dark',
+                      document.documentElement.classList.contains('dark')
+                    )
+                    applyOrientationToReportIframe(reportPageOrientation)
+                  }}
+                  srcDoc={reportHtml}
+                />
+              ) : (
+                <div
+                  className="flex h-[min(70vh,720px)] flex-col items-center justify-center gap-3 px-6"
+                  aria-live="polite"
+                >
+                  <p className="text-sm font-medium text-foreground">
+                    {reportProgress
+                      ? `지도 캡처 중… (${reportProgress.done} / ${reportProgress.total})`
+                      : '보고서 준비 중…'}
+                  </p>
+                  {printing ? (
+                    <p className="text-xs text-muted-foreground">
+                      닫기를 누르면 캡처가 취소됩니다.
+                    </p>
+                  ) : null}
+                </div>
+              )}
+            </div>
+            <div className="standard-detail-edit-footer gap-1">
+              <div className="ml-auto flex items-center gap-2">
+                <div
+                  className="flex items-center gap-2 text-[11px] text-foreground"
+                  role="radiogroup"
+                  aria-label="용지 방향"
+                >
+                  <span className="shrink-0 text-muted-foreground">용지 방향</span>
+                  <label className="inline-flex cursor-pointer items-center gap-1">
+                    <input
+                      type="radio"
+                      name="meter-report-orientation"
+                      className="cursor-pointer"
+                      title="세로"
+                      checked={reportPageOrientation === 'portrait'}
+                      disabled={printing || !reportHtml}
+                      onChange={() => setReportOrientation('portrait')}
+                    />
+                    세로
+                  </label>
+                  <label className="inline-flex cursor-pointer items-center gap-1">
+                    <input
+                      type="radio"
+                      name="meter-report-orientation"
+                      className="cursor-pointer"
+                      title="가로"
+                      checked={reportPageOrientation === 'landscape'}
+                      disabled={printing || !reportHtml}
+                      onChange={() => setReportOrientation('landscape')}
+                    />
+                    가로
+                  </label>
+                </div>
+                <button
+                  type="button"
+                  title={
+                    printing || !reportHtml
+                      ? '캡처가 끝난 뒤 인쇄할 수 있습니다'
+                      : '인쇄 / PDF 저장'
+                  }
+                  disabled={printing || !reportHtml}
+                  className={cn(btnPrimary, 'cursor-pointer disabled:opacity-50')}
+                  onClick={printReportFromModal}
+                >
+                  <Printer className="h-3 w-3" aria-hidden />
+                  {printing ? '캡처 중…' : '인쇄 / PDF 저장'}
+                </button>
+                <button
+                  type="button"
+                  title={printing ? '캡처 취소 후 닫기' : '닫기'}
+                  className={cn(btnGhost, 'cursor-pointer')}
+                  onClick={closeReportModal}
+                >
+                  닫기
+                </button>
+              </div>
+            </div>
           </div>
-          <DialogFooter className="gap-1 border-t border-border px-4 py-2.5 sm:space-x-0">
-            <button
-              type="button"
-              title={printing ? '캡처 취소 후 닫기' : '닫기'}
-              className={cn(btnGhost, 'cursor-pointer')}
-              onClick={closeReportModal}
-            >
-              닫기
-            </button>
-            <button
-              type="button"
-              title={
-                printing || !reportHtml
-                  ? '캡처가 끝난 뒤 인쇄할 수 있습니다'
-                  : '인쇄 / PDF 저장'
-              }
-              disabled={printing || !reportHtml}
-              className={cn(btnPrimary, 'cursor-pointer disabled:opacity-50')}
-              onClick={printReportFromModal}
-            >
-              <Printer className="h-3 w-3" aria-hidden />
-              {printing ? '캡처 중…' : '인쇄 / PDF 저장'}
-            </button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        </MapFloatingPanel>
+      ) : null}
     </div>
   )
 }

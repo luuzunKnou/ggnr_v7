@@ -20,7 +20,12 @@ type EditKind = 'modify' | 'boundary' | 'draw'
 type Props = {
   enabled: boolean
   result: WtlOutageResult | null
-  onApplyZone: (ring: LonLat[], customers: WtlOutageResult['customers'], addresses: WtlOutageResult['addresses']) => void
+  onApplyZone: (
+    ring: LonLat[],
+    customers: WtlOutageResult['customers'],
+    addresses: WtlOutageResult['addresses'],
+    parcels: WtlOutageResult['parcels']
+  ) => void
   onNotice: (msg: string) => void
   onMapEditingChange?: (editing: boolean) => void
 }
@@ -61,6 +66,7 @@ async function refreshCustomers(ring: LonLat[]) {
   return (res?.data ?? res) as {
     customers?: WtlOutageResult['customers']
     addresses?: WtlOutageResult['addresses']
+    parcels?: WtlOutageResult['parcels']
     error?: string
   }
 }
@@ -136,9 +142,11 @@ export function WtlOutageGeomEdit({
           onNotice(body.error)
           return
         }
-        onApplyZone(ring, body.customers ?? [], body.addresses ?? [])
+        onApplyZone(ring, body.customers ?? [], body.addresses ?? [], body.parcels ?? [])
         cancelEdit()
-        onNotice(`도형 적용 · 수용가 ${(body.customers ?? []).length}건`)
+        onNotice(
+          `도형 적용 · 수용가 ${(body.customers ?? []).length} · 필지 ${(body.parcels ?? []).length}`
+        )
       } catch {
         onNotice('도형 적용에 실패했습니다.')
       } finally {
@@ -195,9 +203,11 @@ export function WtlOutageGeomEdit({
         onNotice(body.error)
         return
       }
-      onApplyZone(ring, body.customers ?? [], body.addresses ?? [])
+      onApplyZone(ring, body.customers ?? [], body.addresses ?? [], body.parcels ?? [])
       cancelEdit()
-      onNotice(`행정경계 적용 · 수용가 ${(body.customers ?? []).length}건`)
+      onNotice(
+        `행정경계 적용 · 수용가 ${(body.customers ?? []).length} · 필지 ${(body.parcels ?? []).length}`
+      )
     } catch {
       onNotice('행정경계 적용에 실패했습니다.')
     } finally {
@@ -208,9 +218,11 @@ export function WtlOutageGeomEdit({
   if (!enabled) return null
 
   const tools: { id: EditKind; label: string }[] = [
-    { id: 'modify', label: '수정' },
+    // 수정·그리기는 일단 숨김 — 지도 선·버퍼 편집 도구모음으로 대체.
+    // (첫 조각만 편집, 수용가 판정 기준 변경, 선·버퍼 편집 시 덮어씀 문제 해결 후 다시 노출)
+    // { id: 'modify', label: '수정' },
     { id: 'boundary', label: '읍면동리' },
-    { id: 'draw', label: '그리기' },
+    // { id: 'draw', label: '그리기' },
   ]
 
   return (
@@ -222,7 +234,7 @@ export function WtlOutageGeomEdit({
             key={item.id}
             type="button"
             className={cn(
-              'rounded border px-2 py-1 text-[11px] font-medium',
+              'inline-flex h-7 items-center rounded border px-2 text-[11px] font-medium',
               kind === item.id
                 ? 'border-primary bg-primary/10 text-primary'
                 : 'border-border text-foreground hover:bg-muted'
@@ -242,14 +254,14 @@ export function WtlOutageGeomEdit({
                   ? countBoundarySelection(boundaryDraft) === 0
                   : !draftRing || draftRing.length < 3)
               }
-              className="rounded bg-primary px-2 py-1 text-[11px] font-semibold text-primary-foreground disabled:opacity-40"
+              className="inline-flex h-7 items-center rounded bg-primary px-2 text-[11px] font-semibold text-primary-foreground disabled:opacity-40"
               onClick={() => (kind === 'boundary' ? void applyBoundary() : applyModifyOrDraw())}
             >
               {applying ? '적용중…' : '적용'}
             </button>
             <button
               type="button"
-              className="rounded border border-border px-2 py-1 text-[11px] text-muted-foreground hover:bg-muted"
+              className="inline-flex h-7 items-center rounded border border-border px-2 text-[11px] text-muted-foreground hover:bg-muted"
               onClick={cancelEdit}
             >
               취소

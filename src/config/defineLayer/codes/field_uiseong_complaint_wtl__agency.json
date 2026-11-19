@@ -1,0 +1,194 @@
+[
+  {
+    "define_code_key": "90000",
+    "define_code_field_key": "",
+    "define_code_name": "극동",
+    "define_code_kor_name": "극동"
+  },
+  {
+    "define_code_key": "90001",
+    "define_code_field_key": "",
+    "define_code_name": "극동, 은한",
+    "define_code_kor_name": "극동, 은한"
+  },
+  {
+    "define_code_key": "90002",
+    "define_code_field_key": "",
+    "define_code_name": "극동, 지에프",
+    "define_code_kor_name": "극동, 지에프"
+  },
+  {
+    "define_code_key": "90003",
+    "define_code_field_key": "",
+    "define_code_name": "극동,지에프",
+    "define_code_kor_name": "극동,지에프"
+  },
+  {
+    "define_code_key": "90004",
+    "define_code_field_key": "",
+    "define_code_name": "남산",
+    "define_code_kor_name": "남산"
+  },
+  {
+    "define_code_key": "90005",
+    "define_code_field_key": "",
+    "define_code_name": "대아",
+    "define_code_kor_name": "대아"
+  },
+  {
+    "define_code_key": "90006",
+    "define_code_field_key": "",
+    "define_code_name": "대양",
+    "define_code_kor_name": "대양"
+  },
+  {
+    "define_code_key": "90007",
+    "define_code_field_key": "",
+    "define_code_name": "라스",
+    "define_code_kor_name": "라스"
+  },
+  {
+    "define_code_key": "90008",
+    "define_code_field_key": "",
+    "define_code_name": "반석",
+    "define_code_kor_name": "반석"
+  },
+  {
+    "define_code_key": "90009",
+    "define_code_field_key": "",
+    "define_code_name": "사업소",
+    "define_code_kor_name": "사업소"
+  },
+  {
+    "define_code_key": "90010",
+    "define_code_field_key": "",
+    "define_code_name": "삼부",
+    "define_code_kor_name": "삼부"
+  },
+  {
+    "define_code_key": "90011",
+    "define_code_field_key": "",
+    "define_code_name": "삼부, 오원",
+    "define_code_kor_name": "삼부, 오원"
+  },
+  {
+    "define_code_key": "90012",
+    "define_code_field_key": "",
+    "define_code_name": "삼진",
+    "define_code_kor_name": "삼진"
+  },
+  {
+    "define_code_key": "90013",
+    "define_code_field_key": "",
+    "define_code_name": "서용",
+    "define_code_kor_name": "서용"
+  },
+  {
+    "define_code_key": "90014",
+    "define_code_field_key": "",
+    "define_code_name": "서용, 지에프",
+    "define_code_kor_name": "서용, 지에프"
+  },
+  {
+    "define_code_key": "90015",
+    "define_code_field_key": "",
+    "define_code_name": "승리",
+    "define_code_kor_name": "승리"
+  },
+  {
+    "define_code_key": "90016",
+    "define_code_field_key": "",
+    "define_code_name": "승리, 흥일",
+    "define_code_kor_name": "승리, 흥일"
+  },
+  {
+    "define_code_key": "90017",
+    "define_code_field_key": "",
+    "define_code_name": "아주",
+    "define_code_kor_name": "아주"
+  },
+  {
+    "define_code_key": "90018",
+    "define_code_field_key": "",
+    "define_code_name": "오원",
+    "define_code_kor_name": "오원"
+  },
+  {
+    "define_code_key": "90019",
+    "define_code_field_key": "",
+    "define_code_name": "오원, 한울",
+    "define_code_kor_name": "오원, 한울"
+  },
+  {
+    "define_code_key": "90020",
+    "define_code_field_key": "",
+    "define_code_name": "우성",
+    "define_code_kor_name": "우성"
+  },
+  {
+    "define_code_key": "90021",
+    "define_code_field_key": "",
+    "define_code_name": "은한",
+    "define_code_kor_name": "은한"
+  },
+  {
+    "define_code_key": "90022",
+    "define_code_field_key": "",
+    "define_code_name": "정수장",
+    "define_code_kor_name": "정수장"
+  },
+  {
+    "define_code_key": "90023",
+    "define_code_field_key": "",
+    "define_code_name": "지에프",
+    "define_code_kor_name": "지에프"
+  },
+  {
+    "define_code_key": "90024",
+    "define_code_field_key": "",
+    "define_code_name": "지에프,승리",
+    "define_code_kor_name": "지에프,승리"
+  },
+  {
+    "define_code_key": "90025",
+    "define_code_field_key": "",
+    "define_code_name": "태웅",
+    "define_code_kor_name": "태웅"
+  },
+  {
+    "define_code_key": "90026",
+    "define_code_field_key": "",
+    "define_code_name": "태진",
+    "define_code_kor_name": "태진"
+  },
+  {
+    "define_code_key": "90027",
+    "define_code_field_key": "",
+    "define_code_name": "한빛",
+    "define_code_kor_name": "한빛"
+  },
+  {
+    "define_code_key": "90028",
+    "define_code_field_key": "",
+    "define_code_name": "한빛건설",
+    "define_code_kor_name": "한빛건설"
+  },
+  {
+    "define_code_key": "90029",
+    "define_code_field_key": "",
+    "define_code_name": "한울",
+    "define_code_kor_name": "한울"
+  },
+  {
+    "define_code_key": "90030",
+    "define_code_field_key": "",
+    "define_code_name": "흥일",
+    "define_code_kor_name": "흥일"
+  },
+  {
+    "define_code_key": "90031",
+    "define_code_field_key": "",
+    "define_code_name": "흥일,삼부",
+    "define_code_kor_name": "흥일,삼부"
+  }
+]

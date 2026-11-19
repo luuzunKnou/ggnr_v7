@@ -96,9 +96,18 @@ export const MERGE_APPLY_STEP_SEC: Record<
 export function mergeApplyStepPct(
   step: MergeApplyEtaStep | null | undefined,
   applied: number,
-  total: number
+  total: number,
+  /** ZIP 해제 바이트 진행 (extract 보간용) */
+  bytesDone?: number,
+  totalBytes?: number
 ): number {
-  if (step === 'extract') return 56;
+  if (step === 'extract') {
+    if (totalBytes != null && totalBytes > 0 && bytesDone != null && bytesDone >= 0) {
+      const ratio = Math.min(1, Math.max(0, bytesDone / totalBytes));
+      return 50 + Math.round(ratio * 8);
+    }
+    return 56;
+  }
   if (step === 'count') return 58;
   if (step === 'backup') return 62;
   if (step === 'cleanup') return 90;
@@ -121,6 +130,8 @@ export function estimateMergeApplyRemainingSeconds(opts: {
   total: number;
   stepStartedAtMs: number;
   copyStartedAtMs: number;
+  bytesDone?: number;
+  totalBytes?: number;
 }): number {
   const budget = MERGE_APPLY_STEP_SEC[opts.packageProfile];
   const step = opts.mergeStep ?? 'extract';
@@ -140,6 +151,18 @@ export function estimateMergeApplyRemainingSeconds(opts: {
             budget.copy - Math.max(0, (Date.now() - (opts.stepStartedAtMs || Date.now())) / 1000)
           );
     return Math.max(1, copyRemain + budget.cleanup);
+  }
+
+  if (step === 'extract') {
+    const byBytes =
+      opts.totalBytes != null &&
+      opts.totalBytes > 0 &&
+      opts.bytesDone != null &&
+      opts.bytesDone > 0 &&
+      opts.stepStartedAtMs > 0
+        ? estimateRemainingByBytes(opts.bytesDone, opts.totalBytes, opts.stepStartedAtMs)
+        : null;
+    if (byBytes != null) return Math.max(1, byBytes + after);
   }
 
   const stepBudget = budget[step];

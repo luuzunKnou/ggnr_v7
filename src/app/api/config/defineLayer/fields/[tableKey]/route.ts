@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import * as fs from "fs"
 import * as path from "path"
+import { dedupeDefineLayerFieldsByName } from "@/lib/defineLayerFieldsNormalize"
 import { normalizeDefineFieldsTypes } from "@/lib/defineLayerFieldTypeNormalize"
 import { safeTableName } from "@/lib/shpTableName"
 
@@ -52,7 +53,9 @@ export async function GET(
         { status: 500 }
       )
     }
-    const sorted = sortFields(fields)
+    const sorted = sortFields(
+      dedupeDefineLayerFieldsByName(fields as Record<string, unknown>[])
+    )
 
     const pageParam = _request.nextUrl.searchParams.get("page")
     const limitParam = _request.nextUrl.searchParams.get("limit")
@@ -93,7 +96,7 @@ export async function POST(
     const filePath = getFilePath(tableKey)
     fs.mkdirSync(path.dirname(filePath), { recursive: true })
     const normalized = normalizeDefineFieldsTypes(fields as Record<string, unknown>[])
-    const sorted = sortFields(normalized)
+    const sorted = sortFields(dedupeDefineLayerFieldsByName(normalized))
     fs.writeFileSync(filePath, JSON.stringify(sorted, null, 2), "utf-8")
     return NextResponse.json({ success: true })
   } catch (e) {

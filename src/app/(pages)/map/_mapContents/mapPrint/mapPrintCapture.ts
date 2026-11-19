@@ -674,3 +674,4 @@ export function formatPrintDateTime(date = new Date()): string {
   }).format(date);
   return `${y}.${m}.${d} ${time}`;
 }
+

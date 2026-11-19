@@ -9,7 +9,13 @@ import archiver from 'archiver';
 import { sql } from 'drizzle-orm';
 import db from '@/database/db';
 import {
+  RELATED_CHILD_BY_PARENT,
+  RELATED_CHILD_BIZ_NAME_FIELD_BY_TABLE,
+  relatedChildMatchByBizName,
+} from '@/app/(pages)/map/_mapContents/layerClickDetail/layerClickDetailRelatedConfig';
+import {
   getWtlNetLayerDef,
+  isWtlNetZoneLayerKey,
   isWtlSupplyZoneOrSubzoneLayerDef,
   wtlNetSaaSql,
   type WtlNetGeomKind,
@@ -41,8 +47,23 @@ import type {
   WtlNetworkYearMatrixParams,
 } from '@/app/(pages)/map/_mapContents/wtlAdmin/networkMap/wtlNetworkTypes';
 import adminTabsJson from '@/config/wtlAdmin/adminTabs.json';
+import { COORDINATE_SYSTEM_OPTIONS } from '@/app/(pages)/map/_mapComponents/landInfo/shared';
 import { exportLayerTableToShp } from '@/service/shpUploadService';
 import { buildCodeKeywordInClauses } from '@/lib/defineLayerCodeKeyword';
+
+const WTL_SHP_ALLOWED_SRS = new Set(
+  COORDINATE_SYSTEM_OPTIONS.map((o) => o.code)
+);
+const WTL_SHP_DEFAULT_SRS = 'EPSG:5179';
+
+function resolveWtlShpTargetSrs(raw: string | null | undefined): string {
+  const code = String(raw ?? '').trim().toUpperCase();
+  if (WTL_SHP_ALLOWED_SRS.has(code)) return code;
+  // short "5179" 형태도 허용
+  const asEpsg = code.startsWith('EPSG:') ? code : `EPSG:${code}`;
+  if (WTL_SHP_ALLOWED_SRS.has(asEpsg)) return asEpsg;
+  return WTL_SHP_DEFAULT_SRS;
+}
 
 export type {
   WtlNetworkAxisMode,
@@ -1246,7 +1267,13 @@ export async function getWtlNetworkAtPoint(params: {
   mapSources?: string[];
   /** 미터 단위 대략 버퍼 (3857) */
   tolerance?: number;
-}): Promise<{ row: WtlNetworkRow | null }> {
+  keyword?: string;
+  yearFrom?: number | null;
+  yearTo?: number | null;
+  diameterFrom?: number | null;
+  diameterTo?: number | null;
+  materials?: string[];
+}): Promise<{ row: WtlNetworkRow | null; rows: WtlNetworkRow[] }> {
   const keys = (params.layerKeys ?? []).map((k) => String(k).trim()).filter(Boolean);
   const sources = parseMapSourceIds(params.mapSources)
     .map((id) => resolveWtlNetMapSource(id))
@@ -1254,11 +1281,12 @@ export async function getWtlNetworkAtPoint(params: {
   const x = Number(params.x);
   const y = Number(params.y);
   if (!Number.isFinite(x) || !Number.isFinite(y) || keys.length === 0 || sources.length === 0) {
-    return { row: null };
+    return { row: null, rows: [] };
   }
   const tol = Math.max(1, Number(params.tolerance) || 8);
+  const materialBundle = await ensureMaterialTopBundle();
 
-  type Hit = { row: WtlNetworkRow; rank: number; dist: number };
+  type Hit = { row: WtlNetworkRow; rank: number; idx: number; dist: number };
   const hits: Hit[] = [];
 
   for (const source of sources) {
@@ -1291,6 +1319,48 @@ export async function getWtlNetworkAtPoint(params: {
         def.geomKind;
       const geomKindOut = geomKindFromShp(shp, def.geomKind);
 
+      const attrParts: string[] = [];
+      if (dipCol && params.diameterFrom != null && params.diameterTo != null) {
+        attrParts.push(
+          `(
+            NULLIF(regexp_replace(COALESCE(t."${dipCol}"::text,''), '[^0-9.]', '', 'g'),'') IS NULL
+            OR (
+              NULLIF(regexp_replace(COALESCE(t."${dipCol}"::text,''), '[^0-9.]', '', 'g'),'') ~ '^[0-9]+(\\.[0-9]+)?$'
+              AND NULLIF(regexp_replace(COALESCE(t."${dipCol}"::text,''), '[^0-9.]', '', 'g'),'')::numeric
+                BETWEEN ${Number(params.diameterFrom)} AND ${Number(params.diameterTo)}
+            )
+          )`
+        );
+      }
+      if (yearCol && params.yearFrom != null && params.yearTo != null) {
+        attrParts.push(
+          `(
+            NULLIF(left(regexp_replace(COALESCE(t."${yearCol}"::text,''), '[^0-9]', '', 'g'), 4),'') IS NULL
+            OR (
+              NULLIF(left(regexp_replace(COALESCE(t."${yearCol}"::text,''), '[^0-9]', '', 'g'), 4),'') ~ '^[0-9]{4}$'
+              AND NULLIF(left(regexp_replace(COALESCE(t."${yearCol}"::text,''), '[^0-9]', '', 'g'), 4),'')::int
+                BETWEEN ${Number(params.yearFrom)} AND ${Number(params.yearTo)}
+            )
+          )`
+        );
+      }
+      if (mopCol && params.materials && params.materials.length > 0) {
+        const mw = buildMaterialWhere(mopCol, params.materials, materialBundle);
+        if (mw) attrParts.push(mw);
+      }
+      const kw = String(params.keyword ?? '').trim();
+      if (kw) {
+        const like = `%${esc(kw)}%`;
+        const parts = [
+          `${nameExpr} ILIKE '${like}'`,
+          `COALESCE(t.ftr_idn::text,'') ILIKE '${like}'`,
+        ];
+        if (dipCol) parts.push(`COALESCE(t."${dipCol}"::text,'') ILIKE '${like}'`);
+        if (mopCol) parts.push(`COALESCE(t."${mopCol}"::text,'') ILIKE '${like}'`);
+        attrParts.push(`(${parts.join(' OR ')})`);
+      }
+      const attrSql = attrParts.map((w) => `AND ${w}`).join('\n            ');
+
       const res = await db.execute(
         sql.raw(
           `SELECT
@@ -1315,6 +1385,7 @@ export async function getWtlNetworkAtPoint(params: {
           FROM layer."${tbl}" t
           WHERE t.geom IS NOT NULL
             ${saaClause}
+            ${attrSql}
             AND ST_DWithin(
               ST_Transform(t.geom, 3857),
               ST_SetSRID(ST_MakePoint(${x}, ${y}), 3857),
@@ -1330,14 +1401,23 @@ export async function getWtlNetworkAtPoint(params: {
       hits.push({
         row: mapRow(raw, true),
         rank: atPointGeomRank(shp),
+        // 분할 키(defineTable)·layerKey 우선 — 동일 LINE끼리 idx 순서
+        idx: defineTableIdxForSort([
+          def.defineTable,
+          def.key,
+          def.table,
+          physicalTable,
+        ]),
         dist: Number.isFinite(dist) ? dist : Number.POSITIVE_INFINITY,
       });
     }
   }
 
-  if (hits.length === 0) return { row: null };
-  hits.sort((a, b) => a.rank - b.rank || a.dist - b.dist);
-  return { row: hits[0]!.row };
+  if (hits.length === 0) return { row: null, rows: [] };
+  // POINT → LINE → POLYGON, 이후 define_table_idx, 동률이면 거리
+  hits.sort((a, b) => a.rank - b.rank || a.idx - b.idx || a.dist - b.dist);
+  const rows = hits.map((h) => h.row);
+  return { row: rows[0] ?? null, rows };
 }
 
 /** layer 스키마에서 wtl_wtsba_as 계열 테이블명 */
@@ -1449,15 +1529,38 @@ export async function listWtlNetMapSources(): Promise<{
   const candidates = loadWtlNetMapSourcesFromTablesJson();
   const allNames = candidates.flatMap((s) => [...s.tables]);
   const existing = await existingLayerTables(allNames);
+  const metaByName = loadTablesJsonMetaByName();
 
   const sources: WtlNetMapSourcePayload[] = [];
   for (const source of candidates) {
-    const liveTables = source.tables.filter((t) => existing.has(t.toLowerCase()));
+    const liveTables = source.tables.filter((t) =>
+      existing.has(String(t).toLowerCase())
+    );
     if (liveTables.length === 0) continue;
+    const liveSet = new Set(liveTables.map((t) => String(t).toLowerCase()));
+    // 분할 레이어(wtl_pipe_lm_etc 등)는 DB에 없고 부모만 있는 경우가 많음.
+    // parents_layer가 실테이블이면 그룹 tables에 분할명도 유지 (가용·WMS·버튼용)
+    const tables: string[] = [];
+    const seen = new Set<string>();
+    for (const raw of source.tables) {
+      const name = String(raw ?? '').trim();
+      const low = name.toLowerCase();
+      if (!name || seen.has(low)) continue;
+      if (liveSet.has(low)) {
+        seen.add(low);
+        tables.push(name);
+        continue;
+      }
+      const parents = metaByName.get(low)?.parentsLayer ?? '';
+      if (parents && liveSet.has(parents)) {
+        seen.add(low);
+        tables.push(name);
+      }
+    }
     sources.push({
       id: source.id,
       label: source.label,
-      tables: liveTables,
+      tables,
     });
   }
   return { sources };
@@ -1468,6 +1571,7 @@ type TablesJsonMetaRow = {
   define_table_schema?: string;
   define_table_parents_layer?: string;
   define_table_shp_type?: string;
+  define_table_idx?: string | number;
 };
 
 function loadTablesJsonMetaByName(): Map<
@@ -1526,6 +1630,42 @@ function loadTablesJsonShpByName(): Map<string, string> {
   }
   tablesJsonShpCache = map;
   return map;
+}
+
+/** define_table_name → define_table_idx (숫자, 없으면 999999) */
+let tablesJsonIdxCache: Map<string, number> | null = null;
+function loadTablesJsonIdxByName(): Map<string, number> {
+  if (tablesJsonIdxCache) return tablesJsonIdxCache;
+  const map = new Map<string, number>();
+  try {
+    const raw = fs.readFileSync(TABLES_JSON_PATH, 'utf8');
+    const rows = JSON.parse(raw) as TablesJsonMetaRow[];
+    for (const row of rows) {
+      const name = String(row.define_table_name ?? '')
+        .trim()
+        .toLowerCase();
+      if (!name || map.has(name)) continue;
+      const idxRaw = parseInt(String(row.define_table_idx ?? ''), 10);
+      map.set(name, Number.isFinite(idxRaw) ? idxRaw : 999999);
+    }
+  } catch {
+    /* empty */
+  }
+  tablesJsonIdxCache = map;
+  return map;
+}
+
+function defineTableIdxForSort(names: readonly (string | null | undefined)[]): number {
+  const map = loadTablesJsonIdxByName();
+  for (const n of names) {
+    const key = String(n ?? '')
+      .trim()
+      .toLowerCase();
+    if (!key) continue;
+    const idx = map.get(key);
+    if (idx != null) return idx;
+  }
+  return 999999;
 }
 
 /** layer·public_layer 실테이블 존재 여부 (소문자 테이블명 Set) */
@@ -1600,35 +1740,97 @@ export async function listWtlNetworkAvailableLayerKeys(params: {
       else layerNames.add(n);
     };
 
-    if (def?.table && sources.length > 0) {
+    const baseTable = String(def?.table ?? '').trim();
+    const defineName = String(def?.defineTable ?? '').trim();
+    const keyName = String(key ?? '').trim();
+    const isVirtualSplit =
+      !!baseTable &&
+      ((!!keyName && keyName.toLowerCase() !== baseTable.toLowerCase()) ||
+        (!!defineName && defineName.toLowerCase() !== baseTable.toLowerCase()));
+
+    if (isWtlNetZoneLayerKey(key)) {
+      // 급수구역 — 출처(상수/광역) tables와 무관, layer 스키마 실존만 검사
+      add(def?.table);
+      add(def?.defineTable);
+      add(key);
+      for (const base of [def?.table, def?.defineTable, key]) {
+        for (const n of listWtlNetSameKorTables(String(base ?? ''))) add(n);
+      }
+      if (meta?.parentsLayer) add(meta.parentsLayer, meta.schema);
+      if (meta) add(key, meta.schema);
+    } else if (def?.table && sources.length > 0) {
+      // 출처가 있으면 해당 그룹 테이블만 후보 — 상수 wtl_pipe_lm 이 대진 가용을 오염시키지 않음
       for (const source of sources) {
-        add(source.remapTable(def.table), 'layer');
-        if (def.defineTable) add(source.remapTable(def.defineTable), 'layer');
-        add(source.remapTable(key), 'layer');
-        // 시설관리와 동일 — 한글명 일치 후보(저수조: tank/rsrv 등)
-        for (const n of listWtlNetSameKorTablesInGroup(source.tables, def.table)) {
-          add(n, 'layer');
-        }
-        if (def.defineTable) {
-          for (const n of listWtlNetSameKorTablesInGroup(source.tables, def.defineTable)) {
+        if (isVirtualSplit) {
+          // 관로 분할: 그룹 내 parents_layer LIKE '%wtl_pipe_lm' 인 레이어만 후보.
+          // DB에는 부모만 있는 경우가 많아 parents/부모 remap도 존재 검사에 포함.
+          let splitInGroup = false;
+          const keyLow = keyName.toLowerCase();
+          const defineLow = defineName.toLowerCase();
+          for (const raw of source.tables) {
+            const table = String(raw ?? '')
+              .trim()
+              .toLowerCase();
+            if (!table) continue;
+            const parents = metaByName.get(table)?.parentsLayer ?? '';
+            if (!parents.endsWith('wtl_pipe_lm')) continue;
+            const matchesKey =
+              table === keyLow ||
+              table.endsWith(`_${keyLow}`) ||
+              table.endsWith(keyLow) ||
+              (!!defineLow &&
+                (table === defineLow ||
+                  table.endsWith(`_${defineLow}`) ||
+                  table.endsWith(defineLow))) ||
+              listWtlNetSameKorTablesInGroup(source.tables, keyName).includes(table) ||
+              (!!defineName &&
+                listWtlNetSameKorTablesInGroup(source.tables, defineName).includes(table));
+            if (!matchesKey) continue;
+            add(table, 'layer');
+            add(parents, 'layer');
+            splitInGroup = true;
+          }
+          if (splitInGroup) {
+            add(source.remapTable(baseTable), 'layer');
+          }
+        } else {
+          // remap이 그룹에 없으면 원명(wtl_prga_ps)을 그대로 돌려 DB 실존만으로
+          // 대진 가용 처리되는 것을 막음 — 그룹 tables에 속한 후보만 추가
+          const addIfInSource = (name: string | null | undefined) => {
+            const n = String(name ?? '')
+              .trim()
+              .toLowerCase();
+            if (!n) return;
+            if (source.tables.some((t) => String(t).toLowerCase() === n)) {
+              add(n, 'layer');
+            }
+          };
+          addIfInSource(source.remapTable(def.table));
+          if (def.defineTable) addIfInSource(source.remapTable(def.defineTable));
+          addIfInSource(source.remapTable(key));
+          for (const n of listWtlNetSameKorTablesInGroup(source.tables, def.table)) {
+            add(n, 'layer');
+          }
+          if (def.defineTable) {
+            for (const n of listWtlNetSameKorTablesInGroup(source.tables, def.defineTable)) {
+              add(n, 'layer');
+            }
+          }
+          for (const n of listWtlNetSameKorTablesInGroup(source.tables, key)) {
             add(n, 'layer');
           }
         }
-        for (const n of listWtlNetSameKorTablesInGroup(source.tables, key)) {
-          add(n, 'layer');
-        }
       }
+    } else {
+      add(def?.table);
+      add(def?.defineTable);
+      add(key);
+      for (const base of [def?.table, def?.defineTable, key]) {
+        for (const n of listWtlNetSameKorTables(String(base ?? ''))) add(n);
+      }
+      if (meta?.parentsLayer) add(meta.parentsLayer, meta.schema);
+      if (meta) add(key, meta.schema);
     }
-
-    add(def?.table);
-    add(def?.defineTable);
-    add(key);
-    // 출처 그룹 밖(시설관리 CCTV 등) — 한글명 동일 물리 후보
-    for (const base of [def?.table, def?.defineTable, key]) {
-      for (const n of listWtlNetSameKorTables(String(base ?? ''))) add(n);
-    }
-    if (meta?.parentsLayer) add(meta.parentsLayer, meta.schema);
-    if (meta) add(key, meta.schema);
 
     for (const n of layerNames) layerCandidates.add(n);
     for (const n of publicNames) publicCandidates.add(n);
@@ -1678,17 +1880,6 @@ export type WtlNetworkRelatedChildTab = {
   /** defineLayer 필드용 논리 테이블명 */
   defineTable: string;
   label: string;
-};
-
-const RELATED_CHILD_BY_PARENT: Record<
-  string,
-  Array<{ defineTable: string; label: string }>
-> = {
-  wtl_pres_ps: [
-    { defineTable: 'wtl_pres_pm_ps', label: '펌프현황' },
-    { defineTable: 'wtl_pres_hj_ps', label: '흡수정 현황' },
-  ],
-  wtl_puri_as: [{ defineTable: 'wtl_puri_dt_ps', label: '펌프 현황' }],
 };
 
 /** layer 스키마 — 본명 또는 `*_본명` 접두 테이블 */
@@ -1767,13 +1958,38 @@ export type WtlNetworkRelatedChildRow = {
   geom: unknown | null;
 };
 
+async function resolveRelatedColumnExact(
+  physicalTable: string,
+  columnName: string
+): Promise<string | null> {
+  const colWant = String(columnName ?? '')
+    .trim()
+    .toLowerCase();
+  if (!colWant) return null;
+  const res = await db.execute(
+    sql.raw(
+      `SELECT column_name AS c
+       FROM information_schema.columns
+       WHERE table_schema = 'layer'
+         AND lower(table_name) = '${esc(physicalTable.toLowerCase())}'
+         AND lower(column_name) = '${esc(colWant)}'
+       LIMIT 1`
+    )
+  );
+  const c = String((res.rows?.[0] as { c?: string } | undefined)?.c ?? '').trim();
+  return c || null;
+}
+
 /**
- * 부모 ftr_idn 과 같은 값의 자식 현황 행 목록.
+ * 부모 ftr_idn 또는 사업장명과 같은 값의 자식 현황 행 목록.
+ * 수질계측기·염소투입설비는 parentBizName ↔ mtr_nam/inf_nam 매칭.
  */
 export async function listWtlNetworkRelatedChildRows(params: {
   table?: string;
   defineTable?: string;
   ftrIdn?: string;
+  /** 사업장명 매칭용 — 정수장명·배수지명·가압장명 */
+  parentBizName?: string;
   limit?: number;
 } = {}): Promise<{
   rows: WtlNetworkRelatedChildRow[];
@@ -1787,8 +2003,11 @@ export async function listWtlNetworkRelatedChildRows(params: {
   const defineTable =
     String(params.defineTable ?? '').trim().toLowerCase() || physical;
   const ftrIdn = String(params.ftrIdn ?? '').trim();
+  const parentBizName = String(params.parentBizName ?? '').trim();
   const limit = Math.max(1, Math.min(Number(params.limit) || 200, 500));
-  if (!physical || !ftrIdn) {
+  const byBizName = relatedChildMatchByBizName(defineTable);
+  const matchValue = byBizName ? parentBizName || ftrIdn : ftrIdn;
+  if (!physical || !matchValue) {
     return { rows: [], total: 0, table: physical, defineTable };
   }
   const resolved =
@@ -1797,19 +2016,32 @@ export async function listWtlNetworkRelatedChildRows(params: {
   if (!resolved) {
     return { rows: [], total: 0, table: physical, defineTable };
   }
-  const ftrCol = await resolveRelatedFtrIdnColumn(resolved);
-  if (!ftrCol) {
+
+  let matchCol: string | null = null;
+  if (byBizName) {
+    const wantField =
+      RELATED_CHILD_BIZ_NAME_FIELD_BY_TABLE[defineTable] ||
+      Object.entries(RELATED_CHILD_BIZ_NAME_FIELD_BY_TABLE).find(([k]) =>
+        resolved.endsWith(k)
+      )?.[1];
+    matchCol = wantField
+      ? await resolveRelatedColumnExact(resolved, wantField)
+      : null;
+  } else {
+    matchCol = await resolveRelatedFtrIdnColumn(resolved);
+  }
+  if (!matchCol) {
     return { rows: [], total: 0, table: resolved, defineTable };
   }
   const tbl = resolved.replace(/"/g, '""');
-  const col = ftrCol.replace(/"/g, '""');
+  const col = matchCol.replace(/"/g, '""');
   const hasOgc = await tableHasColumn(resolved, 'ogc_fid');
   const hasGeom = await tableHasColumn(resolved, 'geom');
   const countRes = await db.execute(
     sql.raw(
       `SELECT count(*)::int AS c
        FROM layer."${tbl}" t
-       WHERE lower(trim(t."${col}"::text)) = lower(trim('${esc(ftrIdn)}'))`
+       WHERE lower(trim(t."${col}"::text)) = lower(trim('${esc(matchValue)}'))`
     )
   );
   const total = Number((countRes.rows?.[0] as { c?: number } | undefined)?.c ?? 0);
@@ -1824,7 +2056,7 @@ export async function listWtlNetworkRelatedChildRows(params: {
          (to_jsonb(t) - 'geom') AS record,
          ${geomSel} AS geom
        FROM layer."${tbl}" t
-       WHERE lower(trim(t."${col}"::text)) = lower(trim('${esc(ftrIdn)}'))
+       WHERE lower(trim(t."${col}"::text)) = lower(trim('${esc(matchValue)}'))
        ORDER BY ${hasOgc ? 't.ogc_fid' : '1'}
        LIMIT ${limit}`
     )
@@ -3249,6 +3481,23 @@ export type ExportWtlNetworkShpParams = {
   riCode?: string | null;
   supplyBlock?: string | null;
   areaWkts5181?: string[] | null;
+  /**
+   * 부가자료(수치지형도·배경)용 화면 범위 EPSG:3857.
+   * 시설 필터 bbox와 별도 — «화면 내 시설만» 해제여도 전달 가능.
+   */
+  extrasBbox?: number[] | null;
+  /** ogr2ogr -t_srs (EPSG:xxxx). 미지정·비허용이면 5179 */
+  targetSrs?: string | null;
+  /** 구역·화면 범위와 겹치는 수치지형도 DXF 동봉 (검색 조건만) */
+  includeDigitalMap?: boolean | null;
+  /** 선택할 수치지형도 폴더명 — 없으면 기존(최소 축척 폴더) */
+  digitalMapFolders?: string[] | null;
+  /** 수치지형도 형식 — original=DXF, png=범위 래스터 */
+  digitalMapFormat?: 'original' | 'png' | string | null;
+  /** 구역·화면 범위 자체항공영상 PNG 동봉 (검색 조건만) */
+  includeBackgroundImage?: boolean | null;
+  /** 선택할 자체항공영상 id(tiles_jpg) */
+  backgroundAerialIds?: string[] | null;
 };
 
 function safeShpEntryName(raw: string): string {
@@ -3262,22 +3511,267 @@ function safeShpEntryName(raw: string): string {
   );
 }
 
+/** WKT 좌표열에서 envelope (EPSG:5181 가정) */
+function envelopeFromWkt5181(wkt: string): [number, number, number, number] | null {
+  const nums = String(wkt ?? '')
+    .match(/[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?/g)
+    ?.map(Number)
+    .filter((n) => Number.isFinite(n));
+  if (!nums || nums.length < 4) return null;
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (let i = 0; i + 1 < nums.length; i += 2) {
+    const x = nums[i]!;
+    const y = nums[i + 1]!;
+    if (x < minX) minX = x;
+    if (y < minY) minY = y;
+    if (x > maxX) maxX = x;
+    if (y > maxY) maxY = y;
+  }
+  if (!(maxX > minX) || !(maxY > minY)) return null;
+  return [minX, minY, maxX, maxY];
+}
+
+async function bbox3857To5181(
+  bbox: number[]
+): Promise<[number, number, number, number] | null> {
+  if (bbox.length !== 4 || !bbox.every((n) => Number.isFinite(n))) return null;
+  const { default: proj4 } = await import('proj4');
+  proj4.defs(
+    'EPSG:3857',
+    '+proj=merc +a=6378137 +b=6378137 +lat_ts=0.0 +lon_0=0.0 +x_0=0.0 +y_0=0 +k=1.0 +units=m +nadgrids=@null +no_defs'
+  );
+  proj4.defs(
+    'EPSG:5181',
+    '+proj=tmerc +lat_0=38 +lon_0=127 +k=1 +x_0=200000 +y_0=500000 +ellps=GRS80 +units=m +no_defs'
+  );
+  const corners: Array<[number, number]> = [
+    [bbox[0]!, bbox[1]!],
+    [bbox[0]!, bbox[3]!],
+    [bbox[2]!, bbox[1]!],
+    [bbox[2]!, bbox[3]!],
+  ];
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const c of corners) {
+    const p = proj4('EPSG:3857', 'EPSG:5181', c) as [number, number];
+    minX = Math.min(minX, p[0]);
+    minY = Math.min(minY, p[1]);
+    maxX = Math.max(maxX, p[0]);
+    maxY = Math.max(maxY, p[1]);
+  }
+  if (!(maxX > minX) || !(maxY > minY)) return null;
+  return [minX, minY, maxX, maxY];
+}
+
+function intersectExtent5181(
+  a: [number, number, number, number],
+  b: [number, number, number, number]
+): [number, number, number, number] | null {
+  const minX = Math.max(a[0], b[0]);
+  const minY = Math.max(a[1], b[1]);
+  const maxX = Math.min(a[2], b[2]);
+  const maxY = Math.min(a[3], b[3]);
+  if (!(maxX > minX) || !(maxY > minY)) return null;
+  return [minX, minY, maxX, maxY];
+}
+
+async function resolveExportExtent5181(
+  params: ExportWtlNetworkShpParams
+): Promise<[number, number, number, number] | null> {
+  const wkts = (params.areaWkts5181 ?? [])
+    .map((w) => String(w ?? '').trim())
+    .filter(Boolean);
+  let fromArea: [number, number, number, number] | null = null;
+  if (wkts.length > 0) {
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const w of wkts) {
+      const box = envelopeFromWkt5181(w);
+      if (!box) continue;
+      minX = Math.min(minX, box[0]);
+      minY = Math.min(minY, box[1]);
+      maxX = Math.max(maxX, box[2]);
+      maxY = Math.max(maxY, box[3]);
+    }
+    if (Number.isFinite(minX) && maxX > minX && maxY > minY) {
+      fromArea = [minX, minY, maxX, maxY];
+    }
+  }
+  const extrasRaw = Array.isArray(params.extrasBbox)
+    ? params.extrasBbox.map(Number)
+    : Array.isArray(params.bbox)
+      ? params.bbox.map(Number)
+      : null;
+  const fromBbox =
+    extrasRaw && extrasRaw.length === 4
+      ? await bbox3857To5181(extrasRaw)
+      : null;
+
+  // 구역·화면이 둘 다 있으면 교집합(과다 도엽 방지). 교집합 없으면 화면 우선.
+  if (fromArea && fromBbox) {
+    return intersectExtent5181(fromArea, fromBbox) ?? fromBbox;
+  }
+  return fromArea ?? fromBbox ?? null;
+}
+
+/** 수치지형도 DXF 동봉 상한 — 초과 시 범위 축소 안내 */
+const WTL_SHP_DIGITAL_MAP_MAX_FILES = 40;
+
+/** 선택 범위와 겹치는 수치지형도 없음 — 클라이언트 confirm 후 제외 재시도 */
+export const WTL_SHP_DIGITAL_MAP_EMPTY_CODE = 'DIGITAL_MAP_EMPTY';
+const WTL_SHP_DIGITAL_MAP_EMPTY_MSG =
+  '선택 범위와 겹치는 수치지형도가 없습니다.\n 화면을 해당 도엽 위로 옮기거나 다른 축척 폴더를 선택하세요.';
+
+/** V6 데이터요청과 동일 — GeoServer WMS GetMap PNG (배경영상) */
+async function fetchBackgroundWmsPngs(
+  bbox5181: [number, number, number, number]
+): Promise<Array<{ entryName: string; buffer: Buffer }>> {
+  const { getGeoServerInternalBase } = await import('@/lib/geoserverUrl');
+  const base = getGeoServerInternalBase();
+  let layerNames: string[] = [];
+  try {
+    const res = await fetch(`${base}/rest/workspaces/ggnr/layers.json`, {
+      headers: {
+        Authorization:
+          'Basic ' +
+          Buffer.from(
+            `${process.env.GEOSERVER_USER ?? 'admin'}:${process.env.GEOSERVER_PASSWORD ?? 'geoserver'}`
+          ).toString('base64'),
+      },
+    });
+    if (res.ok) {
+      const json = (await res.json()) as {
+        layers?: { layer?: Array<{ name?: string }> | { name?: string } };
+      };
+      const raw = json.layers?.layer;
+      const list = Array.isArray(raw) ? raw : raw ? [raw] : [];
+      layerNames = list
+        .map((l) => String(l.name ?? '').trim())
+        .filter(Boolean)
+        .filter((n) =>
+          /ortho|aerial|satellite|항공|영상|drone|정사/i.test(n)
+        )
+        .slice(0, 8);
+    }
+  } catch (e) {
+    console.warn(
+      '[exportWtlNetworkShpZip] layers.json',
+      e instanceof Error ? e.message : e
+    );
+  }
+
+  if (layerNames.length === 0) {
+    // 폴백 — VWorld 위성 (단일 GetMap 대체로 타일 서비스 JPEG 1장 근사 불가 → 안내용 빈)
+    return [];
+  }
+
+  const [minX, minY, maxX, maxY] = bbox5181;
+  const width = 1024;
+  const height = Math.max(
+    256,
+    Math.round(width * ((maxY - minY) / Math.max(1e-6, maxX - minX)))
+  );
+  const out: Array<{ entryName: string; buffer: Buffer }> = [];
+  for (const name of layerNames) {
+    const layerParam = name.includes(':') ? name : `ggnr:${name}`;
+    const qs = new URLSearchParams({
+      SERVICE: 'WMS',
+      VERSION: '1.1.1',
+      REQUEST: 'GetMap',
+      FORMAT: 'image/png',
+      TRANSPARENT: 'TRUE',
+      SRS: 'EPSG:5181',
+      WIDTH: String(width),
+      HEIGHT: String(Math.min(2048, height)),
+      LAYERS: layerParam,
+      STYLES: '',
+      BBOX: `${minX},${minY},${maxX},${maxY}`,
+    });
+    try {
+      const imgRes = await fetch(`${base}/ggnr/wms?${qs.toString()}`);
+      if (!imgRes.ok) continue;
+      const ct = imgRes.headers.get('content-type') ?? '';
+      if (!ct.includes('image')) continue;
+      const buf = Buffer.from(await imgRes.arrayBuffer());
+      if (buf.length < 800) continue;
+      const safe = safeShpEntryName(name.replace(/:/g, '_'));
+      out.push({ entryName: `배경영상/${safe}.png`, buffer: buf });
+    } catch (e) {
+      console.warn(
+        '[exportWtlNetworkShpZip] GetMap',
+        name,
+        e instanceof Error ? e.message : e
+      );
+    }
+  }
+  return out;
+}
+
 /**
  * 관망조회 SHP — 레이어관리 `/api/download/shp`와 동일 ogr 경로.
- * 레이어가 여러 개면 zip 안에 레이어별 zip을 담아 반환.
+ * - 레이어 1개: 해당 레이어 SHP zip
+ * - 레이어 여러 개: 바깥 zip 안에 레이어별 폴더(SHP 파일)
  */
 export async function exportWtlNetworkShpZip(
   params: ExportWtlNetworkShpParams = {}
-): Promise<{ success: boolean; zipBuffer?: Buffer; fileName?: string; error?: string }> {
+): Promise<{
+  success: boolean;
+  zipBuffer?: Buffer;
+  fileName?: string;
+  error?: string;
+  errorCode?: string;
+  warning?: string;
+}> {
   const scope: WtlNetworkExportScope =
     String(params.scope ?? 'filtered').trim() === 'all' ? 'all' : 'filtered';
   const keys = (params.layerKeys ?? []).map((k) => String(k).trim()).filter(Boolean);
-  if (keys.length === 0) return { success: false, error: '내보낼 레이어가 없습니다.' };
+  const digitalMapFolders = (params.digitalMapFolders ?? [])
+    .map((n) => String(n ?? '').trim())
+    .filter(Boolean);
+  const backgroundAerialIds = (params.backgroundAerialIds ?? [])
+    .map((n) => String(n ?? '').trim())
+    .filter(Boolean);
+  const includeDigitalMap =
+    Boolean(params.includeDigitalMap) || digitalMapFolders.length > 0;
+  const includeBackgroundImage =
+    Boolean(params.includeBackgroundImage) || backgroundAerialIds.length > 0;
+  const wantExtras = includeDigitalMap || includeBackgroundImage;
+
+  if (keys.length === 0 && !wantExtras) {
+    return { success: false, error: '내보낼 레이어가 없습니다.' };
+  }
+
+  let extent5181: [number, number, number, number] | null = null;
+  if (wantExtras) {
+    if (scope !== 'filtered') {
+      return {
+        success: false,
+        error: '수치지형도·배경영상은 «검색 조건 적용 다운로드»에서만 포함할 수 있습니다.',
+      };
+    }
+    extent5181 = await resolveExportExtent5181(params);
+    if (!extent5181) {
+      return {
+        success: false,
+        error:
+          '수치지형도·배경영상은 구역설정 또는 화면 범위(검색 조건)가 필요합니다.',
+      };
+    }
+  }
 
   const sources = parseMapSourceIds(params.mapSources)
     .map((id) => resolveWtlNetMapSource(id))
     .filter((s): s is WtlNetMapSourceDef => Boolean(s));
-  if (sources.length === 0) return { success: false, error: '레이어 그룹이 없습니다.' };
+  if (keys.length > 0 && sources.length === 0) {
+    return { success: false, error: '레이어 그룹이 없습니다.' };
+  }
 
   const materialBundle =
     scope === 'filtered' && (params.materials?.length ?? 0) > 0
@@ -3302,38 +3796,133 @@ export async function exportWtlNetworkShpZip(
           areaWkts5181: params.areaWkts5181,
         };
 
-  const parts: Array<{ entryName: string; zipBuffer: Buffer }> = [];
+  type ShpPart = {
+    folderName: string;
+    zipBuffer?: Buffer;
+    files?: Array<{ name: string; buffer: Buffer }>;
+  };
+  const parts: ShpPart[] = [];
   const errors: string[] = [];
+  const targetSrs = resolveWtlShpTargetSrs(params.targetSrs);
 
+  /** 실제 내보내기 대상 수 — 1개면 zip, 여러 개면 files→폴더 */
+  const exportTargets: Array<{
+    source: WtlNetMapSourceDef;
+    key: string;
+    physicalTable: string;
+    def: NonNullable<ReturnType<typeof getWtlNetLayerDef>>;
+  }> = [];
   for (const source of sources) {
     for (const key of keys) {
       const def = getWtlNetLayerDef(key);
       if (!def?.table) continue;
       const physicalTable = await resolvePhysicalTableInSource(source, def.table);
       if (!physicalTable) continue;
-      const sqlText = await buildShpExportSql(def, physicalTable, filterOpts);
-      const layerName = safeShpEntryName(
-        `${source.id}_${def.defineTable || def.key || physicalTable}`
-      );
-      const result = await exportLayerTableToShp({
-        tableName: physicalTable,
-        schema: 'layer',
-        sql: sqlText,
-        layerName,
-      });
-      if (!result.success || !result.zipBuffer) {
-        errors.push(`${layerName}: ${result.error ?? '실패'}`);
-        continue;
-      }
-      parts.push({ entryName: `${layerName}.zip`, zipBuffer: result.zipBuffer });
+      exportTargets.push({ source, key, physicalTable, def });
     }
   }
 
-  if (parts.length === 0) {
-    return {
-      success: false,
-      error: errors[0] ?? '내보낼 SHP가 없습니다.',
-    };
+  if (keys.length > 0 && exportTargets.length === 0) {
+    return { success: false, error: '내보낼 SHP가 없습니다.' };
+  }
+
+  const extraFiles: Array<{ name: string; buffer: Buffer }> = [];
+  let warning: string | undefined;
+  const digitalMapFormat =
+    String(params.digitalMapFormat ?? 'original').trim().toLowerCase() === 'png'
+      ? 'png'
+      : 'original';
+
+  /** 수치지형도 — SHP 생성 전에 검사. 없으면 레이어 ZIP을 만들지 않고 중단 */
+  if (extent5181 && includeDigitalMap) {
+    try {
+      if (digitalMapFormat === 'png') {
+        const { renderDigitalMapPngForBbox5181 } = await import(
+          '@/service/digitalMapPngRender'
+        );
+        const pngs = await renderDigitalMapPngForBbox5181(extent5181, {
+          folderNames: digitalMapFolders.length > 0 ? digitalMapFolders : null,
+          width: 2048,
+        });
+        if (pngs.length === 0) {
+          return {
+            success: false,
+            error: WTL_SHP_DIGITAL_MAP_EMPTY_MSG,
+            errorCode: WTL_SHP_DIGITAL_MAP_EMPTY_CODE,
+          };
+        }
+        for (const f of pngs) {
+          extraFiles.push({ name: f.entryName, buffer: f.buffer });
+        }
+      } else {
+        const { collectDigitalMapFilesIntersectingBbox5181 } = await import(
+          '@/service/digitalMapService'
+        );
+        const dxfs = await collectDigitalMapFilesIntersectingBbox5181(
+          extent5181,
+          {
+            folderNames:
+              digitalMapFolders.length > 0 ? digitalMapFolders : null,
+          }
+        );
+        if (dxfs.length === 0) {
+          return {
+            success: false,
+            error: WTL_SHP_DIGITAL_MAP_EMPTY_MSG,
+            errorCode: WTL_SHP_DIGITAL_MAP_EMPTY_CODE,
+          };
+        }
+        if (dxfs.length > WTL_SHP_DIGITAL_MAP_MAX_FILES) {
+          const msg = `범위와 겹치는 수치지형도가 ${dxfs.length}건입니다. ${WTL_SHP_DIGITAL_MAP_MAX_FILES}건 이하가 되도록 화면 범위를 좁히거나 구역을 작게 지정하세요.`;
+          return { success: false, error: msg };
+        }
+        for (const f of dxfs) {
+          extraFiles.push({
+            name: f.entryName,
+            buffer: fs.readFileSync(f.absPath),
+          });
+        }
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.warn('[exportWtlNetworkShpZip] digitalMap', msg);
+      return {
+        success: false,
+        error: `수치지형도를 담지 못했습니다. ${msg}`,
+      };
+    }
+  }
+
+  const multi = exportTargets.length > 1 || wantExtras || exportTargets.length === 0;
+
+  for (const { source, physicalTable, def } of exportTargets) {
+    const sqlText = await buildShpExportSql(def, physicalTable, filterOpts);
+    const layerName = safeShpEntryName(
+      `${source.id}_${def.defineTable || def.key || physicalTable}`
+    );
+    const result = await exportLayerTableToShp({
+      tableName: physicalTable,
+      schema: 'layer',
+      sql: sqlText,
+      layerName,
+      targetSrs,
+      output: multi ? 'files' : 'zip',
+    });
+    if (!result.success) {
+      errors.push(`${layerName}: ${result.error ?? '실패'}`);
+      continue;
+    }
+    if (multi) {
+      if (!result.files?.length) {
+        errors.push(`${layerName}: 파일이 비어 있습니다.`);
+        continue;
+      }
+      parts.push({ folderName: layerName, files: result.files });
+    } else if (result.zipBuffer) {
+      parts.push({ folderName: layerName, zipBuffer: result.zipBuffer });
+    } else {
+      errors.push(`${layerName}: ZIP이 비어 있습니다.`);
+    }
   }
 
   const stamp = (() => {
@@ -3345,12 +3934,70 @@ export async function exportWtlNetworkShpZip(
     );
   })();
   const scopeTag = scope === 'all' ? '전체' : '조건';
+  if (extent5181 && includeBackgroundImage) {
+    try {
+      let bgCount = 0;
+      if (backgroundAerialIds.length > 0) {
+        const { renderCustomAerialPngForBbox5181 } = await import(
+          '@/service/orthophotoService'
+        );
+        for (const aerialId of backgroundAerialIds) {
+          const rendered = await renderCustomAerialPngForBbox5181({
+            aerialId,
+            bbox5181: extent5181,
+          });
+          if (!rendered.ok) {
+            console.warn(
+              '[exportWtlNetworkShpZip] background aerial',
+              aerialId,
+              rendered.error
+            );
+            continue;
+          }
+          extraFiles.push({
+            name: rendered.entryName,
+            buffer: rendered.buffer,
+          });
+          bgCount += 1;
+        }
+      } else {
+        const imgs = await fetchBackgroundWmsPngs(extent5181);
+        for (const img of imgs) {
+          extraFiles.push({ name: img.entryName, buffer: img.buffer });
+          bgCount += 1;
+        }
+      }
+      if (bgCount === 0 && backgroundAerialIds.length > 0) {
+        const msg = '선택 범위와 겹치는 배경영상(자체항공)이 없습니다.';
+        if (exportTargets.length === 0 && !includeDigitalMap) {
+          return { success: false, error: msg };
+        }
+        warning = warning ? `${warning}\n${msg}` : msg;
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.warn('[exportWtlNetworkShpZip] background', msg);
+      return {
+        success: false,
+        error: `배경영상을 담지 못했습니다. ${msg}`,
+      };
+    }
+  }
 
-  if (parts.length === 1) {
+  if (parts.length === 0 && extraFiles.length === 0) {
+    return {
+      success: false,
+      error: errors[0] ?? warning ?? '내보낼 파일이 없습니다.',
+    };
+  }
+
+  if (!multi && parts.length === 1 && extraFiles.length === 0) {
+    const only = parts[0]!;
     return {
       success: true,
-      zipBuffer: parts[0]!.zipBuffer,
-      fileName: `관망조회_${scopeTag}_${parts[0]!.entryName.replace(/\.zip$/i, '')}_${stamp}.zip`,
+      zipBuffer: only.zipBuffer,
+      fileName: `관망조회_${scopeTag}_${only.folderName}_${stamp}.zip`,
+      warning,
     };
   }
 
@@ -3363,7 +4010,12 @@ export async function exportWtlNetworkShpZip(
   });
   archive.pipe(out);
   for (const part of parts) {
-    archive.append(part.zipBuffer, { name: part.entryName });
+    for (const file of part.files ?? []) {
+      archive.append(file.buffer, { name: `${part.folderName}/${file.name}` });
+    }
+  }
+  for (const file of extraFiles) {
+    archive.append(file.buffer, { name: file.name });
   }
   await archive.finalize();
   await finished(out);
@@ -3371,6 +4023,10 @@ export async function exportWtlNetworkShpZip(
   return {
     success: true,
     zipBuffer: Buffer.concat(chunks),
-    fileName: `관망조회_${scopeTag}_SHP_${stamp}.zip`,
+    fileName:
+      parts.length === 0
+        ? `관망조회_${scopeTag}_부가자료_${stamp}.zip`
+        : `관망조회_${scopeTag}_SHP_${stamp}.zip`,
+    warning,
   };
 }

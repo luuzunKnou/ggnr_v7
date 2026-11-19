@@ -149,7 +149,8 @@ export function bindMapGeometryStackOrder(
 
 /**
  * 지도 식별(클릭) 결과 정렬 — 점 → 선 → 면 (작을수록 목록 상단·우선).
- * `geometry_columns.type` 또는 PostGIS OGC 타입 코드(숫자)에 대응.
+ * `geometry_columns.type`·PostGIS OGC 타입·`define_table_shp_type`(POINT/LINE/POLYGON)에 대응.
+ * 그리기 쌓기(`GEOM_STACK_ORDER` 면→선→점)의 역순과 맞춘다.
  */
 export function identifyHitPriorityRank(geometryColumnsType: string | number | undefined | null): number {
   if (geometryColumnsType == null) return 1;
@@ -160,10 +161,80 @@ export function identifyHitPriorityRank(geometryColumnsType: string | number | u
     return 1;
   }
   const t = String(geometryColumnsType).toUpperCase().replace(/^ST_/, '');
+  // define_table_shp_type 단축형
+  if (t === 'POINT' || t === 'MULTIPOINT') return 0;
+  if (t === 'LINE' || t === 'LINESTRING' || t === 'MULTILINESTRING') return 1;
+  if (t === 'POLYGON' || t === 'MULTIPOLYGON' || t === 'AREA' || t === 'SURFACE') return 2;
   if (/POINT|MULTIPOINT/.test(t)) return 0;
-  if (/LINESTRING|MULTILINESTRING|CIRCULARSTRING|COMPOUNDCURVE|CURVE/.test(t)) return 1;
-  if (/POLYGON|MULTIPOLYGON|TRIANGLE|TIN/.test(t)) return 2;
+  if (/LINESTRING|MULTILINESTRING|CIRCULARSTRING|COMPOUNDCURVE|CURVE|^LINE$/.test(t)) return 1;
+  if (/POLYGON|MULTIPOLYGON|TRIANGLE|TIN|^AREA$/.test(t)) return 2;
   return 1;
+}
+
+/** define_table_idx — 없거나 비숫자면 맨 뒤 */
+export function parseDefineTableIdx(raw: unknown): number {
+  const n = parseInt(String(raw ?? '').trim(), 10);
+  return Number.isFinite(n) ? n : 999999;
+}
+
+export type IdentifyDefineSortMeta = { shpRank: number; idx: number };
+
+const IDENTIFY_DEFINE_SORT_FALLBACK: IdentifyDefineSortMeta = { shpRank: 1, idx: 999999 };
+
+/** tables.json 행 → Identify options 정렬 메타 (1: shp_type, 2: idx) */
+export function buildIdentifyDefineSortMetaMap(
+  defineTables: readonly unknown[]
+): Map<string, IdentifyDefineSortMeta> {
+  const map = new Map<string, IdentifyDefineSortMeta>();
+  if (!Array.isArray(defineTables)) return map;
+  for (const row of defineTables) {
+    const r = row as Record<string, unknown>;
+    const name = String(r.define_table_name ?? '')
+      .trim()
+      .toLowerCase();
+    if (!name || map.has(name)) continue;
+    map.set(name, {
+      shpRank: identifyHitPriorityRank(r.define_table_shp_type as string | undefined),
+      idx: parseDefineTableIdx(r.define_table_idx),
+    });
+  }
+  return map;
+}
+
+export function resolveIdentifyDefineSortMeta(
+  map: Map<string, IdentifyDefineSortMeta>,
+  ...tableNames: Array<string | null | undefined>
+): IdentifyDefineSortMeta {
+  for (const t of tableNames) {
+    const key = String(t ?? '')
+      .trim()
+      .toLowerCase();
+    if (!key) continue;
+    const hit = map.get(key);
+    if (hit) return hit;
+  }
+  return IDENTIFY_DEFINE_SORT_FALLBACK;
+}
+
+export function compareIdentifyDefineSortMeta(
+  a: IdentifyDefineSortMeta,
+  b: IdentifyDefineSortMeta
+): number {
+  return a.shpRank - b.shpRank || a.idx - b.idx;
+}
+
+/**
+ * Identify 레이어 결과 정렬 — define_table_shp_type(POINT→LINE→POLYGON) → define_table_idx.
+ */
+export function sortIdentifyLayersByDefineOrder<
+  T extends { tableName?: string; physicalTable?: string },
+>(layers: T[], metaMap: Map<string, IdentifyDefineSortMeta>): T[] {
+  if (layers.length < 2) return layers;
+  return layers.slice().sort((a, b) => {
+    const ma = resolveIdentifyDefineSortMeta(metaMap, a.physicalTable, a.tableName);
+    const mb = resolveIdentifyDefineSortMeta(metaMap, b.physicalTable, b.tableName);
+    return compareIdentifyDefineSortMeta(ma, mb);
+  });
 }
 
 /**
