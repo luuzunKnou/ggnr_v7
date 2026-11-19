@@ -20,8 +20,6 @@ import {
   isDefineFieldFlagTrue,
   type DefineFieldLike,
 } from '../../../_mapComponents/standard/defineLayerRowUtils'
-import { WtlFacilityTableLoadingRow } from './WtlFacilityTableLoadingRow'
-
 const DEFAULT_SER_ENG = 'wtlFacility'
 
 type DetailAttr = {
@@ -298,7 +296,31 @@ export function WtlFacilityDataHistoryTab({
           </thead>
           <tbody>
             {loading ? (
-              <WtlFacilityTableLoadingRow colSpan={histColCount} />
+              Array.from({ length: 5 }, (_, ri) => (
+                <tr
+                  key={`sk-hist-${ri}`}
+                  className="pointer-events-none"
+                  aria-hidden
+                >
+                  {Array.from({ length: histColCount }, (_, ci) => (
+                    <td
+                      key={`sk-hist-${ri}-${ci}`}
+                      className="standard-detail-tab-td"
+                    >
+                      <div
+                        className={cn(
+                          'h-3 animate-pulse rounded bg-muted',
+                          ci === 0
+                            ? 'w-[72%]'
+                            : ci === 1
+                              ? 'w-[88%]'
+                              : 'w-[60%]'
+                        )}
+                      />
+                    </td>
+                  ))}
+                </tr>
+              ))
             ) : error ? (
               <tr>
                 <td colSpan={histColCount} className="standard-table-empty text-destructive">

@@ -148,7 +148,7 @@ export function useLayerClickDetail(opts?: {
       setHits(nextHits)
       // 1건 → 바로 상세, 2건 이상 → 목록(선택 null)
       setSelectedKey(nextHits.length === 1 ? nextHits[0]!.key : null)
-      // 다중 선택 목록이면 최소화 해제(목록이 바로 보이게)
+      // 다중이면 펼침 — 최소화 중이어도 새 FeatureIdentify 목록이 바로 보이게
       if (nextHits.length > 1) setMinimized(false)
       if (
         screenAnchor &&
@@ -189,6 +189,21 @@ export function useLayerClickDetail(opts?: {
   const patchSelectedHit = useCallback((hit: LayerClickHit) => {
     setHits((prev) =>
       prev.map((h) => (h.key === hit.key ? { ...h, ...hit, data: hit.data } : h))
+    )
+  }, [])
+
+  /** 고정창(kept) hit 속성 — 재조회 결과 반영 */
+  const patchKeepHit = useCallback((modalKey: string, hit: LayerClickHit) => {
+    setKeptModals((prev) =>
+      prev.map((m) => {
+        if (m.key !== modalKey) return m
+        return {
+          ...m,
+          hits: m.hits.map((h) =>
+            h.key === hit.key ? { ...h, ...hit, data: hit.data } : h
+          ),
+        }
+      })
     )
   }, [])
 
@@ -361,6 +376,7 @@ export function useLayerClickDetail(opts?: {
     selectHit,
     backToList,
     patchSelectedHit,
+    patchKeepHit,
     detachKeep,
     closeKeep,
     setKeepMinimized,

@@ -4209,7 +4209,9 @@ export default function OpenLayersMap({
                 }}
                 onBackToList={layerClickDetail.backToList}
                 onClose={layerClickDetail.close}
-                onDetach={(origin) => layerClickDetail.detachKeep(origin)}
+                onDetach={(origin, hitKey) =>
+                  layerClickDetail.detachKeep(origin, hitKey)
+                }
                 onSelectedUpdated={(hit) => {
                   layerClickDetail.patchSelectedHit(hit)
                 }}
@@ -4249,6 +4251,9 @@ export default function OpenLayersMap({
                     layerClickDetail.backKeepToList(kept.key)
                   }
                   onClose={() => layerClickDetail.closeKeep(kept.key)}
+                  onSelectedUpdated={(hit) => {
+                    layerClickDetail.patchKeepHit(kept.key, hit)
+                  }}
                 />
               )
             })}
