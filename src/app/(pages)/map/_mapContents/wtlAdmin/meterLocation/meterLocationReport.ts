@@ -93,21 +93,46 @@ function zoneMapSectionHtml(z: MeterReportZoneRow): string {
   return `<section class="zone-map-section">${mapHtml}</section>`
 }
 
+export type MeterReportPageOrientation = 'portrait' | 'landscape'
+
+/** 인쇄 방향에 맞춰 @page size · 메타 문구만 교체 */
+export function applyMeterReportPageOrientation(
+  html: string,
+  orientation: MeterReportPageOrientation
+): string {
+  const size =
+    orientation === 'landscape' ? 'A4 landscape' : 'A4 portrait'
+  const label = orientation === 'landscape' ? 'A4 가로' : 'A4 세로'
+  return html
+    .replace(
+      /@page\s*\{[^}]*\}/m,
+      `@page{\n    size:${size};\n    margin:12mm;\n  }`
+    )
+    .replace(
+      /계량기위치 · 구역별 목록 · A4 (?:세로|가로)/,
+      `계량기위치 · 구역별 목록 · ${label}`
+    )
+}
+
 /**
- * 계량기위치 보고서 HTML — A4 세로 전제.
+ * 계량기위치 보고서 HTML.
  * 구역마다 h2 · 계량기 표 · 하단 지도. 표가 길면 다음 페이지에도 h2 반복.
  */
 export function buildMeterLocationReportHtml(args: {
   zones: MeterReportZoneRow[]
   parcelCount: number
   meterCount: number
+  pageOrientation?: MeterReportPageOrientation
 }): string {
   const now = formatReportDateTime()
   const title = '계량기위치 보고서'
+  const orientation: MeterReportPageOrientation =
+    args.pageOrientation === 'landscape' ? 'landscape' : 'portrait'
+  const pageLabel = orientation === 'landscape' ? 'A4 가로' : 'A4 세로'
   const headHtml = `<div class="doc-head">
     <h1>${esc(title)}</h1>
     <div class="meta-row">
-      <span>계량기위치 · 구역별 목록 · A4 세로</span>
+      <span>계량기위치 · 구역별 목록 · ${pageLabel}</span>
       <span>작성일시 ${esc(now)}</span>
     </div>
   </div>
@@ -168,7 +193,7 @@ export function buildMeterLocationReportHtml(args: {
 <title>${esc(title)}</title>
 <style>
   @page{
-    size:A4 portrait;
+    size:A4 ${orientation};
     margin:12mm;
   }
   :root{
@@ -204,7 +229,7 @@ export function buildMeterLocationReportHtml(args: {
   .zone-table-dual .col-meter-no{width:16%;font-weight:600;color:var(--rpt-strong);white-space:nowrap}
   .zone-table-dual .col-meter-addr{width:28%;color:var(--rpt-fg);line-height:1.35;word-break:keep-all}
   th.col-idx,th.col-meter-no,th.col-meter-addr{font-weight:600;color:inherit;white-space:nowrap}
-  td.col-idx{text-align:center}
+  th.col-idx,td.col-idx{text-align:center !important;vertical-align:middle}
   .empty-row{text-align:center;color:var(--rpt-muted)}
   /* 구역 흐름 래퍼 — 인쇄 시 thead(h2) 페이지 반복용 */
   table.zone-flow{margin:0 0 12px;border:0;background:transparent}
@@ -308,6 +333,11 @@ export function buildMeterLocationReportHtml(args: {
       padding:1.5mm 2mm;
       vertical-align:top;
     }
+    .zone-table th.col-idx,
+    .zone-table td.col-idx{
+      text-align:center !important;
+      vertical-align:middle;
+    }
     .zone-table tr{break-inside:avoid;page-break-inside:avoid}
     /* 지도는 한 덩어리 — 다음 페이지로 넘어가도 thead h2가 위에 붙음 */
     .zone-flow-map{
@@ -346,8 +376,6 @@ export function buildMeterLocationReportHtml(args: {
 </head>
 <body>
   ${zoneBlocks}
-
-  <p class="foot">본 보고서는 A4 세로 인쇄를 전제로 합니다. 인쇄 대화상자에서 용지 방향을 세로로 선택하세요. 구역 표가 길면 여러 페이지로 나뉘며, 각 페이지 상단에 구역 제목이 반복됩니다.</p>
 </body>
 </html>`
 }

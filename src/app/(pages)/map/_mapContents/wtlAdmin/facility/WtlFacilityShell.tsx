@@ -219,9 +219,11 @@ export function WtlFacilityShell({
         .join('\n'),
     [relatedFacilityLayers]
   )
-  const [relatedFacilityCounts, setRelatedFacilityCounts] = useState<
-    Array<{ label: string; total: number }> | null
-  >(null)
+  /** 관련 시설 칩 건수 — tableName → total */
+  const [relatedFacilityCounts, setRelatedFacilityCounts] = useState<Record<
+    string,
+    number
+  > | null>(null)
 
   /** 관로(버튼 숨김·탭/그룹 진입 시 1회 ON) */
   const pipeRelatedNames = useMemo(
@@ -288,15 +290,16 @@ export function WtlFacilityShell({
     let cancelled = false
     setRelatedFacilityCounts(null)
     void (async () => {
-      const next: Array<{ label: string; total: number }> = []
+      const next: Record<string, number> = {}
       for (const layer of relatedFacilityLayers) {
-        const label = String(layer.korName || layer.tableName).trim()
+        const tableName = String(layer.tableName ?? '').trim()
+        if (!tableName) continue
         try {
           const res = await call('', 'POST', {
             service: 'wtlFacilityService',
             action: 'listFacilityRows',
             params: {
-              table: layer.tableName,
+              table: tableName,
               schema: layer.schema || 'layer',
               limit: 1,
               offset: 0,
@@ -304,13 +307,10 @@ export function WtlFacilityShell({
           })
           if (cancelled) return
           const data = (res?.data ?? res) as { total?: number } | undefined
-          next.push({
-            label: label || layer.tableName,
-            total: Number(data?.total ?? 0) || 0,
-          })
+          next[tableName] = Number(data?.total ?? 0) || 0
         } catch {
           if (cancelled) return
-          next.push({ label: label || layer.tableName, total: 0 })
+          next[tableName] = 0
         }
       }
       if (!cancelled) setRelatedFacilityCounts(next)
@@ -1236,39 +1236,7 @@ export function WtlFacilityShell({
             </div>
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
               <div className="standard-filter-section shrink-0 border-b-1 !pb-[13px]">
-                {groupOptions.length > 0 ? (
-                  <div className="mb-2 flex items-center gap-1">
-                    <span className="standard-detail-hit-label w-16 !text-foreground">레이어 그룹</span>
-                    <select
-                      className="standard-detail-hit-select"
-                      value={group || groupOptions[0]?.group || ''}
-                      title="레이어 그룹"
-                      aria-label="레이어 그룹"
-                      onChange={(e) => {
-                        const next = e.target.value
-                        const opt =
-                          groupOptions.find((o) => o.group === next) ?? null
-                        const related = resolveRelatedLayers(
-                          tab,
-                          opt?.defineTableGroup || opt?.group || null
-                        )
-                        setVisibleSyncReady(false)
-                        setRelatedOn(new Set(related.map((l) => l.tableName)))
-                        setGroup(next)
-                        setSelectedId(null)
-                        setSelectedRow(null)
-                        setVisibleSyncReady(true)
-                      }}
-                    >
-                      {groupOptions.map((opt) => (
-                        <option key={opt.group} value={opt.group}>
-                          {opt.group}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                ) : null}
-                <div className="flex flex-wrap items-stretch gap-x-0 gap-y-0 border-b border-border">
+                <div className="mb-2 flex flex-wrap items-center gap-1.5">
                   {catalog.tabs
                     .filter((name) => isTabEnabled(name))
                     .map((name) => {
@@ -1281,20 +1249,53 @@ export function WtlFacilityShell({
                           data-facility-tab={name}
                           title={label}
                           className={cn(
-                            'h-7 shrink-0 cursor-pointer whitespace-nowrap border-b-2 -mb-px px-2 text-center text-[11px]',
-                            on
-                              ? 'border-primary font-semibold text-primary'
-                              : 'border-transparent text-muted-foreground hover:text-foreground'
+                            RELATED_BTN,
+                            '!w-auto !min-w-0 !max-w-none px-2',
+                            on ? RELATED_BTN_ON : RELATED_BTN_OFF
                           )}
                           onClick={() => handleTabClick(name)}
                         >
-                          {label}
+                          <span className="min-w-0 truncate [word-break:keep-all]">
+                            {label}
+                          </span>
                         </button>
                       )
                     })}
                 </div>
                 {tab && isTabEnabled(tab) && groupOptions.length > 0 ? (
-                  <div className="mt-2 space-y-1.5">
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-1">
+                      <span className="standard-detail-hit-label w-16 !text-foreground">
+                        레이어 그룹
+                      </span>
+                      <select
+                        className="standard-detail-hit-select"
+                        value={group || groupOptions[0]?.group || ''}
+                        title="레이어 그룹"
+                        aria-label="레이어 그룹"
+                        onChange={(e) => {
+                          const next = e.target.value
+                          const opt =
+                            groupOptions.find((o) => o.group === next) ?? null
+                          const related = resolveRelatedLayers(
+                            tab,
+                            opt?.defineTableGroup || opt?.group || null
+                          )
+                          setVisibleSyncReady(false)
+                          setRelatedOn(new Set(related.map((l) => l.tableName)))
+                          setGroup(next)
+                          setSelectedId(null)
+                          setSelectedRow(null)
+                          setVisibleSyncReady(true)
+                        }}
+                      >
+                        {groupOptions.map((opt) => (
+                          <option key={opt.group} value={opt.group}>
+                            {opt.group}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                     {relatedLayerGroupsForUi.length > 0 ? (
                       <div className="space-y-1.5" aria-label="연관 레이어">
                         {relatedLayerGroupsForUi.map((group) => (
@@ -1311,11 +1312,16 @@ export function WtlFacilityShell({
                             <div className="flex min-w-0 flex-1 flex-wrap gap-1.5">
                               {group.layers.map((item) => {
                                 const on = relatedOn.has(item.tableName)
+                                const count =
+                                  relatedFacilityCounts?.[item.tableName]
+                                const countText =
+                                  typeof count === 'number' ? ` (${count})` : ''
+                                const label = `${item.korName}${countText}`
                                 return (
                                   <button
                                     key={item.tableName}
                                     type="button"
-                                    title={item.korName}
+                                    title={label}
                                     className={cn(
                                       RELATED_BTN,
                                       on ? RELATED_BTN_ON : RELATED_BTN_OFF
@@ -1326,7 +1332,7 @@ export function WtlFacilityShell({
                                   >
                                     <WtlLayerMark layerKey={item.tableName} />
                                     <span className="min-w-0 truncate [word-break:keep-all]">
-                                      {item.korName}
+                                      {label}
                                     </span>
                                   </button>
                                 )
@@ -1478,13 +1484,7 @@ export function WtlFacilityShell({
                   onExcelDownload={() => void handleExcelExport()}
                   shpBusy={shpExporting}
                   excelBusy={excelExporting}
-                  relatedFacilityCounts={
-                    title === '설비관리' &&
-                    visibleSyncReady &&
-                    groupsReadyTabRef.current === tab
-                      ? relatedFacilityCounts
-                      : null
-                  }
+                  relatedFacilityCounts={null}
                 />
               ) : (
                 <div className="flex min-h-0 flex-1 items-center justify-center px-3">

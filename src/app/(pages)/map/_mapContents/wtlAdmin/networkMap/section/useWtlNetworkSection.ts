@@ -934,13 +934,45 @@ export function useWtlNetworkSection(enabledLayerKeys: string[]) {
   }, [])
   flashGuideRef.current = flashGuide
 
-  /** 적용 — 초안 절단선으로 단면도 조회 */
+  /** 적용 — 초안 절단선으로 단면도 조회 (관로 없으면 confirm) */
   const applyPendingLine = useCallback(() => {
     if (!pendingLine3857 || pendingLine3857.length < 2) return
     const coords = pendingLine3857
-    setPendingLine3857(null)
-    finishWithLine3857(coords)
-  }, [pendingLine3857, finishWithLine3857])
+    const mode = drawMode
+    const start = coords[0]!
+    const end = coords[coords.length - 1]!
+    const ring = sectionCutRectRing3857(start, end, SECTION_RECT_HALF_WIDTH_M)
+
+    void (async () => {
+      let empty = false
+      try {
+        const res = await call('', 'POST', {
+          service: 'elevationService',
+          action: 'countSectionPipesInPolygon',
+          params: { polygon3857: ring },
+        })
+        const data = (res?.data ?? res) as
+          | { total?: number; success?: boolean }
+          | undefined
+        empty = Number(data?.total ?? 0) === 0
+      } catch {
+        empty = false
+      }
+      if (empty) {
+        const ok = window.confirm(
+          '현재 선택된 구역에 관로가 없습니다. 진행하시겠습니까?'
+        )
+        if (!ok) {
+          // 취소 → 적용 대기 해제 후 다시 그리기(입력) 상태
+          setPendingLine3857(null)
+          if (mode) beginLineDraw(mode)
+          return
+        }
+      }
+      setPendingLine3857(null)
+      finishWithLine3857(coords)
+    })()
+  }, [pendingLine3857, drawMode, beginLineDraw, finishWithLine3857])
 
   /** 선 되돌리기 — 초안이면 다시 그리기, 스케치 중이면 마지막 점 제거 */
   const undoLastVertex = useCallback(() => {

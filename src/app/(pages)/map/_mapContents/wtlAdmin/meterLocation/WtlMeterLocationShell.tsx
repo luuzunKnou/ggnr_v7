@@ -21,7 +21,10 @@ import {
   type MeterBulkCandidate,
 } from './MeterBulkAddModal'
 import { MeterNumberSuggestInput } from './MeterNumberSuggestInput'
-import { buildMeterLocationReportHtml } from './meterLocationReport'
+import {
+  buildMeterLocationReportHtml,
+  type MeterReportPageOrientation,
+} from './meterLocationReport'
 import { createMeterZoneCaptureSession } from './meterLocationZoneCapture'
 import { useMeterParcelLayer } from './useMeterParcelLayer'
 import { useWtlMeterIndexLayer } from './useWtlMeterIndexLayer'
@@ -69,6 +72,8 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
   const [printing, setPrinting] = useState(false)
   const [reportOpen, setReportOpen] = useState(false)
   const [reportHtml, setReportHtml] = useState('')
+  const [reportPageOrientation, setReportPageOrientation] =
+    useState<MeterReportPageOrientation>('portrait')
   const [reportProgress, setReportProgress] = useState<{
     done: number
     total: number
@@ -105,6 +110,7 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
     cancelPrintCapture()
     setReportOpen(false)
     setReportHtml('')
+    setReportPageOrientation('portrait')
     setReportProgress(null)
     setPrinting(false)
   }
@@ -485,10 +491,42 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
     doc.documentElement.classList.toggle('dark', theme === 'dark')
   }, [theme, reportHtml, reportOpen])
 
+  /** iframe 리로드 없이 @page 방향만 교체 */
+  const applyOrientationToReportIframe = (
+    orientation: MeterReportPageOrientation
+  ) => {
+    const doc = reportIframeRef.current?.contentDocument
+    if (!doc) return
+    const size =
+      orientation === 'landscape' ? 'A4 landscape' : 'A4 portrait'
+    const label = orientation === 'landscape' ? 'A4 가로' : 'A4 세로'
+    for (const el of doc.querySelectorAll('style')) {
+      const text = el.textContent ?? ''
+      if (!/@page\s*\{/.test(text)) continue
+      el.textContent = text.replace(
+        /@page\s*\{[^}]*\}/m,
+        `@page{\n    size:${size};\n    margin:12mm;\n  }`
+      )
+      break
+    }
+    for (const span of doc.querySelectorAll('.meta-row span')) {
+      const t = span.textContent ?? ''
+      if (!/계량기위치 · 구역별 목록 · A4/.test(t)) continue
+      span.textContent = `계량기위치 · 구역별 목록 · ${label}`
+      break
+    }
+  }
+
+  const setReportOrientation = (next: MeterReportPageOrientation) => {
+    setReportPageOrientation(next)
+    applyOrientationToReportIframe(next)
+  }
+
   const printReportFromModal = () => {
     if (printing || !reportHtml) return
     const win = reportIframeRef.current?.contentWindow
     if (!win) return
+    applyOrientationToReportIframe(reportPageOrientation)
     win.focus()
     win.print()
   }
@@ -578,11 +616,11 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
               </button>
               <button
                 type="button"
-                title="지우기"
+                title="초기화"
                 onClick={handleClear}
                 className="standard-detail-hdr-btn shrink-0"
               >
-                지우기
+                초기화
               </button>
             </div>
             {notice ? (
@@ -609,6 +647,7 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
                 <colgroup>
                   <col className="w-16" />
                   <col className="w-24" />
+                  <col className="w-12" />
                   <col />
                 </colgroup>
                 <thead className="standard-table-thead">
@@ -635,6 +674,9 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
                     <th className="standard-table-th standard-table-th-left w-24 !max-w-none whitespace-nowrap">
                       구역
                     </th>
+                    <th className="standard-table-th w-12 whitespace-nowrap text-center">
+                      번호
+                    </th>
                     <th className="standard-table-th standard-table-th-left">
                       계량기 목록
                     </th>
@@ -643,7 +685,7 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
                 <tbody>
                   {bulkLoading ? (
                     <tr>
-                      <td colSpan={3} className="standard-table-empty">
+                      <td colSpan={4} className="standard-table-empty">
                         <span className="inline-flex items-center justify-center gap-2">
                           <Loader2
                             className="h-4 w-4 shrink-0 animate-spin text-primary"
@@ -655,7 +697,7 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
                     </tr>
                   ) : rows.length === 0 ? (
                     <tr>
-                      <td colSpan={3} className="standard-table-empty">
+                      <td colSpan={4} className="standard-table-empty">
                         표시 결과가 없습니다.
                       </td>
                     </tr>
@@ -664,6 +706,7 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
                       zone.rowIds.map((rowId, idx) => {
                         const row = rowById.get(rowId)
                         if (!row) return null
+                        const visitNo = idx + 1
                         const zoneSelected = selectedZoneId === zone.zoneId
                         const zoneHovered = hoverZoneId === zone.zoneId
                         const meterSelected = focusId === row.id
@@ -753,6 +796,17 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
                               </>
                             ) : null}
                             <td
+                              className="standard-table-td-text w-12 border-r border-border text-center tabular-nums transition-colors"
+                              style={
+                                meterCellBg
+                                  ? { backgroundColor: meterCellBg }
+                                  : undefined
+                              }
+                              title={`방문 번호 ${visitNo}`}
+                            >
+                              {visitNo}
+                            </td>
+                            <td
                               className="p-0 transition-colors"
                               style={
                                 meterCellBg
@@ -769,8 +823,8 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
                                 disabled={row.status === 'miss'}
                                 title={
                                   row.detail
-                                    ? `${row.input} ${row.detail}`
-                                    : row.input
+                                    ? `${visitNo}. ${row.input} ${row.detail}`
+                                    : `${visitNo}. ${row.input}`
                                 }
                                 onClick={() => handleMeterClick(row)}
                                 className={cn(
@@ -854,6 +908,7 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
                       'dark',
                       document.documentElement.classList.contains('dark')
                     )
+                    applyOrientationToReportIframe(reportPageOrientation)
                   }}
                   srcDoc={reportHtml}
                 />
@@ -876,28 +931,61 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
               )}
             </div>
             <div className="standard-detail-edit-footer gap-1">
-              <button
-                type="button"
-                title={
-                  printing || !reportHtml
-                    ? '캡처가 끝난 뒤 인쇄할 수 있습니다'
-                    : '인쇄 / PDF 저장'
-                }
-                disabled={printing || !reportHtml}
-                className={cn(btnPrimary, 'cursor-pointer disabled:opacity-50')}
-                onClick={printReportFromModal}
-              >
-                <Printer className="h-3 w-3" aria-hidden />
-                {printing ? '캡처 중…' : '인쇄 / PDF 저장'}
-              </button>
-              <button
-                type="button"
-                title={printing ? '캡처 취소 후 닫기' : '닫기'}
-                className={cn(btnGhost, 'cursor-pointer')}
-                onClick={closeReportModal}
-              >
-                닫기
-              </button>
+              <div className="ml-auto flex items-center gap-2">
+                <div
+                  className="flex items-center gap-2 text-[11px] text-foreground"
+                  role="radiogroup"
+                  aria-label="용지 방향"
+                >
+                  <span className="shrink-0 text-muted-foreground">용지 방향</span>
+                  <label className="inline-flex cursor-pointer items-center gap-1">
+                    <input
+                      type="radio"
+                      name="meter-report-orientation"
+                      className="cursor-pointer"
+                      title="세로"
+                      checked={reportPageOrientation === 'portrait'}
+                      disabled={printing || !reportHtml}
+                      onChange={() => setReportOrientation('portrait')}
+                    />
+                    세로
+                  </label>
+                  <label className="inline-flex cursor-pointer items-center gap-1">
+                    <input
+                      type="radio"
+                      name="meter-report-orientation"
+                      className="cursor-pointer"
+                      title="가로"
+                      checked={reportPageOrientation === 'landscape'}
+                      disabled={printing || !reportHtml}
+                      onChange={() => setReportOrientation('landscape')}
+                    />
+                    가로
+                  </label>
+                </div>
+                <button
+                  type="button"
+                  title={
+                    printing || !reportHtml
+                      ? '캡처가 끝난 뒤 인쇄할 수 있습니다'
+                      : '인쇄 / PDF 저장'
+                  }
+                  disabled={printing || !reportHtml}
+                  className={cn(btnPrimary, 'cursor-pointer disabled:opacity-50')}
+                  onClick={printReportFromModal}
+                >
+                  <Printer className="h-3 w-3" aria-hidden />
+                  {printing ? '캡처 중…' : '인쇄 / PDF 저장'}
+                </button>
+                <button
+                  type="button"
+                  title={printing ? '캡처 취소 후 닫기' : '닫기'}
+                  className={cn(btnGhost, 'cursor-pointer')}
+                  onClick={closeReportModal}
+                >
+                  닫기
+                </button>
+              </div>
             </div>
           </div>
         </MapFloatingPanel>

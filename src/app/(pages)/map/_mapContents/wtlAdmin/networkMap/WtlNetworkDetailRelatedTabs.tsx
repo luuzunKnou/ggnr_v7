@@ -113,6 +113,18 @@ function resolveParentFtrIdn(item: WtlNetworkRow): string {
   return name
 }
 
+/** 수질·염소 탭용 — 정수장명·배수지명·가압장명 */
+function resolveParentBizName(item: WtlNetworkRow): string {
+  const record = item.record
+  if (record) {
+    for (const field of ['pur_nam', 'srv_nam', 'prs_nam'] as const) {
+      const v = getRowValueByField(record, field)
+      if (v != null && String(v).trim()) return String(v).trim()
+    }
+  }
+  return String(item.name ?? '').trim()
+}
+
 export function WtlNetworkDetailRelatedTabs({
   item,
   fields,
@@ -140,6 +152,7 @@ export function WtlNetworkDetailRelatedTabs({
 
   const itemId = String(item.id ?? '')
   const ftrIdn = resolveParentFtrIdn(item)
+  const parentBizName = resolveParentBizName(item)
   const [wimsEnabled, setWimsEnabled] = useState(false)
   const showWimsTab = isWtlMetaPsLayer(item) && wimsEnabled
 
@@ -410,6 +423,7 @@ export function WtlNetworkDetailRelatedTabs({
           table: activeTable,
           defineTable,
           ftrIdn,
+          parentBizName,
           limit: 200,
         },
       }),
@@ -452,7 +466,14 @@ export function WtlNetworkDetailRelatedTabs({
     return () => {
       cancelled = true
     }
-  }, [active, activeTable, activeDefineTable, ftrIdn, clearRowHighlight])
+  }, [
+    active,
+    activeTable,
+    activeDefineTable,
+    ftrIdn,
+    parentBizName,
+    clearRowHighlight,
+  ])
 
   const listFields = useMemo(() => {
     const all = listBundle?.fields ?? []

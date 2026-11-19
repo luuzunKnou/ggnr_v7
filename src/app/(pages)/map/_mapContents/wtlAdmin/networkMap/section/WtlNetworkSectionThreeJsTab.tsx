@@ -40,6 +40,8 @@ const THREEJS_VIEW_BG_CLASS = {
 
 /** ThreeJs 데이터 범례 — 지형 토글 키 */
 const THREEJS_GROUND_FEATURE_ID = '__wtl_section_ground__'
+/** 초기 fit 거리 대비 축소(줌아웃) 허용 배수 — 체크리스트 참고 */
+const SECTION_3D_MAX_ZOOM_OUT = 1.5
 
 import {
   buildThreeJsHoverTipHtml,
@@ -860,7 +862,21 @@ export function WtlNetworkSectionThreeJsTab({
         orbit.mouseButtons.MIDDLE = THREE.MOUSE.ROTATE
         orbit.mouseButtons.RIGHT = THREE.MOUSE.DOLLY
         orbitRef.current = orbit
-        fitSectionLineView(camera, orbit, groundGroup, groundProps)
+        const fitDist = fitSectionLineView(
+          camera,
+          orbit,
+          groundGroup,
+          groundProps
+        )
+        const baseDist =
+          Number.isFinite(fitDist) && fitDist > 0
+            ? fitDist
+            : camera.position.distanceTo(orbit.target)
+        orbit.minDistance = Math.max(0.5, baseDist * 0.15)
+        orbit.maxDistance = Math.max(
+          orbit.minDistance + 0.1,
+          baseDist * SECTION_3D_MAX_ZOOM_OUT
+        )
         // 최초 화면 — 나침반 «북»과 동일하게 정북 방향
         faceNorthView(camera, orbit)
         renderer.domElement.style.cursor = 'grab'

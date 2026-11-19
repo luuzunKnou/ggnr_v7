@@ -148,7 +148,8 @@ export function useLayerClickDetail(opts?: {
       setHits(nextHits)
       // 1건 → 바로 상세, 2건 이상 → 목록(선택 null)
       setSelectedKey(nextHits.length === 1 ? nextHits[0]!.key : null)
-      // 최소화 유지 — 식별·데이터만 바뀌어도 자동 펼침 금지
+      // 다중 선택 목록이면 최소화 해제(목록이 바로 보이게)
+      if (nextHits.length > 1) setMinimized(false)
       if (
         screenAnchor &&
         Number.isFinite(screenAnchor.top) &&
@@ -179,6 +180,8 @@ export function useLayerClickDetail(opts?: {
   const backToList = useCallback(() => {
     if (forceClosedRef.current) return
     setSelectedKey(null)
+    // 목록이 바로 보이도록 최소화 해제
+    setMinimized(false)
     setFocusToken((t) => t + 1)
   }, [])
 
@@ -191,9 +194,13 @@ export function useLayerClickDetail(opts?: {
 
   /** origin = 기존(기본) 모달 좌상단 — 새 창은 그보다 약간 오른쪽 */
   const detachKeep = useCallback(
-    (origin?: { top: number; left: number } | null) => {
+    (
+      origin?: { top: number; left: number } | null,
+      /** 다중 목록에서 행 지정 시 — 미전달이면 현재 선택 */
+      hitKey?: string | null
+    ) => {
       const curHits = hitsRef.current
-      const curKey = selectedKeyRef.current
+      const curKey = hitKey || selectedKeyRef.current
       const cur =
         curHits.find((h) => h.key === curKey) ?? curHits[0] ?? null
       if (!cur) return
@@ -271,6 +278,7 @@ export function useLayerClickDetail(opts?: {
           ? {
               ...m,
               selectedKey: null,
+              minimized: false,
               focusToken: m.focusToken + 1,
             }
           : m

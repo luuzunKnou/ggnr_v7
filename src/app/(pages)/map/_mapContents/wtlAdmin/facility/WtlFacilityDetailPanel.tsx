@@ -357,7 +357,11 @@ export function WtlFacilityDetailPanel({
     setActiveTab('')
     setTabSelectEpoch((n) => n + 1)
 
-    if (parentKey !== 'wtl_pres_ps' && parentKey !== 'wtl_puri_as') {
+    if (
+      parentKey !== 'wtl_pres_ps' &&
+      parentKey !== 'wtl_puri_as' &&
+      parentKey !== 'wtl_serv_ps'
+    ) {
       return
     }
 
@@ -413,6 +417,13 @@ export function WtlFacilityDetailPanel({
   )
   const keyFieldName = String(keyField?.define_field_name ?? '').trim() || null
   const ftrIdn = resolveParentFtrIdn(row, keyFieldName)
+  const parentBizName = useMemo(() => {
+    for (const field of ['pur_nam', 'srv_nam', 'prs_nam'] as const) {
+      const v = getRowValueByField(row.record, field)
+      if (v != null && String(v).trim()) return String(v).trim()
+    }
+    return String(row.name ?? '').trim()
+  }, [row.record, row.name])
 
   const titleField = useMemo(
     () => allFields.find((f) => isDefineFieldFlagTrue(f.define_field_show_title)) ?? null,
@@ -691,7 +702,7 @@ export function WtlFacilityDetailPanel({
   )
 
   useEffect(() => {
-    if (!activeRelated || !ftrIdn) {
+    if (!activeRelated || (!ftrIdn && !parentBizName)) {
       setRelatedRows([])
       setRelatedTotal(0)
       setRelatedBundle(null)
@@ -720,6 +731,7 @@ export function WtlFacilityDetailPanel({
           table: activeRelated.table,
           defineTable,
           ftrIdn,
+          parentBizName,
           limit: 200,
         },
       }),
@@ -760,7 +772,7 @@ export function WtlFacilityDetailPanel({
     return () => {
       cancelled = true
     }
-  }, [activeRelated, ftrIdn])
+  }, [activeRelated, ftrIdn, parentBizName])
 
   const relatedListFields = useMemo(() => {
     const all = relatedBundle?.fields ?? []
@@ -900,14 +912,27 @@ export function WtlFacilityDetailPanel({
             korName: f.define_field_kor_name,
             fields: allFields,
           })
-          if (kind !== 'byNameLookup') continue
-          const raw = getRowValueByField(row.record, key)
-          const value = raw != null ? String(raw).trim() : ''
-          if (!value) continue
-          const { target } = await lookupFacilityByShowTitleValue({
-            value,
-            schema,
-          })
+          if (kind !== 'byNameLookup' && kind !== 'byFtrIdn') continue
+          let target: Awaited<
+            ReturnType<typeof lookupFacilityByShowTitleValue>
+          >['target'] = null
+          if (kind === 'byFtrIdn') {
+            target = buildFacilityInfoByFtrIdnTarget(
+              key,
+              f.define_field_kor_name,
+              ftrIdn,
+              schema
+            )
+          } else {
+            const raw = getRowValueByField(row.record, key)
+            const value = raw != null ? String(raw).trim() : ''
+            if (!value) continue
+            const looked = await lookupFacilityByShowTitleValue({
+              value,
+              schema,
+            })
+            target = looked.target
+          }
           if (!target) break
           try {
             const res = await call('', 'POST', {
@@ -1012,6 +1037,7 @@ export function WtlFacilityDetailPanel({
               table: tab.table,
               defineTable,
               ftrIdn,
+              parentBizName,
               limit: 200,
             },
           })

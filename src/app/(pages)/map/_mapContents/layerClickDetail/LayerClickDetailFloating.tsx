@@ -10,7 +10,6 @@ import {
   useState,
 } from 'react'
 import {
-  AppWindow,
   ChevronLeft,
   Crosshair,
   Pin,
@@ -74,9 +73,48 @@ const PICK_LIST_WIDTH = 'min(256px, calc(100vw - 2rem))'
 const PICK_LIST_WIDTH_FALLBACK_PX = 256
 /** 상세보기/간소화 보기 선택 — 브라우저 유지 */
 const DETAIL_EXPANDED_STORAGE_KEY = 'ggnr.mapLayerClickDetail.expanded'
-/** 로그인 세션당 1회 — 지도 기본 모달 UI 튜토리얼 */
-const DETAIL_UI_TIP_SESSION_KEY = 'ggnr.mapLayerClickDetail.uiTipSeen'
-const DETAIL_UI_TIP_MS = 5000
+/** 최초 닫기 여부 — localStorage (브라우저 유지) */
+const DETAIL_UI_TIP_STORAGE_KEY = 'ggnr.mapLayerClickDetail.uiTipSeen'
+/** 최초 이후 세션당 1회 — sessionStorage */
+const DETAIL_UI_TIP_SESSION_KEY = 'ggnr.mapLayerClickDetail.uiTipSessionSeen'
+/** 최초 닫은 뒤 자동 닫힘(ms) */
+const DETAIL_UI_TIP_MS = 8000
+
+function readUiTipFirstClosed(): boolean {
+  if (typeof window === 'undefined') return false
+  try {
+    return window.localStorage.getItem(DETAIL_UI_TIP_STORAGE_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+function writeUiTipFirstClosed(): void {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(DETAIL_UI_TIP_STORAGE_KEY, '1')
+  } catch {
+    /* ignore */
+  }
+}
+
+function readUiTipSessionSeen(): boolean {
+  if (typeof window === 'undefined') return false
+  try {
+    return window.sessionStorage.getItem(DETAIL_UI_TIP_SESSION_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+function writeUiTipSessionSeen(): void {
+  if (typeof window === 'undefined') return
+  try {
+    window.sessionStorage.setItem(DETAIL_UI_TIP_SESSION_KEY, '1')
+  } catch {
+    /* ignore */
+  }
+}
 
 /** null = 아직 저장 없음 */
 function readDetailExpandedPref(): boolean | null {
@@ -161,7 +199,10 @@ type Props = {
   /** 새 창으로 분리된 킵 모달 */
   kept?: boolean
   /** 새 창으로 분리 (primary만). origin=현재 패널 좌상단 */
-  onDetach?: (origin?: { top: number; left: number }) => void
+  onDetach?: (
+    origin?: { top: number; left: number },
+    hitKey?: string | null
+  ) => void
   /**
    * true면 항상 목록(간소) 필드만 표시.
    * 하단 «상세보기»는 토글이 아니라 onOpenFullDetail 호출.
@@ -904,38 +945,47 @@ export function LayerClickDetailFloating({
 
   const dismissUiTip = useCallback(() => {
     setUiTipVisible(false)
-    try {
-      sessionStorage.setItem(DETAIL_UI_TIP_SESSION_KEY, '1')
-    } catch {
-      /* ignore */
-    }
+    writeUiTipFirstClosed()
+    writeUiTipSessionSeen()
   }, [])
 
-  // 로그인 세션당 1회 — 기본(비킵) 상세가 펼쳐질 때 헤더 위 튜토리얼
+  // 다중 레이어 선택 목록이면 항상 펼침(최소화 금지)
+  const pickListMode = hits.length > 1 && !selected
   useEffect(() => {
-    if (!open || kept || minimized) {
+    if (!open || !pickListMode || !minimized) return
+    onMinimizedChange(false)
+  }, [open, pickListMode, minimized, onMinimizedChange])
+
+  // 최초(localStorage 없음): 닫기까지 유지.
+  // 이후: 세션당 1회·8초 자동 닫힘 (닫으면 같은 세션에 다시 안 뜸)
+  // 다중 레이어 선택 목록에서는 표시하지 않음
+  useEffect(() => {
+    if (!open || kept || minimized || pickListMode) {
       setUiTipVisible(false)
       return
     }
-    try {
-      if (sessionStorage.getItem(DETAIL_UI_TIP_SESSION_KEY) === '1') return
-    } catch {
-      /* ignore */
+    const firstClosed = readUiTipFirstClosed()
+    if (!firstClosed) {
+      setUiTipVisible(true)
+      return
+    }
+    if (readUiTipSessionSeen()) {
+      setUiTipVisible(false)
+      return
     }
     setUiTipVisible(true)
-    // Strict Mode remount 시에도 타이머를 다시 걸어 닫힘 보장. seen은 닫힐 때만 기록.
     const t = window.setTimeout(() => {
-      dismissUiTip()
+      setUiTipVisible(false)
+      writeUiTipSessionSeen()
     }, DETAIL_UI_TIP_MS)
     return () => {
       window.clearTimeout(t)
     }
-  }, [open, kept, minimized, dismissUiTip])
+  }, [open, kept, minimized, pickListMode])
 
   if (!open || hits.length === 0) return null
 
   const multi = hits.length > 1
-  const pickListMode = multi && !selected
   const layerLine = selected ? String(selected.korName ?? '').trim() : ''
   // 상세(단일·다중): 현재 선택 레이어 제목. 목록 최소화만 N건
   const titleLine = pickListMode
@@ -949,7 +999,7 @@ export function LayerClickDetailFloating({
   const placementReady = placementAsTopLeft || settledTopLeft != null || minimized
 
   const uiTipOverlay =
-    uiTipVisible && !minimized ? (
+    uiTipVisible && !minimized && !pickListMode ? (
       <div
         className="pointer-events-none absolute left-0 top-0 z-10 -translate-x-full pr-1"
         role="status"
@@ -989,7 +1039,7 @@ export function LayerClickDetailFloating({
       title={titleLine}
       minimized={minimized}
       onMinimizedChange={onMinimizedChange}
-      allowMinimize
+      allowMinimize={!pickListMode}
       onClose={onClose}
       pinPosition={pinPosition}
       focusToken={focusToken}
@@ -1095,11 +1145,15 @@ export function LayerClickDetailFloating({
                     aria-selected={highlighted}
                     title={label}
                     tabIndex={0}
-                    onClick={() => setListHighlightKey(hit.key)}
+                    onClick={() => {
+                      setListHighlightKey(hit.key)
+                      onSelectHit(hit.key)
+                    }}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' || e.key === ' ') {
                         e.preventDefault()
                         setListHighlightKey(hit.key)
+                        onSelectHit(hit.key)
                       }
                     }}
                     className="standard-map-float-row-hover flex w-full cursor-pointer items-center justify-between gap-2 py-0.5 pl-2 pr-2 text-left"
@@ -1136,16 +1190,29 @@ export function LayerClickDetailFloating({
                     <span className="flex shrink-0 items-center gap-0.5">
                       <button
                         type="button"
-                        title="화면에서 보기"
-                        aria-label="화면에서 보기"
+                        title="고정창으로 보기"
+                        aria-label="고정창으로 보기"
                         onClick={(e) => {
                           e.stopPropagation()
                           setListHighlightKey(hit.key)
-                          onSelectHit(hit.key)
+                          if (!onDetach) {
+                            onSelectHit(hit.key)
+                            return
+                          }
+                          const el = panelRef.current
+                          const rect = el?.getBoundingClientRect()
+                          const origin =
+                            rect && rect.width > 0 && rect.height > 0
+                              ? {
+                                  top: Math.round(rect.top),
+                                  left: Math.round(rect.left),
+                                }
+                              : undefined
+                          onDetach(origin, hit.key)
                         }}
                         className="standard-map-float-header-close inline-flex h-6 w-6 items-center justify-center text-primary"
                       >
-                        <AppWindow className="h-3.5 w-3.5" aria-hidden />
+                        <Pin className="h-3.5 w-3.5" aria-hidden />
                       </button>
                       <button
                         type="button"

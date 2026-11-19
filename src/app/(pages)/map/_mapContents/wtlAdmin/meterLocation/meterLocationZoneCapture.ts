@@ -25,10 +25,20 @@ import { createPrintCaptureBackgroundLayer } from '../../mapPrint/mapPrintCaptur
 /** A4 세로 보고서용 — 인쇄 선명도 */
 const CAPTURE_W = 960
 const CAPTURE_H = 540
-/** 구역 캡처 목표 축척막대(m) — 클러스터·화면 이동과 동일 */
+/** 구역 캡처 목표 축척막대(m) — git 기존 밴드(30~40, 목표 35) */
 const ZONE_TARGET_SCALE_M = 35
 const ZONE_MIN_SCALE_M = 30
 const ZONE_MAX_SCALE_M = 40
+/** 벡터 겹침 시 확대 하한(축척막대 m) — 이보다 더 확대하지 않음 */
+const ZONE_CAPTURE_OVERLAP_MIN_SCALE_M = 15
+/** 번호 마커 원 반지름(px) — 겹침·화면 안 판정 */
+const METER_MARKER_RADIUS_PX = 12
+const MARKER_EDGE_PAD_PX = METER_MARKER_RADIUS_PX + 8
+
+const CAPTURE_BUILDING_LAYERS = [
+  { tableName: 'tl_sgco_rnadr_mst', zIndex: 8 },
+  { tableName: 'tl_sgco_rnadr_dong', zIndex: 9 },
+] as const
 
 export type MeterZoneCapturePoint = {
   label: string
@@ -330,7 +340,7 @@ function applyViewToExtent(
     resolution = ZONE_TARGET_SCALE_M / SCALE_BAR_PX
   }
 
-  // 작은 구역도 35m 근처로 — fit만 쓰면 과도 확대됨
+  // 작은 구역도 35m 근처로 — fit만 쓰면 과도 확대됨 (git 기존 로직)
   const scaleAtFit = resolution * SCALE_BAR_PX
   const targetRes = ZONE_TARGET_SCALE_M / SCALE_BAR_PX
   const maxRes = ZONE_MAX_SCALE_M / SCALE_BAR_PX
@@ -346,6 +356,78 @@ function applyViewToExtent(
   view.setCenter([(extent[0] + extent[2]) / 2, (extent[1] + extent[3]) / 2])
   view.setResolution(resolution)
   return extent
+}
+
+/** 마커 중심이 화면 가장자리 패딩 안에 있는지 */
+function allMarkersInsideFrame(
+  map: MapType,
+  points: MeterZoneCapturePoint[]
+): boolean {
+  const pad = MARKER_EDGE_PAD_PX
+  for (const p of points) {
+    const lon = Number(p.point4326[0])
+    const lat = Number(p.point4326[1])
+    if (!Number.isFinite(lon) || !Number.isFinite(lat)) continue
+    const pixel = map.getPixelFromCoordinate(fromLonLat([lon, lat]))
+    if (!pixel || !Number.isFinite(pixel[0]) || !Number.isFinite(pixel[1])) {
+      return false
+    }
+    if (
+      pixel[0] < pad ||
+      pixel[1] < pad ||
+      pixel[0] > CAPTURE_W - pad ||
+      pixel[1] > CAPTURE_H - pad
+    ) {
+      return false
+    }
+  }
+  return true
+}
+
+/** 번호 마커 스크린 좌표 기준 원 겹침 여부 */
+function meterMarkersOverlap(
+  map: MapType,
+  points: MeterZoneCapturePoint[]
+): boolean {
+  const coords: Array<[number, number]> = []
+  for (const p of points) {
+    const lon = Number(p.point4326[0])
+    const lat = Number(p.point4326[1])
+    if (!Number.isFinite(lon) || !Number.isFinite(lat)) continue
+    const pixel = map.getPixelFromCoordinate(fromLonLat([lon, lat]))
+    if (!pixel || !Number.isFinite(pixel[0]) || !Number.isFinite(pixel[1])) continue
+    coords.push([pixel[0], pixel[1]])
+  }
+  const minDist = METER_MARKER_RADIUS_PX * 2
+  for (let i = 0; i < coords.length; i++) {
+    for (let j = i + 1; j < coords.length; j++) {
+      const dx = coords[i]![0] - coords[j]![0]
+      const dy = coords[i]![1] - coords[j]![1]
+      if (Math.hypot(dx, dy) < minDist) return true
+    }
+  }
+  return false
+}
+
+/** 타일 해상도 1단계 확대(스냅). 15m 미만 금지 */
+function zoomInOneResolutionStep(view: View): boolean {
+  const current = Number(view.getResolution())
+  if (!Number.isFinite(current) || current <= 0) return false
+  const floorRes = ZONE_CAPTURE_OVERLAP_MIN_SCALE_M / SCALE_BAR_PX
+  if (current <= floorRes + 1e-12) return false
+
+  let next: number | null = null
+  const idx = RESOLUTIONS_3857.findIndex((r) => Math.abs(r - current) < r * 1e-6)
+  if (idx >= 0 && idx < RESOLUTIONS_3857.length - 1) {
+    next = RESOLUTIONS_3857[idx + 1]!
+  } else {
+    const tighter = RESOLUTIONS_3857.filter((r) => r < current - 1e-12)
+    next = tighter.length > 0 ? Math.max(...tighter) : null
+  }
+  if (next == null || next < floorRes - 1e-12) return false
+  if (next >= current - 1e-12) return false
+  view.setResolution(next)
+  return true
 }
 
 /**
@@ -393,6 +475,28 @@ export function createMeterZoneCaptureSession(
     visible: false,
   })
 
+  const buildingEntries = CAPTURE_BUILDING_LAYERS.map(({ tableName, zIndex }) => {
+    const source = new ImageWMS({
+      url: `${geoServerBase}/${WORKSPACE}/wms`,
+      params: {
+        LAYERS: `${WORKSPACE}:${tableName}`,
+        STYLES: tableName,
+        TRANSPARENT: true,
+        FORMAT: 'image/png',
+      },
+      serverType: 'geoserver',
+      ratio: 1,
+      imageLoadFunction: geoserverWmsImageLoadFunction,
+      crossOrigin: 'anonymous',
+    })
+    const layer = new ImageLayer({
+      source,
+      zIndex,
+      visible: true,
+    })
+    return { source, layer }
+  })
+
   // 보고서 캡처: 계량기 WMS 미사용 — 번호 벡터만 표시
   const indexSource = new VectorSource()
   const indexLayer = new VectorLayer({
@@ -402,6 +506,7 @@ export function createMeterZoneCaptureSession(
     visible: true,
   })
 
+  // git 기존: 확대 스냅(constrainResolution)
   const view = new View({
     resolutions: RESOLUTIONS_3857,
     minZoom: 0,
@@ -411,7 +516,7 @@ export function createMeterZoneCaptureSession(
 
   const map = new Map({
     target: host,
-    layers: [bg, jijukLayer, indexLayer],
+    layers: [bg, ...buildingEntries.map((e) => e.layer), jijukLayer, indexLayer],
     view,
     controls: defaultControls({ attribution: false, zoom: false }),
     interactions: [],
@@ -422,24 +527,51 @@ export function createMeterZoneCaptureSession(
   let disposed = false
   let captureCount = 0
 
+  async function waitLayersReady(signal?: AbortSignal): Promise<void> {
+    const tileCap = captureCount === 0 ? 7000 : 5000
+    const wmsCap = captureCount === 0 ? 6000 : 4500
+    const tileWait = tileSource ? watchTiles(tileSource, tileCap) : null
+    const wmsWaits = [
+      ...(jijukLayer.getVisible()
+        ? [watchImageWms(jijukSource, wmsCap)]
+        : []),
+      ...buildingEntries
+        .filter((e) => e.layer.getVisible())
+        .map((e) => watchImageWms(e.source, wmsCap)),
+    ]
+    map.renderSync()
+    tileWait?.arm()
+    for (const w of wmsWaits) w.arm()
+    throwIfAborted(signal)
+    await raceUntil(
+      Promise.all([
+        tileWait?.promise ?? Promise.resolve(),
+        ...wmsWaits.map((w) => w.promise),
+      ]).then(() => undefined),
+      signal
+    )
+    throwIfAborted(signal)
+    // 타일 그린 뒤 한 프레임 더 안정화 — 미로드·빈 지도 캡처 방지
+    await raceUntil(waitRenderComplete(map, 2500), signal)
+    await raceUntil(waitMs(220), signal)
+    await raceUntil(waitRenderComplete(map, 1800), signal)
+  }
+
   return {
     async captureZone(extent3857, points, signal) {
       if (disposed || signal?.aborted) {
         return { dataUrl: null, status: 'failed', reason: '캡처 취소됨' }
       }
       try {
-        // 화면은 35m 기준으로 칸 전체 채움 — 레이어만 해당 구역
+        // git 기존 맞춤(30~40m 밴드 + 스냅) — 구역 fit 우선
+        map.setSize([CAPTURE_W, CAPTURE_H])
+        map.updateSize()
         applyViewToExtent(view, extent3857)
 
         const pnus = points
           .map((p) => String(p.pnu ?? '').replace(/\D/g, '').slice(0, 19))
           .filter(Boolean)
         const jijukCql = buildJijukPnuCql(pnus)
-        // 타일·필지 WMS가 실제로 끝난 뒤에만 캡처 (미로드 격자 방지)
-        const tileCap = captureCount === 0 ? 6000 : 4500
-        const wmsCap = captureCount === 0 ? 5000 : 4000
-        const tileWait = tileSource ? watchTiles(tileSource, tileCap) : null
-        const jijukWait = jijukCql ? watchImageWms(jijukSource, wmsCap) : null
 
         if (jijukCql) {
           jijukLayer.setVisible(true)
@@ -452,6 +584,11 @@ export function createMeterZoneCaptureSession(
         } else {
           jijukLayer.setVisible(false)
           jijukSource.updateParams({ CQL_FILTER: undefined })
+        }
+
+        for (const { source, layer } of buildingEntries) {
+          layer.setVisible(true)
+          source.updateParams({ _: String(Date.now()) })
         }
 
         // 계량기 WMS 대신 표 번호 벡터 마커만
@@ -467,22 +604,27 @@ export function createMeterZoneCaptureSession(
           indexSource.addFeature(feature)
         }
 
-        map.renderSync()
-        tileWait?.arm()
-        jijukWait?.arm()
-        throwIfAborted(signal)
-        await raceUntil(
-          Promise.all([
-            tileWait?.promise ?? Promise.resolve(),
-            jijukWait?.promise ?? Promise.resolve(),
-          ]).then(() => undefined),
-          signal
-        )
-        throwIfAborted(signal)
-        // 타일 그린 뒤 한 프레임 더 안정화 — 인쇄 캡처와 동일 패턴
-        await raceUntil(waitRenderComplete(map, 2000), signal)
-        await raceUntil(waitMs(180), signal)
-        await raceUntil(waitRenderComplete(map, 1500), signal)
+        // 타일·WMS 로드 완료 후 캡처 (미로드 격자·빈 지도 방지)
+        await waitLayersReady(signal)
+
+        // 옵션: 마커 겹치면 타일 단계 확대. 벡터가 잘리면 그 단계 취소
+        let guard = 0
+        while (meterMarkersOverlap(map, points) && guard < 8) {
+          const before = Number(view.getResolution())
+          if (!zoomInOneResolutionStep(view)) break
+          guard += 1
+          map.renderSync()
+          if (!allMarkersInsideFrame(map, points)) {
+            if (Number.isFinite(before) && before > 0) {
+              view.setResolution(before)
+              map.renderSync()
+            }
+            break
+          }
+          // 줌 변경 후 타일 재대기 — 미로드 상태로 찍히는 것 방지
+          throwIfAborted(signal)
+          await waitLayersReady(signal)
+        }
 
         const canvas = document.createElement('canvas')
         if (!compositeOffscreenToCanvas(map, canvas) || canvas.width < 2) {

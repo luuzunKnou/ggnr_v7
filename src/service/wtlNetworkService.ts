@@ -8,9 +8,14 @@ import { finished } from 'node:stream/promises';
 import archiver from 'archiver';
 import { sql } from 'drizzle-orm';
 import db from '@/database/db';
-import { RELATED_CHILD_BY_PARENT } from '@/app/(pages)/map/_mapContents/layerClickDetail/layerClickDetailRelatedConfig';
+import {
+  RELATED_CHILD_BY_PARENT,
+  RELATED_CHILD_BIZ_NAME_FIELD_BY_TABLE,
+  relatedChildMatchByBizName,
+} from '@/app/(pages)/map/_mapContents/layerClickDetail/layerClickDetailRelatedConfig';
 import {
   getWtlNetLayerDef,
+  isWtlNetZoneLayerKey,
   isWtlSupplyZoneOrSubzoneLayerDef,
   wtlNetSaaSql,
   type WtlNetGeomKind,
@@ -1743,7 +1748,17 @@ export async function listWtlNetworkAvailableLayerKeys(params: {
       ((!!keyName && keyName.toLowerCase() !== baseTable.toLowerCase()) ||
         (!!defineName && defineName.toLowerCase() !== baseTable.toLowerCase()));
 
-    if (def?.table && sources.length > 0) {
+    if (isWtlNetZoneLayerKey(key)) {
+      // 급수구역 — 출처(상수/광역) tables와 무관, layer 스키마 실존만 검사
+      add(def?.table);
+      add(def?.defineTable);
+      add(key);
+      for (const base of [def?.table, def?.defineTable, key]) {
+        for (const n of listWtlNetSameKorTables(String(base ?? ''))) add(n);
+      }
+      if (meta?.parentsLayer) add(meta.parentsLayer, meta.schema);
+      if (meta) add(key, meta.schema);
+    } else if (def?.table && sources.length > 0) {
       // 출처가 있으면 해당 그룹 테이블만 후보 — 상수 wtl_pipe_lm 이 대진 가용을 오염시키지 않음
       for (const source of sources) {
         if (isVirtualSplit) {
@@ -1943,13 +1958,38 @@ export type WtlNetworkRelatedChildRow = {
   geom: unknown | null;
 };
 
+async function resolveRelatedColumnExact(
+  physicalTable: string,
+  columnName: string
+): Promise<string | null> {
+  const colWant = String(columnName ?? '')
+    .trim()
+    .toLowerCase();
+  if (!colWant) return null;
+  const res = await db.execute(
+    sql.raw(
+      `SELECT column_name AS c
+       FROM information_schema.columns
+       WHERE table_schema = 'layer'
+         AND lower(table_name) = '${esc(physicalTable.toLowerCase())}'
+         AND lower(column_name) = '${esc(colWant)}'
+       LIMIT 1`
+    )
+  );
+  const c = String((res.rows?.[0] as { c?: string } | undefined)?.c ?? '').trim();
+  return c || null;
+}
+
 /**
- * 부모 ftr_idn 과 같은 값의 자식 현황 행 목록.
+ * 부모 ftr_idn 또는 사업장명과 같은 값의 자식 현황 행 목록.
+ * 수질계측기·염소투입설비는 parentBizName ↔ mtr_nam/inf_nam 매칭.
  */
 export async function listWtlNetworkRelatedChildRows(params: {
   table?: string;
   defineTable?: string;
   ftrIdn?: string;
+  /** 사업장명 매칭용 — 정수장명·배수지명·가압장명 */
+  parentBizName?: string;
   limit?: number;
 } = {}): Promise<{
   rows: WtlNetworkRelatedChildRow[];
@@ -1963,8 +2003,11 @@ export async function listWtlNetworkRelatedChildRows(params: {
   const defineTable =
     String(params.defineTable ?? '').trim().toLowerCase() || physical;
   const ftrIdn = String(params.ftrIdn ?? '').trim();
+  const parentBizName = String(params.parentBizName ?? '').trim();
   const limit = Math.max(1, Math.min(Number(params.limit) || 200, 500));
-  if (!physical || !ftrIdn) {
+  const byBizName = relatedChildMatchByBizName(defineTable);
+  const matchValue = byBizName ? parentBizName || ftrIdn : ftrIdn;
+  if (!physical || !matchValue) {
     return { rows: [], total: 0, table: physical, defineTable };
   }
   const resolved =
@@ -1973,19 +2016,32 @@ export async function listWtlNetworkRelatedChildRows(params: {
   if (!resolved) {
     return { rows: [], total: 0, table: physical, defineTable };
   }
-  const ftrCol = await resolveRelatedFtrIdnColumn(resolved);
-  if (!ftrCol) {
+
+  let matchCol: string | null = null;
+  if (byBizName) {
+    const wantField =
+      RELATED_CHILD_BIZ_NAME_FIELD_BY_TABLE[defineTable] ||
+      Object.entries(RELATED_CHILD_BIZ_NAME_FIELD_BY_TABLE).find(([k]) =>
+        resolved.endsWith(k)
+      )?.[1];
+    matchCol = wantField
+      ? await resolveRelatedColumnExact(resolved, wantField)
+      : null;
+  } else {
+    matchCol = await resolveRelatedFtrIdnColumn(resolved);
+  }
+  if (!matchCol) {
     return { rows: [], total: 0, table: resolved, defineTable };
   }
   const tbl = resolved.replace(/"/g, '""');
-  const col = ftrCol.replace(/"/g, '""');
+  const col = matchCol.replace(/"/g, '""');
   const hasOgc = await tableHasColumn(resolved, 'ogc_fid');
   const hasGeom = await tableHasColumn(resolved, 'geom');
   const countRes = await db.execute(
     sql.raw(
       `SELECT count(*)::int AS c
        FROM layer."${tbl}" t
-       WHERE lower(trim(t."${col}"::text)) = lower(trim('${esc(ftrIdn)}'))`
+       WHERE lower(trim(t."${col}"::text)) = lower(trim('${esc(matchValue)}'))`
     )
   );
   const total = Number((countRes.rows?.[0] as { c?: number } | undefined)?.c ?? 0);
@@ -2000,7 +2056,7 @@ export async function listWtlNetworkRelatedChildRows(params: {
          (to_jsonb(t) - 'geom') AS record,
          ${geomSel} AS geom
        FROM layer."${tbl}" t
-       WHERE lower(trim(t."${col}"::text)) = lower(trim('${esc(ftrIdn)}'))
+       WHERE lower(trim(t."${col}"::text)) = lower(trim('${esc(matchValue)}'))
        ORDER BY ${hasOgc ? 't.ogc_fid' : '1'}
        LIMIT ${limit}`
     )

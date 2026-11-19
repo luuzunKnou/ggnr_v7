@@ -98,8 +98,14 @@ function buildJijukPnuCql(pnus: string[]): string | undefined {
   return `pnu IN (${list})`
 }
 
+/** 계량기 모드에서 지적과 함께 켤 건물·건물군 WMS */
+const METER_BUILDING_LAYERS = [
+  { tableName: 'tl_sgco_rnadr_mst', layerName: '건물군', zIndex: 858 },
+  { tableName: 'tl_sgco_rnadr_dong', layerName: '건물', zIndex: 859 },
+] as const
+
 /**
- * 구역 박스(벡터) + 필지(jijuk) — 목록만, 구역 선택 시 구역 외 필지 숨김.
+ * 구역 박스(벡터) + 필지(jijuk) + 건물·건물군 — 목록만, 구역 선택 시 구역 외 필지 숨김.
  * 계량기 번호 마커는 useWtlMeterIndexLayer.
  */
 export function useMeterParcelLayer(
@@ -113,6 +119,7 @@ export function useMeterParcelLayer(
   const mapContext = useMapContext()
   const zoneSourceRef = useRef<VectorSource | null>(null)
   const jijukLayerRef = useRef<ImageLayer<ImageWMS> | null>(null)
+  const buildingLayersRef = useRef<ImageLayer<ImageWMS>[]>([])
 
   const zoneRowIds = useMemo(() => {
     if (!selectedZoneId) return null
@@ -167,11 +174,39 @@ export function useMeterParcelLayer(
     jijukLayerRef.current = jijukLayer
     map.addLayer(jijukLayer)
 
+    const buildingLayers = METER_BUILDING_LAYERS.map(({ tableName, layerName, zIndex }) => {
+      const layer = new ImageLayer({
+        minZoom: 8,
+        source: new ImageWMS({
+          url: `${geoServerBase}/${WORKSPACE}/wms`,
+          params: {
+            LAYERS: `${WORKSPACE}:${tableName}`,
+            STYLES: tableName,
+            TRANSPARENT: true,
+            FORMAT: 'image/png',
+          },
+          serverType: 'geoserver',
+          ratio: 1.5,
+          imageLoadFunction: geoserverWmsImageLoadFunction,
+        }),
+        zIndex,
+        visible: true,
+      })
+      layer.set('wtlMeterBuilding', true)
+      layer.set('name', layerName)
+      layer.set('layerTableName', tableName)
+      map.addLayer(layer)
+      return layer
+    })
+    buildingLayersRef.current = buildingLayers
+
     return () => {
       zoneSourceRef.current = null
       jijukLayerRef.current = null
+      buildingLayersRef.current = []
       map.removeLayer(zoneLayer)
       map.removeLayer(jijukLayer)
+      for (const layer of buildingLayers) map.removeLayer(layer)
     }
   }, [mapContext?.mapInstanceRef, mapContext?.mapReady])
 

@@ -8,13 +8,36 @@ export type WtlRelatedChildCandidate = {
   label: string
 }
 
-/** 가압장·정수장 상세 하단 연관 자식 탭 후보 */
+/** 수질·염소 — 사업장명(부모 시설명)으로 매칭하는 자식 탭 */
+export const RELATED_CHILD_BIZ_NAME_FIELD_BY_TABLE: Record<string, string> = {
+  wtl_meter_ps: 'mtr_nam',
+  wtl_infeed_ps: 'inf_nam',
+}
+
+const RELATED_CHILD_WATER_QUALITY_TABS: WtlRelatedChildCandidate[] = [
+  { defineTable: 'wtl_meter_ps', label: '수질 계측기' },
+  { defineTable: 'wtl_infeed_ps', label: '염소투입설비' },
+]
+
+/** 가압장·정수장·배수지 상세 하단 연관 자식 탭 후보 */
 export const RELATED_CHILD_BY_PARENT: Record<string, WtlRelatedChildCandidate[]> = {
   wtl_pres_ps: [
     { defineTable: 'wtl_pres_pm_ps', label: '펌프현황' },
     { defineTable: 'wtl_pres_hj_ps', label: '흡수정 현황' },
+    ...RELATED_CHILD_WATER_QUALITY_TABS,
   ],
-  wtl_puri_as: [{ defineTable: 'wtl_puri_dt_ps', label: '펌프 현황' }],
+  wtl_puri_as: [
+    { defineTable: 'wtl_puri_dt_ps', label: '펌프 현황' },
+    ...RELATED_CHILD_WATER_QUALITY_TABS,
+  ],
+  wtl_serv_ps: [...RELATED_CHILD_WATER_QUALITY_TABS],
+}
+
+export function relatedChildMatchByBizName(defineTable: string): boolean {
+  const key = String(defineTable ?? '')
+    .trim()
+    .toLowerCase()
+  return Boolean(RELATED_CHILD_BIZ_NAME_FIELD_BY_TABLE[key])
 }
 
 export function relatedChildParentKeys(): string[] {

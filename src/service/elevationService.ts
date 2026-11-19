@@ -1404,6 +1404,94 @@ export async function getWtlPipesInExtent(params: {
   }
 }
 
+/**
+ * 단면도 적용 전 — 선택 구역(EPSG:3857 폴리곤)에
+ * 상수관로(wtl_pipe_lm)·하수관로(swl_pipe_lm)가 있는지 건수만 조회.
+ */
+export async function countSectionPipesInPolygon(params: {
+  polygon3857?: [number, number][] | number[][];
+} = {}): Promise<{
+  success: boolean;
+  wtlCount: number;
+  swlCount: number;
+  total: number;
+  error?: string;
+}> {
+  const polyRaw = Array.isArray(params?.polygon3857) ? params.polygon3857 : null;
+  const polyPts: [number, number][] = [];
+  if (polyRaw) {
+    for (const p of polyRaw) {
+      if (!Array.isArray(p) || p.length < 2) continue;
+      const px = Number(p[0]);
+      const py = Number(p[1]);
+      if (!Number.isFinite(px) || !Number.isFinite(py)) continue;
+      polyPts.push([px, py]);
+    }
+  }
+  if (polyPts.length < 3) {
+    return {
+      success: false,
+      wtlCount: 0,
+      swlCount: 0,
+      total: 0,
+      error: '선택 구역 좌표가 올바르지 않습니다',
+    };
+  }
+  const ring = [...polyPts];
+  const first = ring[0]!;
+  const last = ring[ring.length - 1]!;
+  if (first[0] !== last[0] || first[1] !== last[1]) {
+    ring.push([first[0], first[1]]);
+  }
+  const wkt = `POLYGON((${ring.map(([px, py]) => `${px} ${py}`).join(',')}))`;
+  const env3857 = `ST_MakeValid(ST_GeomFromText('${wkt}', 3857))`;
+
+  async function countOne(table: string): Promise<number> {
+    const exists = await tableExists('layer', table);
+    if (!exists) return 0;
+    const meta = await getGeomMeta('layer', table);
+    if (!meta) return 0;
+    const geomCol = `"${meta.geomCol.replace(/"/g, '""')}"`;
+    const geom = geomStamped(geomCol, meta.srid);
+    const from = `"layer"."${table.replace(/"/g, '""')}"`;
+    const in3857 = `ST_Transform(${geom}, 3857)`;
+    try {
+      const res = await db.execute(
+        sql.raw(
+          `SELECT count(*)::int AS c
+           FROM ${from} t
+           WHERE t.${geomCol} IS NOT NULL
+             AND ST_Intersects(${in3857}, ${env3857})`
+        )
+      );
+      return Number((res.rows?.[0] as { c?: number } | undefined)?.c ?? 0) || 0;
+    } catch {
+      return 0;
+    }
+  }
+
+  try {
+    const [wtlCount, swlCount] = await Promise.all([
+      countOne('wtl_pipe_lm'),
+      countOne('swl_pipe_lm'),
+    ]);
+    return {
+      success: true,
+      wtlCount,
+      swlCount,
+      total: wtlCount + swlCount,
+    };
+  } catch (e) {
+    return {
+      success: false,
+      wtlCount: 0,
+      swlCount: 0,
+      total: 0,
+      error: e instanceof Error ? e.message : '관로 존재 조회 오류',
+    };
+  }
+}
+
 const MANH_SCHEMA = 'layer';
 const MANH_TABLE = 'wtl_manh_ps';
 
