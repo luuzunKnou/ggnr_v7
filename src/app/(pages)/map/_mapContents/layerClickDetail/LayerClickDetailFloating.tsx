@@ -16,6 +16,7 @@ import {
   Pin,
   Search,
   SquareArrowOutUpRight,
+  X,
 } from 'lucide-react'
 import { call } from '@/lib/api'
 import { useSerWriteAccess } from '@/hooks/useSerWriteAccess'
@@ -73,6 +74,9 @@ const PICK_LIST_WIDTH = 'min(256px, calc(100vw - 2rem))'
 const PICK_LIST_WIDTH_FALLBACK_PX = 256
 /** 상세보기/간소화 보기 선택 — 브라우저 유지 */
 const DETAIL_EXPANDED_STORAGE_KEY = 'ggnr.mapLayerClickDetail.expanded'
+/** 로그인 세션당 1회 — 지도 기본 모달 UI 튜토리얼 */
+const DETAIL_UI_TIP_SESSION_KEY = 'ggnr.mapLayerClickDetail.uiTipSeen'
+const DETAIL_UI_TIP_MS = 5000
 
 /** null = 아직 저장 없음 */
 function readDetailExpandedPref(): boolean | null {
@@ -257,6 +261,7 @@ export function LayerClickDetailFloating({
   useLayerClickDetailMapHighlight(open ? selected : null)
   const canWrite = useSerWriteAccess(writeSerEng)
   const panelRef = useRef<HTMLDivElement | null>(null)
+  const [uiTipVisible, setUiTipVisible] = useState(false)
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
@@ -897,6 +902,36 @@ export function LayerClickDetailFloating({
     onBackToList?.()
   }
 
+  const dismissUiTip = useCallback(() => {
+    setUiTipVisible(false)
+    try {
+      sessionStorage.setItem(DETAIL_UI_TIP_SESSION_KEY, '1')
+    } catch {
+      /* ignore */
+    }
+  }, [])
+
+  // 로그인 세션당 1회 — 기본(비킵) 상세가 펼쳐질 때 헤더 위 튜토리얼
+  useEffect(() => {
+    if (!open || kept || minimized) {
+      setUiTipVisible(false)
+      return
+    }
+    try {
+      if (sessionStorage.getItem(DETAIL_UI_TIP_SESSION_KEY) === '1') return
+    } catch {
+      /* ignore */
+    }
+    setUiTipVisible(true)
+    // Strict Mode remount 시에도 타이머를 다시 걸어 닫힘 보장. seen은 닫힐 때만 기록.
+    const t = window.setTimeout(() => {
+      dismissUiTip()
+    }, DETAIL_UI_TIP_MS)
+    return () => {
+      window.clearTimeout(t)
+    }
+  }, [open, kept, minimized, dismissUiTip])
+
   if (!open || hits.length === 0) return null
 
   const multi = hits.length > 1
@@ -912,6 +947,33 @@ export function LayerClickDetailFloating({
     !pickListMode && Boolean(layerLine && layerLine !== titleLine)
 
   const placementReady = placementAsTopLeft || settledTopLeft != null || minimized
+
+  const uiTipOverlay =
+    uiTipVisible && !minimized ? (
+      <div
+        className="pointer-events-none absolute left-0 top-0 z-10 -translate-x-full pr-1"
+        role="status"
+      >
+        <div className="pointer-events-auto flex max-w-[min(420px,calc(100vw-2rem))] items-start gap-2 rounded-[5px] border border-amber-200 bg-amber-50/95 px-3 py-1.5 text-[12px] font-medium text-amber-900 shadow-md">
+          <div className="min-w-0 space-y-0.5 whitespace-normal">
+            <p className="m-0">제목을 두 번 클릭하면 최소화됩니다</p>
+            <p className="m-0">제목을 끌면 창을 옮길 수 있습니다</p>
+            <p className="m-0">
+              제목을 우클릭하면 고정 창·새 창으로 열 수 있습니다
+            </p>
+          </div>
+          <button
+            type="button"
+            title="튜토리얼 닫기"
+            aria-label="튜토리얼 닫기"
+            className="inline-flex shrink-0 cursor-pointer items-center justify-center rounded p-0.5 text-amber-900 hover:bg-amber-200/50"
+            onClick={dismissUiTip}
+          >
+            <X className="h-3.5 w-3.5" aria-hidden />
+          </button>
+        </div>
+      </div>
+    ) : null
 
   return (
     <>
@@ -933,6 +995,7 @@ export function LayerClickDetailFloating({
       focusToken={focusToken}
       onActivate={handleActivate}
       panelRef={panelRef}
+      overlay={uiTipOverlay}
       width={pickListMode ? PICK_LIST_WIDTH : DETAIL_WIDTH}
       minimizedWidth={MAP_DETAIL_FLOAT_MINIMIZED_WIDTH}
       maxHeight={DETAIL_MAX_HEIGHT}

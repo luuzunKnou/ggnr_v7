@@ -3598,8 +3598,11 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
                   </div>
                   {visibleDisplayGroups.length > 0 ? (
                   <div className="flex border-b border-border">
-                      {visibleDisplayGroups.map(({ title }) => {
+                      {visibleDisplayGroups.map(({ title, items }) => {
                       const on = group === title
+                      const hasActiveLayer = items.some((it) =>
+                        extraOn.has(it.define_table_name)
+                      )
                       return (
                         <button
                           key={title}
@@ -3608,7 +3611,9 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
                             'h-7 min-w-0 flex-1 truncate px-0.5 text-center text-[11px] border-b-2 -mb-px',
                             on
                               ? 'border-primary font-semibold text-primary'
-                              : 'border-transparent text-muted-foreground hover:text-foreground'
+                              : hasActiveLayer
+                                ? 'border-transparent font-medium text-[color-mix(in_srgb,var(--primary)_62%,white)] dark:text-[color-mix(in_srgb,var(--primary)_78%,white)]'
+                                : 'border-transparent text-muted-foreground hover:text-foreground'
                           )}
                           onClick={() => {
                             if (title === group) return

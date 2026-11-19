@@ -3,14 +3,14 @@
 import { useEffect, useRef, useState, type ReactNode, type Ref } from 'react'
 import { createPortal } from 'react-dom'
 import {
-  AppWindow,
   Minus,
+  Pin,
   Square,
   SquareArrowOutUpRight,
   X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import type { MapUiZLayer } from '@/lib/mapUiZIndex'
+import { MAP_UI_Z, type MapUiZLayer } from '@/lib/mapUiZIndex'
 import {
   MapFloatingPanel,
   type MapFloatingPanelPosition,
@@ -40,7 +40,7 @@ export type MapDetailFloatingPanelProps = {
   headerActions?: ReactNode
   /** 펼침·최소화 모두 최소화·닫기 왼쪽에 표시 (위치 이동 등) */
   headerActionsAlways?: ReactNode
-  /** 헤더 우클릭 — 화면에서 보기(플로팅 분리) */
+  /** 헤더 우클릭 — 고정 창으로 보기(플로팅 분리) */
   onHeaderOpenInScreen?: () => void
   /** 헤더 우클릭 — 새 창으로 보기(blank) */
   onHeaderOpenInNewWindow?: () => void
@@ -174,6 +174,7 @@ export function MapDetailFloatingPanel({
         !isMapFloat && 'bg-background backdrop-blur-none',
         className
       )}
+      overlay={overlay}
       header={
         <div
           ref={headerRef}
@@ -274,8 +275,13 @@ export function MapDetailFloatingPanel({
                 <div
                   ref={menuRef}
                   role="menu"
-                  className="fixed z-[10050] min-w-[11rem] rounded-md border border-border bg-background py-1 text-xs shadow-lg"
-                  style={{ left: ctxMenu.left, top: ctxMenu.top }}
+                  className="fixed min-w-[11rem] rounded-md border border-border bg-background py-1 text-xs shadow-lg"
+                  style={{
+                    left: ctxMenu.left,
+                    top: ctxMenu.top,
+                    // 상세 플로팅(selected +1)보다 위 — 헤더 우클릭 메뉴가 가려지지 않게
+                    zIndex: MAP_UI_Z.nestedDialog,
+                  }}
                 >
                   {allowMinimize ? (
                     <button
@@ -300,15 +306,15 @@ export function MapDetailFloatingPanel({
                     <button
                       type="button"
                       role="menuitem"
-                      title="화면에서 보기"
+                      title="고정 창으로 보기"
                       className="flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-left text-foreground hover:bg-primary/10"
                       onClick={() => {
                         setCtxMenu(null)
                         onHeaderOpenInScreen?.()
                       }}
                     >
-                      <AppWindow className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                      화면에서 보기
+                      <Pin className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                      고정 창으로 보기
                     </button>
                   ) : null}
                   {showBlankItem ? (
@@ -336,7 +342,6 @@ export function MapDetailFloatingPanel({
         </div>
       }
     >
-      {overlay}
       <div
         className={cn(
           'flex min-h-0 flex-1 flex-col overflow-hidden',

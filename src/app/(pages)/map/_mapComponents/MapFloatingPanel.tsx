@@ -60,6 +60,8 @@ export interface MapFloatingPanelProps {
    * default: 상세 플로팅(rounded-xl).
    */
   variant?: 'default' | 'mapFloat';
+  /** 패널 루트 기준 absolute 오버레이(튜토리얼 등). 헤더 위 노출용 */
+  overlay?: React.ReactNode;
 }
 
 export function MapFloatingPanel({
@@ -79,6 +81,7 @@ export function MapFloatingPanel({
   onHeaderDoubleClick,
   flushViewportClamp = false,
   variant = 'default',
+  overlay,
 }: MapFloatingPanelProps) {
   const isMapFloat = variant === 'mapFloat';
   const useLeft = defaultPosition.left != null;
@@ -191,6 +194,8 @@ export function MapFloatingPanel({
   const handlePointerDown = useCallback(
     (e: React.PointerEvent) => {
       if (pinPosition) return;
+      // 좌클릭만 드래그 — 우클릭 컨텍스트 메뉴와 충돌 방지
+      if (e.button !== 0) return;
       if ((e.target as HTMLElement).closest('button')) return;
       dragRef.current = {
         isDragging: true,
@@ -329,7 +334,8 @@ export function MapFloatingPanel({
       ref={setRootRef}
       onPointerDownCapture={bringToFront}
       className={cn(
-        'flex flex-col overflow-hidden pointer-events-auto',
+        // overflow-visible: 헤더 위 튜토리얼 등 overlay 노출. 본문만 overflow-hidden
+        'relative flex flex-col overflow-visible pointer-events-auto',
         isMapFloat
           ? // 우측 패널 surface와 동일 톤·radius. opacity-90은 센터마크가 비치므로 플로팅은 불투명
             'standard-map-float-surface !opacity-100'
@@ -351,6 +357,7 @@ export function MapFloatingPanel({
         ...(!zClass && _ignoredZ != null ? { zIndex: _ignoredZ } : null),
       }}
     >
+      {overlay}
       <div
         role="button"
         tabIndex={0}
@@ -384,7 +391,7 @@ export function MapFloatingPanel({
       {/* 최소화(pin) 시 본문 숨김(마운트 유지) — 높이·클릭은 헤더만 */}
       <div
         className={cn(
-          'flex min-h-0 flex-1 flex-col',
+          'flex min-h-0 flex-1 flex-col overflow-hidden',
           pinPosition && 'pointer-events-none hidden h-0 max-h-0 overflow-hidden !flex-none'
         )}
         aria-hidden={Boolean(pinPosition)}

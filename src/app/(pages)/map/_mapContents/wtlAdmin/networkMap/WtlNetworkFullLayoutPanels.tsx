@@ -76,16 +76,23 @@ type Props = {
   listError?: string
 }
 
+/** 활성 레이어가 있는 카테고리 — primary보다 살짝 밝은 글자 (하단 bar 없음) */
+const TAB_LIT_TEXT =
+  'text-[color-mix(in_srgb,var(--primary)_62%,white)] dark:text-[color-mix(in_srgb,var(--primary)_78%,white)]'
+
 function TabRow({
   items,
   activeId,
   onChange,
   variant = 'underline',
+  litIds,
 }: {
   items: { id: string; label: string }[]
   activeId: string
   onChange: (id: string) => void
   variant?: 'underline' | 'chip'
+  /** 활성 레이어가 있는 항목 id — underline에서만 글자색 강조(bar 없음) */
+  litIds?: ReadonlySet<string>
 }) {
   if (items.length === 0) return null
   if (variant === 'chip') {
@@ -117,6 +124,7 @@ function TabRow({
     <div className="flex shrink-0 border-b border-border">
       {items.map((it) => {
         const on = it.id === activeId
+        const lit = !on && Boolean(litIds?.has(it.id))
         return (
           <button
             key={it.id}
@@ -125,7 +133,9 @@ function TabRow({
               'h-7 min-w-0 flex-1 cursor-pointer truncate px-0.5 text-center text-[11px] border-b-2 -mb-px',
               on
                 ? 'border-primary font-semibold text-primary'
-                : 'border-transparent text-muted-foreground hover:text-foreground'
+                : lit
+                  ? cn('border-transparent font-medium', TAB_LIT_TEXT)
+                  : 'border-transparent text-muted-foreground hover:text-foreground'
             )}
             title={it.label}
             onClick={() => onChange(it.id)}
@@ -326,7 +336,7 @@ export function WtlNetworkFullLayoutPanels({
                       onChange={onSourceTabChange}
                       variant="underline"
                     />
-                    {/* 2단: 분류(관로·상수시설 등) */}
+                    {/* 2단: 분류(관로·상수시설 등) — 목록에 있으면 활성 레이어 있음(선택 탭은 bar 유지) */}
                     <TabRow
                       items={categories.map((c) => ({
                         id: c.title,
@@ -335,6 +345,7 @@ export function WtlNetworkFullLayoutPanels({
                       activeId={groupTab}
                       onChange={onGroupTabChange}
                       variant="underline"
+                      litIds={new Set(categories.map((c) => c.title))}
                     />
                     {/* 3단: 레이어 */}
                     <TabRow

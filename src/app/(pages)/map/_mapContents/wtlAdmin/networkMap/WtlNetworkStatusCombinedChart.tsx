@@ -411,7 +411,7 @@ export function WtlNetworkStatusCombinedChart({
                       aria-pressed={!hidden}
                       onClick={() => toggleMaterial(label)}
                       className={cn(
-                        'flex w-full min-w-0 cursor-pointer items-start gap-1.5 rounded px-0.5 py-0.5 text-left text-xs leading-snug hover:bg-muted/60',
+                        'flex w-full min-w-0 cursor-pointer items-center gap-1.5 rounded px-0.5 py-0.5 text-left text-xs leading-snug hover:bg-muted/60',
                         hidden
                           ? 'text-muted-foreground/45 line-through'
                           : 'text-muted-foreground'
@@ -419,13 +419,13 @@ export function WtlNetworkStatusCombinedChart({
                     >
                       <span
                         className={cn(
-                          'mt-1 h-2.5 w-2.5 shrink-0 rounded-md',
+                          'h-2.5 w-2.5 shrink-0 rounded-md',
                           hidden && 'opacity-40'
                         )}
                         style={{ backgroundColor: color }}
                         aria-hidden
                       />
-                      <span className="min-w-0 break-all">{label}</span>
+                      <span className="min-w-0 truncate">{label}</span>
                     </button>
                   </li>
                 )
