@@ -12,7 +12,7 @@
     <entry key="preparedStatements">false</entry>
     <entry key="database">ggnr_ad</entry>
     <entry key="port">5433</entry>
-    <entry key="passwd">crypt1:to7fXijaxCmp7xBA/MNlUw==</entry>
+    <entry key="passwd">crypt1:+YkY8im4lofG/Xgmz6xcyA==</entry>
     <entry key="validate connections">true</entry>
     <entry key="host">192.168.127.32</entry>
     <entry key="dbtype">postgis</entry>
@@ -22,6 +22,6 @@
   </connectionParameters>
   <__default>false</__default>
   <dateCreated>2026-02-11 16:00:05.477 UTC</dateCreated>
-  <dateModified>2026-10-30 02:03:40.629 UTC</dateModified>
+  <dateModified>2026-11-19 02:38:31.795 UTC</dateModified>
   <disableOnConnFailure>false</disableOnConnFailure>
 </dataStore>

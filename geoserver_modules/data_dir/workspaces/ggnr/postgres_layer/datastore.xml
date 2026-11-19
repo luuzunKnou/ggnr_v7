@@ -12,7 +12,7 @@
     <entry key="preparedStatements">false</entry>
     <entry key="database">ggnr_ad</entry>
     <entry key="port">5433</entry>
-    <entry key="passwd">crypt1:sLG6KNUX77Q8wpiCVk+SDA==</entry>
+    <entry key="passwd">crypt1:GW2H1RV4Czc9NbFgfWGJGQ==</entry>
     <entry key="validate connections">true</entry>
     <entry key="host">192.168.127.32</entry>
     <entry key="dbtype">postgis</entry>

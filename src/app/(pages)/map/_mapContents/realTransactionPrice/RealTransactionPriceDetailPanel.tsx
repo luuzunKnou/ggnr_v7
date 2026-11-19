@@ -1,11 +1,10 @@
 'use client'
 
 import { useEffect, useState, type ReactNode } from 'react'
-import { call } from '@/lib/api'
+import { dongTradesClient } from '@/lib/realTransactionPriceClient'
 import { DetailAttrRow, DetailAttrTable, LayerRowEditHeader } from '../../_mapComponents/layerRowEdit'
 import { MapSideDetailScroll } from '../../_mapComponents/MapSideDetailScroll'
 import {
-  REAL_TRANSACTION_PRICE_SERVICE,
   dealYmdLabel,
   formatArea,
   formatManWon,
@@ -62,22 +61,10 @@ export function RealTransactionPriceDetailPanel({ umdNm, dealYmd, onClose }: Pro
   useEffect(() => {
     let cancelled = false
     const key = `${dealYmd}:${umdNm}`
-    call('', 'POST', {
-      service: REAL_TRANSACTION_PRICE_SERVICE,
-      action: 'dongTrades',
-      params: { dealYmd, umdNm },
-    })
-      .then((res) => {
+    dongTradesClient({ dealYmd, umdNm })
+      .then((detail) => {
         if (cancelled) return
-        if (!res?.success) {
-          setLoaded({
-            key,
-            detail: null,
-            error: String((res as { error?: string })?.error ?? '거래 목록을 불러오지 못했습니다.'),
-          })
-          return
-        }
-        setLoaded({ key, detail: (res.data ?? res) as DetailPayload, error: null })
+        setLoaded({ key, detail: detail as DetailPayload, error: null })
       })
       .catch((e) => {
         if (!cancelled) {
