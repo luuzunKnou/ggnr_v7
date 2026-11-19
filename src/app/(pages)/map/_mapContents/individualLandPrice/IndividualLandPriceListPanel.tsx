@@ -426,7 +426,7 @@ export function IndividualLandPriceListPanel({ onClose, selectedPnu, onSelect }:
                   value={keywordInput}
                   onChange={(e) => setKeywordInput(e.target.value)}
                   placeholder="소재지·지번"
-                  title="목록에서 소재지(읍면동·리) 또는 지번으로 거릅니다 (예: 삼산동, 12-3, 산5)"
+                  title="목록에서 소재지·지번 앞자리로 거릅니다 (예: 천리동 2, 운흥동 247-2 → 247-20)"
                   className="w-full rounded-md border border-border bg-background py-1 pl-7 pr-2 text-xs text-foreground outline-none ring-offset-2 focus:border-border focus:ring-2 focus:ring-ring scheme-light dark:scheme-dark"
                 />
               </div>

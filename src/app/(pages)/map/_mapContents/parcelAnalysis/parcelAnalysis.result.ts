@@ -13,6 +13,7 @@ import {
   type AnalyzeLandRow,
 } from '@/lib/parcelLandNormalize';
 import { PARCEL_ANALYSIS_LINKAGE_CONCURRENCY } from '@/lib/parcelAnalysisTheme';
+import { fetchBuildingLedgersPortalBatchClient } from '@/lib/buildingLedgerPortalClient';
 import {
   fetchLandInfoConfig,
   fetchVworldLandUseZonesBatch,
@@ -710,27 +711,32 @@ async function fetchBuildingChunk(
   notice?: string;
 }> {
   if (!rows.length) return { rows: [] };
+  const parcels = rows.map((r) => ({ pnu: r.pnu, jibun: r.jibun }));
   const res = await call('', 'POST', {
     service: 'mapAnalyseService',
     action: 'fetchBuildingLedgersForParcels',
-    params: {
-      parcels: rows.map((r) => ({ pnu: r.pnu, jibun: r.jibun })),
-    },
+    params: { parcels },
   });
   const data = (res?.data ?? res) as {
     ok?: boolean;
     rows?: NonNullable<AnalyzeExtendedResponse['buildingRows']>;
     notice?: string;
     portalQuotaExceeded?: boolean;
+    needsPortalFallback?: boolean;
   };
-  const notice = data?.notice
-    ? data.notice
-    : data?.portalQuotaExceeded
-      ? '공공데이터포털 호출이 제한되어 전부 가져오지 못했습니다. 잠시 후 다시 조회해 주세요'
-      : undefined;
+
+  if (data?.needsPortalFallback === false) {
+    return {
+      rows: Array.isArray(data.rows) ? data.rows : [],
+      notice: data.notice,
+    };
+  }
+
+  // 세움 없음·실패 → 브라우저에서 포털 직접 조회
+  const portal = await fetchBuildingLedgersPortalBatchClient({ parcels });
   return {
-    rows: data?.ok && data.rows ? data.rows : [],
-    notice,
+    rows: portal.rows as NonNullable<AnalyzeExtendedResponse['buildingRows']>,
+    notice: portal.notice,
   };
 }
 

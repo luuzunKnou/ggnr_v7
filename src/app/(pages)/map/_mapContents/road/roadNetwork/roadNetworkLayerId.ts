@@ -71,7 +71,7 @@ export function isRoadNetworkWmsLayerId(tableName: string): boolean {
  */
 const ROAD_NETWORK_UNIFIED_WMS_LAYER_IDS = [ROAD_NETWORK_UNIFIED_LS, ROAD_NETWORK_UNIFIED_PS];
 
-/** 패널이 켜고 끄는 전체 WMS (지도 클릭 선택 대상 + 표지 점) */
+/** 패널이 켜고 끄는 전체 WMS (지도 클릭 선택 대상 + 표지 점). 기·종점 WMS는 제외 */
 export const ROAD_NETWORK_OWNED_WMS_LAYER_IDS = [
   ...ROAD_NETWORK_WMS_LAYER_IDS,
   ROAD_NETWORK_UNIFIED_PS,
