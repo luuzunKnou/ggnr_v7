@@ -220,7 +220,7 @@
               </sld:Fill>
             </sld:Halo>
             <sld:Fill>
-              <sld:CssParameter name="fill">#16A34A</sld:CssParameter>
+              <sld:CssParameter name="fill">#1C94D8</sld:CssParameter>
             </sld:Fill>
           </sld:TextSymbolizer>
           <sld:TextSymbolizer>
@@ -252,7 +252,7 @@
               </sld:Fill>
             </sld:Halo>
             <sld:Fill>
-              <sld:CssParameter name="fill">#16A34A</sld:CssParameter>
+              <sld:CssParameter name="fill">#1C94D8</sld:CssParameter>
             </sld:Fill>
           </sld:TextSymbolizer>
           <sld:TextSymbolizer>
@@ -284,7 +284,7 @@
               </sld:Fill>
             </sld:Halo>
             <sld:Fill>
-              <sld:CssParameter name="fill">#16A34A</sld:CssParameter>
+              <sld:CssParameter name="fill">#1C94D8</sld:CssParameter>
             </sld:Fill>
           </sld:TextSymbolizer>
         </sld:Rule>
@@ -504,7 +504,7 @@
               </sld:Fill>
             </sld:Halo>
             <sld:Fill>
-              <sld:CssParameter name="fill">#EAB308</sld:CssParameter>
+              <sld:CssParameter name="fill">#0EA54B</sld:CssParameter>
             </sld:Fill>
           </sld:TextSymbolizer>
           <sld:TextSymbolizer>
@@ -536,7 +536,7 @@
               </sld:Fill>
             </sld:Halo>
             <sld:Fill>
-              <sld:CssParameter name="fill">#EAB308</sld:CssParameter>
+              <sld:CssParameter name="fill">#0EA54B</sld:CssParameter>
             </sld:Fill>
           </sld:TextSymbolizer>
           <sld:TextSymbolizer>
@@ -568,7 +568,7 @@
               </sld:Fill>
             </sld:Halo>
             <sld:Fill>
-              <sld:CssParameter name="fill">#EAB308</sld:CssParameter>
+              <sld:CssParameter name="fill">#0EA54B</sld:CssParameter>
             </sld:Fill>
           </sld:TextSymbolizer>
         </sld:Rule>
