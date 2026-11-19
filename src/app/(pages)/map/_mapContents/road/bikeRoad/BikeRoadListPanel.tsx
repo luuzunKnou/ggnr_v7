@@ -1,9 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Plus, Search, X } from "lucide-react";
+import { unByKey } from "ol/Observable";
+import type { EventsKey } from "ol/events";
 import { cn } from "@/lib/utils";
 import { LayerRowPanelButton } from "../../../_mapComponents/layerRowEdit";
+import { useMapContext } from "../../../_mapComponents/MapContext";
+import { warmBikeRoadNetByBbox } from "./loadBikeRoadNet";
 import {
   BIKE_ROAD_MOCK_ROUTES,
   normalizeBikeRoadKind,
@@ -63,8 +67,33 @@ export function BikeRoadListPanel({
   onAdd,
   routes = BIKE_ROAD_MOCK_ROUTES,
 }: Props) {
+  const mapContext = useMapContext();
   const [keyword, setKeyword] = useState("");
   const [kindFilter, setKindFilter] = useState<KindFilter>("전체");
+
+  /** 목록만 열어도 현재 화면 통판 망 미리 받기 — 모달 즉시 표시 */
+  useEffect(() => {
+    const map = mapContext?.mapInstanceRef?.current;
+    if (!map || !mapContext?.mapReady) return;
+    const warm = () => {
+      const size = map.getSize();
+      if (!size) return;
+      const extent = map.getView().calculateExtent(size) as [
+        number,
+        number,
+        number,
+        number,
+      ];
+      void warmBikeRoadNetByBbox(extent, {
+        resolution: map.getView().getResolution() ?? undefined,
+      });
+    };
+    warm();
+    const key = map.on("moveend", warm) as EventsKey;
+    return () => {
+      unByKey(key);
+    };
+  }, [mapContext, mapContext?.mapReady]);
 
   const filtered = useMemo(() => {
     const q = keyword.trim().toLowerCase();

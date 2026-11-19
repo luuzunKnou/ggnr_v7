@@ -130,6 +130,77 @@ export function pathStyleFromKind(
   return normalizeBikeRoadKind(kind) === "전용도로" ? "dedicated" : "sharedSep";
 }
 
+/** 구간 «자전거도로 종류» → 지도·위치도 선 색 */
+export function pathStyleFromPathType(
+  pathType: string
+): BikeRoadRoute["pathStyle"] {
+  const g = bikeRoadWidthGroup(pathType);
+  if (g === "dedicated") return "dedicated";
+  if (g === "sharedNonSep") return "sharedNonSep";
+  return "sharedSep";
+}
+
+/** 위치도·지도 범례와 동일 색 */
+export const BIKE_ROAD_PATH_STYLE_COLOR = {
+  dedicated: "#FF2D95",
+  sharedSep: "#00C853",
+  sharedNonSep: "#1E88E5",
+} as const;
+
+/** 단순 목록(호환) */
+export const BIKE_ROAD_PATH_STYLE_LEGEND: {
+  key: BikeRoadRoute["pathStyle"];
+  label: string;
+  color: string;
+}[] = [
+  { key: "dedicated", label: "전용도로", color: BIKE_ROAD_PATH_STYLE_COLOR.dedicated },
+  {
+    key: "sharedSep",
+    label: "겸용도로(분리)",
+    color: BIKE_ROAD_PATH_STYLE_COLOR.sharedSep,
+  },
+  {
+    key: "sharedNonSep",
+    label: "겸용도로(비분리)",
+    color: BIKE_ROAD_PATH_STYLE_COLOR.sharedNonSep,
+  },
+];
+
+/**
+ * 범례 표 구조 — 제목·구분·현황.
+ * 겸용은 대분류 rowspan + 분리/비분리.
+ */
+export const BIKE_ROAD_PATH_LEGEND_TABLE = {
+  title: "범례",
+  colGroup: "구분",
+  colStatus: "현황",
+  dedicated: {
+    group: "자전거전용도로",
+    color: BIKE_ROAD_PATH_STYLE_COLOR.dedicated,
+  },
+  sharedGroup: "자전거 보행자 겸용도로",
+  shared: [
+    {
+      key: "sharedSep" as const,
+      sub: "분리",
+      color: BIKE_ROAD_PATH_STYLE_COLOR.sharedSep,
+    },
+    {
+      key: "sharedNonSep" as const,
+      sub: "비분리",
+      color: BIKE_ROAD_PATH_STYLE_COLOR.sharedNonSep,
+    },
+  ],
+} as const;
+
+export function bikeRoadStrokeColor(
+  pathStyle: BikeRoadRoute["pathStyle"] | string
+): string {
+  if (pathStyle === "dedicated") return BIKE_ROAD_PATH_STYLE_COLOR.dedicated;
+  if (pathStyle === "sharedNonSep") return BIKE_ROAD_PATH_STYLE_COLOR.sharedNonSep;
+  return BIKE_ROAD_PATH_STYLE_COLOR.sharedSep;
+}
+
 export const BIKE_ROAD_NEW_ID_PREFIX = "bike-new-";
 
 export function isNewBikeRoadRouteId(id: string | null | undefined): boolean {

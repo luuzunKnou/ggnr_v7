@@ -30,7 +30,7 @@ import { RoadNetworkDetailPanel } from "./_mapContents/road/roadNetwork/RoadNetw
 import { clearRoadNetworkWmsLayers } from "./_mapContents/road/roadNetwork/roadNetworkMapSync"
 import { BikeRoadListPanel } from "./_mapContents/road/bikeRoad/BikeRoadListPanel"
 import { BikeRoadDetailPanel } from "./_mapContents/road/bikeRoad/BikeRoadDetailPanel"
-import { BikeRoadMapOverlay } from "./_mapContents/road/bikeRoad/useBikeRoadMapOverlay"
+import { BikeRoadMapOverlay } from "./_mapContents/road/bikeRoad/BikeRoadMapOverlay"
 import {
   BIKE_ROAD_MOCK_ROUTES,
   createEmptyBikeRoadRoute,

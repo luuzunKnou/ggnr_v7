@@ -1,12 +1,10 @@
 /**
- * 도로구간(tl_sprd_manage) 클라이언트 네트워크.
- * 사유지분석이 실폭도로를 한 면으로 합치듯, 도로구간 조각을 이어 붙여
- * 하나의 경로망으로 쓴 뒤 두 스냅점 사이 중심선 최단경로를 구한다.
+ * 원본 도로구간(tl_sprd_manage) 경로망 탐색.
+ * 안내는 원본 그대로. 경로 그래프는 서버가 교차·근접을 이은 망을 쓴다.
  */
 
 import GeoJSON from "ol/format/GeoJSON";
 import type { Coordinate } from "ol/coordinate";
-import { fetchWfsGeoJsonByBbox } from "@/lib/geoserverWfs";
 
 export type Pt = [number, number];
 
@@ -29,14 +27,17 @@ export type BikeRoadNet = {
   edgeCoords: Pt[][];
 };
 
-/** 끝점·교차 접합 허용 (사거리 끝점이 수 m 어긋나도 이음) */
-const END_JOIN_M = 10;
-/** T자·교차: 끝점이 다른 도로 중간에 가까우면 그 위치에서 분할 */
-const T_JOIN_M = 10;
-/** 구간 추가·경로망 원천 — 도로구간 (조각 → 하나로 이어 붙여 사용) */
-const ROAD_LAYER = "tl_sprd_manage";
-const WFS_MAX = 2500;
+/**
+ * 끝점·근접 접합 거리 (m).
+ * 넓히면 안 닿는 옆길이 끌려와 경로가 V자로 꺾임 → 1m.
+ */
+const END_JOIN_M = 1;
+/** T자·교차 근접 분할 (END_JOIN 과 동일) */
+const T_JOIN_M = 1;
 export const BIKE_ROAD_NET_MAX_RES = 12;
+/** 안내선·원천 도로구간 (원본 유지) */
+export const ROAD_LAYER = "tl_sprd_manage";
+export const ROAD_SOURCE_LAYER = "tl_sprd_manage";
 
 function dist(a: Pt, b: Pt): number {
   return Math.hypot(a[0] - b[0], a[1] - b[1]);
@@ -183,13 +184,87 @@ function segmentIntersection(a: Pt, b: Pt, c: Pt, d: Pt): Pt | null {
   return [a[0] + t * ax, a[1] + t * ay];
 }
 
+/** 두 선분 최근접 — 사거리에서 살짝 어긋난 선도 같은 노드로 이으려고 */
+function closestApproachSegments(
+  a0: Pt,
+  a1: Pt,
+  b0: Pt,
+  b1: Pt
+): { ta: number; tb: number; d: number; dirDot: number } | null {
+  const ax = a1[0] - a0[0];
+  const ay = a1[1] - a0[1];
+  const bx = b1[0] - b0[0];
+  const by = b1[1] - b0[1];
+  const aLen = Math.hypot(ax, ay);
+  const bLen = Math.hypot(bx, by);
+  if (aLen < 1e-9 || bLen < 1e-9) return null;
+  const dirDot = (ax * bx + ay * by) / (aLen * bLen);
+
+  const samples: { ta: number; tb: number; d: number }[] = [];
+  // 끝점→상대 선분 투영 4개 + 클램프된 무한직선 최근접
+  {
+    const ha0 = projectOnSegment(a0, b0, b1);
+    samples.push({ ta: 0, tb: ha0.t, d: ha0.dist });
+    const ha1 = projectOnSegment(a1, b0, b1);
+    samples.push({ ta: 1, tb: ha1.t, d: ha1.dist });
+    const hb0 = projectOnSegment(b0, a0, a1);
+    samples.push({ ta: hb0.t, tb: 0, d: hb0.dist });
+    const hb1 = projectOnSegment(b1, a0, a1);
+    samples.push({ ta: hb1.t, tb: 1, d: hb1.dist });
+  }
+  {
+    const rx = a0[0] - b0[0];
+    const ry = a0[1] - b0[1];
+    const aa = ax * ax + ay * ay;
+    const bb = bx * bx + by * by;
+    const ab = ax * bx + ay * by;
+    const ar = ax * rx + ay * ry;
+    const br = bx * rx + by * ry;
+    const den = aa * bb - ab * ab;
+    if (Math.abs(den) > 1e-12) {
+      let ta = (ab * br - bb * ar) / den;
+      let tb = (aa * br - ab * ar) / den;
+      ta = Math.max(0, Math.min(1, ta));
+      tb = Math.max(0, Math.min(1, tb));
+      const pa: Pt = [a0[0] + ax * ta, a0[1] + ay * ta];
+      const pb: Pt = [b0[0] + bx * tb, b0[1] + by * tb];
+      samples.push({ ta, tb, d: dist(pa, pb) });
+    }
+  }
+
+  let best: { ta: number; tb: number; d: number } | null = null;
+  for (const s of samples) {
+    if (!best || s.d < best.d) best = s;
+  }
+  if (!best) return null;
+  return { ...best, dirDot };
+}
+
 /**
  * GeoJSON → 도로망 그래프.
  * 1) T자·교차에서 선 분할 2) 끝점 클러스터 접합
  */
+export type BuildBikeRoadNetOpts = {
+  /**
+   * 빠른 구축 — 교차·근접 분할·degree2 dissolve 생략.
+   * 그리기 모달 등 반응성 우선 시 사용.
+   */
+  fast?: boolean;
+  /**
+   * 교차·T접합은 하되 degree2 긴 선 합치기만 생략.
+   * 서버 통판 로딩 단축용 (사거리 연결 유지).
+   */
+  skipDissolve?: boolean;
+};
+
 export function buildBikeRoadNetFromFeatures(
-  features: import("ol/Feature").default[]
+  features: import("ol/Feature").default[],
+  opts?: BuildBikeRoadNetOpts
 ): BikeRoadNet {
+  const fast = opts?.fast === true;
+  const skipDissolve = opts?.skipDissolve === true || fast;
+  // fast만 근접통과 생략 — quick으로 빼면 사거리 어긋난 도로가 안 이어져 경로가 이상해짐
+  const skipNearCross = fast;
   const raw: Pt[][] = [];
   for (const f of features) {
     const geom = f.getGeometry();
@@ -277,30 +352,78 @@ export function buildBikeRoadNetFromFeatures(
     }
   }
 
-  // 사거리 통과형 교차 — 근처 선만
-  for (let i = 0; i < raw.length; i++) {
-    const A = raw[i]!;
-    for (const j of nearbyLines(i)) {
-      if (j <= i) continue;
-      const B = raw[j]!;
-      let alongA = 0;
-      for (let ai = 0; ai < A.length - 1; ai++) {
-        const a0 = A[ai]!;
-        const a1 = A[ai + 1]!;
-        const aSeg = dist(a0, a1);
-        let alongB = 0;
-        for (let bi = 0; bi < B.length - 1; bi++) {
-          const b0 = B[bi]!;
-          const b1 = B[bi + 1]!;
-          const bSeg = dist(b0, b1);
-          const cross = segmentIntersection(a0, a1, b0, b1);
-          if (cross) {
-            addCut(i, alongA + dist(a0, cross));
-            addCut(j, alongB + dist(b0, cross));
-          }
-          alongB += bSeg;
+  // 사거리 교차·근접통과 — 경로 품질에 필수(끄면 블록 우회).
+  // 속도: 선분 bbox가 멀면 closestApproach 자체를 호출하지 않음(품질 유지).
+  if (!fast) {
+    const nearPad = T_JOIN_M;
+    for (let i = 0; i < raw.length; i++) {
+      const A = raw[i]!;
+      const lenA = edgeLenM(A);
+      const boxA = lineBoxes[i]!;
+      for (const j of nearbyLines(i)) {
+        if (j <= i) continue;
+        const B = raw[j]!;
+        const lenB = edgeLenM(B);
+        const boxB = lineBoxes[j]!;
+        // 폴리라인 bbox가 이미 멀면 선분 루프 스킵
+        if (
+          boxA.maxX + nearPad < boxB.minX ||
+          boxB.maxX + nearPad < boxA.minX ||
+          boxA.maxY + nearPad < boxB.minY ||
+          boxB.maxY + nearPad < boxA.minY
+        ) {
+          continue;
         }
-        alongA += aSeg;
+        let alongA = 0;
+        for (let ai = 0; ai < A.length - 1; ai++) {
+          const a0 = A[ai]!;
+          const a1 = A[ai + 1]!;
+          const aSeg = dist(a0, a1);
+          const aMinX = Math.min(a0[0], a1[0]) - nearPad;
+          const aMaxX = Math.max(a0[0], a1[0]) + nearPad;
+          const aMinY = Math.min(a0[1], a1[1]) - nearPad;
+          const aMaxY = Math.max(a0[1], a1[1]) + nearPad;
+          let alongB = 0;
+          for (let bi = 0; bi < B.length - 1; bi++) {
+            const b0 = B[bi]!;
+            const b1 = B[bi + 1]!;
+            const bSeg = dist(b0, b1);
+            const bMinX = Math.min(b0[0], b1[0]);
+            const bMaxX = Math.max(b0[0], b1[0]);
+            const bMinY = Math.min(b0[1], b1[1]);
+            const bMaxY = Math.max(b0[1], b1[1]);
+            // 선분 bbox 멀면 교차·근접 모두 불필요
+            if (
+              aMaxX < bMinX ||
+              bMaxX < aMinX ||
+              aMaxY < bMinY ||
+              bMaxY < aMinY
+            ) {
+              alongB += bSeg;
+              continue;
+            }
+            const cross = segmentIntersection(a0, a1, b0, b1);
+            if (cross) {
+              addCut(i, alongA + dist(a0, cross));
+              addCut(j, alongB + dist(b0, cross));
+            } else if (!skipNearCross) {
+              const near = closestApproachSegments(a0, a1, b0, b1);
+              if (
+                near &&
+                near.d <= T_JOIN_M &&
+                near.d > 0.05 &&
+                Math.abs(near.dirDot) < 0.92
+              ) {
+                const ca = alongA + aSeg * near.ta;
+                const cb = alongB + bSeg * near.tb;
+                if (ca > T_JOIN_M && ca < lenA - T_JOIN_M) addCut(i, ca);
+                if (cb > T_JOIN_M && cb < lenB - T_JOIN_M) addCut(j, cb);
+              }
+            }
+            alongB += bSeg;
+          }
+          alongA += aSeg;
+        }
       }
     }
   }
@@ -312,10 +435,73 @@ export function buildBikeRoadNetFromFeatures(
     }
   }
 
-  // 꺾임만 있는 구간(차수 2)은 한 줄로 이어 붙임 — 조각난 도로구간을 실폭처럼 연속 망으로
-  const pieces = dissolveDegree2Chains(splitPieces, END_JOIN_M);
+  // dissolve는 비용 큼 — skipDissolve/fast면 조각 그대로 노드 접합만
+  const pieces = skipDissolve
+    ? splitPieces
+    : dissolveDegree2Chains(splitPieces, END_JOIN_M);
 
-  return buildNetFromPieces(pieces, END_JOIN_M);
+  // 끝점 클러스터 + 사거리 근접 노드를 통판으로 이음
+  return linkNearbyNodes(buildNetFromPieces(pieces, END_JOIN_M), END_JOIN_M);
+}
+
+/**
+ * 가까운 노드끼리 짧은 링크로 연결 — 이중선·사거리 중심선이
+ * 살짝 어긋나도 통판처럼 한 망으로 이어지게 함.
+ */
+function linkNearbyNodes(net: BikeRoadNet, joinM: number): BikeRoadNet {
+  const { nodes, edges, edgeCoords } = net;
+  if (nodes.length < 2) return net;
+
+  const linked = new Set<string>();
+  for (const [a, b] of edges) {
+    linked.add(`${Math.min(a, b)}_${Math.max(a, b)}`);
+  }
+
+  const cell = Math.max(8, joinM);
+  const bucket = new Map<string, number[]>();
+  const nextEdges: [number, number, number][] = [...edges];
+  const nextCoords: Pt[][] = edgeCoords.map((c) => c.map((p) => [p[0], p[1]] as Pt));
+
+  for (let i = 0; i < nodes.length; i++) {
+    const p = nodes[i]!;
+    const gx = Math.floor(p[0] / cell);
+    const gy = Math.floor(p[1] / cell);
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dy = -1; dy <= 1; dy++) {
+        for (const j of bucket.get(`${gx + dx}_${gy + dy}`) ?? []) {
+          const q = nodes[j]!;
+          const d = dist(p, q);
+          if (d < 0.05 || d > joinM) continue;
+          const key = `${Math.min(i, j)}_${Math.max(i, j)}`;
+          if (linked.has(key)) continue;
+          linked.add(key);
+          nextEdges.push([i, j, d]);
+          nextCoords.push([
+            [p[0], p[1]],
+            [q[0], q[1]],
+          ]);
+        }
+      }
+    }
+    const key = `${gx}_${gy}`;
+    if (!bucket.has(key)) bucket.set(key, []);
+    bucket.get(key)!.push(i);
+  }
+
+  return { nodes, edges: nextEdges, edgeCoords: nextCoords };
+}
+
+/** GeoJSON FeatureCollection → 도로망 (서버·클라이언트 공용) */
+export function buildBikeRoadNetFromGeoJson(
+  json: { type?: string; features?: unknown[] },
+  opts?: BuildBikeRoadNetOpts
+): BikeRoadNet {
+  const format = new GeoJSON();
+  const features = format.readFeatures(json, {
+    dataProjection: "EPSG:3857",
+    featureProjection: "EPSG:3857",
+  });
+  return buildBikeRoadNetFromFeatures(features, opts);
 }
 
 /** 끝점이 가까운 조각들을 클러스터로 묶고, 분기·사거리가 아닌 곳은 한 선으로 합침 */
@@ -543,56 +729,78 @@ function buildNetFromPieces(pieces: Pt[][], joinM: number): BikeRoadNet {
   return { nodes, edges, edgeCoords };
 }
 
-export async function loadBikeRoadNetByBbox(
-  bbox: [number, number, number, number],
-  opts?: { resolution?: number }
-): Promise<BikeRoadNet | null> {
-  const res = opts?.resolution;
-  if (res != null && res > BIKE_ROAD_NET_MAX_RES) {
-    return null;
-  }
-  const [minX, minY, maxX, maxY] = bbox;
-  const dx = (maxX - minX) * 0.12;
-  const dy = (maxY - minY) * 0.12;
-  const buffered: [number, number, number, number] = [
-    minX - dx,
-    minY - dy,
-    maxX + dx,
-    maxY + dy,
-  ];
-  const json = await fetchWfsGeoJsonByBbox({
-    layerName: ROAD_LAYER,
-    bbox: buffered,
-    srsName: "EPSG:3857",
-    maxFeatures: WFS_MAX,
-  });
-  if (!json?.features?.length) return null;
-  const format = new GeoJSON();
-  const features = format.readFeatures(json, {
-    dataProjection: "EPSG:3857",
-    featureProjection: "EPSG:3857",
-  });
-  return buildBikeRoadNetFromFeatures(features);
-}
-
-export type ProjectOnNetOpts = {
-  /** 직전 스냅 엣지 — 평행도로로 튀지 않게 우선 */
-  preferEdgeId?: number | null;
-  /** 선호 엣지 허용 여유 (m). 이보다 멀면 일반 최근접 */
-  preferSlackM?: number;
+export type BikeRoadNetLoadResult = {
+  net: BikeRoadNet;
+  /** 실제 조회에 쓴 bbox (캐시 판별용) */
+  bufferedBbox: [number, number, number, number];
+  /**
+   * 원본 도로구간 좌표 (안내선용).
+   * 그래프용으로 자른 edgeCoords 와 분리 — 화면은 원본 모양 유지.
+   */
+  guideLines?: Pt[][];
 };
 
-/** 점 → 가장 가까운 엣지 투영 (드래그 중엔 preferEdgeId로 고착) */
+/** 화면 extent가 캐시 bbox 안쪽(여유 포함)에 있으면 재로드 불필요 */
+export function netCacheCoversView(
+  cached: [number, number, number, number],
+  view: [number, number, number, number],
+  marginRatio = 0.08
+): boolean {
+  const [cx0, cy0, cx1, cy1] = cached;
+  const [vx0, vy0, vx1, vy1] = view;
+  const mx = (cx1 - cx0) * marginRatio;
+  const my = (cy1 - cy0) * marginRatio;
+  return (
+    vx0 >= cx0 + mx &&
+    vy0 >= cy0 + my &&
+    vx1 <= cx1 - mx &&
+    vy1 <= cy1 - my
+  );
+}
+
+/** 두 bbox 합집합 */
+export function unionBbox3857(
+  a: [number, number, number, number],
+  b: [number, number, number, number]
+): [number, number, number, number] {
+  return [
+    Math.min(a[0], b[0]),
+    Math.min(a[1], b[1]),
+    Math.max(a[2], b[2]),
+    Math.max(a[3], b[3]),
+  ];
+}
+
+/**
+ * 인접 타일 도로망 합치기 — 이동 시 기존 망을 버리지 않고 확장.
+ * (교체하면 찍은 점이 엉뚱한 도로에 붙음)
+ */
+export function mergeBikeRoadNets(a: BikeRoadNet, b: BikeRoadNet): BikeRoadNet {
+  const pieces = [...a.edgeCoords, ...b.edgeCoords].filter((c) => c.length >= 2);
+  if (pieces.length === 0) {
+    return { nodes: [], edges: [], edgeCoords: [] };
+  }
+  return linkNearbyNodes(buildNetFromPieces(pieces, END_JOIN_M), END_JOIN_M);
+}
+
+/** 점 → 가장 가까운 엣지 투영 */
 export function projectOnNet(
   net: BikeRoadNet,
   p: Pt,
-  maxDistM: number,
-  opts?: ProjectOnNetOpts
+  maxDistM: number
 ): RoadNetHit | null {
-  let best: RoadNetHit | null = null;
-  let preferred: RoadNetHit | null = null;
-  const preferId = opts?.preferEdgeId;
-  const slack = opts?.preferSlackM ?? 8;
+  const hits = projectOnNetAll(net, p, maxDistM, 1);
+  return hits[0] ?? null;
+}
+
+/** 점 근처 엣지 투영들 (엣지당 1개, 거리순) — 우회 의심 시 대체 스냅용 */
+function projectOnNetAll(
+  net: BikeRoadNet,
+  p: Pt,
+  maxDistM: number,
+  limit: number
+): RoadNetHit[] {
+  const byEdge = new Map<number, RoadNetHit>();
 
   for (let i = 0; i < net.edgeCoords.length; i++) {
     const coords = net.edgeCoords[i]!;
@@ -612,28 +820,16 @@ export function projectOnNet(
           from,
           to,
         };
-        if (!best || hit.dist < best.dist) best = cand;
-        if (
-          preferId != null &&
-          i === preferId &&
-          (!preferred || hit.dist < preferred.dist)
-        ) {
-          preferred = cand;
-        }
+        const prev = byEdge.get(i);
+        if (!prev || hit.dist < prev.dist) byEdge.set(i, cand);
       }
       along += dist(a, b);
     }
   }
 
-  if (
-    preferred &&
-    best &&
-    preferred.edgeId === preferId &&
-    preferred.dist <= best.dist + slack
-  ) {
-    return preferred;
-  }
-  return best;
+  return [...byEdge.values()]
+    .sort((a, b) => a.dist - b.dist)
+    .slice(0, Math.max(1, limit));
 }
 
 function neighbors(
@@ -656,11 +852,78 @@ function appendPath(out: Pt[], next: Pt[]) {
 }
 
 /**
+ * 사거리를 지나 짧게 나갔다 꺾인 꼭짓점만 제거.
+ * 블록 모서리(직각·긴 변)는 건드리지 않음 — 좌·우 한쪽만 잘라 반대가 뜨는 일 방지.
+ */
+function trimJunctionSpurs(pts: Pt[]): Pt[] {
+  if (pts.length < 3) return pts.map((p) => [p[0], p[1]] as Pt);
+  const out: Pt[] = [[pts[0]![0], pts[0]![1]]];
+  for (let i = 1; i < pts.length - 1; i++) {
+    const prev = out[out.length - 1]!;
+    const cur = pts[i]!;
+    const next = pts[i + 1]!;
+    const d01 = dist(prev, cur);
+    const d12 = dist(cur, next);
+    const d02 = dist(prev, next);
+    if (d02 <= END_JOIN_M + 4 && d01 + d12 > d02 * 1.25 + 1.5) {
+      continue;
+    }
+    const ax = cur[0] - prev[0];
+    const ay = cur[1] - prev[1];
+    const bx = next[0] - cur[0];
+    const by = next[1] - cur[1];
+    const al = Math.hypot(ax, ay);
+    const bl = Math.hypot(bx, by);
+    if (al > 0.5 && bl > 0.5) {
+      const dot = (ax / al) * (bx / bl) + (ay / al) * (by / bl);
+      if (dot < -0.35 && Math.min(d01, d12) <= END_JOIN_M + 4) continue;
+    }
+    out.push([cur[0], cur[1]]);
+  }
+  out.push([pts[pts.length - 1]![0], pts[pts.length - 1]![1]]);
+  return out.length >= 2 ? out : pts.map((p) => [p[0], p[1]] as Pt);
+}
+
+/**
  * 두 투영점 사이 도로 따라 경로 (3857).
  * 같은 선이면 선 위 구간 vs 다른 길로 우회 중 짧은 쪽.
- * 직선 지름길 금지.
+ * 직선 지름길 금지. 블록 한 바퀴 우회가 의심되면 근처 다른 스냅 조합도 본다.
  */
 export function netPath(
+  net: BikeRoadNet,
+  from: RoadNetHit,
+  to: RoadNetHit
+): Pt[] | null {
+  let best = netPathCore(net, from, to);
+  let bestLen = best && best.length >= 2 ? edgeLenM(best) : Infinity;
+  const crow = dist(from.point, to.point);
+
+  // 가까운데 한 바퀴 도는 경우 — 근처 다른 도로 스냅으로 재탐색
+  const detour =
+    Number.isFinite(bestLen) &&
+    crow < 160 &&
+    bestLen > Math.max(crow * 2.2, crow + 35);
+  if (detour) {
+    const tol = Math.max(22, crow * 0.35);
+    const fromHits = projectOnNetAll(net, from.point, tol, 8);
+    const toHits = projectOnNetAll(net, to.point, tol, 8);
+    for (const a of fromHits) {
+      for (const b of toHits) {
+        const p = netPathCore(net, a, b);
+        if (!p || p.length < 2) continue;
+        const len = edgeLenM(p);
+        if (len + 0.5 < bestLen) {
+          best = p;
+          bestLen = len;
+        }
+      }
+    }
+  }
+
+  return best;
+}
+
+function netPathCore(
   net: BikeRoadNet,
   from: RoadNetHit,
   to: RoadNetHit
@@ -671,10 +934,16 @@ export function netPath(
     const direct = sliceEdgeCoords(coords, from.alongM, to.alongM);
     const directLen =
       direct.length >= 2 ? edgeLenM(direct) : Math.abs(from.alongM - to.alongM);
+    const crow = dist(from.point, to.point);
     // 합친 긴 선이 블록을 한 바퀴 도는 경우 — 끝점 우회가 더 짧으면 그쪽
     const via = netPathViaGraph(net, from, to);
     const viaLen = via && via.length >= 2 ? edgeLenM(via) : Infinity;
     if (via && viaLen + 0.5 < directLen) return via;
+    // 선 위 직행이 직선보다 훨씬 길면(한 바퀴) 직행 우선하지 않음
+    if (directLen > Math.max(crow * 2.2, crow + 35)) {
+      if (via && via.length >= 2) return via;
+      return null;
+    }
     if (direct.length >= 2) return direct;
     return via;
   }
@@ -688,196 +957,6 @@ export function netPath(
     return null;
   }
   return out;
-}
-
-/**
- * 드래그 한 스텝 — 최단경로(Dijkstra) 사용 안 함.
- * 같은 선 슬라이스, 또는 사거리에서 맞닿은 선으로만 한 칸 꺾기.
- */
-export function netPathFollowStep(
-  net: BikeRoadNet,
-  from: RoadNetHit,
-  to: RoadNetHit
-): Pt[] | null {
-  const fromCoords = net.edgeCoords[from.edgeId];
-  const toCoords = net.edgeCoords[to.edgeId];
-  if (!fromCoords || !toCoords) return null;
-
-  if (from.edgeId === to.edgeId) {
-    const sliced = sliceEdgeCoords(fromCoords, from.alongM, to.alongM);
-    if (sliced.length < 2) {
-      return dist(from.point, to.point) < 0.5 ? [from.point, to.point] : null;
-    }
-    const stepLen = edgeLenM(sliced);
-    const crow = dist(from.point, to.point);
-    if (crow > 2 && stepLen > Math.max(crow * 2.2, crow + 20)) {
-      return null;
-    }
-    return sliced;
-  }
-
-  // 사거리·T자: 공유 노드(또는 끝점이 가까운 노드)로만 한 번 꺾기
-  const hop = junctionHop(net, from, to);
-  if (!hop) return null;
-  const stepLen = edgeLenM(hop);
-  const crow = dist(from.point, to.point);
-  if (stepLen > Math.max(crow * 2.5, crow + 30, 45)) return null;
-  return hop;
-}
-
-/** 두 엣지가 맞닿는 지점으로만 연결 (다중 우회 금지) */
-function junctionHop(
-  net: BikeRoadNet,
-  from: RoadNetHit,
-  to: RoadNetHit
-): Pt[] | null {
-  const fromCoords = net.edgeCoords[from.edgeId];
-  const toCoords = net.edgeCoords[to.edgeId];
-  if (!fromCoords || !toCoords) return null;
-  const fromLen = edgeLenM(fromCoords);
-  const toLen = edgeLenM(toCoords);
-
-  type End = { node: number; along: number; pt: Pt };
-  const fromEnds: End[] = [
-    { node: from.from, along: 0, pt: fromCoords[0]! },
-    {
-      node: from.to,
-      along: fromLen,
-      pt: fromCoords[fromCoords.length - 1]!,
-    },
-  ];
-  const toEnds: End[] = [
-    { node: to.from, along: 0, pt: toCoords[0]! },
-    { node: to.to, along: toLen, pt: toCoords[toCoords.length - 1]! },
-  ];
-
-  let best: { fe: End; te: End; d: number } | null = null;
-  for (const fe of fromEnds) {
-    for (const te of toEnds) {
-      const sameNode = fe.node === te.node;
-      const near = dist(fe.pt, te.pt) <= END_JOIN_M;
-      if (!sameNode && !near) continue;
-      const d = dist(fe.pt, te.pt);
-      if (!best || d < best.d) best = { fe, te, d };
-    }
-  }
-  if (!best) return null;
-
-  // 현재 위치가 해당 끝점과 너무 멀면(아직 사거리 전) 꺾지 않음
-  const toJunction = Math.abs(from.alongM - best.fe.along);
-  if (toJunction > 35 && dist(from.point, best.fe.pt) > 35) return null;
-
-  const part1 = sliceEdgeCoords(fromCoords, from.alongM, best.fe.along);
-  const part2 = sliceEdgeCoords(toCoords, best.te.along, to.alongM);
-  const out: Pt[] = [];
-  appendPath(out, part1.length ? part1 : [from.point]);
-  if (best.d > 0.05) appendPath(out, [best.te.pt]);
-  appendPath(out, part2.length ? part2 : [to.point]);
-  return out.length >= 2 ? out : null;
-}
-
-/**
- * 드래그 스냅 — 직전 도로·진행 방향·사거리 연결을 보고 고름.
- * 최단거리 도로로 마음대로 튀지 않게 함.
- */
-export function projectOnNetForDrag(
-  net: BikeRoadNet,
-  p: Pt,
-  maxDistM: number,
-  from: RoadNetHit,
-  moveVec: Pt | null
-): RoadNetHit | null {
-  const fromCoords = net.edgeCoords[from.edgeId];
-  if (!fromCoords) {
-    return projectOnNet(net, p, maxDistM);
-  }
-  const fromLen = edgeLenM(fromCoords);
-  const nearStart = from.alongM < 28;
-  const nearEnd = from.alongM > fromLen - 28;
-
-  const moveLen = moveVec ? Math.hypot(moveVec[0], moveVec[1]) : 0;
-  const hasMove = moveLen > 1e-3;
-  const mx = hasMove ? moveVec![0] / moveLen : 0;
-  const my = hasMove ? moveVec![1] / moveLen : 0;
-
-  type Cand = RoadNetHit & { score: number };
-  let best: Cand | null = null;
-
-  for (let i = 0; i < net.edgeCoords.length; i++) {
-    const coords = net.edgeCoords[i];
-    if (!coords || coords.length < 2) continue;
-    const [ef, et] = net.edges[i]!;
-    let along = 0;
-    for (let j = 0; j < coords.length - 1; j++) {
-      const a = coords[j]!;
-      const b = coords[j + 1]!;
-      const hit = projectOnSegment(p, a, b);
-      const alongM = along + dist(a, b) * hit.t;
-      along += dist(a, b);
-      if (hit.dist > maxDistM) continue;
-
-      let score = -hit.dist;
-
-      if (i === from.edgeId) {
-        // 같은 선 유지 보너스 — 사거리 근처면 약하게
-        score += nearStart || nearEnd ? 6 : 14;
-        // 진행 방향과 along 변화가 맞으면 가산
-        if (hasMove) {
-          const dAlong = alongM - from.alongM;
-          const alongDir: Pt =
-            dAlong >= 0
-              ? [b[0] - a[0], b[1] - a[1]]
-              : [a[0] - b[0], a[1] - b[1]];
-          const al = Math.hypot(alongDir[0], alongDir[1]) || 1;
-          const align = (alongDir[0] / al) * mx + (alongDir[1] / al) * my;
-          score += align * 10;
-        }
-      } else {
-        const shares =
-          ef === from.from ||
-          ef === from.to ||
-          et === from.from ||
-          et === from.to;
-        const endNear =
-          dist(coords[0]!, fromCoords[0]!) <= END_JOIN_M ||
-          dist(coords[0]!, fromCoords[fromCoords.length - 1]!) <= END_JOIN_M ||
-          dist(coords[coords.length - 1]!, fromCoords[0]!) <= END_JOIN_M ||
-          dist(coords[coords.length - 1]!, fromCoords[fromCoords.length - 1]!) <=
-            END_JOIN_M;
-
-        if (!shares && !endNear) {
-          // 연결 안 된 도로 — 강하게 감점 (최단으로 튀는 것 방지)
-          score -= 40;
-        } else if (!(nearStart || nearEnd)) {
-          // 아직 사거리 전인데 다른 선으로 점프 — 감점
-          score -= 18;
-        } else {
-          // 사거리에서 옆길로 — 드래그 방향 정렬이 중요
-          score += 8;
-          if (hasMove) {
-            const vx = hit.point[0] - from.point[0];
-            const vy = hit.point[1] - from.point[1];
-            const vl = Math.hypot(vx, vy) || 1;
-            const align = (vx / vl) * mx + (vy / vl) * my;
-            score += align * 22;
-          }
-        }
-      }
-
-      if (!best || score > best.score) {
-        best = {
-          edgeId: i,
-          point: hit.point,
-          alongM,
-          dist: hit.dist,
-          from: ef,
-          to: et,
-          score,
-        };
-      }
-    }
-  }
-  return best;
 }
 
 /** Dijkstra — from/to 엣지를 끝점 경유로 연결 */
@@ -961,55 +1040,81 @@ function netPathViaGraph(
   nodeChain.reverse();
   if (nodeChain[0] !== startNode) return null;
 
-  const out: Pt[] = [];
+  const firstReal = nodeChain[1];
+  if (firstReal == null) return null;
+  let leaveAlong: number;
+  if (firstReal === startA) leaveAlong = 0;
+  else if (firstReal === startB) leaveAlong = fromLen;
+  else return null;
 
-  {
-    const firstReal = nodeChain[1];
-    if (firstReal == null) return null;
-    if (firstReal === startA) {
-      appendPath(out, sliceEdgeCoords(fromCoords, from.alongM, 0));
-    } else if (firstReal === startB) {
-      appendPath(out, sliceEdgeCoords(fromCoords, from.alongM, fromLen));
-    } else {
-      return null;
-    }
-  }
+  const lastReal = nodeChain[nodeChain.length - 2];
+  if (lastReal == null) return null;
+  let enterAlong: number;
+  if (lastReal === endA) enterAlong = 0;
+  else if (lastReal === endB) enterAlong = toLen;
+  else return null;
 
+  // 중간 도로 먼저 구성 — 출발/도착 끝점 과잉(모서리 튀어나옴) 보정에 사용
+  const mid: Pt[] = [];
   for (let i = 1; i < nodeChain.length - 1; i++) {
     const a = nodeChain[i]!;
     const b = nodeChain[i + 1]!;
     if (b === endNode) break;
     const edgeId = prevEdge.get(b);
     if (edgeId == null) return null;
-    // 끝점 가상 이동(from/to 엣지)은 앞·뒤 slice에서 이미 반영
-    if (edgeId === from.edgeId || edgeId === to.edgeId) {
-      continue;
-    }
+    if (edgeId === from.edgeId || edgeId === to.edgeId) continue;
     const coords = net.edgeCoords[edgeId]!;
     const [ef, et] = net.edges[edgeId]!;
     if (a === ef && b === et) {
-      appendPath(out, coords);
+      appendPath(mid, coords);
     } else if (a === et && b === ef) {
-      appendPath(out, [...coords].reverse());
+      appendPath(mid, [...coords].reverse());
     } else {
       return null;
     }
   }
 
+  // 도착: 이전 지점이 목표 도로의 [끝점↔목표] 구간에 있으면 그 지점부터
+  // (끝으로 나갔다 오는 튀어나옴 제거 — 출발 보정과 대칭)
   {
-    const lastReal = nodeChain[nodeChain.length - 2];
-    if (lastReal == null) return null;
-    if (lastReal === endA) {
-      appendPath(out, sliceEdgeCoords(toCoords, 0, to.alongM));
-    } else if (lastReal === endB) {
-      appendPath(out, sliceEdgeCoords(toCoords, toLen, to.alongM));
-    } else {
-      return null;
+    const prevHint = mid.length > 0 ? mid[mid.length - 1]! : from.point;
+    const onTo = projectOnPolyline(prevHint, toCoords);
+    if (onTo && onTo.dist <= END_JOIN_M + 2) {
+      const lo = Math.min(enterAlong, to.alongM);
+      const hi = Math.max(enterAlong, to.alongM);
+      if (onTo.alongM >= lo - 1 && onTo.alongM <= hi + 1) {
+        enterAlong = onTo.alongM;
+      }
     }
   }
+
+  const tail = sliceEdgeCoords(toCoords, enterAlong, to.alongM);
+  if (tail.length < 1) return null;
+
+  // 출발: 다음 지점이 출발 도로의 [클릭↔끝점] 구간에 있으면 그 지점까지만
+  {
+    const nextHint = mid.length > 0 ? mid[0]! : tail[0]!;
+    const onFrom = projectOnPolyline(nextHint, fromCoords);
+    if (onFrom && onFrom.dist <= END_JOIN_M + 2) {
+      const lo = Math.min(from.alongM, leaveAlong);
+      const hi = Math.max(from.alongM, leaveAlong);
+      if (onFrom.alongM >= lo - 1 && onFrom.alongM <= hi + 1) {
+        leaveAlong = onFrom.alongM;
+      }
+    }
+  }
+
+  const head = sliceEdgeCoords(fromCoords, from.alongM, leaveAlong);
+  const out: Pt[] = [];
+  appendPath(out, head);
+  appendPath(out, mid);
+  appendPath(out, tail);
 
   if (out.length < 2) return null;
-  return out;
+  const cleaned = trimJunctionSpurs(out);
+  cleaned[0] = [from.point[0], from.point[1]];
+  cleaned[cleaned.length - 1] = [to.point[0], to.point[1]];
+  return cleaned.length >= 2 ? cleaned : out;
 }
 
 /** 스냅 허용 거리 (합친 도로구간 중심선) */
@@ -1017,4 +1122,4 @@ export function snapTolM(resolution: number): number {
   return Math.max(10, resolution * 16);
 }
 
-export { neighbors, dist as ptDist, ROAD_LAYER };
+export { neighbors, dist as ptDist };

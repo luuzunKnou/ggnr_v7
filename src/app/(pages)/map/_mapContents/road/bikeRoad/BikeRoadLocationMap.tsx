@@ -6,7 +6,10 @@ import { cn } from "@/lib/utils";
 import { useMapContext } from "../../../_mapComponents/MapContext";
 import { FALLBACK_BACKGROUND_MAP_ID } from "../../../_mapComponents/mapControlPanel/backgroundMapSelector";
 import { captureBikeRoadLocationMap } from "./bikeRoadLocationCapture";
-import type { BikeRoadRoute } from "./bikeRoadMock";
+import {
+  pathStyleFromPathType,
+  type BikeRoadRoute,
+} from "./bikeRoadMock";
 
 type Props = {
   route: BikeRoadRoute;
@@ -14,6 +17,9 @@ type Props = {
   onSaveImage?: (dataUrl: string) => void;
   className?: string;
 };
+
+/** 캡처 로직·범례·확대 바뀌면 올려 옛 이미지 폐기 */
+const CAPTURE_VERSION = 10;
 
 function downloadDataUrl(dataUrl: string, fileName: string) {
   const a = document.createElement("a");
@@ -25,60 +31,127 @@ function downloadDataUrl(dataUrl: string, fileName: string) {
   a.remove();
 }
 
+/** 구간 종류·색·버전이 바뀌면 다시 찍기 */
+function routeCaptureKey(route: BikeRoadRoute): string {
+  const types = route.segments
+    .map((s) => {
+      const pt = s.pathType ?? "";
+      const hasGeom =
+        (s.centerLineCoords?.length ?? 0) >= 2 ||
+        (s.lineCoords?.length ?? 0) >= 2
+          ? "1"
+          : "0";
+      return `${s.id}:${pt}:${pathStyleFromPathType(pt)}:${hasGeom}`;
+    })
+    .join("|");
+  return `v${CAPTURE_VERSION}::${route.id}::${types}`;
+}
+
 /**
- * 상세 위치도 — 오프스크린 캡처(기점~종점) 저장·표시.
- * 호버 시 우상단 다운로드만.
+ * 상세 위치도 — 구간 전체·종류별 색으로 오프스크린 캡처.
+ * 저장된 옛(초록) 이미지를 키 불일치 시 절대 다시 보여 주지 않음.
  */
 export function BikeRoadLocationMap({ route, onSaveImage, className }: Props) {
   const mapContext = useMapContext();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [displayUrl, setDisplayUrl] = useState("");
   const capturingRef = useRef(false);
-  const lastCapturedIdRef = useRef<string | null>(null);
+  const pendingRecaptureRef = useRef(false);
+  const lastKeyRef = useRef<string | null>(null);
+  const failCountRef = useRef(0);
+  const routeRef = useRef(route);
+  routeRef.current = route;
+  const onSaveImageRef = useRef(onSaveImage);
+  onSaveImageRef.current = onSaveImage;
 
-  const imageUrl = route.locationMapUrl?.trim() || "";
-  const hasGeom = route.lineCoords.length >= 2;
+  const hasGeom =
+    route.lineCoords.length >= 2 ||
+    route.segments.some(
+      (s) =>
+        (s.centerLineCoords?.length ?? 0) >= 2 ||
+        (s.lineCoords?.length ?? 0) >= 2
+    );
+  const captureKey = routeCaptureKey(route);
 
   const captureAndSave = useCallback(async () => {
-    if (!onSaveImage || !hasGeom) return;
-    if (capturingRef.current) return;
+    const save = onSaveImageRef.current;
+    if (!save || !hasGeom) return;
+    if (capturingRef.current) {
+      pendingRecaptureRef.current = true;
+      return;
+    }
 
     capturingRef.current = true;
+    pendingRecaptureRef.current = false;
     setBusy(true);
     setError(null);
+    setDisplayUrl("");
+
+    const src = routeRef.current;
+    const snapshot: BikeRoadRoute = {
+      ...src,
+      segments: src.segments.map((s) => ({ ...s })),
+    };
+    const keyAtStart = routeCaptureKey(snapshot);
+    let shouldRetry = false;
+
     try {
       const backgroundId =
-        mapContext?.mapBackgroundMapIdRef?.current?.trim() || FALLBACK_BACKGROUND_MAP_ID;
-      const dataUrl = await captureBikeRoadLocationMap(route, backgroundId);
-      if (!dataUrl) {
-        setError("위치도를 담지 못했습니다.");
+        mapContext?.mapBackgroundMapIdRef?.current?.trim() ||
+        FALLBACK_BACKGROUND_MAP_ID;
+      const dataUrl = await captureBikeRoadLocationMap(snapshot, backgroundId);
+
+      const keyNow = routeCaptureKey(routeRef.current);
+      if (keyNow !== keyAtStart || pendingRecaptureRef.current) {
+        pendingRecaptureRef.current = false;
+        shouldRetry = true;
         return;
       }
-      lastCapturedIdRef.current = route.id;
-      onSaveImage(dataUrl);
+
+      if (!dataUrl) {
+        failCountRef.current += 1;
+        if (failCountRef.current < 2) shouldRetry = true;
+        else setError("위치도를 담지 못했습니다.");
+        return;
+      }
+      failCountRef.current = 0;
+      lastKeyRef.current = keyAtStart;
+      setDisplayUrl(dataUrl);
+      setError(null);
+      save(dataUrl);
     } catch {
-      setError("위치도를 담지 못했습니다.");
+      failCountRef.current += 1;
+      if (failCountRef.current < 2) shouldRetry = true;
+      else setError("위치도를 담지 못했습니다.");
     } finally {
       capturingRef.current = false;
       setBusy(false);
+      if (shouldRetry || pendingRecaptureRef.current) {
+        pendingRecaptureRef.current = false;
+        window.setTimeout(() => {
+          void captureAndSave();
+        }, 400);
+      }
     }
-  }, [onSaveImage, hasGeom, route, mapContext]);
+  }, [hasGeom, mapContext]);
 
-  /** 노선 선택 시 기점·종점 보이게 다시 캡처 (재캡처 버튼 없음) */
+  /** 키가 바뀌면 재캡처 — 저장된 옛 URL 유무와 무관 */
   useEffect(() => {
     if (!hasGeom || !onSaveImage) return;
-    if (lastCapturedIdRef.current === route.id) return;
+    if (lastKeyRef.current === captureKey) return;
     const t = window.setTimeout(() => {
       void captureAndSave();
-    }, 300);
+    }, 200);
     return () => window.clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [route.id, hasGeom]);
+  }, [captureKey, hasGeom, onSaveImage, captureAndSave]);
 
   const handleDownload = () => {
-    if (!imageUrl) return;
-    const safe = (route.title || "자전거도로").replace(/[\\/:*?"<>|]/g, "_").slice(0, 40);
-    downloadDataUrl(imageUrl, `${safe}_위치도.png`);
+    if (!displayUrl) return;
+    const safe = (route.title || "자전거도로")
+      .replace(/[\\/:*?"<>|]/g, "_")
+      .slice(0, 40);
+    downloadDataUrl(displayUrl, `${safe}_위치도.png`);
   };
 
   if (!hasGeom) {
@@ -101,10 +174,10 @@ export function BikeRoadLocationMap({ route, onSaveImage, className }: Props) {
         className
       )}
     >
-      {imageUrl ? (
+      {displayUrl ? (
         // eslint-disable-next-line @next/next/no-img-element -- 캡처 data URL
         <img
-          src={imageUrl}
+          src={displayUrl}
           alt="위치도"
           className="h-full w-full object-contain object-center bg-[#e8eef2]"
         />
@@ -119,14 +192,14 @@ export function BikeRoadLocationMap({ route, onSaveImage, className }: Props) {
           type="button"
           className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border bg-background/95 text-muted-foreground shadow-sm hover:bg-muted hover:text-foreground disabled:opacity-50"
           title="다운로드"
-          disabled={!imageUrl || busy}
+          disabled={!displayUrl || busy}
           onClick={handleDownload}
         >
           <Download className="h-3.5 w-3.5" />
         </button>
       </div>
 
-      {busy && imageUrl ? (
+      {busy && displayUrl ? (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-background/40 text-[11px] text-muted-foreground">
           캡처 중…
         </div>

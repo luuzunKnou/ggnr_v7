@@ -9,8 +9,6 @@ import {
   bikeFormTdClass,
   bikeFormThClass,
 } from "./bikeRoadFormUi";
-import { BikeRoadSegmentSidePick } from "./BikeRoadSegmentDrawBanner";
-import type { BikeRoadDrawSideMode } from "./useBikeRoadSegmentDraw";
 import {
   BIKE_ROAD_PATH_TYPE_OPTIONS,
   normalizeBikeRoadPathType,
@@ -24,7 +22,7 @@ type EditableKey = Exclude<keyof BikeRoadSegment, "id">;
 type Props = {
   segments: BikeRoadSegment[];
   isEditing?: boolean;
-  onAddPick?: (mode: BikeRoadDrawSideMode) => void;
+  onAdd?: () => void;
   onRemove?: (segmentId: string) => void;
   onChange?: (segmentId: string, key: EditableKey, value: string) => void;
   drawActive?: boolean;
@@ -114,13 +112,12 @@ function ViewSpan({
 export function BikeRoadSegmentListSection({
   segments,
   isEditing = false,
-  onAddPick,
+  onAdd,
   onRemove,
   onChange,
   drawActive = false,
 }: Props) {
   const [open, setOpen] = useState(true);
-  const [sidePickOpen, setSidePickOpen] = useState(false);
 
   const setField = (id: string, key: EditableKey, value: string) => {
     onChange?.(id, key, value);
@@ -144,29 +141,19 @@ export function BikeRoadSegmentListSection({
             ({segments.length})
           </span>
         </button>
-        {isEditing && onAddPick ? (
-          <div className="relative shrink-0">
-            <button
-              type="button"
-              className={cn(actionBtn)}
-              disabled={drawActive}
-              onClick={(e) => {
-                e.stopPropagation();
-                setSidePickOpen((v) => !v);
-              }}
-            >
-              <Plus className="h-3 w-3" />
-              추가
-            </button>
-            <BikeRoadSegmentSidePick
-              open={sidePickOpen}
-              onClose={() => setSidePickOpen(false)}
-              onPick={(m) => {
-                setSidePickOpen(false);
-                onAddPick(m);
-              }}
-            />
-          </div>
+        {isEditing && onAdd ? (
+          <button
+            type="button"
+            className={cn(actionBtn)}
+            disabled={drawActive}
+            onClick={(e) => {
+              e.stopPropagation();
+              onAdd();
+            }}
+          >
+            <Plus className="h-3 w-3" />
+            추가
+          </button>
         ) : null}
       </div>
       {open ? (
@@ -174,7 +161,7 @@ export function BikeRoadSegmentListSection({
           {segments.length === 0 ? (
             <p className="py-3 text-center text-[11px] text-muted-foreground">
               {isEditing
-                ? "«추가»로 양측·편측을 고른 뒤 지도에서 점을 찍으세요."
+                ? "«추가»를 누르면 그리기 창에서 도로를 따라 구간을 넣을 수 있습니다."
                 : "구간이 없습니다."}
             </p>
           ) : (

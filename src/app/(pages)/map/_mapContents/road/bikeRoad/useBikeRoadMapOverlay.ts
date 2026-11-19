@@ -13,23 +13,18 @@ import { isEmpty as isEmptyExtent } from "ol/extent";
 import { scheduleFitMapToExtent3857 } from "../../../_mapComponents/config/mapAutoNavigation";
 import { MAP_AUTO_NAV_MAX_ZOOM } from "../../../_mapComponents/config/mapDefaults";
 import { useMapContext } from "../../../_mapComponents/MapContext";
-import { BIKE_ROAD_MOCK_ROUTES, type BikeRoadRoute } from "./bikeRoadMock";
-import { collectSegmentLines } from "./bikeRoadSegmentGeom";
-
+import {
+  BIKE_ROAD_MOCK_ROUTES,
+  bikeRoadStrokeColor,
+  pathStyleFromPathType,
+  type BikeRoadRoute,
+} from "./bikeRoadMock";
+import {
+  collectRouteEndpointMarkers,
+  collectSegmentLines,
+} from "./bikeRoadSegmentGeom";
+import { bikeRoadLineStyles } from "./bikeRoadStrokeStyle";
 const LAYER_PROP = "bikeRoadMockOverlay";
-
-/** 위치도 범례와 동일: 전용 분홍 / 겸용분리 초록 / 겸용비분리 파랑 */
-const PATH_STYLE_COLOR = {
-  dedicated: "#FF2D95",
-  sharedSep: "#00C853",
-  sharedNonSep: "#1E88E5",
-} as const;
-
-function routeStrokeColor(pathStyle: string): string {
-  if (pathStyle === "dedicated") return PATH_STYLE_COLOR.dedicated;
-  if (pathStyle === "sharedNonSep") return PATH_STYLE_COLOR.sharedNonSep;
-  return PATH_STYLE_COLOR.sharedSep;
-}
 
 function createStyle(getSelectedId: () => string | null) {
   return (feature: FeatureLike) => {
@@ -39,11 +34,12 @@ function createStyle(getSelectedId: () => string | null) {
     const selectedId = getSelectedId();
     const selected = selectedId != null && routeId === selectedId;
     const dimmed = selectedId != null && !selected;
-    const color = routeStrokeColor(pathStyle);
+    const color = bikeRoadStrokeColor(pathStyle);
 
     if (role === "endpoint") {
       if (!selected) return [];
       const label = String(feature.get("label") ?? "");
+      const offsetY = Number(feature.get("labelOffsetY") ?? -14);
       return new Style({
         image: new CircleStyle({
           radius: 6,
@@ -53,7 +49,7 @@ function createStyle(getSelectedId: () => string | null) {
         text: new Text({
           text: label,
           font: '11px "Pretendard", sans-serif',
-          offsetY: -14,
+          offsetY,
           fill: new Fill({ color: "#111827" }),
           stroke: new Stroke({ color: "#ffffff", width: 3 }),
           backgroundFill: new Fill({ color: "rgba(255,255,255,0.92)" }),
@@ -63,37 +59,27 @@ function createStyle(getSelectedId: () => string | null) {
       });
     }
 
-    const width = selected ? 5 : 3.5;
-    const opacity = dimmed ? 0.35 : 1;
-    return [
-      new Style({
-        stroke: new Stroke({
-          color: `rgba(255,255,255,${0.85 * opacity})`,
-          width: width + 3,
-        }),
-        zIndex: selected ? 4 : 2,
-      }),
-      new Style({
-        stroke: new Stroke({
-          color,
-          width,
-          lineCap: "round",
-          lineJoin: "round",
-        }),
-        zIndex: selected ? 5 : 3,
-      }),
-    ];
+    return bikeRoadLineStyles(color, {
+      selected,
+      opacity: dimmed ? 0.35 : 1,
+      zBase: selected ? 4 : 2,
+    });
   };
 }
 
 function addRouteFeatures(source: VectorSource, route: BikeRoadRoute) {
+  const segById = new Map(route.segments.map((s) => [s.id, s]));
   const segLines = collectSegmentLines(route.segments);
   if (segLines.length > 0) {
     for (const line of segLines) {
+      const seg = segById.get(line.segmentId);
+      const pathStyle = seg
+        ? pathStyleFromPathType(seg.pathType)
+        : route.pathStyle;
       const mapCoords = line.coords.map((c) => fromLonLat(c));
       const f = new Feature({ geometry: new LineString(mapCoords) });
       f.set("routeId", route.id);
-      f.set("pathStyle", route.pathStyle);
+      f.set("pathStyle", pathStyle);
       f.set("role", "line");
       f.set("segmentId", line.segmentId);
       f.set("side", line.side);
@@ -108,31 +94,25 @@ function addRouteFeatures(source: VectorSource, route: BikeRoadRoute) {
     source.addFeature(line);
   }
 
-  const start =
-    route.lineCoords[0] ??
-    segLines[0]?.coords[0] ??
-    null;
-  const endLine = segLines.find((s) => s.side === "R" || s.side === "C") ?? segLines[0];
-  const end =
-    route.lineCoords[route.lineCoords.length - 1] ??
-    (endLine ? endLine.coords[endLine.coords.length - 1] : null);
-
-  if (start) {
-    const f = new Feature({ geometry: new Point(fromLonLat(start)) });
+  // 양측·공통 기점은 1개, 종점이 다르면 종점 라벨 여러 개
+  const markers = collectRouteEndpointMarkers(route.segments);
+  const endMarkers = markers.filter((m) => m.kind === "end");
+  markers.forEach((m, i) => {
+    const pathStyle = pathStyleFromPathType(m.pathType) || route.pathStyle;
+    const f = new Feature({ geometry: new Point(fromLonLat(m.lonLat)) });
     f.set("routeId", route.id);
-    f.set("pathStyle", route.pathStyle);
+    f.set("pathStyle", pathStyle);
     f.set("role", "endpoint");
-    f.set("label", `기점: ${route.startLabel || ""}`);
+    const prefix = m.kind === "start" ? "기점" : "종점";
+    f.set("label", m.name ? `${prefix}: ${m.name}` : prefix);
+    // 종점이 여러 개면 라벨이 겹치지 않게 살짝 어긋남
+    if (m.kind === "end" && endMarkers.length > 1) {
+      const idx = endMarkers.indexOf(m);
+      f.set("labelOffsetY", -14 - idx * 16);
+    }
+    f.set("endpointIndex", i);
     source.addFeature(f);
-  }
-  if (end) {
-    const f = new Feature({ geometry: new Point(fromLonLat(end)) });
-    f.set("routeId", route.id);
-    f.set("pathStyle", route.pathStyle);
-    f.set("role", "endpoint");
-    f.set("label", `종점: ${route.endLabel || ""}`);
-    source.addFeature(f);
-  }
+  });
 }
 
 type Options = {
@@ -233,16 +213,3 @@ export function useBikeRoadMapOverlay({
   }, [open, selectedId, map, mapReady, mapContext?.applyMapViewPaddingRef, routes]);
 }
 
-/** map-layout에서 훅만 쓰기 위한 빈 컴포넌트 */
-export function BikeRoadMapOverlay({
-  open,
-  selectedId,
-  routes,
-}: {
-  open: boolean;
-  selectedId: string | null;
-  routes?: BikeRoadRoute[];
-}) {
-  useBikeRoadMapOverlay({ open, selectedId, routes });
-  return null;
-}
