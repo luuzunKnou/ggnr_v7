@@ -132,6 +132,17 @@ function buildCaptureLines(route: BikeRoadRoute): CaptureLine[] {
     });
   }
 
+  // 3) 구간 좌표가 전혀 없으면 노선 lineCoords 폴백 (샘플 등)
+  if (out.length === 0 && route.lineCoords.length >= 2) {
+    const pathStyle = route.pathStyle;
+    out.push({
+      segmentId: route.segments[0]?.id ?? route.id,
+      coords: route.lineCoords,
+      pathStyle,
+      color: bikeRoadStrokeColor(pathStyle),
+    });
+  }
+
   return out;
 }
 

@@ -19,7 +19,7 @@ type Props = {
 };
 
 /** 캡처 로직·범례·확대 바뀌면 올려 옛 이미지 폐기 */
-const CAPTURE_VERSION = 10;
+const CAPTURE_VERSION = 11;
 
 function downloadDataUrl(dataUrl: string, fileName: string) {
   const a = document.createElement("a");
@@ -44,7 +44,8 @@ function routeCaptureKey(route: BikeRoadRoute): string {
       return `${s.id}:${pt}:${pathStyleFromPathType(pt)}:${hasGeom}`;
     })
     .join("|");
-  return `v${CAPTURE_VERSION}::${route.id}::${types}`;
+  const routeGeom = route.lineCoords.length >= 2 ? "1" : "0";
+  return `v${CAPTURE_VERSION}::${route.id}::${routeGeom}::${types}`;
 }
 
 /**
@@ -136,7 +137,7 @@ export function BikeRoadLocationMap({ route, onSaveImage, className }: Props) {
     }
   }, [hasGeom, mapContext]);
 
-  /** 키가 바뀌면 재캡처 — 저장된 옛 URL 유무와 무관 */
+  /** 키가 바뀌면 재캡처 — 지도 캡처본을 저장 */
   useEffect(() => {
     if (!hasGeom || !onSaveImage) return;
     if (lastKeyRef.current === captureKey) return;

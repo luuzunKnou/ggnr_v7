@@ -304,7 +304,13 @@ export function BikeRoadDetailPanel({ route, onClose, onSave, onDelete }: Props)
     segments: BikeRoadSegment[];
   }) => {
     setDraftSegments((list) => {
-      const next = [...list, ...result.segments];
+      // 신규 빈 행(선 없음)은 그린 구간으로 교체
+      const kept = list.filter(
+        (s) =>
+          (s.centerLineCoords?.length ?? 0) >= 2 ||
+          (s.lineCoords?.length ?? 0) >= 2
+      );
+      const next = [...kept, ...result.segments];
       const merged = mergeRouteLineCoords(next);
       const ends = routeEndsFromSegments(next);
       const sum = sumBikeRoadLengthKm(next);
@@ -555,8 +561,8 @@ export function BikeRoadDetailPanel({ route, onClose, onSave, onDelete }: Props)
       const next = list.map((s) =>
         s.id === segmentId ? { ...s, [key]: value } : s
       );
-      // 종류 변경 시 지도·위치도 색이 바로 바뀌도록 저장 (위치도 재캡처)
-      if (key === "pathType" && !isNew) {
+      // 종류 변경 → 지도 레이어·위치도 색 즉시 반영
+      if (key === "pathType") {
         const merged = mergeRouteLineCoords(next);
         const ends = routeEndsFromSegments(next);
         const base = routeRef.current;

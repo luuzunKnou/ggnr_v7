@@ -140,12 +140,23 @@ export function useBikeRoadMapOverlay({
     sourceRef.current?.changed();
   }, [selectedId]);
 
+  /** 종류(색)·좌표 포함 — pathType 바뀌면 피처만 다시 그림 */
+  const routesPaintKey = routes
+    .map(
+      (r) =>
+        `${r.id}:${r.segments
+          .map(
+            (s) =>
+              `${s.id}:${s.pathType ?? ""}:${(s.lineCoords ?? s.centerLineCoords ?? []).length}`
+          )
+          .join(",")}`
+    )
+    .join("|");
+
   useEffect(() => {
     if (!open || !mapReady || !map) {
       const layer = layerRef.current;
-      if (layer && map) {
-        map.removeLayer(layer);
-      }
+      if (layer && map) map.removeLayer(layer);
       sourceRef.current = null;
       layerRef.current = null;
       fittedKeyRef.current = null;
@@ -163,24 +174,36 @@ export function useBikeRoadMapOverlay({
     sourceRef.current = source;
     layerRef.current = layer;
 
-    for (const route of routes) {
-      addRouteFeatures(source, route);
-    }
-
     return () => {
       map.removeLayer(layer);
       if (sourceRef.current === source) sourceRef.current = null;
       if (layerRef.current === layer) layerRef.current = null;
       fittedKeyRef.current = null;
     };
-  }, [open, map, mapReady, routes]);
+  }, [open, map, mapReady]);
+
+  useEffect(() => {
+    if (!open || !mapReady || !map) return;
+    const source = sourceRef.current;
+    const layer = layerRef.current;
+    if (!source || !layer) return;
+    source.clear();
+    for (const route of routes) {
+      addRouteFeatures(source, route);
+    }
+    source.changed();
+    layer.changed();
+  }, [open, map, mapReady, routes, routesPaintKey]);
 
   useEffect(() => {
     if (!open || !mapReady || !map) return;
     const source = sourceRef.current;
     if (!source) return;
 
-    const fitKey = `${selectedId ?? "__all__"}:${routes.length}`;
+    // 종류만 바꿀 때는 지도 fit 하지 않음
+    const fitKey = `${selectedId ?? "__all__"}:${routes
+      .map((r) => `${r.id}:${r.segments.length}`)
+      .join("|")}`;
     if (fittedKeyRef.current === fitKey) return;
 
     const features = source.getFeatures().filter((f) => {

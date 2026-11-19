@@ -146,6 +146,7 @@ function distMApprox(a: [number, number], b: [number, number]): number {
 /**
  * 구간마다 기점·종점을 모은 뒤, 같은 위치(양측·공통 기점)는 하나로 합친다.
  * 기점은 같고 종점만 다르면 종점 라벨이 여러 개 나온다.
+ * 다음 구간 기점이 직전 종점과 겹치면(이어 붙인 지점) 라벨은 숨긴다.
  */
 export function collectRouteEndpointMarkers(
   segments: BikeRoadSegment[]
@@ -193,7 +194,24 @@ export function collectRouteEndpointMarkers(
     return out;
   }
 
-  return [...merge(starts), ...merge(ends)];
+  const mergedStarts = merge(starts);
+  const mergedEnds = merge(ends);
+
+  // 이음점(직전 종점 ≈ 다음 기점) — 기점·종점 라벨 모두 생략
+  const startsOut = mergedStarts.filter(
+    (s) =>
+      !mergedEnds.some(
+        (e) => distMApprox(s.lonLat, e.lonLat) <= ENDPOINT_MERGE_M
+      )
+  );
+  const endsOut = mergedEnds.filter(
+    (e) =>
+      !mergedStarts.some(
+        (s) => distMApprox(s.lonLat, e.lonLat) <= ENDPOINT_MERGE_M
+      )
+  );
+
+  return [...startsOut, ...endsOut];
 }
 
 /**

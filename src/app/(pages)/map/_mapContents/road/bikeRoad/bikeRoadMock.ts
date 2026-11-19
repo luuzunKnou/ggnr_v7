@@ -207,7 +207,7 @@ export function isNewBikeRoadRouteId(id: string | null | undefined): boolean {
   return Boolean(id && String(id).startsWith(BIKE_ROAD_NEW_ID_PREFIX));
 }
 
-/** 프로토타입 — 속성만 채우는 신규 노선 (구간·도형은 비움) */
+/** 프로토타입 — 신규 노선. 구간 표에 빈 행 1개부터 표시 */
 export function createEmptyBikeRoadRoute(): BikeRoadRoute {
   return {
     id: `${BIKE_ROAD_NEW_ID_PREFIX}${Date.now()}`,
@@ -222,7 +222,7 @@ export function createEmptyBikeRoadRoute(): BikeRoadRoute {
     sidePath: "",
     remark: "",
     attachments: [],
-    segments: [],
+    segments: [createEmptyBikeRoadSegment({ routePrefix: "1", index1: 1 })],
     history: [],
     lineCoords: [],
     startLabel: "",
@@ -286,7 +286,57 @@ export function bikeRoadSerialPrefix(segments: BikeRoadSegment[]): string {
   return m?.[1] ?? "1";
 }
 
-export const BIKE_ROAD_MOCK_ROUTES: BikeRoadRoute[] = [
+/**
+ * 샘플 노선 — 구간별 좌표가 없으면 노선 lineCoords를
+ * 기점·종점 구간(양측 R/L 동일)에 나눠 넣어 위치도·오버레이가 찍히게 함.
+ */
+function assignMockSegmentCoords(route: BikeRoadRoute): BikeRoadRoute {
+  if (route.lineCoords.length < 2) return route;
+  if (
+    route.segments.some(
+      (s) =>
+        (s.centerLineCoords?.length ?? 0) >= 2 ||
+        (s.lineCoords?.length ?? 0) >= 2
+    )
+  ) {
+    return route;
+  }
+
+  const stretchKey = (s: BikeRoadSegment) => `${s.startName}|${s.endName}`;
+  const stretchKeys: string[] = [];
+  for (const s of route.segments) {
+    const k = stretchKey(s);
+    if (!stretchKeys.includes(k)) stretchKeys.push(k);
+  }
+  const n = Math.max(1, stretchKeys.length);
+  const pts = route.lineCoords;
+  const byStretch = new Map<string, [number, number][]>();
+  for (let i = 0; i < stretchKeys.length; i++) {
+    const start = Math.floor((i * (pts.length - 1)) / n);
+    const end = Math.floor(((i + 1) * (pts.length - 1)) / n);
+    let slice = pts.slice(start, end + 1) as [number, number][];
+    if (slice.length < 2) {
+      const a = pts[start]!;
+      const b = pts[Math.min(pts.length - 1, start + 1)]!;
+      slice = [a, b];
+    }
+    byStretch.set(stretchKeys[i]!, slice);
+  }
+
+  return {
+    ...route,
+    segments: route.segments.map((s) => {
+      const coords = byStretch.get(stretchKey(s)) ?? pts;
+      return {
+        ...s,
+        centerLineCoords: coords,
+        lineCoords: coords,
+      };
+    }),
+  };
+}
+
+const BIKE_ROAD_MOCK_ROUTES_RAW: BikeRoadRoute[] = [
   {
     id: "bike-route-1",
     title: "삼성현로(대구시계) ~ 대학로",
@@ -316,29 +366,7 @@ export const BIKE_ROAD_MOCK_ROUTES: BikeRoadRoute[] = [
         url: "/mock/bikeRoad/samsung_01.png",
       },
     ],
-    history: [
-      {
-        id: "hist-1-1",
-        action: "등록",
-        at: "2024-03-12 10:20",
-        user: "도로관리",
-        detail: "국가자전거구축사업 노선 등록",
-      },
-      {
-        id: "hist-1-2",
-        action: "속성 수정",
-        at: "2025-06-18 14:05",
-        user: "도로관리",
-        detail: "교량·지하철역 정보 보완",
-      },
-      {
-        id: "hist-1-3",
-        action: "정비",
-        at: "2025-09-02 11:30",
-        user: "도로관리",
-        detail: "남매로 구간 노면 보수",
-      },
-    ],
+    history: [],
     startLabel: "모레아장례식장",
     endLabel: "압량농협네거리",
     pathStyle: "sharedSep",
@@ -516,29 +544,7 @@ export const BIKE_ROAD_MOCK_ROUTES: BikeRoadRoute[] = [
         url: "/mock/bikeRoad/geumho_01.png",
       },
     ],
-    history: [
-      {
-        id: "hist-2-1",
-        action: "등록",
-        at: "2023-11-02 09:40",
-        user: "도로관리",
-        detail: "금호강 전용도로 노선 등록",
-      },
-      {
-        id: "hist-2-2",
-        action: "구간 보완",
-        at: "2025-01-09 16:22",
-        user: "도로관리",
-        detail: "하양교 겸용 구간(2-8) 폭원 반영",
-      },
-      {
-        id: "hist-2-3",
-        action: "정비",
-        at: "2025-08-14 13:10",
-        user: "도로관리",
-        detail: "하양교 주변 안내표지 교체",
-      },
-    ],
+    history: [],
     startLabel: "대정동",
     endLabel: "와촌면 계당리",
     pathStyle: "dedicated",
@@ -699,3 +705,7 @@ export const BIKE_ROAD_MOCK_ROUTES: BikeRoadRoute[] = [
     ],
   },
 ];
+
+/** 샘플 2건 — 구간 좌표 채워 위치도(지도 캡처)가 바로 찍힘 */
+export const BIKE_ROAD_MOCK_ROUTES: BikeRoadRoute[] =
+  BIKE_ROAD_MOCK_ROUTES_RAW.map(assignMockSegmentCoords);
