@@ -11,9 +11,15 @@ export const REAL_TRANSACTION_PRICE_DETAIL_MAX_WIDTH = 760
 
 export type DongSortKey = 'umdNm' | 'count' | 'avgPerSqm'
 
+export type BoundaryKind = 'emd' | 'ri'
+
 export type DongSummaryRow = {
   umdNm: string
+  /** 읍면동 코드 — 동·읍·면 매칭 시 */
   emdCd: string | null
+  /** 리 코드 — 리명 매칭 시 */
+  riCd: string | null
+  boundaryKind: BoundaryKind | null
   count: number
   medianPerSqm: number | null
   avgPerSqm: number | null

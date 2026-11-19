@@ -4,7 +4,12 @@
  */
 import { getSessionUsrId } from '@/lib/auth/guard';
 import { getLandLinkageConfig } from '@/service/configService';
-import { getEmdGeometry, getEmdRiOptions } from '@/service/devTestService';
+import {
+  getEmdGeometry,
+  getEmdRiOptions,
+  getRiGeometry,
+  getRiOptionsByEmd,
+} from '@/service/devTestService';
 
 const LAND_TRADE_URL =
   'https://apis.data.go.kr/1613000/RTMSDataSvcLandTrade/getRTMSDataSvcLandTrade';
@@ -35,6 +40,8 @@ export type LandTradeRaw = {
 export type DongSummaryRow = {
   umdNm: string;
   emdCd: string | null;
+  riCd: string | null;
+  boundaryKind: 'emd' | 'ri' | null;
   count: number;
   medianPerSqm: number | null;
   avgPerSqm: number | null;
@@ -235,9 +242,9 @@ async function loadTradesForMonth(dealYmd: string): Promise<LandTradeRaw[]> {
   return active;
 }
 
-function buildEmdNameMap(emd: { code: string; name: string }[]): Map<string, string> {
+function buildNameCodeMap(rows: { code: string; name: string }[]): Map<string, string> {
   const map = new Map<string, string>();
-  for (const row of emd) {
+  for (const row of rows) {
     const name = normalizeUmd(row.name);
     if (!name || map.has(name)) continue;
     map.set(name, row.code);
@@ -245,15 +252,44 @@ function buildEmdNameMap(emd: { code: string; name: string }[]): Map<string, str
   return map;
 }
 
-/** 계약 연월별 읍면동 집계 */
+/** 실거래 umdNm → 읍면동 우선, 없으면 리 경계 */
+function resolveBoundary(
+  umdNm: string,
+  emdMap: Map<string, string>,
+  riMap: Map<string, string>
+): { kind: 'emd' | 'ri' | null; emdCd: string | null; riCd: string | null } {
+  const key = normalizeUmd(umdNm);
+  const emdCd = emdMap.get(key) ?? null;
+  if (emdCd) return { kind: 'emd', emdCd, riCd: null };
+
+  const riExact = riMap.get(key) ?? null;
+  if (riExact) return { kind: 'ri', emdCd: null, riCd: riExact };
+
+  // «와룡면가구리»처럼 면+리가 붙은 경우 리명 접미로 매칭
+  let bestName = '';
+  let bestCd: string | null = null;
+  for (const [riName, riCd] of riMap) {
+    if (riName.length < 2) continue;
+    if (!key.endsWith(riName)) continue;
+    if (riName.length > bestName.length) {
+      bestName = riName;
+      bestCd = riCd;
+    }
+  }
+  if (bestCd) return { kind: 'ri', emdCd: null, riCd: bestCd };
+  return { kind: null, emdCd: null, riCd: null };
+}
+
+/** 계약 연월별 읍면동·리 집계 */
 export async function dongSummary(params: { dealYmd?: string } = {}) {
   await requireUsr();
   const dealYmd = String(params.dealYmd ?? '').replace(/\D/g, '');
   if (!/^\d{6}$/.test(dealYmd)) throwHttp(400, '계약년월(YYYYMM)이 필요합니다.');
 
   const trades = await loadTradesForMonth(dealYmd);
-  const emdRes = await getEmdRiOptions({});
-  const emdMap = buildEmdNameMap(emdRes.emd ?? []);
+  const [emdRes, riRes] = await Promise.all([getEmdRiOptions({}), getRiOptionsByEmd({})]);
+  const emdMap = buildNameCodeMap(emdRes.emd ?? []);
+  const riMap = buildNameCodeMap(riRes.ri ?? []);
 
   const byDong = new Map<string, LandTradeRaw[]>();
   for (const t of trades) {
@@ -277,9 +313,12 @@ export async function dongSummary(params: { dealYmd?: string } = {}) {
       perSqmList.length > 0
         ? Math.round(perSqmList.reduce((a, b) => a + b, 0) / perSqmList.length)
         : null;
+    const bound = resolveBoundary(umdNm, emdMap, riMap);
     rows.push({
       umdNm,
-      emdCd: emdMap.get(normalizeUmd(umdNm)) ?? null,
+      emdCd: bound.emdCd,
+      riCd: bound.riCd,
+      boundaryKind: bound.kind,
       count: list.length,
       medianPerSqm: median(perSqmList),
       avgPerSqm: avg,
@@ -332,13 +371,17 @@ export async function dongTrades(params: { dealYmd?: string; umdNm?: string } = 
       ? Math.round(amountList.reduce((a, b) => a + b, 0) / amountList.length)
       : null;
 
-  const emdRes = await getEmdRiOptions({});
-  const emdMap = buildEmdNameMap(emdRes.emd ?? []);
+  const [emdRes, riRes] = await Promise.all([getEmdRiOptions({}), getRiOptionsByEmd({})]);
+  const emdMap = buildNameCodeMap(emdRes.emd ?? []);
+  const riMap = buildNameCodeMap(riRes.ri ?? []);
+  const bound = resolveBoundary(umdNm, emdMap, riMap);
 
   return {
     dealYmd,
     umdNm: matched[0]?.umdNm ?? umdNm,
-    emdCd: emdMap.get(target) ?? null,
+    emdCd: bound.emdCd,
+    riCd: bound.riCd,
+    boundaryKind: bound.kind,
     count: rows.length,
     medianPerSqm: median(perSqmList),
     avgPerSqm,
@@ -348,10 +391,10 @@ export async function dongTrades(params: { dealYmd?: string; umdNm?: string } = 
   };
 }
 
-/** 지도 색칠용 — 동 집계 + 행정경계 WKT */
+/** 지도 색칠용 — 읍면동·리 집계 + 행정경계 WKT */
 export async function dongMapFeatures(params: { dealYmd?: string } = {}) {
   const summary = await dongSummary(params);
-  const withCode = summary.rows.filter((r) => r.emdCd);
+  const withCode = summary.rows.filter((r) => r.boundaryKind && (r.emdCd || r.riCd));
   const features: Array<
     DongSummaryRow & {
       wkt: string;
@@ -364,7 +407,12 @@ export async function dongMapFeatures(params: { dealYmd?: string } = {}) {
     const batch = withCode.slice(i, i + chunk);
     const parts = await Promise.all(
       batch.map(async (row) => {
-        const g = await getEmdGeometry({ emdCode: String(row.emdCd) });
+        const g =
+          row.boundaryKind === 'ri' && row.riCd
+            ? await getRiGeometry({ riCode: String(row.riCd) })
+            : row.emdCd
+              ? await getEmdGeometry({ emdCode: String(row.emdCd) })
+              : { wkt: null, center: null };
         const wkt = g.wkt != null ? String(g.wkt).trim() : '';
         if (!wkt) return null;
         return {

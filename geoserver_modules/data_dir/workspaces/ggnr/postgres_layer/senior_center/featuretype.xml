@@ -1,0 +1,60 @@
+<featureType>
+  <id>FeatureTypeInfoImpl--440dd679:1a1e88b1cfe:-7de7</id>
+  <name>senior_center</name>
+  <nativeName>senior_center</nativeName>
+  <namespace>
+    <id>NamespaceInfoImpl-4bf97568:19c4d6c3053:-7ffa</id>
+  </namespace>
+  <title>senior_center</title>
+  <keywords>
+    <string>features</string>
+    <string>senior_center</string>
+  </keywords>
+  <nativeCRS class="projected">PROJCS[&quot;Korea 2000 / Central Belt&quot;, &#xd;
+  GEOGCS[&quot;Korea 2000&quot;, &#xd;
+    DATUM[&quot;Geocentric_datum_of_Korea&quot;, &#xd;
+      SPHEROID[&quot;GRS 1980&quot;, 6378137.0, 298.257222101], &#xd;
+      TOWGS84[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]], &#xd;
+    PRIMEM[&quot;Greenwich&quot;, 0.0], &#xd;
+    UNIT[&quot;degree&quot;, 0.017453292519943295], &#xd;
+    AXIS[&quot;Longitude&quot;, EAST], &#xd;
+    AXIS[&quot;Latitude&quot;, NORTH]], &#xd;
+  PROJECTION[&quot;Transverse_Mercator&quot;], &#xd;
+  PARAMETER[&quot;central_meridian&quot;, 127.0], &#xd;
+  PARAMETER[&quot;latitude_of_origin&quot;, 38.0], &#xd;
+  PARAMETER[&quot;scale_factor&quot;, 1.0], &#xd;
+  PARAMETER[&quot;false_easting&quot;, 200000.0], &#xd;
+  PARAMETER[&quot;false_northing&quot;, 500000.0], &#xd;
+  UNIT[&quot;m&quot;, 1.0], &#xd;
+  AXIS[&quot;x&quot;, EAST], &#xd;
+  AXIS[&quot;y&quot;, NORTH], &#xd;
+  AUTHORITY[&quot;EPSG&quot;,&quot;5181&quot;]]</nativeCRS>
+  <srs>EPSG:5181</srs>
+  <nativeBoundingBox>
+    <minx>329600.2274859863</minx>
+    <maxx>378017.2450904263</maxx>
+    <miny>313700.67789737403</miny>
+    <maxy>368393.83574781544</maxy>
+    <crs class="projected">EPSG:5181</crs>
+  </nativeBoundingBox>
+  <latLonBoundingBox>
+    <minx>128.44694985630775</minx>
+    <maxx>128.98709479889578</maxx>
+    <miny>36.30612298734415</miny>
+    <maxy>36.800823332204516</maxy>
+    <crs>EPSG:4326</crs>
+  </latLonBoundingBox>
+  <projectionPolicy>FORCE_DECLARED</projectionPolicy>
+  <enabled>true</enabled>
+  <store class="dataStore">
+    <id>DataStoreInfoImpl-4bf97568:19c4d6c3053:-7ff9</id>
+  </store>
+  <serviceConfiguration>false</serviceConfiguration>
+  <maxFeatures>0</maxFeatures>
+  <numDecimals>0</numDecimals>
+  <padWithZeros>false</padWithZeros>
+  <forcedDecimal>false</forcedDecimal>
+  <overridingServiceSRS>false</overridingServiceSRS>
+  <skipNumberMatched>false</skipNumberMatched>
+  <circularArcPresent>false</circularArcPresent>
+</featureType>

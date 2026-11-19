@@ -273,6 +273,64 @@ function estimateListColNeededPx(
   return Math.ceil(maxText + pad + LIST_COL_SAFETY_PX);
 }
 
+/**
+ * 패널 폭에 맞춤(가로 스크롤·우측 여백 없음).
+ * - 합 ≤ 패널: 데이터 길이 비율로 확장해 채움
+ * - 합 > 패널: 짧은 열은 필요 폭 그대로 보장, 긴 열만 남는 폭을 나눠 가짐(짧은 열 말줄임 방지)
+ */
+function fitListColWidthsToContainer(needed: number[], containerW: number): number[] {
+  const n = needed.length;
+  if (n === 0) return needed;
+  const req = needed.map((w) => Math.max(1, Math.round(w)));
+  const sum = req.reduce((a, b) => a + b, 0);
+  if (sum <= 0) return req;
+  if (!(containerW > 0)) return req;
+
+  if (sum <= containerW) {
+    const scale = containerW / sum;
+    const out = req.map((w) => Math.max(1, Math.floor(w * scale)));
+    out[n - 1] = Math.max(1, out[n - 1] + (containerW - out.reduce((a, b) => a + b, 0)));
+    return out;
+  }
+
+  const order = req
+    .map((w, i) => ({ w, i }))
+    .sort((a, b) => a.w - b.w || a.i - b.i);
+  const out = new Array<number>(n).fill(0);
+  let remaining = containerW;
+  let left = n;
+
+  for (let k = 0; k < order.length; k++) {
+    const { w, i } = order[k];
+    const fair = remaining / left;
+    if (w <= fair) {
+      out[i] = w;
+      remaining -= w;
+      left -= 1;
+      continue;
+    }
+    const rest = order.slice(k);
+    const restSum = rest.reduce((a, x) => a + x.w, 0);
+    let used = 0;
+    for (let r = 0; r < rest.length; r++) {
+      const idx = rest[r].i;
+      if (r === rest.length - 1) {
+        out[idx] = Math.max(1, remaining - used);
+      } else {
+        const share = Math.max(1, Math.floor((remaining * rest[r].w) / restSum));
+        out[idx] = share;
+        used += share;
+      }
+    }
+    return out;
+  }
+
+  if (remaining > 0 && n > 0) {
+    out[n - 1] += remaining;
+  }
+  return out;
+}
+
 type LayerDataPanelProps = {
   dataTable: string;
   onClose?: () => void;
@@ -459,6 +517,8 @@ export function LayerDataPanel({
   /** 레이어별 목록 컬럼 폭(px). 페이지가 바뀌면 더 긴 값만 반영해 늘림 */
   const listColWidthsLayerRef = useRef<string | null>(null);
   const [listColWidthsPx, setListColWidthsPx] = useState<number[] | null>(null);
+  /** 목록 영역 실제 폭 — 데이터 길이 합이 넘치면 비율 축소에 사용 */
+  const [listContainerWidthPx, setListContainerWidthPx] = useState(0);
   const selectedRowDataRef = useRef(selectedRowData);
   selectedRowDataRef.current = selectedRowData;
   const keyFieldNameRef = useRef(keyFieldName);
@@ -494,6 +554,19 @@ export function LayerDataPanel({
     highlightedRow: null,
     total: 0,
   });
+
+  useLayoutEffect(() => {
+    const el = listScrollRef.current;
+    if (!el) return;
+    const update = () => {
+      const w = Math.floor(el.clientWidth);
+      setListContainerWidthPx((prev) => (prev === w ? prev : w));
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [activeLayer?.tableName, isIdentifyMode]);
 
   /** 새 식별·검색이 들어오면 직전 화면(목록 또는 이전 식별)을 스택에 push */
   useEffect(() => {
@@ -2158,6 +2231,18 @@ export function LayerDataPanel({
       })
     : listFieldsAll.slice(0, 5);
 
+  const listColNeededPx =
+    listColWidthsPx != null && listColWidthsPx.length === listFields.length
+      ? listColWidthsPx
+      : listFields.map((f) =>
+          getListColMinPx(String(f.define_field_name ?? ''), f.define_field_kor_name)
+        );
+  const listColDisplayWidthsPx = fitListColWidthsToContainer(
+    listColNeededPx,
+    listContainerWidthPx
+  );
+  const listTableWidthPx = listColDisplayWidthsPx.reduce((sum, w) => sum + w, 0);
+
   const isKeyField = (name: string) =>
     keyFieldName != null && name.trim().toLowerCase() === keyFieldName.trim().toLowerCase();
 
@@ -2280,21 +2365,24 @@ export function LayerDataPanel({
             />
           )}
           {!isIdentifyMode && !error && listFields.length > 0 && (rows.length > 0 || !loading) && (
-            <table className="h-full w-full table-fixed border-collapse text-left text-[12px]">
+            <table
+              className="h-full w-full table-fixed border-collapse text-left text-[12px]"
+              style={
+                listTableWidthPx > 0
+                  ? { width: listTableWidthPx, maxWidth: '100%' }
+                  : undefined
+              }
+            >
               <colgroup>
                 {listFields.map((f, colIndex) => {
                   const fieldName = String(f.define_field_name ?? '');
                   const korName = f.define_field_kor_name;
-                  const isNumberCol = isNumberColumnField(fieldName, korName);
-                  const colPx = listColWidthsPx?.[colIndex] ?? getListColMinPx(fieldName, korName);
+                  const colPx =
+                    listColDisplayWidthsPx[colIndex] ?? getListColMinPx(fieldName, korName);
                   return (
                     <col
                       key={fieldName}
-                      style={
-                        isNumberCol
-                          ? { width: colPx, minWidth: colPx, maxWidth: colPx }
-                          : { minWidth: colPx }
-                      }
+                      style={{ width: colPx, minWidth: colPx, maxWidth: colPx }}
                     />
                   );
                 })}
@@ -2306,7 +2394,8 @@ export function LayerDataPanel({
                     const korName = f.define_field_kor_name;
                     const isNumberCol = isNumberColumnField(fieldName, korName);
                     const headerLabel = getDefineFieldDisplayLabel(fieldName, korName);
-                    const colPx = listColWidthsPx?.[colIndex] ?? getListColMinPx(fieldName, korName);
+                    const colPx =
+                      listColDisplayWidthsPx[colIndex] ?? getListColMinPx(fieldName, korName);
                     return (
                       <th
                         key={fieldName}
@@ -2314,11 +2403,7 @@ export function LayerDataPanel({
                           'overflow-hidden truncate whitespace-nowrap border-b border-border px-2 py-1.5 first:pl-4 last:pr-4 align-middle text-[12px] font-medium text-slate-500 dark:text-muted-foreground',
                           isNumberCol ? 'text-center' : 'text-left'
                         )}
-                        style={
-                          isNumberCol
-                            ? { width: colPx, maxWidth: colPx }
-                            : { minWidth: colPx }
-                        }
+                        style={{ width: colPx, maxWidth: colPx }}
                         title={headerLabel}
                       >
                         {headerLabel}
@@ -2382,7 +2467,8 @@ export function LayerDataPanel({
                           const fieldName = String(f.define_field_name ?? '');
                           const korName = f.define_field_kor_name;
                           const isNumberCol = isNumberColumnField(fieldName, korName);
-                          const colPx = listColWidthsPx?.[colIndex] ?? getListColMinPx(fieldName, korName);
+                          const colPx =
+                            listColDisplayWidthsPx[colIndex] ?? getListColMinPx(fieldName, korName);
                           const display = useFacilityCols
                             ? formatRoadLedgerFacilityCellValue(fieldName, row)
                             : (() => {
@@ -2407,11 +2493,7 @@ export function LayerDataPanel({
                                 'overflow-hidden truncate whitespace-nowrap px-2 first:pl-4 last:pr-4 text-slate-900 dark:text-foreground',
                                 isNumberCol && 'text-center'
                               )}
-                              style={
-                                isNumberCol
-                                  ? { width: colPx, maxWidth: colPx }
-                                  : { minWidth: colPx }
-                              }
+                              style={{ width: colPx, maxWidth: colPx }}
                               title={cellText}
                             >
                               {display}

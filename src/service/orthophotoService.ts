@@ -1172,11 +1172,31 @@ async function collectTifsUnderDir(
 /**
  * tiles_tif/{그룹폴더}/… 하위 모든 tif 수집 (그룹명 = 직계 하위 폴더명).
  * 배치: GGNR_ORTHO_SOURCE_GROUP + SOURCE_DIR 이면 폴더명이 한글·UNC 여도 그룹으로 편입.
+ * 강제 그룹이 있으면 형제 폴더(시계열 연도 등) 전체 스캔을 생략한다.
  */
 export async function listSatelliteTifGroupedUploads(): Promise<SatelliteTifGroupedUploadsResult> {
   await ensureBaseStructure();
-  const root = getTilesTifRoot();
   const groups: SatelliteTifGroupedUploadsResult['groups'] = [];
+
+  const forceGroup = (process.env.GGNR_ORTHO_SOURCE_GROUP ?? '').trim();
+  if (forceGroup && isSafeOrthoSegment(forceGroup)) {
+    const forcedDir = getForcedOrthoSourceGroupAbsDir(forceGroup);
+    if (forcedDir) {
+      const files = await collectTifsUnderDir(forcedDir, forceGroup);
+      if (files.length) {
+        const fromName = parseOrthoGroupNameLoose(forceGroup)?.sourceCrs || null;
+        const crsMeta = await readOrthoGroupCrsMeta();
+        groups.push({
+          groupName: forceGroup,
+          sourceCrs: fromName || crsMeta[forceGroup] || null,
+          files,
+        });
+        return { groups };
+      }
+    }
+  }
+
+  const root = getTilesTifRoot();
   let top: fs.Dirent[];
   try {
     top = await fsPromises.readdir(root, { withFileTypes: true });
@@ -1190,15 +1210,6 @@ export async function listSatelliteTifGroupedUploads(): Promise<SatelliteTifGrou
     const groupDir = path.join(root, groupName);
     const files = await collectTifsUnderDir(groupDir, groupName);
     if (files.length) groups.push({ groupName, sourceCrs: null, files });
-  }
-
-  const forceGroup = (process.env.GGNR_ORTHO_SOURCE_GROUP ?? '').trim();
-  if (forceGroup && isSafeOrthoSegment(forceGroup) && !groups.some((g) => g.groupName === forceGroup)) {
-    const forcedDir = getForcedOrthoSourceGroupAbsDir(forceGroup);
-    if (forcedDir) {
-      const files = await collectTifsUnderDir(forcedDir, forceGroup);
-      if (files.length) groups.push({ groupName: forceGroup, sourceCrs: null, files });
-    }
   }
 
   const crsMeta = await readOrthoGroupCrsMeta();
@@ -2306,12 +2317,21 @@ async function executeSatelliteTifGroupConversion(prepared: PreparedSatelliteGro
   }
 
   const gbEnv = buildGdalChildEnv(gdalbuildvrt);
-  const gbArgs: string[] = ['-overwrite', '-allow_projection_difference', vrtPath, ...absPaths];
+  // UNC·다수 tif 를 argv 에 넣으면 Windows spawn ENAMETOOLONG → 목록 파일로 전달
+  const listPath = path.join(bundleDir, 'input_files.txt');
+  await fsPromises.writeFile(listPath, `${absPaths.join('\n')}\n`, 'utf8');
+  const gbArgs: string[] = [
+    '-overwrite',
+    '-allow_projection_difference',
+    '-input_file_list',
+    listPath,
+    vrtPath,
+  ];
   setOrthoPhase(groupName, 'vrt', 0, 'VRT 합본 중');
   orthoJobLog(
     { groupName, outputSlug: groupOutputSlug, sourceFile: 'mosaic.vrt', tileSetUi: tileSetId },
     '0/3 gdalbuildvrt 시작',
-    gdalbuildvrt
+    `${gdalbuildvrt} files=${absPaths.length} list=${listPath}`
   );
   const gb = await runProcess(gdalbuildvrt, gbArgs, base, 0, gbEnv, {
     activityTimeoutMs: 0,

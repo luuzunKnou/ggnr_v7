@@ -2,11 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowDown, ArrowUp, ArrowUpDown, Search, X } from 'lucide-react'
-import { call } from '@/lib/api'
 import { cn } from '@/lib/utils'
+import { dongSummaryClient } from '@/lib/realTransactionPriceClient'
 import {
   MONTH_OPTIONS,
-  REAL_TRANSACTION_PRICE_SERVICE,
   dealYmdParts,
   defaultDealYmd,
   formatWon,
@@ -24,18 +23,6 @@ type Props = {
   dealYmd: string
   onDealYmdChange: (dealYmd: string) => void
   onSelect: (umdNm: string | null) => void
-}
-
-async function callService<T>(action: string, params: Record<string, unknown>): Promise<T> {
-  const res = await call('', 'POST', {
-    service: REAL_TRANSACTION_PRICE_SERVICE,
-    action,
-    params,
-  })
-  if (!res?.success) {
-    throw new Error(String((res as { error?: string })?.error ?? '조회하지 못했습니다.'))
-  }
-  return (res.data ?? res) as T
 }
 
 const LIST_COLUMNS: {
@@ -75,8 +62,8 @@ export function RealTransactionPriceListPanel({
       setError(null)
       onSelect(null)
       try {
-        const data = await callService<{ rows: DongSummaryRow[] }>('dongSummary', { dealYmd: ymd })
-        setRows(Array.isArray(data.rows) ? data.rows : [])
+        const data = await dongSummaryClient({ dealYmd: ymd })
+        setRows(Array.isArray(data.rows) ? (data.rows as DongSummaryRow[]) : [])
         onDealYmdChange(ymd)
       } catch (e) {
         setRows([])
@@ -290,7 +277,7 @@ export function RealTransactionPriceListPanel({
               <span className="tabular-nums">
                 {loading ? '불러오는 중' : `${filteredSorted.length.toLocaleString('ko-KR')}건`}
               </span>
-              <span className="text-muted-foreground">동 단위</span>
+              <span className="text-muted-foreground">읍면동·리</span>
             </div>
           </div>
         </>

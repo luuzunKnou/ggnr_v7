@@ -1,0 +1,19 @@
+<layer>
+  <name>senior_center</name>
+  <id>LayerInfoImpl--440dd679:1a1e88b1cfe:-7de6</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl--440dd679:1a1e88b1cfe:-7de5</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl--440dd679:1a1e88b1cfe:-7de7</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-11-18 08:16:15.13 UTC</dateCreated>
+  <dateModified>2026-11-18 08:16:16.652 UTC</dateModified>
+</layer>
