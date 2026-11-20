@@ -192,15 +192,14 @@ export function readLayerClickDetailBlankPayload(
 function popupFeatures(): string {
   const width = 540
   const height = 680
+  const screen = window.screen as Screen & { availLeft?: number; availTop?: number }
   const left = Math.max(
     0,
-    Math.round(((window.screen?.availWidth ?? width) - width) / 2) +
-      (window.screen?.availLeft ?? 0)
+    Math.round(((screen?.availWidth ?? width) - width) / 2) + (screen?.availLeft ?? 0)
   )
   const top = Math.max(
     0,
-    Math.round(((window.screen?.availHeight ?? height) - height) / 2) +
-      (window.screen?.availTop ?? 0)
+    Math.round(((screen?.availHeight ?? height) - height) / 2) + (screen?.availTop ?? 0)
   )
   return [
     `width=${width}`,
