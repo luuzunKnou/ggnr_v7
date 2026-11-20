@@ -19,7 +19,25 @@ import {
   TableRow,
 } from "@/app/shadcnComponents/ui/table"
 import { call } from "@/lib/api"
-import { Trash2, Plus, Search } from "lucide-react"
+import { FileDown, Trash2, Plus, Search } from "lucide-react"
+
+function downloadBase64Excel(base64: string, fileName: string) {
+  const bin = atob(base64)
+  const bytes = new Uint8Array(bin.length)
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
+  const blob = new Blob([bytes], {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  })
+  const a = document.createElement("a")
+  a.href = URL.createObjectURL(blob)
+  a.download = fileName
+  a.rel = "noopener"
+  a.title = fileName
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(a.href)
+}
 
 export type ServiceItem = {
   ser_menu: string | null
@@ -79,6 +97,29 @@ export function ServiceListManager() {
   const [addSource, setAddSource] = useState<ServiceSource | null>(null)
   const [form, setForm] = useState<ServiceItem>(emptyService())
   const [listSearch, setListSearch] = useState("")
+  const [exporting, setExporting] = useState(false)
+
+  const exportFeatureListReport = async () => {
+    setError(null)
+    setSuccessMsg(null)
+    setExporting(true)
+    try {
+      const res = await call("", "POST", {
+        service: "configService",
+        action: "exportFeatureListReport",
+        params: {},
+      })
+      if (!res.success) throw new Error(res.error ?? "보고서 생성 실패")
+      const fileName = String(res.data?.fileName ?? "기능목록_보고서.xlsx")
+      const base64 = String(res.data?.base64 ?? "")
+      if (!base64) throw new Error("엑셀 데이터가 비어 있습니다.")
+      downloadBase64Excel(base64, fileName)
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "보고서 다운로드 실패")
+    } finally {
+      setExporting(false)
+    }
+  }
 
   const filteredRows = useMemo(() => {
     const q = listSearch.trim().toLowerCase()
@@ -354,11 +395,11 @@ export function ServiceListManager() {
       )}
 
       <div className="flex shrink-0 items-center gap-2 flex-wrap">
-        <Button size="sm" className="rounded-none gap-1" onClick={openAddCommon}>
+        <Button size="sm" className="rounded-none gap-1" onClick={openAddCommon} title="공통 추가">
           <Plus className="w-4 h-4" />
           공통 추가
         </Button>
-        <Button size="sm" className="rounded-none gap-1" onClick={openAddCustom}>
+        <Button size="sm" className="rounded-none gap-1" onClick={openAddCustom} title="커스텀 추가">
           <Plus className="w-4 h-4" />
           커스텀 추가
         </Button>
@@ -372,6 +413,18 @@ export function ServiceListManager() {
           />
         </div>
         {saving && <span className="text-xs text-muted-foreground self-center">저장 중...</span>}
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="rounded-none gap-1 cursor-pointer ml-auto"
+          title="기능 목록 보고서"
+          disabled={exporting}
+          onClick={() => void exportFeatureListReport()}
+        >
+          <FileDown className="w-4 h-4" />
+          {exporting ? "생성 중..." : "기능 목록 보고서"}
+        </Button>
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto rounded border">
