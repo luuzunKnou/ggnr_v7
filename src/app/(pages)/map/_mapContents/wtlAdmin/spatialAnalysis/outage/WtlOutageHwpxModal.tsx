@@ -80,17 +80,36 @@ export function WtlOutageHwpxModal({
       return
     }
     setBusy(true)
-    setMessage('단수구역도 생성 중입니다…')
+    setMessage('알림문용 구역을 맞추는 중입니다…')
     try {
       const rings = result.rings && result.rings.length > 0 ? result.rings : [result.ring]
-      // 단수구역도는 지우기로 뺀 구멍까지 그대로
-      const image = await captureOutageZoneImage(outagePolygonsOf(result))
+      const sourcePolygons = outagePolygonsOf(result)
+      // 알림문만 — 화면 지도와 달리 틈 ~45m로 면을 합쳐 구역도·대상지역 개수를 맞춤
+      const clusteredRes = await call('', 'POST', {
+        service: 'wtlOutageService',
+        action: 'clusterWtlOutageHwpxPolygons',
+        params: { polygons: sourcePolygons, rings },
+      })
+      const clusteredBody = (clusteredRes?.data ?? clusteredRes) as {
+        polygons?: [number, number][][][]
+        error?: string
+      }
+      if (clusteredBody.error) {
+        setMessage(clusteredBody.error)
+        return
+      }
+      const polygons =
+        clusteredBody.polygons && clusteredBody.polygons.length > 0
+          ? clusteredBody.polygons
+          : sourcePolygons
+      setMessage('단수구역도 생성 중입니다…')
+      const image = await captureOutageZoneImage(polygons)
       if (!image) setMessage('단수구역도 캡처에 실패해 그림 없이 만듭니다…')
       else setMessage('한글 파일을 만드는 중입니다…')
       const res = await call('', 'POST', {
         service: 'wtlOutageService',
         action: 'exportWtlOutageHwpx',
-        params: { title, reason, startAt, endAt, rings, imageBase64: image ?? '' },
+        params: { title, reason, startAt, endAt, rings, polygons, imageBase64: image ?? '' },
       })
       const body = (res?.data ?? res) as ExportBody
       if (body.error || !body.base64 || !body.fileName) {
@@ -167,7 +186,7 @@ export function WtlOutageHwpxModal({
           </div>
           {timeInvalid && <p className="text-[11px] text-rose-600">종료일은 시작일 이후로 입력해주세요.</p>}
           <p className="text-[10px] text-muted-foreground">
-            대상지역은 단수 면과 겹치는 리 이름으로, 단수구역도는 현재 단수 면을 항공영상 위에 그려 넣습니다.
+            알림문을 만들 때만 가까운 단수 면(틈 약 45m)을 합칩니다. 구역도와 대상지역 문구는 그 합친 면을 같이 쓰고, 화면 지도의 붉은 면은 그대로입니다.
           </p>
           {message && (
             <p role="status" className="text-[11px] text-foreground">

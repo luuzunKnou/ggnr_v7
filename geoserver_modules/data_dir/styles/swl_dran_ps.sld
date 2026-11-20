@@ -17,7 +17,7 @@
                 <sld:OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="/www/symbol/sewer/swl_dran_ps.svg"/>
                 <sld:Format>image/svg+xml</sld:Format>
               </sld:ExternalGraphic>
-              <sld:Size><ogc:Function name="if_then_else"><ogc:Function name="greaterThan"><ogc:Function name="env"><ogc:Literal>ignore_scale</ogc:Literal><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>18</ogc:Literal>
+              <sld:Size>
                 <ogc:Function name="if_then_else">
                   <ogc:Function name="greaterThan">
                     <ogc:Function name="env">
@@ -34,12 +34,16 @@
                     <ogc:Function name="env">
                       <ogc:Literal>wms_scale_denominator</ogc:Literal>
                     </ogc:Function>
+                    <ogc:Literal>24</ogc:Literal>
+                    <ogc:Literal>500</ogc:Literal>
+                    <ogc:Literal>22</ogc:Literal>
+                    <ogc:Literal>800</ogc:Literal>
+                    <ogc:Literal>20</ogc:Literal>
+                    <ogc:Literal>1500</ogc:Literal>
                     <ogc:Literal>18</ogc:Literal>
-                    <ogc:Literal>8000</ogc:Literal>
-                    <ogc:Literal>16</ogc:Literal>
                   </ogc:Function>
                 </ogc:Function>
-              </ogc:Function></sld:Size>
+              </sld:Size>
             </sld:Graphic>
           </sld:PointSymbolizer>
         </sld:Rule>
@@ -74,7 +78,7 @@
                   <ogc:Function name="greaterThan">
                     <ogc:Function name="env">
                       <ogc:Literal>swl_dran_ps_label_size</ogc:Literal>
-                      <ogc:Literal>0</ogc:Literal>
+                      <ogc:Literal>15</ogc:Literal>
                     </ogc:Function>
                     <ogc:Literal>0</ogc:Literal>
                   </ogc:Function>
@@ -125,7 +129,7 @@
                     <ogc:Literal>#</ogc:Literal>
                     <ogc:Function name="env">
                       <ogc:Literal>swl_dran_ps_label_halo_color</ogc:Literal>
-                      <ogc:Literal>FFFFFF</ogc:Literal>
+                      <ogc:Literal>333333</ogc:Literal>
                     </ogc:Function>
                   </ogc:Function>
                 </sld:CssParameter>
@@ -137,7 +141,7 @@
                   <ogc:Literal>#</ogc:Literal>
                   <ogc:Function name="env">
                     <ogc:Literal>swl_dran_ps_label_color</ogc:Literal>
-                    <ogc:Literal>333333</ogc:Literal>
+                    <ogc:Literal>FFFFFF</ogc:Literal>
                   </ogc:Function>
                 </ogc:Function>
               </sld:CssParameter>

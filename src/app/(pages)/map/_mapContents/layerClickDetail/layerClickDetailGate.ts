@@ -10,7 +10,7 @@ export const LAYER_CLICK_DETAIL_BLOCKED_OPENED = [
   'wtlNetworkMap',
   'wtlFacility',
   'wtlEquipment',
-  'wtlSpatialAnalysis',
+  // 공간분석은 관로·제수변·계량기 속성조회 허용 (차단하지 않음)
   'wtlConstructionLedger',
   'swlNetworkMap',
   'wtlComplaint',

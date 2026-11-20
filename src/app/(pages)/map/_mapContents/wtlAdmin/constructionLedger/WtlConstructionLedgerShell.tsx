@@ -199,6 +199,8 @@ export function WtlConstructionLedgerShell({
   const [fitToken, setFitToken] = useState(0)
   const [alertJump, setAlertJump] = useState(0)
   const pinProjectRef = useRef<string | null>(null)
+  /** 사업 다시 눌러 해제했을 때, 필터 effect가 첫 사업을 다시 고르지 않게 함 */
+  const skipAutoProjectRef = useRef(false)
   const keepWorkRef = useRef<string | null>(null)
   const [emdOptions, setEmdOptions] = useState<{ code: string; name: string }[]>([])
   const [riOptions, setRiOptions] = useState<{ code: string; name: string }[]>([])
@@ -501,6 +503,9 @@ export function WtlConstructionLedgerShell({
     return projectGeoms.filter((item) => item.id === work.consCode)
   }, [projectGeoms, work, showAllProjectGeoms])
 
+  /** 관련탭 «화면에 보이는 시설만» — ON이면 목록 선택 시 맵무브 안 함 */
+  const [suppressListFit, setSuppressListFit] = useState(true)
+
   useWtlConsMapLayer({
     projectGeoms: visibleProjectGeoms,
     selectedId: work?.consCode ?? null,
@@ -510,6 +515,7 @@ export function WtlConstructionLedgerShell({
     relatedFacilities,
     fitToken,
     bottomInset: mapBottomInset,
+    suppressListFit,
   })
 
   useEffect(() => {
@@ -545,10 +551,17 @@ export function WtlConstructionLedgerShell({
     if (workId && projectId && projects.some((item) => item.id === projectId)) return
     const pinned = pinProjectRef.current
     if (pinned && projects.some((item) => item.id === pinned)) {
+      skipAutoProjectRef.current = false
       if (projectId !== pinned) setProjectId(pinned)
       return
     }
-    if (projectId && filteredProjects.some((item) => item.id === projectId)) return
+    if (projectId && filteredProjects.some((item) => item.id === projectId)) {
+      skipAutoProjectRef.current = false
+      return
+    }
+    // 사용자가 사업 선택을 해제한 상태 유지
+    if (!projectId && skipAutoProjectRef.current) return
+    skipAutoProjectRef.current = false
     setProjectId(filteredProjects[0]?.id ?? null)
   }, [filteredProjects, projectId, projects, workId])
 
@@ -724,6 +737,14 @@ export function WtlConstructionLedgerShell({
                           pinProjectRef.current = null
                           setMapFocus(null)
                           setWorkId(null)
+                          // 같은 사업 다시 선택 → 사업·공사 모두 해제(초기)
+                          if (item.id === projectId) {
+                            skipAutoProjectRef.current = true
+                            setProjectId(null)
+                            setFitToken((token) => token + 1)
+                            return
+                          }
+                          skipAutoProjectRef.current = false
                           setProjectId(item.id)
                           setFitToken((token) => token + 1)
                         }}
@@ -770,7 +791,14 @@ export function WtlConstructionLedgerShell({
                       empty={searchActive ? '검색된 공사가 없습니다.' : '공사가 없습니다.'}
                       onSelect={(item) => {
                         setMapFocus(null)
+                        // 같은 공사 다시 선택 → 공사 해제, 사업만 남은 상태
+                        if (item.id === workId) {
+                          setWorkId(null)
+                          setFitToken((token) => token + 1)
+                          return
+                        }
                         setWorkId(item.id)
+                        setFitToken((token) => token + 1)
                       }}
                     />
                   </div>
@@ -889,8 +917,13 @@ export function WtlConstructionLedgerShell({
                     setMapFocus(null)
                     setZoneId((prev) => (prev === id ? null : id))
                   }}
-                  onFocus={setMapFocus}
+                  onFocus={(focus) => {
+                    setMapFocus(focus)
+                    // 공사이력·관련시설 포커스 시 공사위치 검정 선택 해제(미선택 스타일로)
+                    if (focus) setZoneId(null)
+                  }}
                   onRelatedFacilities={setRelatedFacilities}
+                  onOnlyInViewChange={setSuppressListFit}
                   workGeom4326={work ? geomByCode[work.consCode] ?? null : null}
                   kind={kind}
                   consCode={work?.consCode ?? null}

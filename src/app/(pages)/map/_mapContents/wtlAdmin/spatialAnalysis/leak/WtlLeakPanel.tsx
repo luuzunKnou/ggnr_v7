@@ -1,8 +1,9 @@
 'use client'
 
-import { useState } from 'react'
-import { call } from '@/lib/api'
+import { useEffect, useMemo, useState } from 'react'
+import { useSession } from 'next-auth/react'
 import { cn } from '@/lib/utils'
+import { useMapContext } from '../../../../_mapComponents/MapContext'
 import {
   ANALYSIS_HISTORY_PAGE_SIZE,
   AnalysisHistoryPager,
@@ -28,6 +29,16 @@ type Props = {
 }
 
 export function WtlLeakPanel({ active = true, mapLeftPx = 0, onHandoffToOutage }: Props) {
+  const mapContext = useMapContext()
+  const { data: session } = useSession()
+  const sessionAuthor = useMemo(
+    () => ({
+      userId: String(session?.user?.id ?? '').trim() || null,
+      userName: String(session?.user?.name ?? '').trim() || null,
+    }),
+    [session?.user?.id, session?.user?.name]
+  )
+  const setMapFeatureIdentifyDisabled = mapContext?.setMapFeatureIdentifyDisabled
   const [history, setHistory] = useState<WtlLeakHistory[]>([])
   const [historyPage, setHistoryPage] = useState(1)
   const [historyId, setHistoryId] = useState<string | null>(null)
@@ -42,6 +53,22 @@ export function WtlLeakPanel({ active = true, mapLeftPx = 0, onHandoffToOutage }
   const [notice, setNotice] = useState('해당 위치에서 가까운 관로에 맞춰 분석합니다.')
   const [hiddenPipeIndexes, setHiddenPipeIndexes] = useState<number[]>([])
   const [editMode, setEditMode] = useState<LeakEditMode>(null)
+
+  // 따라 그리기 UI 비활성 — 잔여 follow 모드만 정리
+  useEffect(() => {
+    if (editMode === 'follow') setEditMode(null)
+  }, [editMode])
+
+  /** 분석 전·선 편집 중에는 속성조회 끔 (관로 클릭은 분석/편집만) */
+  useEffect(() => {
+    if (!setMapFeatureIdentifyDisabled) return
+    if (!active) {
+      setMapFeatureIdentifyDisabled(false)
+      return
+    }
+    setMapFeatureIdentifyDisabled(result == null || editMode === 'line')
+    return () => setMapFeatureIdentifyDisabled(false)
+  }, [active, result, editMode, setMapFeatureIdentifyDisabled])
 
   // 다른 탭으로 나가면 분석 상태를 비워 다시 들어오면 새 분석 (분석 이력 목록은 유지)
   // — effect 대신 이전 값 비교로 렌더 중 초기화(React 권장 패턴)
@@ -68,7 +95,6 @@ export function WtlLeakPanel({ active = true, mapLeftPx = 0, onHandoffToOutage }
   /** 선택만(지도 이동 없음) — 지도에서 제수변을 눌렀을 때 */
   const selectGate = (gate: WtlLeakGate) => {
     setSelectedGateId(gate.id)
-    setNotice(`${gate.name} 선택 · ${gate.diameter} · ${gate.address}`)
   }
 
   /** 선택 + 지도 이동 — 목록에서 제수변을 눌렀을 때 */
@@ -83,13 +109,14 @@ export function WtlLeakPanel({ active = true, mapLeftPx = 0, onHandoffToOutage }
     setHistoryId(null)
     setSaved(false)
     setEditMode(null)
+    setHiddenPipeIndexes([])
     // 분석 직후는 누수지점 펄스 — 제수변은 목록에서 고를 때 선택
     setSelectedGateId(null)
     setSelectedPipeIndex(null)
     setAnalyzing(false)
     setNotice(
       next.gates.length > 0
-        ? `분석 완료 · 제수변 ${next.gates.length}개 · 관로 ${next.pipes.length}구간`
+        ? '분석 완료'
         : next.truncated
           ? '탐색 한도 안에서 잠글 제수변을 찾지 못했습니다.'
           : '이어진 관로에 잠글 제수변이 없습니다. 관로가 끊겨 있는지 확인하세요.'
@@ -145,6 +172,7 @@ export function WtlLeakPanel({ active = true, mapLeftPx = 0, onHandoffToOutage }
     setSaved(false)
     setAnalyzing(false)
     setEditMode(null)
+    setHiddenPipeIndexes([])
     setNotice('해당 위치에서 가까운 관로에 맞춰 분석합니다.')
   }
 
@@ -154,6 +182,13 @@ export function WtlLeakPanel({ active = true, mapLeftPx = 0, onHandoffToOutage }
     setSelectedGateId((id) => (id && next.gates.some((gate) => gate.id === id) ? id : null))
     setSelectedPipeIndex(null)
   }
+
+  // 따라 그리기 UI 일시 비활성 — 훅·모드는 유지
+  // const openFollowDraw = () => {
+  //   if (!result) return
+  //   setEditMode('follow')
+  //   setNotice('따라 그리기 · 끝점을 끌어 늘이거나 줄입니다')
+  // }
 
   const loadHistory = (item: WtlLeakHistory) => {
     setHistoryId(item.id)
@@ -173,12 +208,12 @@ export function WtlLeakPanel({ active = true, mapLeftPx = 0, onHandoffToOutage }
       setNotice('누수 위치를 지정해 분석한 뒤 저장할 수 있습니다.')
       return
     }
-    const row = buildLeakHistory(result)
+    const row = buildLeakHistory(result, sessionAuthor)
     setHistory((prev) => [row, ...prev])
     setHistoryPage(1)
     setHistoryId(row.id)
     setSaved(true)
-    setNotice(`분석결과 저장 · 제수변 ${result.gates.length} · 관로 ${result.pipes.length}`)
+    setNotice('분석결과 저장')
   }
 
   const historyPageCount = Math.max(1, Math.ceil(history.length / ANALYSIS_HISTORY_PAGE_SIZE))
@@ -190,7 +225,12 @@ export function WtlLeakPanel({ active = true, mapLeftPx = 0, onHandoffToOutage }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <WtlOutageZoomHint active={active} message="제수변이 보이는 축척까지 지도를 확대해 주세요" />
+      <WtlOutageZoomHint
+        active={active}
+        message="제수변이 보이는 축척까지 지도를 확대해 주세요"
+        showLockHint={!snap}
+        lockMessage="지도에서 누수 위치를 클릭하세요"
+      />
       <WtlLeakResultEdit
         active={active}
         mapLeftPx={mapLeftPx}
@@ -215,9 +255,10 @@ export function WtlLeakPanel({ active = true, mapLeftPx = 0, onHandoffToOutage }
               <table className="w-full table-fixed border-collapse text-left text-[11px]">
                 <thead className="bg-muted">
                   <tr className="h-7 border-b border-border">
-                    <th className="w-[7rem] px-1.5 font-medium text-muted-foreground">일시</th>
-                    <th className="w-[6.25rem] px-1.5 font-medium text-muted-foreground">위치</th>
-                    <th className="px-1.5 font-medium text-muted-foreground">제수변</th>
+                    <th className="w-[7.25rem] px-1.5 font-medium text-muted-foreground">일시</th>
+                    <th className="w-[5.5rem] px-1.5 font-medium text-muted-foreground">위치</th>
+                    <th className="w-[5rem] px-1.5 font-medium text-muted-foreground">제수변</th>
+                    <th className="w-[4.75rem] px-1.5 font-medium text-muted-foreground">작성자</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -246,6 +287,12 @@ export function WtlLeakPanel({ active = true, mapLeftPx = 0, onHandoffToOutage }
                       >
                         {leakHistoryGateText(item)}
                       </td>
+                      <td
+                        className="truncate px-1.5 text-muted-foreground"
+                        title={item.createUserName || item.createUser || undefined}
+                      >
+                        {item.createUserName || item.createUser || '—'}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -270,7 +317,9 @@ export function WtlLeakPanel({ active = true, mapLeftPx = 0, onHandoffToOutage }
                   <span className="text-muted-foreground">
                     {' '}
                     · {snap.pipeTable === 'wtl_sply_ls' ? '급수관로' : '관로'} #{snap.pipeId}
-                    {result ? ` · 제수변 ${result.gates.length}개` : ''}
+                    {result
+                      ? ` · 제수변 ${result.gates.length}개 · 관로 ${result.pipes.length}구간`
+                      : ''}
                   </span>
                 </>
               ) : selectedGate ? (
@@ -374,6 +423,20 @@ export function WtlLeakPanel({ active = true, mapLeftPx = 0, onHandoffToOutage }
           >
             분석결과저장
           </button>
+          {/* <button
+            type="button"
+            disabled={!result || analyzing}
+            className={cn(
+              'rounded border px-2.5 py-1.5 text-[11px] font-medium disabled:opacity-40',
+              editMode === 'follow'
+                ? 'border-[#0f766e] bg-[#f3fbf8] text-[#0f766e]'
+                : 'border-dashed border-[#0f766e] text-[#0f766e] hover:bg-[#f3fbf8]'
+            )}
+            onClick={openFollowDraw}
+            title="끝점·분기 드래그로 결과 선 편집 (클릭 추가·제외 이전 방식)"
+          >
+            따라 그리기
+          </button> */}
           <button
             type="button"
             disabled={!result || result.gates.length === 0 || analyzing || !onHandoffToOutage}

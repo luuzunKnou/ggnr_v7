@@ -11,7 +11,24 @@
           <sld:Name>Name</sld:Name>
           <sld:Title>swl_spot_ps_etc</sld:Title>
           <sld:Abstract>Abstract</sld:Abstract>
-          <sld:MaxScaleDenominator>3000.0</sld:MaxScaleDenominator>
+          <ogc:Filter>
+            <ogc:Or>
+              <ogc:PropertyIsEqualTo>
+                <ogc:Function name="env">
+                  <ogc:Literal>ignore_scale</ogc:Literal>
+                  <ogc:Literal>0</ogc:Literal>
+                </ogc:Function>
+                <ogc:Literal>1</ogc:Literal>
+              </ogc:PropertyIsEqualTo>
+              <ogc:PropertyIsLessThan>
+                <ogc:Function name="env">
+                  <ogc:Literal>wms_scale_denominator</ogc:Literal>
+                  <ogc:Literal>999999999</ogc:Literal>
+                </ogc:Function>
+                <ogc:Literal>3000</ogc:Literal>
+              </ogc:PropertyIsLessThan>
+            </ogc:Or>
+          </ogc:Filter>
           <sld:PointSymbolizer>
             <sld:Graphic>
               <sld:Mark>
@@ -56,7 +73,7 @@
                   </sld:CssParameter>
                 </sld:Stroke>
               </sld:Mark>
-              <sld:Size><ogc:Function name="if_then_else"><ogc:Function name="greaterThan"><ogc:Function name="env"><ogc:Literal>ignore_scale</ogc:Literal><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>18</ogc:Literal>
+              <sld:Size>
                 <ogc:Function name="if_then_else">
                   <ogc:Function name="greaterThan">
                     <ogc:Function name="env">
@@ -80,9 +97,15 @@
                     <ogc:Literal>16</ogc:Literal>
                     <ogc:Literal>1500</ogc:Literal>
                     <ogc:Literal>14</ogc:Literal>
+                    <ogc:Literal>3000</ogc:Literal>
+                    <ogc:Literal>12</ogc:Literal>
+                    <ogc:Literal>6000</ogc:Literal>
+                    <ogc:Literal>10</ogc:Literal>
+                    <ogc:Literal>12000</ogc:Literal>
+                    <ogc:Literal>8</ogc:Literal>
                   </ogc:Function>
                 </ogc:Function>
-              </ogc:Function></sld:Size>
+              </sld:Size>
             </sld:Graphic>
           </sld:PointSymbolizer>
         </sld:Rule>
@@ -91,17 +114,34 @@
           <sld:Title>swl_spot_ps_etc_label</sld:Title>
           <sld:Abstract>Abstract</sld:Abstract>
           <ogc:Filter>
-            <ogc:PropertyIsGreaterThan>
-              <ogc:Function name="strLength">
-                <ogc:Function name="env">
-                  <ogc:Literal>swl_spot_ps_etc_label_property_name</ogc:Literal>
-                  <ogc:Literal></ogc:Literal>
+            <ogc:And>
+              <ogc:PropertyIsGreaterThan>
+                <ogc:Function name="strLength">
+                  <ogc:Function name="env">
+                    <ogc:Literal>swl_spot_ps_etc_label_property_name</ogc:Literal>
+                    <ogc:Literal/>
+                  </ogc:Function>
                 </ogc:Function>
-              </ogc:Function>
-              <ogc:Literal>0</ogc:Literal>
-            </ogc:PropertyIsGreaterThan>
+                <ogc:Literal>0</ogc:Literal>
+              </ogc:PropertyIsGreaterThan>
+              <ogc:Or>
+                <ogc:PropertyIsEqualTo>
+                  <ogc:Function name="env">
+                    <ogc:Literal>ignore_scale</ogc:Literal>
+                    <ogc:Literal>0</ogc:Literal>
+                  </ogc:Function>
+                  <ogc:Literal>1</ogc:Literal>
+                </ogc:PropertyIsEqualTo>
+                <ogc:PropertyIsLessThan>
+                  <ogc:Function name="env">
+                    <ogc:Literal>wms_scale_denominator</ogc:Literal>
+                    <ogc:Literal>999999999</ogc:Literal>
+                  </ogc:Function>
+                  <ogc:Literal>3000</ogc:Literal>
+                </ogc:PropertyIsLessThan>
+              </ogc:Or>
+            </ogc:And>
           </ogc:Filter>
-          <sld:MaxScaleDenominator>3000.0</sld:MaxScaleDenominator>
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="property">
@@ -123,7 +163,7 @@
               <sld:CssParameter name="font-weight">
                 <ogc:Function name="env">
                   <ogc:Literal>swl_spot_ps_etc_label_font_weight</ogc:Literal>
-                  <ogc:Literal>normal</ogc:Literal>
+                  <ogc:Literal>bold</ogc:Literal>
                 </ogc:Function>
               </sld:CssParameter>
             </sld:Font>
@@ -152,7 +192,7 @@
                     <ogc:Literal>#</ogc:Literal>
                     <ogc:Function name="env">
                       <ogc:Literal>swl_spot_ps_etc_label_halo_color</ogc:Literal>
-                      <ogc:Literal>FFFFFF</ogc:Literal>
+                      <ogc:Literal>16fcca</ogc:Literal>
                     </ogc:Function>
                   </ogc:Function>
                 </sld:CssParameter>
@@ -164,7 +204,7 @@
                   <ogc:Literal>#</ogc:Literal>
                   <ogc:Function name="env">
                     <ogc:Literal>swl_spot_ps_etc_label_color</ogc:Literal>
-                    <ogc:Literal>16fcca</ogc:Literal>
+                    <ogc:Literal>FFFFFF</ogc:Literal>
                   </ogc:Function>
                 </ogc:Function>
               </sld:CssParameter>
@@ -178,4 +218,3 @@
     </sld:UserStyle>
   </sld:NamedLayer>
 </sld:StyledLayerDescriptor>
-

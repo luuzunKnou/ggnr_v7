@@ -1,10 +1,22 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useSession } from 'next-auth/react'
+import { containsCoordinate } from 'ol/extent'
 import { transform } from 'ol/proj'
 import { call } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { useMapContext } from '../../../../_mapComponents/MapContext'
+import type {
+  IdentifyLayerResult,
+  IdentifyPopupState,
+} from '../../../../_mapComponents/hooks/useFeatureIdentify'
+import { clearMapLayerClickDetailHighlight } from '@/lib/mapLayerClickDetailHighlight'
+import {
+  getViewProjectionCode,
+  lonLatToView,
+  viewToLonLat,
+} from '../topology/topoMapProjection'
 import {
   ANALYSIS_HISTORY_PAGE_SIZE,
   AnalysisHistoryPager,
@@ -14,9 +26,11 @@ import { WtlOutageGeomEdit } from './WtlOutageGeomEdit'
 import { WtlOutageResultEdit, type OutageEditMode } from './WtlOutageResultEdit'
 import { WtlOutageSmsModal } from './WtlOutageSmsModal'
 import { WtlOutageHwpxModal } from './WtlOutageHwpxModal'
-import { exportWtlOutageMeterExcel } from './exportWtlOutageMeterExcel'
-import type { WtlOutageMeterRowDto } from '@/service/wtlOutageService'
-import { OUTAGE_OVERLAY_MAX_SCALE_M, useWtlOutageMapLayer } from './useWtlOutageMapLayer'
+import {
+  isOutageOverlayScaleVisible,
+  OUTAGE_OVERLAY_MAX_SCALE_M,
+  useWtlOutageMapLayer,
+} from './useWtlOutageMapLayer'
 import { zoomFromScaleMeters } from '../../../../_mapComponents/hooks/mapScale'
 import { WtlOutageZoomHint } from './WtlOutageZoomHint'
 import type { LonLat } from './wtlOutageGeom'
@@ -24,6 +38,7 @@ import {
   fitOutageGeometry4326,
   fitOutageResult,
   flyToOutageLonLat,
+  OUTAGE_FLY_MS,
   type WtlOutageSelectionHighlight,
 } from './wtlOutageMapFly'
 import {
@@ -53,12 +68,27 @@ function statusClass(status: string) {
   return 'text-foreground'
 }
 
+/** 지도 상단용 — 단수 구간 미생성. 패널 notice와 문구를 나누어 중복하지 않음 */
+function outageNoIsolationBanner(lockCount: number): string {
+  return lockCount === 1
+    ? '이 제수변만 잠가서는 단수 구간이 생기지 않습니다.'
+    : '잠근 제수변으로는 단수 구간이 생기지 않습니다.'
+}
+
 export function WtlOutagePanel({
   active = true,
   handoffSeed = null,
   onHandoffConsumed,
   mapLeftPx = 0,
 }: Props) {
+  const { data: session } = useSession()
+  const sessionAuthor = useMemo(
+    () => ({
+      userId: String(session?.user?.id ?? '').trim() || null,
+      userName: String(session?.user?.name ?? '').trim() || null,
+    }),
+    [session?.user?.id, session?.user?.name]
+  )
   const [history, setHistory] = useState<WtlOutageHistory[]>([])
   const [historyPage, setHistoryPage] = useState(1)
   const [historyId, setHistoryId] = useState<string | null>(null)
@@ -73,14 +103,14 @@ export function WtlOutagePanel({
   const targetFetchSeqRef = useRef(0)
   const [smsOpen, setSmsOpen] = useState(false)
   const [hwpxOpen, setHwpxOpen] = useState(false)
-  /** 계량기 목록 엑셀 만드는 중 */
-  const [meterExporting, setMeterExporting] = useState(false)
   /** 제수변 번호(ogc_fid) 찾기 */
   const [gateQuery, setGateQuery] = useState('')
   const [gateSearching, setGateSearching] = useState(false)
   const [gateMatches, setGateMatches] = useState<WtlOutageGate[]>([])
   const [hiddenPipeIndexes, setHiddenPipeIndexes] = useState<number[]>([])
   const [notice, setNotice] = useState('')
+  /** 지도 상단 — 단수 구간 미생성 짧은 안내(패널 notice와 분리) */
+  const [mapStatusBanner, setMapStatusBanner] = useState<string | null>(null)
   /** 지도 클릭으로 고른 행 — 목록에서 보이게 스크롤 */
   const [scrollToTargetId, setScrollToTargetId] = useState<string | null>(null)
   const targetListRef = useRef<HTMLDivElement>(null)
@@ -89,6 +119,8 @@ export function WtlOutagePanel({
   const [saved, setSaved] = useState(false)
   const previewSeqRef = useRef(0)
   const handoffDoneRef = useRef<number | null>(null)
+  /** 단수구역 최초 진입 시 가까운 제수변 이동 — 모드 끌 때 초기화 */
+  const entryFlyDoneRef = useRef(false)
   const onHandoffConsumedRef = useRef(onHandoffConsumed)
   onHandoffConsumedRef.current = onHandoffConsumed
   const mapContext = useMapContext()
@@ -120,13 +152,109 @@ export function WtlOutagePanel({
     setSelectionHighlight(null)
   }
 
-  /** 수용가·도로명: wtl_meta_ps 점 + 강조. 필지: 선택 시 면 조회 후 강조 */
+  /**
+   * 수용가 목록 → 위치 이동 후 속성조회(레이어 클릭 상세).
+   * 단수 전용 펄스 대신 공통 속성조회 펄스/패널을 쓴다.
+   */
+  const openCustomerAttributeIdentify = (
+    point: [number, number],
+    meta?: { ogcFid?: number; meterNo?: string }
+  ) => {
+    const map = mapContext?.mapInstanceRef?.current
+    const setIdentifyPopup = mapContext?.setMapSplitIdentifyPopup
+    if (!map || !setIdentifyPopup) {
+      setNotice('지도를 준비 중입니다. 잠시 후 다시 선택하세요.')
+      return
+    }
+    setNotice('')
+    /** 대기 중 식별·공통 펄스만 정리(속성조회 공통 닫기 API는 건드리지 않음). 이동 후 새 식별로 연다 */
+    setIdentifyPopup(null)
+    clearMapLayerClickDetailHighlight(map, 'layerClickDetail')
+    flyToPoint(point)
+    /** flyToOutageLonLat 시작 지연(80) + 애니메이션 + 여유 — 이동 끝난 뒤 식별·패널 앵커 */
+    const seq = ++targetFetchSeqRef.current
+    window.setTimeout(() => {
+      if (seq !== targetFetchSeqRef.current) return
+      const mapNow = mapContext?.mapInstanceRef?.current
+      if (!mapNow || !setIdentifyPopup) return
+      const viewProj = getViewProjectionCode(mapNow)
+      const coord = transform(point, 'EPSG:4326', viewProj) as [number, number]
+      const zoom = mapNow.getView().getZoom() ?? 16
+      const buffer = 300_000 * Math.pow(0.54, zoom)
+      void call('', 'POST', {
+        service: 'standardService',
+        action: 'identifyFeatures',
+        params: {
+          x: coord[0],
+          y: coord[1],
+          buffer,
+          tables: ['wtl_meta_ps'],
+          schema: 'layer',
+        },
+      })
+        .then((res: unknown) => {
+          if (seq !== targetFetchSeqRef.current) return
+          const data = (res as { data?: { results?: IdentifyLayerResult[] } })?.data ?? res
+          let results: IdentifyLayerResult[] = Array.isArray(
+            (data as { results?: IdentifyLayerResult[] })?.results
+          )
+            ? ((data as { results: IdentifyLayerResult[] }).results ?? [])
+            : []
+          if (results.length === 0) {
+            setNotice('계량기 속성을 찾지 못했습니다.')
+            return
+          }
+          const wantFid =
+            meta?.ogcFid != null && Number.isFinite(meta.ogcFid) ? Math.trunc(meta.ogcFid) : null
+          const wantMeter = meta?.meterNo?.trim()
+          if (wantFid != null || wantMeter) {
+            results = results.map((layer) => {
+              const physical = String(layer.physicalTable ?? layer.tableName ?? '')
+                .trim()
+                .toLowerCase()
+              if (
+                physical !== 'wtl_meta_ps' &&
+                String(layer.tableName).toLowerCase() !== 'wtl_meta_ps'
+              ) {
+                return layer
+              }
+              const matched = layer.features.filter((f) => {
+                const d = f.data ?? {}
+                if (wantFid != null) {
+                  const fid = Number(d.ogc_fid ?? d.ogcFid)
+                  if (Number.isFinite(fid) && Math.trunc(fid) === wantFid) return true
+                }
+                if (wantMeter) {
+                  const m = String(d.met_num ?? d.meterNo ?? '').trim()
+                  if (m && m === wantMeter) return true
+                }
+                return false
+              })
+              return matched.length > 0 ? { ...layer, features: matched } : layer
+            })
+            results = results.filter((l) => l.features.length > 0)
+            if (results.length === 0) {
+              setNotice('계량기 속성을 찾지 못했습니다.')
+              return
+            }
+          }
+          const popup: IdentifyPopupState = { coordinate: coord, results }
+          setIdentifyPopup(popup)
+        })
+        .catch(() => {
+          if (seq !== targetFetchSeqRef.current) return
+          setNotice('계량기 속성 조회에 실패했습니다.')
+        })
+    }, 80 + OUTAGE_FLY_MS + 80)
+  }
+
+  /** 도로명: wtl_meta_ps 점 + 강조. 필지: 면 조회 후 강조. 수용가: 속성조회로 대체 */
   const toggleTargetRow = (
     id: string,
     point: [number, number] | null | undefined,
-    kind: 'point' | 'parcel',
+    kind: 'customer' | 'point' | 'parcel',
     meta?: { ogcFid?: number; meterNo?: string },
-    /** 지도에서 직접 고른 경우 — 이미 보고 있는 위치라 이동하지 않음 */
+    /** 지도에서 직접 고른 경우 — 이미 보고 있는 위치라 이동·식별 재요청 없음 */
     fromMap = false
   ) => {
     if (selectedTargetId === id) {
@@ -134,6 +262,16 @@ export function WtlOutagePanel({
       return
     }
     setSelectedTargetId(id)
+    if (kind === 'customer') {
+      // 단수 전용 펄스 없음 — 지도 클릭은 속성조회만, 목록은 이동 후 속성조회
+      setSelectionHighlight(null)
+      if (!point || !Number.isFinite(point[0]) || !Number.isFinite(point[1])) {
+        setNotice('위치 정보가 없어 속성을 열 수 없습니다. 다시 분석·저장하면 위치가 포함됩니다.')
+        return
+      }
+      if (!fromMap) openCustomerAttributeIdentify(point, meta)
+      return
+    }
     if (kind === 'point') {
       if (!point || !Number.isFinite(point[0]) || !Number.isFinite(point[1])) {
         setSelectionHighlight(null)
@@ -224,6 +362,7 @@ export function WtlOutagePanel({
     }
     const seq = ++previewSeqRef.current
     setAnalyzing(true)
+    setMapStatusBanner(null)
     setNotice('밸브에 맞닿은 출구 관로 진행방향으로 추적하는 중…')
     try {
       const res = await call('', 'POST', {
@@ -236,17 +375,22 @@ export function WtlOutagePanel({
         result?: WtlOutageResult | null
         gates?: WtlOutageGate[]
         error?: string
+        errorCode?: string
       }
       if (body.gates?.length) rememberGates(body.gates)
       if (body.error || !body.result) {
         setResult(null)
         clearTargetSelection()
+        setMapStatusBanner(
+          body.errorCode === 'no_isolation' ? outageNoIsolationBanner(ids.length) : null
+        )
         setNotice(body.error || '단수 관로를 찾을 수 없습니다.')
         return null
       }
       setResult(body.result)
       setEditMode(null)
       clearTargetSelection()
+      setMapStatusBanner(null)
       fitToResult(body.result)
       setNotice(
         `잠금 ${ids.length}개 · 단수관로 ${body.result.pipes.length}구간 · 수용가 ${body.result.customers.length} · 필지 ${body.result.parcels.length}` +
@@ -261,6 +405,7 @@ export function WtlOutagePanel({
     } catch {
       if (seq !== previewSeqRef.current) return null
       setResult(null)
+      setMapStatusBanner(null)
       setNotice('단수 관로 표시에 실패했습니다.')
       return null
     } finally {
@@ -268,13 +413,13 @@ export function WtlOutagePanel({
     }
   }
 
-  /** 세션 이력에만 저장 (brief: 세션 이력만 유지) */
+  /** 세션 이력에만 저장 (brief: 세션 이력만 유지). 작성자는 로그인 세션 */
   const saveToSessionHistory = (
     gates: WtlOutageGate[],
     analyzed: WtlOutageResult,
     reason = ''
   ): WtlOutageHistory => {
-    const row = { ...buildOutageHistory(gates, analyzed), reason }
+    const row = { ...buildOutageHistory(gates, analyzed, sessionAuthor), reason }
     setHistory((prev) => [row, ...prev])
     setHistoryPage(1)
     setHistoryId(row.id)
@@ -318,6 +463,7 @@ export function WtlOutagePanel({
   /** 다른 탭으로 나가면 잠금·분석 결과를 비워 다시 들어오면 새 분석 */
   useEffect(() => {
     if (active) return
+    entryFlyDoneRef.current = false
     setHistoryId(null)
     setLockedGateIds([])
     setResult(null)
@@ -327,8 +473,67 @@ export function WtlOutagePanel({
     setHiddenPipeIndexes([])
     setSmsOpen(false)
     setAnalyzing(false)
-    setNotice('제수변 위 잠금으로 여러 개를 선택할 수 있습니다.')
+    setNotice('')
+    setMapStatusBanner(null)
   }, [active])
+
+  /**
+   * 최초 진입: 주변에 제수변이 안 보이면 가장 가까운 제수변으로 이동하고
+   * 열림·잠금이 보이는 축척까지 확대. 이미 보이면 이동 생략.
+   */
+  useEffect(() => {
+    if (!active || entryFlyDoneRef.current) return
+    if (handoffSeed?.seq) return
+    if (lockedGateIds.length > 0 || result || historyId) return
+    const map = mapContext?.mapInstanceRef?.current
+    if (!map || !mapContext?.mapReady) return
+    const view = map.getView()
+    const center = view.getCenter()
+    if (!center || center.length < 2) return
+
+    entryFlyDoneRef.current = true
+    const viewProj = getViewProjectionCode(map)
+    const [lon, lat] = viewToLonLat([center[0], center[1]], viewProj)
+    const overlayMinZoom = zoomFromScaleMeters(OUTAGE_OVERLAY_MAX_SCALE_M) + 1
+
+    void (async () => {
+      try {
+        const res = await call('', 'POST', {
+          service: 'wtlOutageService',
+          action: 'findNearestWtlOutageGate',
+          params: { lon, lat },
+        })
+        const gate = (((res?.data ?? res) as { rows?: WtlOutageGate[] })?.rows ?? []).find(
+          (g) => g?.id && Array.isArray(g.point) && g.point.length >= 2
+        )
+        if (!gate) {
+          setNotice('근처에 제수변을 찾지 못했습니다. 지도를 옮겨 제수변을 찾아 잠그세요.')
+          return
+        }
+        rememberGates([gate])
+        const size = map.getSize()
+        const extent = size ? view.calculateExtent(size) : null
+        const gateView = lonLatToView(gate.point, viewProj)
+        const inView = extent ? containsCoordinate(extent, gateView) : false
+        const scaleOk = isOutageOverlayScaleVisible(view.getZoom())
+        if (inView && scaleOk) {
+          setNotice('지도에서 제수변 위 열림·잠금으로 잠그세요.')
+          return
+        }
+        flyToOutageLonLat(
+          map,
+          gate.point[0],
+          gate.point[1],
+          mapContext?.applyMapViewPaddingRef?.current,
+          overlayMinZoom
+        )
+        setNotice(`${gate.name} 위치로 이동 · 열림/잠금으로 잠글 수 있습니다.`)
+      } catch {
+        setNotice('가까운 제수변을 찾지 못했습니다. 지도를 확대해 제수변을 잠그세요.')
+      }
+    })()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 진입 1회
+  }, [active, mapContext?.mapReady, handoffSeed?.seq, lockedGateIds.length, result, historyId])
 
   const lockGate = (gateId?: string | null) => {
     const id = gateId
@@ -351,6 +556,7 @@ export function WtlOutagePanel({
       setResult(null)
       setHistoryId(null)
       setSaved(false)
+      setMapStatusBanner(null)
       setNotice('모든 잠금을 해제했습니다.')
       return
     }
@@ -360,6 +566,7 @@ export function WtlOutagePanel({
     setLockedGateIds(next)
     if (next.length === 0) {
       setResult(null)
+      setMapStatusBanner(null)
       setNotice('잠긴 제수변이 없습니다.')
       return
     }
@@ -433,7 +640,7 @@ export function WtlOutagePanel({
       toggleTargetRow(
         row.id,
         row.point,
-        'point',
+        'customer',
         { ogcFid: row.ogcFid, meterNo: row.meterNo !== '—' ? row.meterNo : undefined },
         true
       )
@@ -478,41 +685,6 @@ export function WtlOutagePanel({
     historySafePage * ANALYSIS_HISTORY_PAGE_SIZE
   )
 
-  /** 단수 계량기(수용가 목록의 wtl_meta_ps) 속성을 조회해 엑셀로 저장 */
-  const downloadMeterExcel = async () => {
-    if (!result || meterExporting) return
-    const fids = result.customers
-      .map((c) => c.ogcFid)
-      .filter((n): n is number => typeof n === 'number' && Number.isFinite(n))
-    if (fids.length === 0) {
-      setNotice('내보낼 계량기가 없습니다.')
-      return
-    }
-    setMeterExporting(true)
-    try {
-      const res = await call('', 'POST', {
-        service: 'wtlOutageService',
-        action: 'listWtlOutageMeters',
-        params: { fids },
-      })
-      const body = (res?.data ?? res) as { rows?: WtlOutageMeterRowDto[]; truncated?: boolean; error?: string }
-      if (body?.error) {
-        setNotice(`계량기 목록 실패 · ${body.error}`)
-        return
-      }
-      const rows = body?.rows ?? []
-      const fileName = exportWtlOutageMeterExcel(rows, currentHistory?.gateName)
-      if (!fileName) {
-        setNotice('내보낼 계량기가 없습니다.')
-        return
-      }
-      setNotice(`계량기 목록 다운로드 · ${rows.length}건${body.truncated ? ' (상한까지만)' : ''} · ${fileName}`)
-    } catch (e) {
-      setNotice(`계량기 목록 실패 · ${e instanceof Error ? e.message : '알 수 없는 오류'}`)
-    } finally {
-      setMeterExporting(false)
-    }
-  }
   const nextStatus = currentHistory ? nextOutageStatus(currentHistory.status) : null
 
   const patchHistoryLocal = (id: string | null, patch: Partial<WtlOutageHistory>) => {
@@ -545,6 +717,7 @@ export function WtlOutagePanel({
     clearTargetSelection()
     setSaved(false)
     setGeomMapEditing(false)
+    setMapStatusBanner(null)
     setNotice('제수변 위 잠금으로 여러 개를 선택할 수 있습니다.')
   }
 
@@ -555,6 +728,7 @@ export function WtlOutagePanel({
     clearTargetSelection()
     setSaved(false)
     setGeomMapEditing(false)
+    setMapStatusBanner(null)
     setNotice('이력 선택을 해제했습니다.')
   }
 
@@ -635,7 +809,13 @@ export function WtlOutagePanel({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <WtlOutageZoomHint active={active} />
+      <WtlOutageZoomHint
+        active={active}
+        showLockHint={lockedGateIds.length === 0}
+        statusMessage={
+          lockedGateIds.length > 0 && !result && !analyzing ? mapStatusBanner : null
+        }
+      />
       <WtlOutageResultEdit
         active={active && !geomMapEditing}
         mapLeftPx={mapLeftPx}
@@ -661,9 +841,10 @@ export function WtlOutagePanel({
               <table className="w-full table-fixed border-collapse text-left text-[11px]">
                 <thead className="bg-muted">
                   <tr className="h-7 border-b border-border">
-                    <th className="w-[7rem] px-1.5 font-medium text-muted-foreground">일시</th>
-                    <th className="w-[5.5rem] px-1.5 font-medium text-muted-foreground">제수변</th>
+                    <th className="w-[7.25rem] px-1.5 font-medium text-muted-foreground">일시</th>
+                    <th className="w-[5rem] px-1.5 font-medium text-muted-foreground">제수변</th>
                     <th className="px-2 font-medium text-muted-foreground">사유</th>
+                    <th className="w-[4.75rem] px-1.5 font-medium text-muted-foreground">작성자</th>
                     <th className="w-[4.75rem] px-1.5 font-medium text-muted-foreground">상태</th>
                   </tr>
                 </thead>
@@ -689,6 +870,12 @@ export function WtlOutagePanel({
                         title={item.reason?.trim() ? item.reason : undefined}
                       >
                         {item.reason || '—'}
+                      </td>
+                      <td
+                        className="truncate px-1.5 text-muted-foreground"
+                        title={item.createUserName || item.createUser || undefined}
+                      >
+                        {item.createUserName || item.createUser || '—'}
                       </td>
                       <td className={cn('whitespace-nowrap px-1.5', statusClass(item.status))}>
                         {item.status}
@@ -717,7 +904,7 @@ export function WtlOutagePanel({
                   <span className="text-muted-foreground"> · {lockedGates.map((g) => g.name).join(', ')}</span>
                 </>
               ) : (
-                <span className="text-muted-foreground">지도에서 제수변을 잠그세요</span>
+                <span className="text-muted-foreground">잠금 없음</span>
               )}
             </p>
             <button
@@ -906,7 +1093,7 @@ export function WtlOutagePanel({
                     selectedTargetId === row.id && 'bg-primary/[0.12] ring-1 ring-inset ring-primary/25'
                   )}
                   onClick={() =>
-                    toggleTargetRow(row.id, row.point, 'point', {
+                    toggleTargetRow(row.id, row.point, 'customer', {
                       ogcFid: row.ogcFid,
                       meterNo: row.meterNo !== '—' ? row.meterNo : undefined,
                     })
@@ -965,17 +1152,8 @@ export function WtlOutagePanel({
           )}
           <button
             type="button"
-            disabled={!result || analyzing || meterExporting || customers.length === 0}
-            className="ml-auto rounded border border-border inline-flex h-7 items-center px-2.5 text-[11px] font-medium text-foreground hover:bg-muted disabled:opacity-40"
-            onClick={() => void downloadMeterExcel()}
-            title="단수 대상 계량기 목록(엑셀) 다운로드"
-          >
-            {meterExporting ? '계량기 목록…' : '계량기 목록'}
-          </button>
-          <button
-            type="button"
             disabled={!result || analyzing}
-            className="rounded border border-border inline-flex h-7 items-center px-2.5 text-[11px] font-medium text-foreground hover:bg-muted disabled:opacity-40"
+            className="ml-auto rounded border border-border inline-flex h-7 items-center px-2.5 text-[11px] font-medium text-foreground hover:bg-muted disabled:opacity-40"
             onClick={() => setHwpxOpen(true)}
             title="단수 알림문(HWPX) 다운로드"
           >

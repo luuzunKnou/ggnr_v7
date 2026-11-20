@@ -16,9 +16,9 @@
             <sld:Graphic>
               <sld:ExternalGraphic>
                 <sld:OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="/www/symbol/sewer/swl_pump_ps.svg"/>
-                <sld:Format>image/svg</sld:Format>
+                <sld:Format>image/svg+xml</sld:Format>
               </sld:ExternalGraphic>
-              <sld:Size><ogc:Function name="if_then_else"><ogc:Function name="greaterThan"><ogc:Function name="env"><ogc:Literal>ignore_scale</ogc:Literal><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>18</ogc:Literal>
+              <sld:Size>
                 <ogc:Function name="if_then_else">
                   <ogc:Function name="greaterThan">
                     <ogc:Function name="env">
@@ -35,52 +35,16 @@
                     <ogc:Function name="env">
                       <ogc:Literal>wms_scale_denominator</ogc:Literal>
                     </ogc:Function>
+                    <ogc:Literal>24</ogc:Literal>
+                    <ogc:Literal>500</ogc:Literal>
+                    <ogc:Literal>22</ogc:Literal>
+                    <ogc:Literal>800</ogc:Literal>
                     <ogc:Literal>20</ogc:Literal>
-                    <ogc:Literal>8000</ogc:Literal>
+                    <ogc:Literal>1500</ogc:Literal>
                     <ogc:Literal>18</ogc:Literal>
-                    <ogc:Literal>256000</ogc:Literal>
-                    <ogc:Literal>0</ogc:Literal>
                   </ogc:Function>
                 </ogc:Function>
-              </ogc:Function></sld:Size>
-            </sld:Graphic>
-          </sld:PointSymbolizer>
-        </sld:Rule><sld:Rule>
-          <sld:Name>Name</sld:Name>
-          <sld:Title>swl_pump_ps</sld:Title>
-          <sld:Abstract>Abstract</sld:Abstract>
-          <sld:MinScaleDenominator>256000.0</sld:MinScaleDenominator>
-          <ogc:Filter><ogc:PropertyIsEqualTo><ogc:Function name="env"><ogc:Literal>ignore_scale</ogc:Literal><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>1</ogc:Literal></ogc:PropertyIsEqualTo></ogc:Filter><sld:PointSymbolizer>
-            <sld:Graphic>
-              <sld:ExternalGraphic>
-                <sld:OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="/www/symbol/sewer/swl_pump_ps.svg"/>
-                <sld:Format>image/svg</sld:Format>
-              </sld:ExternalGraphic>
-              <sld:Size><ogc:Function name="if_then_else"><ogc:Function name="greaterThan"><ogc:Function name="env"><ogc:Literal>ignore_scale</ogc:Literal><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>18</ogc:Literal>
-                <ogc:Function name="if_then_else">
-                  <ogc:Function name="greaterThan">
-                    <ogc:Function name="env">
-                      <ogc:Literal>swl_pump_ps_size</ogc:Literal>
-                      <ogc:Literal>0</ogc:Literal>
-                    </ogc:Function>
-                    <ogc:Literal>0</ogc:Literal>
-                  </ogc:Function>
-                  <ogc:Function name="env">
-                    <ogc:Literal>swl_pump_ps_size</ogc:Literal>
-                    <ogc:Literal>16</ogc:Literal>
-                  </ogc:Function>
-                  <ogc:Function name="Categorize">
-                    <ogc:Function name="env">
-                      <ogc:Literal>wms_scale_denominator</ogc:Literal>
-                    </ogc:Function>
-                    <ogc:Literal>20</ogc:Literal>
-                    <ogc:Literal>8000</ogc:Literal>
-                    <ogc:Literal>18</ogc:Literal>
-                    <ogc:Literal>256000</ogc:Literal>
-                    <ogc:Literal>0</ogc:Literal>
-                  </ogc:Function>
-                </ogc:Function>
-              </ogc:Function></sld:Size>
+              </sld:Size>
             </sld:Graphic>
           </sld:PointSymbolizer>
         </sld:Rule>
@@ -88,17 +52,34 @@
           <sld:Name>label</sld:Name>
           <sld:Title>swl_pump_ps_label</sld:Title>
           <ogc:Filter>
-            <ogc:PropertyIsGreaterThan>
-              <ogc:Function name="strLength">
-                <ogc:Function name="env">
-                  <ogc:Literal>swl_pump_ps_label_property_name</ogc:Literal>
-                  <ogc:Literal>pmp_nam</ogc:Literal>
+            <ogc:And>
+              <ogc:PropertyIsGreaterThan>
+                <ogc:Function name="strLength">
+                  <ogc:Function name="env">
+                    <ogc:Literal>swl_pump_ps_label_property_name</ogc:Literal>
+                    <ogc:Literal></ogc:Literal>
+                  </ogc:Function>
                 </ogc:Function>
-              </ogc:Function>
-              <ogc:Literal>0</ogc:Literal>
-            </ogc:PropertyIsGreaterThan>
+                <ogc:Literal>0</ogc:Literal>
+              </ogc:PropertyIsGreaterThan>
+              <ogc:Or>
+                <ogc:PropertyIsEqualTo>
+                  <ogc:Function name="env">
+                    <ogc:Literal>ignore_scale</ogc:Literal>
+                    <ogc:Literal>0</ogc:Literal>
+                  </ogc:Function>
+                  <ogc:Literal>1</ogc:Literal>
+                </ogc:PropertyIsEqualTo>
+                <ogc:PropertyIsLessThan>
+                  <ogc:Function name="env">
+                    <ogc:Literal>wms_scale_denominator</ogc:Literal>
+                    <ogc:Literal>999999999</ogc:Literal>
+                  </ogc:Function>
+                  <ogc:Literal>64000.0</ogc:Literal>
+                </ogc:PropertyIsLessThan>
+              </ogc:Or>
+            </ogc:And>
           </ogc:Filter>
-          <sld:MaxScaleDenominator>64000.0</sld:MaxScaleDenominator>
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="property">
@@ -115,7 +96,7 @@
                   <ogc:Function name="greaterThan">
                     <ogc:Function name="env">
                       <ogc:Literal>swl_pump_ps_label_size</ogc:Literal>
-                      <ogc:Literal>0</ogc:Literal>
+                      <ogc:Literal>15</ogc:Literal>
                     </ogc:Function>
                     <ogc:Literal>0</ogc:Literal>
                   </ogc:Function>
@@ -170,7 +151,7 @@
                     <ogc:Literal>#</ogc:Literal>
                     <ogc:Function name="env">
                       <ogc:Literal>swl_pump_ps_label_halo_color</ogc:Literal>
-                      <ogc:Literal>0A2E80</ogc:Literal>
+                      <ogc:Literal>FFFFFF</ogc:Literal>
                     </ogc:Function>
                   </ogc:Function>
                 </sld:CssParameter>
@@ -182,7 +163,7 @@
                   <ogc:Literal>#</ogc:Literal>
                   <ogc:Function name="env">
                     <ogc:Literal>swl_pump_ps_label_color</ogc:Literal>
-                    <ogc:Literal>FFFFFF</ogc:Literal>
+                    <ogc:Literal>000000</ogc:Literal>
                   </ogc:Function>
                 </ogc:Function>
               </sld:CssParameter>
@@ -196,4 +177,3 @@
     </sld:UserStyle>
   </sld:NamedLayer>
 </sld:StyledLayerDescriptor>
-

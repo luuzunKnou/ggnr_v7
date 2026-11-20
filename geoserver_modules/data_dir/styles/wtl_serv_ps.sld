@@ -1,4 +1,5 @@
-<?xml version="1.0" encoding="UTF-8"?><sld:StyledLayerDescriptor xmlns="http://www.opengis.net/sld" xmlns:sld="http://www.opengis.net/sld" xmlns:gml="http://www.opengis.net/gml" xmlns:ogc="http://www.opengis.net/ogc" version="1.0.0">
+<?xml version="1.0" encoding="UTF-8"?>
+<sld:StyledLayerDescriptor xmlns="http://www.opengis.net/sld" xmlns:sld="http://www.opengis.net/sld" xmlns:gml="http://www.opengis.net/gml" xmlns:ogc="http://www.opengis.net/ogc" version="1.0.0">
   <sld:NamedLayer>
     <sld:Name>Default Styler</sld:Name>
     <sld:UserStyle>
@@ -17,7 +18,7 @@
                 <sld:OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="/www/symbol/water/wtl_serv_ps.svg"/>
                 <sld:Format>image/svg+xml</sld:Format>
               </sld:ExternalGraphic>
-              <sld:Size><ogc:Function name="if_then_else"><ogc:Function name="greaterThan"><ogc:Function name="env"><ogc:Literal>ignore_scale</ogc:Literal><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>18</ogc:Literal>
+              <sld:Size>
                 <ogc:Function name="if_then_else">
                   <ogc:Function name="greaterThan">
                     <ogc:Function name="env">
@@ -39,7 +40,7 @@
                     <ogc:Literal>16</ogc:Literal>
                   </ogc:Function>
                 </ogc:Function>
-              </ogc:Function></sld:Size>
+              </sld:Size>
             </sld:Graphic>
           </sld:PointSymbolizer>
         </sld:Rule>
@@ -151,4 +152,3 @@
     </sld:UserStyle>
   </sld:NamedLayer>
 </sld:StyledLayerDescriptor>
-

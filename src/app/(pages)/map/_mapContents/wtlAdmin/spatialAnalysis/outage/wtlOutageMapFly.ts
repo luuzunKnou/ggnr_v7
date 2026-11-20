@@ -7,7 +7,9 @@ import { getViewProjectionCode, lonLatToView } from '../topology/topoMapProjecti
 import type { WtlOutageResult } from './wtlOutageSample'
 
 const FLY_ZOOM = 17
-const FLY_MS = 450
+/** 목록→좌표 이동 애니메이션 길이(ms). 이동 후 속성조회 등 후속 작업 지연에 사용 */
+export const OUTAGE_FLY_MS = 450
+const FLY_MS = OUTAGE_FLY_MS
 /** 탐색 범위 맞춤: 범위가 짧으면 충분히 확대(상한만 두고 줌은 fit이 범위 크기로 결정) */
 const RESULT_FIT_MAX_ZOOM = 20
 const RESULT_FIT_PADDING: [number, number, number, number] = [40, 40, 40, 40]

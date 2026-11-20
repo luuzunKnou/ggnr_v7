@@ -1,9 +1,10 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { call } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { useWtlSupplyPathMapLayer } from './useWtlSupplyPathMapLayer'
+import { WtlSupplyAlertToast } from './WtlSupplyAlertToast'
 import { WtlSupplyBusyToast } from './WtlSupplyBusyToast'
 import {
   WTL_SUPPLY_KINDS,
@@ -30,9 +31,16 @@ export function WtlSupplyPathPanel({ active = true }: Props) {
   const [revealing, setRevealing] = useState(false)
   const [replayToken, setReplayToken] = useState(0)
   const [notice, setNotice] = useState('정수장 또는 배수지를 선택하면 송수경로가 표시됩니다.')
+  /** 탐색 실패 등 — 지도 중앙 토스트 */
+  const [alertMsg, setAlertMsg] = useState<string | null>(null)
   /** 정수장에서 닿는 배수지 후보와 선택한 도착 배수지 */
   const [destinations, setDestinations] = useState<WtlSupplySource[]>([])
   const [destinationId, setDestinationId] = useState<string | null>(null)
+  /** 탭 첫 진입 시 맨 위 시설 자동 탐색은 한 번만 */
+  const entryAutoDoneRef = useRef(false)
+  const analyzeRef = useRef<(sourceId: string, toId?: string | null) => Promise<void>>(
+    async () => undefined
+  )
 
   const filtered = useMemo(() => sources.filter((s) => s.kind === kind), [sources, kind])
 
@@ -82,9 +90,12 @@ export function WtlSupplyPathPanel({ active = true }: Props) {
     setDestinationId(toId)
     // 출발 시설이 바뀌면(또는 전체 보기) 도착 배수지 후보를 새로 받음
     if (toId == null) setDestinations([])
+    const startedAt = Date.now()
     setAnalyzing(true)
+    setAlertMsg(null)
     // 진행 중 안내는 지도 위 토스트(WtlSupplyBusyToast)로 표시
     setNotice('')
+    let failMsg: string | null = null
     try {
       const res = await call('', 'POST', {
         service: 'wtlSupplyPathService',
@@ -97,7 +108,7 @@ export function WtlSupplyPathPanel({ active = true }: Props) {
       }
       if (body.error || !body.result) {
         setResult(null)
-        setNotice(body.error || '송수경로를 찾지 못했습니다.')
+        failMsg = body.error || '송수경로를 찾지 못했습니다.'
         return
       }
       const next = body.result
@@ -108,15 +119,33 @@ export function WtlSupplyPathPanel({ active = true }: Props) {
       setNotice(`${next.source.name}${toName ? ` → ${toName}` : ''} · 관로 ${next.pipeCount}구간`)
     } catch {
       setResult(null)
-      setNotice('송수경로 분석에 실패했습니다.')
+      failMsg = '송수경로 분석에 실패했습니다.'
     } finally {
+      // 빠른 응답이어도 탐색 스피너는 최소 2초 노출
+      const remain = 2000 - (Date.now() - startedAt)
+      if (remain > 0) await new Promise((r) => setTimeout(r, remain))
       setAnalyzing(false)
+      if (failMsg) setAlertMsg(failMsg)
     }
   }
+  analyzeRef.current = analyze
+
+  // 송수경로 탭 첫 진입 + 목록 준비 후, 현재 탭(기본 정수장) 맨 위 시설만 한 번 자동 탐색
+  useEffect(() => {
+    if (!active || loadingList || entryAutoDoneRef.current) return
+    entryAutoDoneRef.current = true
+    const first = filtered[0]
+    if (!first) return
+    void analyzeRef.current(first.id)
+  }, [active, loadingList, filtered])
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <WtlSupplyBusyToast message={active && analyzing ? '송수경로를 탐색하는 중…' : null} />
+      <WtlSupplyAlertToast
+        message={active && !analyzing ? alertMsg : null}
+        onDismiss={() => setAlertMsg(null)}
+      />
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <div className="flex shrink-0 border-b border-border">
           {WTL_SUPPLY_KINDS.map((name) => (
