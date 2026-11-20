@@ -3,6 +3,7 @@ import {
   type DefineCodeRow,
 } from '@/lib/defineLayerCodeDisplay'
 import { dedupeDefineLayerFieldsByName } from '@/lib/defineLayerFieldsNormalize'
+import { appFetch } from '@/lib/basePath'
 import type { DefineFieldLike } from '../../../_mapComponents/standard/defineLayerRowUtils'
 
 export type WtlDefineDisplayBundle = {
@@ -30,21 +31,32 @@ function tablesToTry(table: string, fallback?: string | null): string[] {
   return out
 }
 
-async function fetchFields(table: string): Promise<DefineFieldLike[]> {
+type FetchFieldsResult =
+  | { ok: true; fields: DefineFieldLike[] }
+  | { ok: false; fields: [] }
+
+async function fetchFields(table: string): Promise<FetchFieldsResult> {
   try {
-    const res = await fetch(`/api/config/defineLayer/fields/${encodeURIComponent(table)}`)
+    const res = await appFetch(
+      `/api/config/defineLayer/fields/${encodeURIComponent(table)}`
+    )
+    if (!res.ok) return { ok: false, fields: [] }
     const body = (await res.json()) as { data?: DefineFieldLike[] }
-    return Array.isArray(body?.data) ? body.data : []
+    return {
+      ok: true,
+      fields: Array.isArray(body?.data) ? body.data : [],
+    }
   } catch {
-    return []
+    return { ok: false, fields: [] }
   }
 }
 
 async function fetchCodes(tableFieldKey: string): Promise<DefineCodeRow[]> {
   try {
-    const res = await fetch(
+    const res = await appFetch(
       `/api/config/defineLayer/codes/${encodeURIComponent(tableFieldKey)}`
     )
+    if (!res.ok) return []
     const body = (await res.json()) as { data?: DefineCodeRow[] }
     return Array.isArray(body?.data) ? body.data : []
   } catch {
@@ -115,11 +127,13 @@ export function loadWtlDefineDisplayBundle(
     const tryTables = tablesToTry(primary, fallback)
     let fields: DefineFieldLike[] = []
     let resolvedTable = primary
+    let anyOk = false
     for (const t of tryTables) {
-      const rows = await fetchFields(t)
-      if (rows.length > 0) {
+      const result = await fetchFields(t)
+      if (result.ok) anyOk = true
+      if (result.fields.length > 0) {
         fields = dedupeDefineLayerFieldsByName(
-          rows as Array<DefineFieldLike & Record<string, unknown>>
+          result.fields as Array<DefineFieldLike & Record<string, unknown>>
         )
         resolvedTable = t
         break
@@ -140,7 +154,10 @@ export function loadWtlDefineDisplayBundle(
       for (const [k, codes] of entries) codesByField[k] = codes
     }
     const bundle: WtlDefineDisplayBundle = { fields, codesByField, resolvedTable }
-    bundleCache.set(key, bundle)
+    // 일시적 404·네트워크 실패는 빈 결과로 캐시하지 않음 (한글화·show_list 누락 방지)
+    if (fields.length > 0 || anyOk) {
+      bundleCache.set(key, bundle)
+    }
     return bundle
   })().finally(() => {
     inflight.delete(key)

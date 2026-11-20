@@ -13,6 +13,7 @@ import { cn, copyTextToClipboard } from '@/lib/utils';
 import { useMapContext } from '../MapContext';
 import { MapFloatingPanel } from '../MapFloatingPanel';
 import { COMPLAINT_DETAIL_PANEL_DEFAULT_TOP } from '../complaint/complaintPanelLayout';
+import { computeRelatedChildModalBesideParent } from '@/app/(pages)/map/_mapContents/layerClickDetail/relatedChildModalPlacement';
 import {
   LAND_INFO_LIST_TD,
   LAND_INFO_LIST_TH,
@@ -28,6 +29,10 @@ import {
   loadWimsStat,
   WimsClientError,
 } from './wimsClient';
+import {
+  WIMS_HISTORY_DETAIL_COLUMNS,
+  WIMS_HISTORY_LIST_COLUMNS,
+} from '@/lib/wimsHistoryColumns';
 import {
   WIMS_GOJIKIND,
   WIMS_JOCODE,
@@ -50,50 +55,18 @@ const HIGHLIGHT_STYLE = new Style({
   }),
 });
 
-const LIST_COLUMNS: { key: keyof WimsHistoryRow; label: string; kind: 'code' | 'date' | 'number' | 'text' }[] = [
-  { key: 'gojikind', label: '종류', kind: 'code' },
-  { key: 'meterDay', label: '검침일', kind: 'date' },
-  { key: 'nabgiDate', label: '납기마감일', kind: 'date' },
-  { key: 'meterNo', label: '계량기번호', kind: 'text' },
-  { key: 'useQty', label: '사용량', kind: 'number' },
-  { key: 'freeQty', label: '사용료', kind: 'number' },
-  { key: 'induty', label: '업종', kind: 'text' },
-  { key: 'delYn', label: '상태', kind: 'text' },
-];
+const LIST_COLUMNS = WIMS_HISTORY_LIST_COLUMNS;
+const DETAIL_COLUMNS = WIMS_HISTORY_DETAIL_COLUMNS;
 
-const DETAIL_COLUMNS: {
-  key: keyof WimsHistoryRow;
-  label: string;
-  kind: 'code' | 'date' | 'number' | 'text';
-  title?: boolean;
-}[] = [
-  { key: 'gojikind', label: '종류', kind: 'code' },
-  { key: 'meterDay', label: '검침일', kind: 'date', title: true },
-  { key: 'nabgiDate', label: '납기마감일', kind: 'date' },
-  { key: 'customerNo', label: '수용가번호', kind: 'text' },
-  { key: 'meterNo', label: '계량기번호', kind: 'text', title: true },
-  { key: 'suname', label: '성명', kind: 'text' },
-  { key: 'areaCd', label: '구역', kind: 'text' },
-  { key: 'admDong', label: '행정동', kind: 'text' },
-  { key: 'lostnoAddr', label: '지번주소', kind: 'text' },
-  { key: 'roadAddr', label: '도로명주소', kind: 'text' },
-  { key: 'useQty', label: '사용량', kind: 'number' },
-  { key: 'freeQty', label: '사용료', kind: 'number' },
-  { key: 'induty', label: '업종', kind: 'text' },
-  { key: 'diam', label: '구경', kind: 'number' },
-  { key: 'delYn', label: '상태', kind: 'text' },
-];
-
-/** AddressInfoDetail 패널 max-w-[520px]과 동일 — 플로팅 상세를 그 왼쪽에 붙임 */
-const LAND_INFO_PANEL_MAX_WIDTH_PX = 520;
-const WIMS_DETAIL_FLOAT_GAP_PX = 8;
 const WIMS_DETAIL_FLOAT_WIDTH = '420px';
 const WIMS_DETAIL_FLOAT_MAX_HEIGHT = '70vh';
 
-/** 마운트 시 하단 근처 — MapFloatingPanel이 실측 높이로 clamp */
-function wimsDetailMountTop(): number {
-  if (typeof window === 'undefined') return COMPLAINT_DETAIL_PANEL_DEFAULT_TOP;
-  return window.innerHeight;
+function resolveAddressInfoHostRect(): DOMRect | null {
+  if (typeof document === 'undefined') return null;
+  const el = document.querySelector('[data-address-info-panel]');
+  if (!(el instanceof HTMLElement)) return null;
+  const rect = el.getBoundingClientRect();
+  return rect.width > 0 && rect.height > 0 ? rect : null;
 }
 
 const fieldClass =
@@ -124,8 +97,15 @@ function formatAvg(value: number | null): string {
   return (Math.round(value * 100) / 100).toLocaleString('ko-KR');
 }
 
-function formatCell(kind: 'code' | 'date' | 'number' | 'text', raw: string): string {
-  if (kind === 'code') return WIMS_GOJIKIND[raw] ?? raw;
+function formatCell(
+  key: keyof WimsHistoryRow,
+  kind: 'code' | 'date' | 'number' | 'text',
+  raw: string
+): string {
+  if (kind === 'code') {
+    if (key === 'jocode') return WIMS_JOCODE[raw] ?? raw;
+    return WIMS_GOJIKIND[raw] ?? raw;
+  }
   if (kind === 'date') return formatYmd(raw);
   if (kind === 'number') return formatNumber(raw);
   return raw;
@@ -243,6 +223,7 @@ export function WimsInfoPanel({
   const [selectedStat, setSelectedStat] = useState<number | null>(null);
   const [selectedRow, setSelectedRow] = useState<WimsHistoryRow | null>(null);
   const [detailCollapsed, setDetailCollapsed] = useState(false);
+  const [detailAnchor, setDetailAnchor] = useState<{ top: number; left: number } | null>(null);
   const [highlightGeom, setHighlightGeom] = useState<string | null>(null);
   const [excelBusy, setExcelBusy] = useState(false);
 
@@ -312,6 +293,7 @@ export function WimsInfoPanel({
     setSelectedStat(null);
     setSelectedRow(null);
     setDetailCollapsed(false);
+    setDetailAnchor(null);
     setHighlightGeom(null);
     setSearchInput('');
     setKeyword('');
@@ -377,6 +359,7 @@ export function WimsInfoPanel({
       setTotal(data.totalCount);
       setPage(nextPage);
       setSelectedRow(null);
+      setDetailAnchor(null);
     } catch (err: unknown) {
       if (id !== listReq.current) return;
       if (err instanceof WimsClientError && err.code === 'db_unreachable') {
@@ -591,7 +574,7 @@ export function WimsInfoPanel({
             <table className="min-w-[640px] w-full border-collapse">
               <thead className={LAND_INFO_LIST_THEAD}>
                 <tr>
-                  {['수용가 번호', '계량기 번호', '성명', '주소', '평균 사용량', '평균 사용료', '상태'].map((label) => (
+                  {['수용가 번호', '계량기 번호', '성명', '주소', '평균 사용량', '평균 상수도 사용료', '상태'].map((label) => (
                     <th key={label} className={LAND_INFO_LIST_TH} title={label}>
                       {label}
                     </th>
@@ -776,7 +759,7 @@ export function WimsInfoPanel({
           </div>
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded border border-border">
             <div className="min-h-0 flex-1 overflow-auto">
-              <table className="standard-list-table min-w-[720px]">
+              <table className="standard-list-table min-w-[560px]">
                 <thead className="standard-table-thead">
                   <tr>
                     {LIST_COLUMNS.map((col) => (
@@ -823,10 +806,18 @@ export function WimsInfoPanel({
                             'standard-list-row',
                             selected && 'standard-list-row-selected'
                           )}
-                          onClick={() => setSelectedRow(row)}
+                          title="상세보기"
+                          onClick={() => {
+                            setSelectedRow(row);
+                            setDetailCollapsed(false);
+                            const rect = resolveAddressInfoHostRect();
+                            setDetailAnchor(
+                              rect ? computeRelatedChildModalBesideParent(rect) : null
+                            );
+                          }}
                         >
                           {LIST_COLUMNS.map((col) => {
-                            const text = dash(formatCell(col.kind, row[col.key]));
+                            const text = dash(formatCell(col.key, col.kind, row[col.key]));
                             return (
                               <td key={col.key} className="standard-table-td-compact" title={text}>
                                 {text}
@@ -874,14 +865,15 @@ export function WimsInfoPanel({
 
       {selectedRow ? (
         <MapFloatingPanel
+          key={`wims-land-${selectedRow.meterNo}-${selectedRow.meterDay}-${detailAnchor?.left ?? 'd'}-${detailAnchor?.top ?? 'd'}`}
           viewport
           zLayer="detailRelated"
           width={WIMS_DETAIL_FLOAT_WIDTH}
           maxHeight={WIMS_DETAIL_FLOAT_MAX_HEIGHT}
           className="bg-background backdrop-blur-none"
           defaultPosition={{
-            top: wimsDetailMountTop(),
-            right: LAND_INFO_PANEL_MAX_WIDTH_PX + WIMS_DETAIL_FLOAT_GAP_PX,
+            top: detailAnchor?.top ?? COMPLAINT_DETAIL_PANEL_DEFAULT_TOP,
+            left: detailAnchor?.left ?? 56,
           }}
           header={
             <>
@@ -898,16 +890,16 @@ export function WimsInfoPanel({
                   aria-hidden
                 />
               </button>
-              <div className="min-w-0 flex-1 pr-2">
+              <div className="standard-detail-float-heading pr-2">
                 <span
-                  className="block truncate text-xs font-medium text-foreground"
+                  className="standard-detail-float-layer"
                   title="WIMS 검침이력 상세"
                 >
                   WIMS 검침이력 상세
                 </span>
                 {trimId(selectedRow.meterDay) || trimId(selectedRow.meterNo) ? (
                   <span
-                    className="mt-0.5 block truncate text-[11px] text-muted-foreground"
+                    className="standard-detail-float-title-below"
                     title={`${dash(formatYmd(selectedRow.meterDay))} / ${dash(selectedRow.meterNo)}`}
                   >
                     {dash(formatYmd(selectedRow.meterDay))} / {dash(selectedRow.meterNo)}
@@ -917,7 +909,10 @@ export function WimsInfoPanel({
               <button
                 type="button"
                 title="닫기"
-                onClick={() => setSelectedRow(null)}
+                onClick={() => {
+                  setSelectedRow(null);
+                  setDetailAnchor(null);
+                }}
                 className="standard-panel-close cursor-pointer"
                 aria-label="닫기"
               >
@@ -935,7 +930,7 @@ export function WimsInfoPanel({
             <div className="standard-detail-scroll">
               <div className="standard-detail-attr-table">
                 {DETAIL_COLUMNS.map((col) => {
-                  const text = dash(formatCell(col.kind, selectedRow[col.key]));
+                  const text = dash(formatCell(col.key, col.kind, selectedRow[col.key]));
                   return (
                     <div key={col.key} className="contents">
                       <div className="standard-detail-attr-label standard-detail-attr-cell-border">
@@ -962,7 +957,10 @@ export function WimsInfoPanel({
               <button
                 type="button"
                 title="닫기"
-                onClick={() => setSelectedRow(null)}
+                onClick={() => {
+                  setSelectedRow(null);
+                  setDetailAnchor(null);
+                }}
                 className="standard-detail-hdr-btn"
               >
                 닫기

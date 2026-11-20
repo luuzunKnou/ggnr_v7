@@ -27,7 +27,11 @@ import {
   RELATED_FACILITY_CATEGORY,
   resolveRelatedLayers,
 } from './wtlFacilityRelatedLayers'
-import { flyToWtlNetworkGeom } from '../networkMap/wtlNetworkMapFly'
+import { MAP_AUTO_NAV_MAX_ZOOM } from '../../../_mapComponents/config/mapDefaults'
+import {
+  extent3857FromGeoJson4326,
+  scheduleFitMapToExtent3857,
+} from '../../../_mapComponents/config/mapAutoNavigation'
 import { useEnsureMapCenterInSggOnMount } from '../useEnsureMapCenterInSggOnMount'
 import { WtlLayerMark } from '../networkMap/WtlLayerMark'
 import { exportWtlFacilityExcel } from './exportWtlFacilityExcel'
@@ -43,6 +47,12 @@ import {
   setLayerClickDetailMatchCloseDirectNames,
   type LayerClickDetailMatchCloseDirectSlot,
 } from '../../layerClickDetail/layerClickDetailMatchClose'
+import { WtlFacilityInfoPreviewFloat } from './WtlFacilityInfoPreviewFloat'
+import {
+  loadEquipmentFacilityInfoPreview,
+  resolveEquipmentFacilityInfoTarget,
+  type EquipmentFacilityInfoPreview,
+} from './resolveEquipmentFacilityInfoPreview'
 
 const RELATED_BTN =
   'standard-layer-toggle-chip !w-[120px] !max-w-[120px] !min-w-[120px] shrink-0 cursor-pointer'
@@ -171,6 +181,10 @@ export function WtlFacilityShell({
   const [selectedId, setSelectedId] = useState<string | null>(null)
   /** 목록에 없어도 상세·하이라이트 유지 (지도 선택 시 rows 앞에 끼워 넣지 않음) */
   const [selectedRow, setSelectedRow] = useState<WtlFacilityListRow | null>(null)
+  /** 설비관리 리스트 — 시설정보 미리보기 플로팅 모달 */
+  const [facilityInfoPreview, setFacilityInfoPreview] =
+    useState<EquipmentFacilityInfoPreview | null>(null)
+  const facilityInfoPreviewReqRef = useRef(0)
   const rowsLenRef = useRef(0)
   const totalRef = useRef(0)
   const loadingMoreRef = useRef(false)
@@ -355,11 +369,97 @@ export function WtlFacilityShell({
     if (map) claimMapLayerClickDetailHighlight(map, 'wtlFacility')
   }, [mapContext?.mapInstanceRef])
 
+  const clearFacilityInfoPreview = useCallback(() => {
+    facilityInfoPreviewReqRef.current += 1
+    setFacilityInfoPreview(null)
+  }, [])
+
+  /** 선택 해제·탭/그룹 전환 시 시설정보 미리보기 닫기 */
+  useEffect(() => {
+    if (!selectedId) clearFacilityInfoPreview()
+  }, [selectedId, clearFacilityInfoPreview])
+
+  const flyToGeomAndWait = useCallback(
+    async (geom: unknown) => {
+      const map = mapContext?.mapInstanceRef?.current
+      const extent = extent3857FromGeoJson4326(geom)
+      if (!map || !extent) return
+      scheduleFitMapToExtent3857(map, extent, {
+        maxZoom: MAP_AUTO_NAV_MAX_ZOOM,
+        applyMapViewPadding: () =>
+          mapContext?.applyMapViewPaddingRef?.current?.(),
+      })
+      await new Promise<void>((resolve) => {
+        let settled = false
+        const finish = () => {
+          if (settled) return
+          settled = true
+          window.clearTimeout(armTimer)
+          window.clearTimeout(fallbackTimer)
+          map.un('moveend', onMoveEnd)
+          resolve()
+        }
+        const onMoveEnd = () => finish()
+        // scheduleFit(rAF×2) 시작 뒤에 moveend 대기, 미이동 시 타임아웃
+        const armTimer = window.setTimeout(() => {
+          map.once('moveend', onMoveEnd)
+        }, 80)
+        const fallbackTimer = window.setTimeout(finish, 780)
+      })
+    },
+    [mapContext?.applyMapViewPaddingRef, mapContext?.mapInstanceRef]
+  )
+
+  const openFacilityInfoPreviewFromList = useCallback(
+    (row: WtlFacilityListRow) => {
+      if (title !== '설비관리' || layerGroupsMode !== 'equipment') {
+        clearFacilityInfoPreview()
+        void flyToGeomAndWait(row.geom)
+        return
+      }
+      const reqId = ++facilityInfoPreviewReqRef.current
+      setFacilityInfoPreview(null)
+      const schema =
+        String(selectedSource?.schema ?? 'layer').trim() || 'layer'
+      void (async () => {
+        try {
+          const target = await resolveEquipmentFacilityInfoTarget(row, schema)
+          if (reqId !== facilityInfoPreviewReqRef.current) return
+          if (!target) {
+            await flyToGeomAndWait(row.geom)
+            return
+          }
+          const preview = await loadEquipmentFacilityInfoPreview(target)
+          if (reqId !== facilityInfoPreviewReqRef.current) return
+          if (!preview) {
+            await flyToGeomAndWait(row.geom)
+            return
+          }
+          await flyToGeomAndWait(preview.geom ?? row.geom)
+          if (reqId !== facilityInfoPreviewReqRef.current) return
+          setFacilityInfoPreview(preview)
+        } catch {
+          if (reqId !== facilityInfoPreviewReqRef.current) return
+          setFacilityInfoPreview(null)
+          await flyToGeomAndWait(row.geom)
+        }
+      })()
+    },
+    [
+      clearFacilityInfoPreview,
+      flyToGeomAndWait,
+      layerGroupsMode,
+      selectedSource?.schema,
+      title,
+    ]
+  )
+
   const selectFacilityRow = useCallback(
     (row: WtlFacilityListRow | null, opts?: { fly?: boolean }) => {
       if (!row) {
         setSelectedId(null)
         setSelectedRow(null)
+        clearFacilityInfoPreview()
         return
       }
       setSelectedId(row.id)
@@ -373,18 +473,15 @@ export function WtlFacilityShell({
         ogcFid: row.ogcFid,
       })
       if (opts?.fly) {
-        const map = mapContext?.mapInstanceRef?.current
-        flyToWtlNetworkGeom(
-          map,
-          row.geom,
-          () => mapContext?.applyMapViewPaddingRef?.current?.()
-        )
+        openFacilityInfoPreviewFromList(row)
+      } else {
+        clearFacilityInfoPreview()
       }
     },
     [
       claimFacilityHighlight,
-      mapContext?.applyMapViewPaddingRef,
-      mapContext?.mapInstanceRef,
+      clearFacilityInfoPreview,
+      openFacilityInfoPreviewFromList,
     ]
   )
 
@@ -420,14 +517,42 @@ export function WtlFacilityShell({
 
   const onTotalWidthChangeRef = useRef(onTotalWidthChange)
   onTotalWidthChangeRef.current = onTotalWidthChange
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
+  /** 닫기 중 — 패널을 먼저 내리고 무거운 언마운트·레이어 OFF는 뒤로 */
+  const closingRef = useRef(false)
+  const [isClosing, setIsClosing] = useState(false)
 
   /** 콜백 참조만 ref — deps에 넣으면 부모 리렌더 루프. Strict Mode 정리(0) 후에도 totalWidth로 재통지 */
   useEffect(() => {
+    if (closingRef.current) return
     onTotalWidthChangeRef.current(totalWidth)
   }, [totalWidth])
 
   useEffect(() => {
     return () => onTotalWidthChangeRef.current(0)
+  }, [])
+
+  /**
+   * 닫기 체감 지연 완화:
+   * 1) 폭 0·트리 null로 화면에서 즉시 제거
+   * 2) 목록·상세·미리보기 비워 언마운트 비용 축소
+   * 3) 다음 프레임에 opened 해제(부모)
+   */
+  const handlePanelClose = useCallback(() => {
+    if (closingRef.current) return
+    closingRef.current = true
+    setIsClosing(true)
+    onTotalWidthChangeRef.current(0)
+    facilityInfoPreviewReqRef.current += 1
+    setFacilityInfoPreview(null)
+    setSelectedId(null)
+    setSelectedRow(null)
+    setRows([])
+    setTotal(0)
+    requestAnimationFrame(() => {
+      onCloseRef.current()
+    })
   }, [])
 
   /** 시설관리 기본 카탈로그 — adminTabs.json wtlFacility + DB 활성 탭 */
@@ -491,6 +616,7 @@ export function WtlFacilityShell({
   useEffect(() => {
     const setVisible = mapContext?.setVisibleLayerNames
     if (!setVisible) return
+    if (closingRef.current) return
     if (!visibleSyncReady) return
     const direct = String(selectedSource?.tableName ?? '')
       .trim()
@@ -543,6 +669,7 @@ export function WtlFacilityShell({
   useEffect(() => {
     const setVisible = mapContext?.setVisibleLayerNames
     if (!setVisible) return
+    if (closingRef.current) return
     if (!visibleSyncReady) return
     const direct = String(selectedSource?.tableName ?? '')
       .trim()
@@ -576,22 +703,24 @@ export function WtlFacilityShell({
     visibleSyncReady,
   ])
 
-  /** 시설관리 종료 시에만 이 셸이 켠 레이어 제거 */
+  /** 시설·설비 종료 시 이 셸이 켠 레이어 제거 — 닫기 페인트 뒤로 미룸 */
   useEffect(() => {
     const setVisible = mapContext?.setVisibleLayerNames
     if (!setVisible) return
     return () => {
       const applied = lastAppliedVisibleRef.current
-      if (applied.length === 0) return
-      setVisible((prev) => {
-        let changed = false
-        const next = new Set(prev)
-        for (const t of applied) {
-          if (next.delete(t)) changed = true
-        }
-        return changed ? next : prev
-      })
       lastAppliedVisibleRef.current = []
+      if (applied.length === 0) return
+      window.setTimeout(() => {
+        setVisible((prev) => {
+          let changed = false
+          const next = new Set(prev)
+          for (const t of applied) {
+            if (next.delete(t)) changed = true
+          }
+          return changed ? next : prev
+        })
+      }, 0)
     }
   }, [mapContext?.setVisibleLayerNames])
 
@@ -1210,6 +1339,8 @@ export function WtlFacilityShell({
     [toggleableRelatedNames]
   )
 
+  if (isClosing) return null
+
   return (
     <>
       <div className="pointer-events-auto shrink-0">
@@ -1227,7 +1358,7 @@ export function WtlFacilityShell({
               <button
                 type="button"
                 className="standard-panel-close cursor-pointer"
-                onClick={onClose}
+                onClick={handlePanelClose}
                 aria-label="닫기"
                 title="닫기"
               >
@@ -1519,6 +1650,7 @@ export function WtlFacilityShell({
               onClose={() => {
                 setSelectedId(null)
                 setSelectedRow(null)
+                clearFacilityInfoPreview()
               }}
               onUpdated={(next) => {
                 setRows((prev) => prev.map((r) => (r.id === next.id ? next : r)))
@@ -1529,6 +1661,7 @@ export function WtlFacilityShell({
                 setTotal((t) => Math.max(0, t - 1))
                 setSelectedId(null)
                 setSelectedRow(null)
+                clearFacilityInfoPreview()
               }}
               onHistoryReverted={() => {
                 void loadRows()
@@ -1537,6 +1670,13 @@ export function WtlFacilityShell({
           </MapSideListPanel>
         </div>
       )}
+
+      {facilityInfoPreview ? (
+        <WtlFacilityInfoPreviewFloat
+          preview={facilityInfoPreview}
+          onClose={clearFacilityInfoPreview}
+        />
+      ) : null}
     </>
   )
 }

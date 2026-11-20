@@ -18,6 +18,7 @@ import {
   X,
 } from 'lucide-react'
 import { call } from '@/lib/api'
+import { appFetch } from '@/lib/basePath'
 import { useSerWriteAccess } from '@/hooks/useSerWriteAccess'
 import {
   formatBooleanYeobu,
@@ -45,7 +46,11 @@ import {
 } from '../../_mapComponents/standard/defineLayerRowUtils'
 import { useDefineLayerCodes } from '../../_mapComponents/standard/useDefineLayerCodes'
 import { useMapContext } from '../../_mapComponents/MapContext'
-import { centerMapOnWtlNetworkGeom } from '../wtlAdmin/networkMap/wtlNetworkMapFly'
+import { MAP_AUTO_NAV_MAX_ZOOM } from '../../_mapComponents/config/mapDefaults'
+import {
+  extent3857FromGeoJson4326,
+  scheduleAnimateMapToCenter3857,
+} from '../../_mapComponents/config/mapAutoNavigation'
 import {
   WtlMappedFacilityFloating,
   type WtlMappedFacilityTarget,
@@ -382,6 +387,9 @@ export function LayerClickDetailFloating({
   /** 물리 컬럼명(소문자) → PG data_type — BOOLEAN 체크박스 판별 */
   const [columnTypes, setColumnTypes] = useState<Record<string, string>>({})
   const [columnTypesReady, setColumnTypesReady] = useState(false)
+  /** 고정창 분리 시 행 재조회 중 — 속성 스켈레톤 */
+  const [keptRowRefetching, setKeptRowRefetching] = useState(false)
+  const keptRowFetchedKeyRef = useRef<string | null>(null)
 
   const isUndergroundFacilityLayer = useMemo(() => {
     if (!undergroundFacilityTableNames || undergroundFacilityTableNames.size === 0) {
@@ -453,9 +461,12 @@ export function LayerClickDetailFloating({
     let cancelled = false
     setFieldsLoading(true)
     setFieldsTable(fieldsTableKey)
-    void fetch(`/api/config/defineLayer/fields/${encodeURIComponent(fieldsTableKey)}`)
-      .then((r) => r.json())
-      .then((body: { data?: DefineFieldLike[] }) => {
+    void appFetch(`/api/config/defineLayer/fields/${encodeURIComponent(fieldsTableKey)}`)
+      .then(async (r) => {
+        if (!r.ok) throw new Error(`fields ${r.status}`)
+        return (await r.json()) as { data?: DefineFieldLike[] }
+      })
+      .then((body) => {
         if (cancelled) return
         setFields(Array.isArray(body?.data) ? body.data : [])
       })
@@ -514,6 +525,74 @@ export function LayerClickDetailFloating({
       cancelled = true
     }
   }, [open, tableName, fieldsTableKey, selected?.key])
+
+  /** 고정창 — identify 복사본 대신 DB 행 재조회 */
+  useEffect(() => {
+    if (!open || !kept || !selected) {
+      keptRowFetchedKeyRef.current = null
+      setKeptRowRefetching(false)
+      return
+    }
+    if (fieldsLoading || fields.length === 0) return
+    if (keptRowFetchedKeyRef.current === selected.key) return
+
+    const networkItem = layerClickHitToNetworkRow(selected)
+    const target = resolveWtlNetworkRowEditTarget(networkItem, fields)
+    if (!target) {
+      keptRowFetchedKeyRef.current = selected.key
+      setKeptRowRefetching(false)
+      return
+    }
+
+    let cancelled = false
+    keptRowFetchedKeyRef.current = selected.key
+    setKeptRowRefetching(true)
+    const baseHit = selected
+    void call('', 'POST', {
+      service: 'layerRowService',
+      action: 'getTableRowForEdit',
+      params: {
+        table: target.table,
+        schema: target.schema,
+        keyValue: target.keyValue,
+        keyField: target.keyField,
+      },
+    })
+      .then((res) => {
+        if (cancelled) return
+        const data = (res?.data ?? res) as
+          | { row?: Record<string, unknown> | null; error?: string }
+          | undefined
+        const row = data?.row
+        if (!row || typeof row !== 'object' || data?.error) return
+        onSelectedUpdated?.({
+          ...baseHit,
+          data: { ...baseHit.data, ...row },
+        })
+      })
+      .catch(() => {
+        /* 재조회 실패 시 identify 복사본 유지 */
+      })
+      .finally(() => {
+        if (
+          !cancelled &&
+          keptRowFetchedKeyRef.current === baseHit.key
+        ) {
+          setKeptRowRefetching(false)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [
+    open,
+    kept,
+    selected,
+    fieldsLoading,
+    fields,
+    onSelectedUpdated,
+  ])
 
   const listFields = useMemo(() => selectDefineLayerListFields(fields), [fields])
   const detailFields = useMemo(
@@ -931,10 +1010,20 @@ export function LayerClickDetailFloating({
   const handleGoToLocation = () => {
     if (!selected) return
     const map = mapContext?.mapInstanceRef?.current
+    if (!map) return
     const geom = pickLayerClickHitGeom(selected.data)
-    centerMapOnWtlNetworkGeom(map, geom, () =>
-      mapContext?.applyMapViewPaddingRef?.current?.()
-    )
+    const extent = extent3857FromGeoJson4326(geom)
+    if (!extent) return
+    const center: [number, number] = [
+      (extent[0] + extent[2]) / 2,
+      (extent[1] + extent[3]) / 2,
+    ]
+    const zoom = map.getView().getZoom() ?? MAP_AUTO_NAV_MAX_ZOOM
+    scheduleAnimateMapToCenter3857(map, center, zoom, {
+      duration: 450,
+      applyMapViewPadding: () =>
+        mapContext?.applyMapViewPaddingRef?.current?.(),
+    })
   }
 
   const handleBackToList = () => {
@@ -949,12 +1038,7 @@ export function LayerClickDetailFloating({
     writeUiTipSessionSeen()
   }, [])
 
-  // 다중 레이어 선택 목록이면 항상 펼침(최소화 금지)
   const pickListMode = hits.length > 1 && !selected
-  useEffect(() => {
-    if (!open || !pickListMode || !minimized) return
-    onMinimizedChange(false)
-  }, [open, pickListMode, minimized, onMinimizedChange])
 
   // 최초(localStorage 없음): 닫기까지 유지.
   // 이후: 세션당 1회·8초 자동 닫힘 (닫으면 같은 세션에 다시 안 뜸)
@@ -1039,7 +1123,6 @@ export function LayerClickDetailFloating({
       title={titleLine}
       minimized={minimized}
       onMinimizedChange={onMinimizedChange}
-      allowMinimize={!pickListMode}
       onClose={onClose}
       pinPosition={pinPosition}
       focusToken={focusToken}
@@ -1248,7 +1331,11 @@ export function LayerClickDetailFloating({
         )}
         style={isSimpleView ? { flex: 'none' } : undefined}
       >
-        {fieldsLoading ? (
+        {fieldsLoading ||
+        (kept &&
+          selected &&
+          (keptRowRefetching ||
+            keptRowFetchedKeyRef.current !== selected.key)) ? (
           <LayerClickDetailAttrSkeleton
             rows={isSimpleView ? 5 : 10}
           />
@@ -1371,6 +1458,7 @@ export function LayerClickDetailFloating({
           hit={selected}
           fields={fields}
           relatedChildAsModal
+          relatedModalAnchorHostRef={panelRef}
         />
       ) : null}
       {showOpenFullDetail || canToggleDetail || showEditButton || editing ? (

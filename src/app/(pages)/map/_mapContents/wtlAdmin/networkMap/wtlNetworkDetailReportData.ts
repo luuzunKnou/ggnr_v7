@@ -17,6 +17,7 @@ import {
   selectDefineLayerListFields,
   type DefineFieldLike,
 } from '../../../_mapComponents/standard/defineLayerRowUtils'
+import { WIMS_HISTORY_LIST_COLUMNS } from '@/lib/wimsHistoryColumns'
 import { WIMS_GOJIKIND, WIMS_PAGE_SIZE, type WimsHistoryRow } from '@/lib/wimsTypes'
 import {
   buildWtlFacilityDetailReportHtml,
@@ -45,20 +46,7 @@ type RelatedRow = {
   geom: unknown | null
 }
 
-const WIMS_COLUMNS: {
-  key: keyof WimsHistoryRow
-  label: string
-  kind: 'code' | 'date' | 'number' | 'text'
-}[] = [
-  { key: 'gojikind', label: '종류', kind: 'code' },
-  { key: 'meterDay', label: '검침일', kind: 'date' },
-  { key: 'nabgiDate', label: '납기마감일', kind: 'date' },
-  { key: 'meterNo', label: '계량기번호', kind: 'text' },
-  { key: 'useQty', label: '사용량', kind: 'number' },
-  { key: 'freeQty', label: '사용료', kind: 'number' },
-  { key: 'induty', label: '업종', kind: 'text' },
-  { key: 'delYn', label: '상태', kind: 'text' },
-]
+const WIMS_COLUMNS = WIMS_HISTORY_LIST_COLUMNS
 
 function trimId(value: unknown): string {
   return String(value ?? '').trim()
