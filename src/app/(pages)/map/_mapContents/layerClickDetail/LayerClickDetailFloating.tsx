@@ -45,7 +45,11 @@ import {
 } from '../../_mapComponents/standard/defineLayerRowUtils'
 import { useDefineLayerCodes } from '../../_mapComponents/standard/useDefineLayerCodes'
 import { useMapContext } from '../../_mapComponents/MapContext'
-import { centerMapOnWtlNetworkGeom } from '../wtlAdmin/networkMap/wtlNetworkMapFly'
+import { MAP_AUTO_NAV_MAX_ZOOM } from '../../_mapComponents/config/mapDefaults'
+import {
+  extent3857FromGeoJson4326,
+  scheduleAnimateMapToCenter3857,
+} from '../../_mapComponents/config/mapAutoNavigation'
 import {
   WtlMappedFacilityFloating,
   type WtlMappedFacilityTarget,
@@ -1002,10 +1006,20 @@ export function LayerClickDetailFloating({
   const handleGoToLocation = () => {
     if (!selected) return
     const map = mapContext?.mapInstanceRef?.current
+    if (!map) return
     const geom = pickLayerClickHitGeom(selected.data)
-    centerMapOnWtlNetworkGeom(map, geom, () =>
-      mapContext?.applyMapViewPaddingRef?.current?.()
-    )
+    const extent = extent3857FromGeoJson4326(geom)
+    if (!extent) return
+    const center: [number, number] = [
+      (extent[0] + extent[2]) / 2,
+      (extent[1] + extent[3]) / 2,
+    ]
+    const zoom = map.getView().getZoom() ?? MAP_AUTO_NAV_MAX_ZOOM
+    scheduleAnimateMapToCenter3857(map, center, zoom, {
+      duration: 450,
+      applyMapViewPadding: () =>
+        mapContext?.applyMapViewPaddingRef?.current?.(),
+    })
   }
 
   const handleBackToList = () => {

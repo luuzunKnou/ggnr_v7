@@ -36,7 +36,11 @@ import {
   peekWtlDefineDisplayBundle,
   type WtlDefineDisplayBundle,
 } from './wtlNetworkDefineDisplayCache'
-import { flyToWtlNetworkGeom } from './wtlNetworkMapFly'
+import { MAP_AUTO_NAV_MAX_ZOOM } from '../../../_mapComponents/config/mapDefaults'
+import {
+  extent3857FromGeoJson4326,
+  scheduleFitMapToExtent3857,
+} from '../../../_mapComponents/config/mapAutoNavigation'
 import {
   isWtlMetaPsLayer,
   WtlNetworkWimsHistoryTab,
@@ -293,11 +297,14 @@ export function WtlNetworkDetailRelatedTabs({
 
   const focusParentOnMap = useCallback(() => {
     const map = mapContext?.mapInstanceRef?.current
-    flyToWtlNetworkGeom(
-      map,
-      item.geom,
-      () => mapContext?.applyMapViewPaddingRef?.current?.()
-    )
+    if (!map) return
+    const extent = extent3857FromGeoJson4326(item.geom)
+    if (!extent) return
+    scheduleFitMapToExtent3857(map, extent, {
+      maxZoom: MAP_AUTO_NAV_MAX_ZOOM,
+      applyMapViewPadding: () =>
+        mapContext?.applyMapViewPaddingRef?.current?.(),
+    })
   }, [item.geom, mapContext?.applyMapViewPaddingRef, mapContext?.mapInstanceRef])
 
   const handleRowClick = useCallback(
@@ -341,11 +348,14 @@ export function WtlNetworkDetailRelatedTabs({
         } catch {
           /* ignore */
         }
-        flyToWtlNetworkGeom(
-          map,
-          row.geom,
-          () => mapContext?.applyMapViewPaddingRef?.current?.()
-        )
+        const extent = extent3857FromGeoJson4326(row.geom)
+        if (extent) {
+          scheduleFitMapToExtent3857(map, extent, {
+            maxZoom: MAP_AUTO_NAV_MAX_ZOOM,
+            applyMapViewPadding: () =>
+              mapContext?.applyMapViewPaddingRef?.current?.(),
+          })
+        }
       }
     },
     [
@@ -670,7 +680,10 @@ export function WtlNetworkDetailRelatedTabs({
           </div>
         ) : active === 'wimsHistory' ? (
           <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-card">
-            <WtlNetworkWimsHistoryTab item={item} />
+            <WtlNetworkWimsHistoryTab
+              item={item}
+              relatedModalAnchorHostRef={relatedModalAnchorHostRef}
+            />
           </div>
         ) : active === 'dataHistory' ? (
           <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-card">

@@ -73,7 +73,12 @@ import {
   type WtlNetworkToolBtnVariant,
 } from './WtlNetworkExportMenu'
 import { useEnsureMapCenterInSggOnMount } from '../useEnsureMapCenterInSggOnMount'
-import { centerMapOnWtlNetworkGeom, flyToWtlNetworkGeom } from './wtlNetworkMapFly'
+import { MAP_AUTO_NAV_MAX_ZOOM } from '../../../_mapComponents/config/mapDefaults'
+import {
+  extent3857FromGeoJson4326,
+  scheduleAnimateMapToCenter3857,
+  scheduleFitMapToExtent3857,
+} from '../../../_mapComponents/config/mapAutoNavigation'
 import { WtlNetworkSectionPanel } from './section/WtlNetworkSectionPanel'
 import { WtlNetworkSectionDrawGuide } from './section/WtlNetworkSectionDrawGuide'
 import { useWtlNetworkSection } from './section/useWtlNetworkSection'
@@ -1023,24 +1028,55 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
     section.closePanel()
   }, [section.closePanel])
 
+  /** 기본 상세만 닫기 — 고정창(kept) 유지 */
+  const dismissPrimaryDetail = useCallback(() => {
+    setCommonDetail(null)
+    setCommonDetailMinimized(false)
+    setSelected(null)
+  }, [])
+
+  // 단면도·구역 등 지도 그리기 시작 시 레이어선택·기본 상세 닫기(고정창 유지)
+  useEffect(() => {
+    const drawingActive =
+      section.drawing ||
+      zoneDrawing ||
+      Boolean(mapContext?.spatialDrawRequest) ||
+      Boolean(mapContext?.mapDrawInputSuspended) ||
+      Boolean(mapContext?.layerRowGeomEdit) ||
+      Boolean(mapContext?.measurementActive)
+    if (!drawingActive) return
+    dismissPrimaryDetail()
+  }, [
+    section.drawing,
+    zoneDrawing,
+    mapContext?.spatialDrawRequest,
+    mapContext?.mapDrawInputSuspended,
+    mapContext?.layerRowGeomEdit,
+    mapContext?.measurementActive,
+    dismissPrimaryDetail,
+  ])
+
   /** origin = 기본 모달 좌상단 — 새 창은 그보다 약간 오른쪽 */
   const detachKeepDetail = useCallback(
-    (origin?: { top: number; left: number } | null) => {
+    (
+      origin?: { top: number; left: number } | null,
+      /** 레이어 선택 목록 행 핀 — 목록 단계에서는 item이 null */
+      hitKey?: string | null
+    ) => {
       const cur = commonDetailRef.current
-      if (!cur?.item) return
-      const curItem = cur.item
-      const hitRows =
-        cur.hitRows.length > 0
-          ? cur.hitRows.map((r) =>
-              r.id === curItem.id ? curItem : r
-            )
-          : [curItem]
-      const hits = hitRows.map(networkRowToLayerClickHit)
+      if (!cur) return
+      const wantKey = hitKey != null ? String(hitKey).trim() : ''
+      const fromList =
+        wantKey && cur.hitRows.length > 0
+          ? cur.hitRows.find((r) => String(r.id) === wantKey) ?? null
+          : null
+      const curItem = fromList ?? cur.item
+      if (!curItem) return
+      const hit = networkRowToLayerClickHit(curItem)
       const facilityKey = String(curItem.id)
       setKeptModals((prev) => {
-        const existing = prev.find((m) =>
-          m.hits.some((h) => h.key === facilityKey)
-        )
+        // 같은 시설 고정창이 있으면 앞으로 — 목록 전체 hit를 넣으면 형제 핀이 덮어쓰기 됨
+        const existing = prev.find((m) => m.selectedKey === facilityKey)
         if (existing) {
           return prev.map((m) =>
             m.key === existing.key
@@ -1061,7 +1097,7 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
           ...prev,
           {
             key: nextNetworkKeepModalKey(),
-            hits: hits.map((h) => ({ ...h, data: { ...h.data } })),
+            hits: [{ ...hit, data: { ...hit.data } }],
             selectedKey: facilityKey,
             anchor: base
               ? { left: base.left + offsetX, top: base.top + offsetY }
@@ -2069,12 +2105,25 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
       })
     }
     setSelected(next)
-      const map = mapContext?.mapInstanceRef?.current
+    const map = mapContext?.mapInstanceRef?.current
     const applyPad = () => mapContext?.applyMapViewPaddingRef?.current?.()
+    const extent = extent3857FromGeoJson4326(next.geom)
+    if (!map || !extent) return
     if (opts?.center) {
-      centerMapOnWtlNetworkGeom(map, next.geom, applyPad)
+      const center: [number, number] = [
+        (extent[0] + extent[2]) / 2,
+        (extent[1] + extent[3]) / 2,
+      ]
+      const zoom = map.getView().getZoom() ?? MAP_AUTO_NAV_MAX_ZOOM
+      scheduleAnimateMapToCenter3857(map, center, zoom, {
+        duration: 450,
+        applyMapViewPadding: applyPad,
+      })
     } else if (opts?.fly) {
-      flyToWtlNetworkGeom(map, next.geom, applyPad)
+      scheduleFitMapToExtent3857(map, extent, {
+        maxZoom: MAP_AUTO_NAV_MAX_ZOOM,
+        applyMapViewPadding: applyPad,
+      })
     }
   }
   const searchFilter = useMemo(() => {
@@ -4175,7 +4224,9 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
                   setCommonDetailMinimized(false)
                   setSelected(null)
                 }}
-                onDetach={(origin) => detachKeepDetail(origin)}
+                onDetach={(origin, hitKey) =>
+                  detachKeepDetail(origin, hitKey)
+                }
                 onActivate={() => {
                   if (commonDetail.item) setSelected(commonDetail.item)
                   const map = mapContext?.mapInstanceRef?.current

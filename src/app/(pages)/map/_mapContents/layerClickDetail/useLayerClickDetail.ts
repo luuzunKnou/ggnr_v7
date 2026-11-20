@@ -12,6 +12,7 @@ import type {
   IdentifyPopupState,
 } from '../../_mapComponents/hooks/useFeatureIdentify'
 import { extractDefineRowKeyValue } from '../../_mapComponents/standard/defineLayerRowUtils'
+import { MAP_CENTER_ANIMATE_EVENT } from '../../_mapComponents/config/mapAutoNavigation'
 import {
   LAYER_CLICK_DETAIL_MATCH_CLOSE_EVENT,
   type LayerClickDetailMatchClosePayload,
@@ -221,9 +222,8 @@ export function useLayerClickDetail(opts?: {
       if (!cur) return
       const facilityKey = cur.key
       setKeptModals((prev) => {
-        const existing = prev.find((m) =>
-          m.hits.some((h) => h.key === facilityKey)
-        )
+        // 같은 시설 고정창이 있으면 앞으로 (형제 행은 새 창)
+        const existing = prev.find((m) => m.selectedKey === facilityKey)
         if (existing) {
           return prev.map((m) =>
             m.key === existing.key
@@ -244,10 +244,8 @@ export function useLayerClickDetail(opts?: {
           ...prev,
           {
             key: nextKeepModalKey(),
-            hits:
-              curHits.length > 0
-                ? curHits.map((h) => ({ ...h, data: { ...h.data } }))
-                : [cur],
+            // 고정창은 해당 시설 1건만 — 다중 목록 전체를 넣으면 다른 행 핀이 덮어쓰기 됨
+            hits: [{ ...cur, data: { ...cur.data } }],
             selectedKey: cur.key,
             anchor: base
               ? { left: base.left + offsetX, top: base.top + offsetY }
@@ -359,6 +357,18 @@ export function useLayerClickDetail(opts?: {
     return () =>
       window.removeEventListener(LAYER_CLICK_DETAIL_MATCH_CLOSE_EVENT, onMatchClose)
   }, [closeMatchingHits])
+
+  /** 지도 중심 이동 시 다중 레이어 선택 목록만 닫음 (상세·고정창 유지) */
+  useEffect(() => {
+    const onCenterAnimate = () => {
+      if (hitsRef.current.length > 1 && selectedKeyRef.current == null) {
+        close()
+      }
+    }
+    window.addEventListener(MAP_CENTER_ANIMATE_EVENT, onCenterAnimate)
+    return () =>
+      window.removeEventListener(MAP_CENTER_ANIMATE_EVENT, onCenterAnimate)
+  }, [close])
 
   const open = hits.length > 0 && !forceClosed
 

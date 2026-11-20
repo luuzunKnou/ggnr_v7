@@ -1,8 +1,44 @@
 import type Map from "ol/Map";
+import GeoJSON from "ol/format/GeoJSON";
 import { MAP_AUTO_NAV_MAX_ZOOM } from "./mapDefaults";
 
 export type Extent3857 = [number, number, number, number];
 type FitPadding = [number, number, number, number];
+
+function normalizeGeoJsonGeom(geom: unknown): object | null {
+  if (!geom) return null;
+  if (typeof geom === "object") return geom as object;
+  if (typeof geom === "string") {
+    try {
+      const parsed = JSON.parse(geom) as unknown;
+      return parsed && typeof parsed === "object" ? (parsed as object) : null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+/**
+ * API가 내려주는 GeoJSON(EPSG:4326) → 지도용 extent(EPSG:3857).
+ * DB는 보통 5181이지만 목록·상세 geom 페이로드는 4326이다.
+ */
+export function extent3857FromGeoJson4326(
+  geom: unknown
+): Extent3857 | null {
+  const geo = normalizeGeoJsonGeom(geom);
+  if (!geo) return null;
+  try {
+    const olGeom = new GeoJSON().readGeometry(geo, {
+      dataProjection: "EPSG:4326",
+      featureProjection: "EPSG:3857",
+    });
+    const extent = olGeom?.getExtent();
+    return parseExtent3857(extent ?? null);
+  } catch {
+    return null;
+  }
+}
 
 export type MapAutoNavOptions = {
   maxZoom?: number;
@@ -166,6 +202,9 @@ export function scheduleFitMapToExtent3857(
   });
 }
 
+/** 지도 중심 애니메이트 시작 — 다중 레이어 선택 모달 등 구독용 */
+export const MAP_CENTER_ANIMATE_EVENT = "ggnr:map-center-animate";
+
 /** 패널을 고려한 중심 이동 */
 export function scheduleAnimateMapToCenter3857(
   map: Map,
@@ -175,6 +214,9 @@ export function scheduleAnimateMapToCenter3857(
 ): void {
   const run = () => {
     prepareMapForPanelAwareNavigation(map, options?.applyMapViewPadding);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent(MAP_CENTER_ANIMATE_EVENT));
+    }
     map.getView().animate({
       center: center3857,
       zoom,
