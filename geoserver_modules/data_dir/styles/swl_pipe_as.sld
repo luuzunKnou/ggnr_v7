@@ -63,7 +63,7 @@
               <ogc:Function name="strLength">
                 <ogc:Function name="env">
                   <ogc:Literal>swl_pipe_as_label_property_name</ogc:Literal>
-                  <ogc:Literal></ogc:Literal>
+                  <ogc:Literal/>
                 </ogc:Function>
               </ogc:Function>
               <ogc:Literal>0</ogc:Literal>
@@ -115,7 +115,7 @@
                     <ogc:Literal>#</ogc:Literal>
                     <ogc:Function name="env">
                       <ogc:Literal>swl_pipe_as_label_halo_color</ogc:Literal>
-                      <ogc:Literal>FFFFFF</ogc:Literal>
+                      <ogc:Literal>DFA2BF</ogc:Literal>
                     </ogc:Function>
                   </ogc:Function>
                 </sld:CssParameter>
@@ -138,3 +138,4 @@
     </sld:UserStyle>
   </sld:NamedLayer>
 </sld:StyledLayerDescriptor>
+

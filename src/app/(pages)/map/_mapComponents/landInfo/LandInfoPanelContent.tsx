@@ -2,7 +2,11 @@
 
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Check, Copy, Loader2 } from 'lucide-react';
-import { COORDINATE_SYSTEM_OPTIONS, type AddressInfoPanelProps } from './shared';
+import {
+  COORDINATE_SYSTEM_OPTIONS,
+  openExternalMapByAddress,
+  type AddressInfoPanelProps,
+} from './shared';
 import { transformCoordinate } from '../services/coordinateService';
 import {
   fetchBuildingRegisterDetail,
@@ -64,25 +68,6 @@ function AddressCopyButton({ text }: { text: string }) {
       {copied ? <Check className="h-3 w-3 text-primary" aria-hidden /> : <Copy className="h-3 w-3" aria-hidden />}
     </button>
   );
-}
-
-/** 주소 문자열로 외부 지도 검색 */
-function openExternalMapByAddress(
-  provider: 'naver' | 'kakao' | 'google',
-  address: string
-) {
-  const q = String(address ?? '').trim();
-  if (!q || q === '-') {
-    window.alert('검색할 주소가 없습니다.');
-    return;
-  }
-  const enc = encodeURIComponent(q);
-  const urls = {
-    naver: `https://map.naver.com/p/search/${enc}`,
-    kakao: `https://map.kakao.com/?q=${enc}`,
-    google: `https://www.google.com/maps/search/?api=1&query=${enc}`,
-  } as const;
-  window.open(urls[provider], '_blank', 'noopener,noreferrer');
 }
 
 type TabId = 'parcel' | 'buildingLedger' | 'buildingPermit';

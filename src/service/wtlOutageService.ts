@@ -9,7 +9,6 @@ import db from '@/database/db';
 import { fetchNormalizedJibunFromAddressSearch } from '@/lib/vworldAddressServer';
 import { loadTraceCriterion, matchAppliedTraceAnswer, mergeAppliedTrace } from '@/service/wtlRequestService';
 import { buildStopWaterHwpx, stopWaterHwpxFileName } from '@/lib/hwpx/stopWaterHwpx';
-import { toHjdCdeKorName } from '@/lib/hjdCde';
 
 const GATE_FTR = 'SA200'; // 제수변
 /** 제수변이 관로 선분 위에 앉았는지(레이어 SRID m) — v6 JUNCTION_VALVE_TOL */
@@ -83,8 +82,21 @@ const BUILDING_SCHEMA = 'public_layer';
 const BUILDING_TABLE = 'tl_sgco_rnadr_mst';
 /** 계량기와 건물군 «인접» 판정 거리(m, 건물군 SRID 기준) — 0이면 속한 경우만 */
 const BUILDING_NEAR_M = 5;
-/** 건물군 외곽 여유(m, 3857 단위) — 외곽선에 붙은 계량기 기호가 면 경계에 걸리지 않게 */
-const BUILDING_MARGIN_M = 1;
+/**
+ * 건물군 표시 버퍼(m, 3857). 분석 시 붉은 면 = 건물군 + 이 버퍼.
+ * 이웃 건물 붉은 면이 겹치면 하나의 Polygon으로 합친다.
+ */
+const BUILDING_MARGIN_M = 3;
+/**
+ * 지도 붉은 면 — 단수 면 사이 틈이 이 값(m) 이하면 한 면으로 합친다.
+ * (건물 외곽 BUILDING_MARGIN_M과는 별개)
+ */
+const ZONE_MAP_CLUSTER_GAP_M = 15;
+/**
+ * 알림문(한글) 생성 시에만 — 면 사이 틈이 이 값(m) 이하면 구역도·대상지역 문구용으로 한 면으로 합친다.
+ * 지도 화면의 단수 면(ZONE_MAP_CLUSTER_GAP_M)은 바꾸지 않는다.
+ */
+const AREA_LABEL_CLUSTER_GAP_M = 45;
 /** 계량기 없는 건물군 후보: 단수 관로에서 이 거리(m) 안 */
 const METERLESS_BUILDING_CAND_M = 30;
 /**
@@ -379,6 +391,177 @@ function zoneGeoJsonFromRings(rings: [number, number][][]): unknown {
   return { type: 'MultiPolygon', coordinates: closed.map((r) => [r]) };
 }
 
+/** 고리 → POLYGON WKT(4326). SQL 합치기용 */
+function ringToPolygonWkt(ring: [number, number][]): string | null {
+  const closed = closeRing(
+    ring
+      .filter((c) => Array.isArray(c) && Number.isFinite(Number(c[0])) && Number.isFinite(Number(c[1])))
+      .map((c) => [Number(c[0]), Number(c[1])] as [number, number])
+  );
+  if (closed.length < 4) return null;
+  return `POLYGON((${closed.map((c) => `${c[0]} ${c[1]}`).join(',')}))`;
+}
+
+/** 면(구멍 포함) → POLYGON WKT(4326) */
+function polygonToWkt(poly: ZonePolygon): string | null {
+  const rings = poly
+    .map((ring) =>
+      closeRing(
+        ring
+          .filter((c) => Array.isArray(c) && Number.isFinite(Number(c[0])) && Number.isFinite(Number(c[1])))
+          .map((c) => [Number(c[0]), Number(c[1])] as [number, number])
+      )
+    )
+    .filter((r) => r.length >= 4);
+  if (rings.length === 0) return null;
+  return `POLYGON(${rings.map((r) => `(${r.map((c) => `${c[0]} ${c[1]}`).join(',')})`).join(',')})`;
+}
+
+/**
+ * 알림문용 — 면 사이 틈이 AREA_LABEL_CLUSTER_GAP_M 이하면 갭을 메워 한 Polygon으로 합친다.
+ * (팽창→합치기→수축). 구역도 캡처·대상지역 문구가 같은 면을 쓰도록.
+ */
+async function clusterPolygonsForHwpx(polys: ZonePolygon[]): Promise<ZonePolygon[]> {
+  if (polys.length <= 1) return polys;
+  const wkts = polys.map(polygonToWkt).filter((w): w is string => Boolean(w));
+  if (wkts.length <= 1) return polys;
+  const halfGap = AREA_LABEL_CLUSTER_GAP_M / 2;
+  const values = wkts.map((w, i) => `(${i}, '${w}')`).join(',');
+  try {
+    const res = await db.execute(
+      sql.raw(
+        `WITH parts AS (
+           SELECT ST_MakeValid(ST_Transform(ST_GeomFromText(v.w, 4326), 3857)) AS g
+           FROM (VALUES ${values}) AS v(i, w)
+         ),
+         closed AS (
+           SELECT ST_MakeValid(
+             ST_Buffer(
+               ST_UnaryUnion(ST_Collect(ST_Buffer(g, ${halfGap}, ${ANGULAR_BUFFER}))),
+               -${halfGap},
+               ${ANGULAR_BUFFER}
+             )
+           ) AS g
+           FROM parts
+         )
+         SELECT ST_AsGeoJSON(ST_Transform(
+           ST_CollectionExtract(
+             CASE
+               WHEN g IS NULL OR ST_IsEmpty(g) THEN (
+                 SELECT ST_UnaryUnion(ST_Collect(ST_Buffer(p.g, ${halfGap}, ${ANGULAR_BUFFER})))
+                 FROM parts p
+               )
+               ELSE g
+             END,
+             3
+           ),
+           4326
+         ))::json AS geom
+         FROM closed`
+      )
+    );
+    const geom = (res.rows?.[0] as { geom?: unknown } | undefined)?.geom;
+    const out = parsePolygons(geom);
+    if (out.length > 0) return out;
+  } catch (e) {
+    console.warn('[wtlOutage] clusterPolygonsForHwpx', e);
+  }
+  return polys;
+}
+
+/**
+ * 알림문 구역도·대상지역용 면 — 지도 결과 면을 AREA_LABEL_CLUSTER_GAP_M으로 합친다.
+ * 화면 지도는 바꾸지 않는다.
+ */
+export async function clusterWtlOutageHwpxPolygons(params: {
+  polygons?: ZonePolygon[];
+  rings?: [number, number][][];
+  ring?: [number, number][];
+}): Promise<{ polygons: ZonePolygon[]; error?: string }> {
+  const fromPolys = cleanPolygons(params.polygons);
+  const fromRings = (
+    params.rings && params.rings.length > 0 ? params.rings : params.ring ? [params.ring] : []
+  )
+    .filter((r) => Array.isArray(r) && r.length >= 3)
+    .map((r) => [r] as ZonePolygon);
+  const raw = fromPolys.length > 0 ? fromPolys : fromRings;
+  if (raw.length === 0) return { polygons: [], error: '단수 구역이 없습니다.' };
+  return { polygons: await clusterPolygonsForHwpx(raw) };
+}
+
+/**
+ * 분석으로 그린 붉은 면(건물군+버퍼)끼리 — 겹치면 하나의 Polygon으로 합친다.
+ * 떨어져 있으면 MultiPolygon으로 남긴다.
+ */
+async function unionBuildingGroupRings(
+  rawRings: [number, number][][]
+): Promise<{ rings: [number, number][][]; polygons: ZonePolygon[] }> {
+  const wkts = rawRings
+    .map(ringToPolygonWkt)
+    .filter((w): w is string => Boolean(w));
+  if (wkts.length === 0) return { rings: [], polygons: [] };
+  if (wkts.length === 1) {
+    const rings = rawRings
+      .map((r) => closeRing(r))
+      .filter((r) => r.length >= 4)
+      .slice(0, 1);
+    return { rings, polygons: rings.map((r) => [r]) };
+  }
+  const values = wkts.map((w, i) => `(${i}, '${w}')`).join(',');
+  /** 틈 ≤ ZONE_MAP_CLUSTER_GAP_M 이면 붙도록 갭/2 팽창→합치기→수축(형태 닫기) */
+  const halfGap = ZONE_MAP_CLUSTER_GAP_M / 2;
+  try {
+    const res = await db.execute(
+      sql.raw(
+        `WITH parts AS (
+           SELECT ST_MakeValid(ST_Transform(ST_GeomFromText(v.w, 4326), 3857)) AS g
+           FROM (VALUES ${values}) AS v(i, w)
+         ),
+         closed AS (
+           SELECT ST_MakeValid(
+             ST_Buffer(
+               ST_UnaryUnion(ST_Collect(ST_Buffer(g, ${halfGap}, ${ANGULAR_BUFFER}))),
+               -${halfGap},
+               ${ANGULAR_BUFFER}
+             )
+           ) AS g
+           FROM parts
+         )
+         SELECT ST_AsGeoJSON(ST_Transform(
+           ST_CollectionExtract(
+             CASE
+               WHEN g IS NULL OR ST_IsEmpty(g) THEN (
+                 SELECT ST_UnaryUnion(ST_Collect(ST_Buffer(p.g, ${halfGap}, ${ANGULAR_BUFFER})))
+                 FROM parts p
+               )
+               ELSE g
+             END,
+             3
+           ),
+           4326
+         ))::json AS geom
+         FROM closed`
+      )
+    );
+    const geom = (res.rows?.[0] as { geom?: unknown } | undefined)?.geom;
+    const polygons = parsePolygons(geom);
+    const rings = parseRings(geom);
+    if (polygons.length > 0) {
+      return {
+        rings: rings.length > 0 ? rings : polygons.map((p) => p[0]!).filter(Boolean),
+        polygons,
+      };
+    }
+    if (rings.length > 0) return { rings, polygons: rings.map((r) => [r]) };
+  } catch (e) {
+    console.warn('[wtlOutage] union building rings', e);
+  }
+  const cleaned = rawRings
+    .map((r) => closeRing(r))
+    .filter((r) => r.length >= 4);
+  return { rings: cleaned, polygons: cleaned.map((r) => [r]) };
+}
+
 function gateIdOf(ogcFid: number): string {
   return `gate-${ogcFid}`;
 }
@@ -492,6 +675,40 @@ export async function listWtlOutageGates(params: {
        WHERE ${wheres.join(' AND ')}
        ORDER BY t.ogc_fid
        LIMIT ${limit}`
+    )
+  );
+  const rows: WtlOutageGateDto[] = [];
+  for (const raw of res.rows ?? []) {
+    const gate = mapGateRow(raw as Record<string, unknown>);
+    if (gate) rows.push(gate);
+  }
+  return { rows };
+}
+
+/**
+ * 지도 중심(경위도)에서 가장 가까운 제수변 1건 — 단수구역 최초 진입 시 이동용.
+ */
+export async function findNearestWtlOutageGate(params: {
+  lon?: number;
+  lat?: number;
+} = {}): Promise<{ rows: WtlOutageGateDto[] }> {
+  const lon = Number(params.lon);
+  const lat = Number(params.lat);
+  if (!Number.isFinite(lon) || !Number.isFinite(lat)) return { rows: [] };
+  if (!(await tableExists('layer', 'wtl_valv_ps'))) return { rows: [] };
+  const res = await db.execute(
+    sql.raw(
+      `SELECT
+         t.ogc_fid AS "ogcFid",
+         t.ftr_idn AS "ftrIdn",
+         t.std_dip AS "stdDip",
+         t.hjd_cde AS hjd,
+         ST_AsGeoJSON(ST_Transform(ST_Centroid(t.geom), 4326))::json AS geom
+       FROM layer.wtl_valv_ps t
+       WHERE t.geom IS NOT NULL
+         AND t.ftr_cde = '${GATE_FTR}'
+       ORDER BY t.geom <-> ST_Transform(ST_SetSRID(ST_MakePoint(${lon}, ${lat}), 4326), ST_SRID(t.geom))
+       LIMIT 1`
     )
   );
   const rows: WtlOutageGateDto[] = [];
@@ -1855,8 +2072,14 @@ async function queryMeterBuildings(
        )
        SELECT
          (SELECT COALESCE(array_agg(DISTINCT hit.i), '{}') FROM hit) AS idx,
+         -- 건물마다 버퍼를 준 뒤, 그 그린 면이 겹치면 합친다
          (SELECT ST_AsGeoJSON(ST_Transform(
-            ST_Buffer(ST_Transform(ST_UnaryUnion(ST_Collect(ST_MakeValid(hit.g))), 3857), ${BUILDING_MARGIN_M}, ${ANGULAR_BUFFER}),
+            ST_CollectionExtract(
+              ST_UnaryUnion(ST_Collect(
+                ST_Buffer(ST_Transform(ST_MakeValid(hit.g), 3857), ${BUILDING_MARGIN_M}, ${ANGULAR_BUFFER})
+              )),
+              3
+            ),
             4326
           ))::json FROM hit) AS geom`
     )
@@ -2018,8 +2241,14 @@ async function queryMeterlessOutageBuildings(
        )
        SELECT
          (SELECT count(*) FROM hit) AS n,
+         -- 건물마다 버퍼를 준 뒤, 그 그린 면이 겹치면 합친다
          (SELECT ST_AsGeoJSON(ST_Transform(
-            ST_Buffer(ST_Transform(ST_UnaryUnion(ST_Collect(ST_MakeValid(hit.g))), 3857), ${BUILDING_MARGIN_M}, ${ANGULAR_BUFFER}),
+            ST_CollectionExtract(
+              ST_UnaryUnion(ST_Collect(
+                ST_Buffer(ST_Transform(ST_MakeValid(hit.g), 3857), ${BUILDING_MARGIN_M}, ${ANGULAR_BUFFER})
+              )),
+              3
+            ),
             4326
           ))::json FROM hit) AS geom`
     )
@@ -2079,6 +2308,8 @@ export async function analyzeWtlOutage(params: {
   result: WtlOutageResultDto | null;
   gates: WtlOutageGateDto[];
   error?: string;
+  /** 패널 배너용 — 예: 고립 불가(no_isolation) */
+  errorCode?: 'no_isolation';
   debug?: WtlOutageAnalyzeDebug;
 }> {
   const gateFids = parseGateOgcFids(params.gateIds ?? []);
@@ -2159,10 +2390,12 @@ export async function analyzeWtlOutage(params: {
       return {
         result: null,
         gates,
+        /** 지도 상단은 패널에서 짧은 안내로 표시. 여기 error는 패널용 부가 설명만 */
+        errorCode: 'no_isolation' as const,
         error:
           gateXy.length === 1
-            ? '이 제수변만 잠가서는 단수 구간이 생기지 않습니다(다른 관로로 물이 돌아 들어옴). 주변 제수변을 함께 잠가 보세요.'
-            : '잠근 제수변으로는 단수 구간이 생기지 않습니다(다른 관로로 물이 돌아 들어옴). 제수변을 추가로 잠가 보세요.',
+            ? '다른 관로로 물이 돌아 들어옵니다. 주변 제수변을 함께 잠가 보세요.'
+            : '다른 관로로 물이 돌아 들어옵니다. 제수변을 추가로 잠가 보세요.',
       };
     }
     isoPieces = iso.pieces;
@@ -2270,6 +2503,8 @@ export async function analyzeWtlOutage(params: {
   // 계량기 기준: 관로 조각별 버퍼를 계량기까지 덮도록 계산 → 편집 화면과 같은 buildWtlOutageZone 경로로 면 생성
   let lineBuffers: number[] | undefined;
   let rings: [number, number][][] = [];
+  /** 합친 뒤의 단수 면(겹친 건물군은 한 Polygon). 없으면 rings로 구성 */
+  let zonePolygonsMerged: ZonePolygon[] | null = null;
   /** 계량기가 속하거나 인접한 건물군 면 — 있으면 그 계량기는 관로 버퍼·작은 원 대신 건물군 전체로 덮음 */
   let buildingRings: [number, number][][] = [];
   let buildingMeterCount = 0;
@@ -2295,35 +2530,21 @@ export async function analyzeWtlOutage(params: {
     } catch (e) {
       console.warn('[wtlOutage] meterless buildings', e);
     }
-    // 건물군 면을 단수 관로와 잇는 띠(떨어져 섬처럼 보이지 않게) — 편집 때도 유지되도록 건물군 면에 포함
-    try {
-      const links = await connectBuildingsToLines(buildingRings, pipes);
-      if (links.length > 0) buildingRings = [...buildingRings, ...links];
-    } catch (e) {
-      console.warn('[wtlOutage] building links', e);
-    }
-    // 관로는 버퍼를 넓히지 않고 관로를 따라서만(PIPE_TRACE_BUFFER_M) — 계량기는 건물군 면으로 덮는다.
-    // 계량기 주변 원은 그리지 않음(수용가는 판정된 계량기로 바로 뽑으므로 면 밖이어도 빠지지 않음)
+    // 표시용 단수구역 = 수용가(건물군) 면만. 겹치면 합침. 관로 버퍼·연결 띠는 넣지 않음.
     lineBuffers = pipes.map(() => PIPE_TRACE_BUFFER_M);
-    try {
-      const zone = await buildWtlOutageZone({
-        pipes,
-        bufferM: PIPE_TRACE_BUFFER_M,
-        bufferMs: lineBuffers,
-        extraRings: buildingRings,
-        withTargets: false,
-      });
-      rings = zone.rings;
-    } catch (e) {
-      console.warn('[wtlOutage] meter zone', e);
-    }
+    const united = await unionBuildingGroupRings(buildingRings);
+    rings = united.rings;
+    zonePolygonsMerged = united.polygons.length > 0 ? united.polygons : null;
+    // 저장·편집용 건물군도 합친 면과 맞춤
+    if (rings.length > 0) buildingRings = rings;
     if (rings.length === 0) {
-      // 면 생성 실패 시 관로 버퍼 방식으로 폴백
+      // 건물군이 없으면 관로 버퍼 방식으로 폴백
       meterSel = null;
       lineBuffers = undefined;
       buildingRings = [];
       buildingMeterCount = 0;
       meterlessBuildingCount = 0;
+      zonePolygonsMerged = null;
     }
   }
   /**
@@ -2340,31 +2561,21 @@ export async function analyzeWtlOutage(params: {
       if (extra.count > 0 && extra.rings.length > 0) {
         buildingRings = extra.rings;
         meterlessBuildingCount = extra.count;
-        const links = await connectBuildingsToLines(buildingRings, pipes);
-        if (links.length > 0) buildingRings = [...buildingRings, ...links];
       }
     } catch (e) {
       console.warn('[wtlOutage] meterless buildings', e);
     }
-    // 끊긴 관로를 따라 아주 좁게(NO_METER_BUFFER_M)만 — 주변 건물·필지를 덮지 않게
-    try {
-      const zone = await buildWtlOutageZone({
-        pipes,
-        bufferM: NO_METER_BUFFER_M,
-        bufferMs: lineBuffers,
-        extraRings: buildingRings,
-        withTargets: false,
-      });
-      rings = zone.rings;
-    } catch (e) {
-      console.warn('[wtlOutage] narrow zone', e);
-    }
+    const united = await unionBuildingGroupRings(buildingRings);
+    rings = united.rings;
+    zonePolygonsMerged = united.polygons.length > 0 ? united.polygons : null;
+    if (rings.length > 0) buildingRings = rings;
   }
   const narrowZone = noOutageMeters && rings.length > 0;
   if (!meterSel && !narrowZone) {
     lineBuffers = undefined;
     buildingRings = [];
     meterlessBuildingCount = 0;
+    zonePolygonsMerged = null;
     const zoneSql = geomParts[0]?.includes('ST_Buffer')
       ? `SELECT ST_AsGeoJSON(ST_Transform(ST_UnaryUnion(ST_Collect(geom)), 4326))::json AS geom FROM (
            ${geomParts.join('\nUNION ALL\n')}
@@ -2381,8 +2592,11 @@ export async function analyzeWtlOutage(params: {
   }
   const ring = rings[0] ?? [];
 
-  // 초기 면은 바깥 경계만(건물군·관로 사이 작은 틈은 채움) — 구멍은 사용자가 «지우기»로 낼 때만 생김
-  const zonePolygons: ZonePolygon[] = rings.map((r) => [r]);
+  // 건물군 합친 면 우선. 떨어지면 MultiPolygon 여러 조각. 구멍은 «지우기»로만.
+  const zonePolygons: ZonePolygon[] =
+    zonePolygonsMerged && zonePolygonsMerged.length > 0
+      ? zonePolygonsMerged
+      : rings.map((r) => [r]);
   const zoneJsonOut = zoneGeoJsonFromPolygons(zonePolygons);
 
   const originKey = gates
@@ -3149,8 +3363,21 @@ async function riNameColumn(): Promise<string | null> {
   return ['ri_nm', 'li_kor_nm', 'li_nm', 'name'].find((c) => cols.has(c)) ?? null;
 }
 
+/** 읍·면·동 경계 테이블의 이름 컬럼 */
+async function emdNameColumn(): Promise<string | null> {
+  const res = await db.execute(
+    sql.raw(
+      `SELECT column_name FROM information_schema.columns
+       WHERE table_schema = 'public_layer' AND table_name = 'emd'
+         AND column_name IN ('emd_kor_nm', 'emd_nm', 'adm_nm', 'name')`
+    )
+  );
+  const cols = new Set((res.rows ?? []).map((r) => String((r as { column_name?: unknown }).column_name)));
+  return ['emd_kor_nm', 'emd_nm', 'adm_nm', 'name'].find((c) => cols.has(c)) ?? null;
+}
+
 /**
- * 단수 면과 겹치는 리 이름(v6 «대상지역» = 리 이름 쉼표 연결, 이름순)
+ * 단수 면과 겹치는 리 이름(하위 호환·필지 라벨 실패 시 폴백)
  */
 async function queryOutageAreaNames(rings: [number, number][][]): Promise<string[]> {
   const zoneJson = zoneGeoJsonFromRings(rings);
@@ -3182,9 +3409,137 @@ async function queryOutageAreaNames(rings: [number, number][][]): Promise<string
   }
 }
 
+type OutageAreaParcelLabel = { myeon: string; ri: string; bunji: string };
+
+/** 한 단수 면(그룹)에서 면적이 가장 큰 필지 → 면·리·지번 */
+async function queryLargestParcelLabelForZone(zoneJson: unknown): Promise<OutageAreaParcelLabel | null> {
+  if (!zoneJson || !(await tableExists('public_layer', 'jijuk'))) return null;
+  const jijukSrid = await getJijukSrid();
+  const targetSrid = jijukSrid > 0 ? jijukSrid : 5181;
+  const emdCol = (await tableExists('public_layer', 'emd')) ? await emdNameColumn() : null;
+  const riCol = (await tableExists('public_layer', 'ri')) ? await riNameColumn() : null;
+  const myeonSql = emdCol
+    ? `(SELECT NULLIF(TRIM(e."${emdCol}"::text), '')
+        FROM public_layer.emd e
+        WHERE e.geom IS NOT NULL
+          AND ST_Intersects(
+            CASE WHEN ST_SRID(e.geom) = 0 THEN ST_SetSRID(e.geom, ${targetSrid}) ELSE e.geom END,
+            ST_Transform(cand.pt, CASE WHEN ST_SRID(e.geom) = 0 THEN ${targetSrid} ELSE ST_SRID(e.geom) END)
+          )
+        LIMIT 1)`
+    : `NULL`;
+  const riSql = riCol
+    ? `(SELECT NULLIF(TRIM(r."${riCol}"::text), '')
+        FROM public_layer.ri r
+        WHERE r.geom IS NOT NULL
+          AND ST_Intersects(
+            CASE WHEN ST_SRID(r.geom) = 0 THEN ST_SetSRID(r.geom, ${targetSrid}) ELSE r.geom END,
+            ST_Transform(cand.pt, CASE WHEN ST_SRID(r.geom) = 0 THEN ${targetSrid} ELSE ST_SRID(r.geom) END)
+          )
+        LIMIT 1)`
+    : `NULL`;
+  try {
+    const res = await db.execute(
+      sql.raw(
+        `WITH zone AS (
+           SELECT ST_Transform(
+             ST_SetSRID(ST_GeomFromGeoJSON('${esc(JSON.stringify(zoneJson))}'), 4326),
+             ${targetSrid}
+           ) AS g
+         ),
+         cand AS (
+           SELECT
+             ST_Centroid(
+               CASE WHEN ST_SRID(j.geom) = 0 THEN ST_SetSRID(j.geom, ${targetSrid}) ELSE j.geom END
+             ) AS pt,
+             COALESCE(
+               NULLIF(TRIM(SUBSTRING(j.jibun::text FROM '(산?[0-9]+(?:-[0-9]+)?)')), ''),
+               NULLIF(TRIM(regexp_replace(j.jibun::text, '[[:space:]]*[가-힣]+$', '')), ''),
+               NULLIF(TRIM(j.jibun::text), '')
+             ) AS bunji,
+             ST_Area(
+               CASE
+                 WHEN ST_SRID(j.geom) = 0 THEN ST_SetSRID(j.geom, 5181)
+                 WHEN ST_SRID(j.geom) = 5181 THEN j.geom
+                 ELSE ST_Transform(j.geom, 5181)
+               END
+             ) AS area_sqm
+           FROM public_layer.jijuk j, zone
+           WHERE j.geom IS NOT NULL
+             AND ST_Intersects(
+               CASE WHEN ST_SRID(j.geom) = 0 THEN ST_SetSRID(j.geom, ${targetSrid}) ELSE j.geom END,
+               zone.g
+             )
+           ORDER BY area_sqm DESC NULLS LAST
+           LIMIT 1
+         )
+         SELECT
+           COALESCE(${myeonSql}, '') AS myeon,
+           COALESCE(${riSql}, '') AS ri,
+           COALESCE(cand.bunji, '') AS bunji
+         FROM cand`
+      )
+    );
+    const row = res.rows?.[0] as { myeon?: unknown; ri?: unknown; bunji?: unknown } | undefined;
+    if (!row) return null;
+    const myeon = asStr(row.myeon);
+    const ri = asStr(row.ri);
+    const bunji = asStr(row.bunji);
+    if (!myeon && !ri && !bunji) return null;
+    return { myeon, ri, bunji };
+  } catch (e) {
+    console.warn('[wtlOutage] queryLargestParcelLabelForZone', e);
+    return null;
+  }
+}
+
+/** 구역별 «면 리 지번 일대» — 같은 면이면 면 이름 생략, 동일 지번 중복 제거 */
+function formatOutageAreaLabels(parts: OutageAreaParcelLabel[]): string {
+  let prevMyeon = '';
+  const labels: string[] = [];
+  const seen = new Set<string>();
+  for (const p of parts) {
+    const key = `${p.myeon}\0${p.ri}\0${p.bunji}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const omitMyeon = Boolean(p.myeon) && p.myeon === prevMyeon;
+    const bits = [omitMyeon ? '' : p.myeon, p.ri, p.bunji].filter(Boolean);
+    if (bits.length === 0) continue;
+    labels.push(`${bits.join(' ')} 일대`);
+    if (p.myeon) prevMyeon = p.myeon;
+  }
+  return labels.join(', ');
+}
+
+/**
+ * 알림문용으로 합친 면마다 가장 큰 필지 지번으로 대상지역 문구 생성.
+ * polygons가 이미 clusterWtlOutageHwpxPolygons 결과면 그대로 쓰고, 아니면 여기서 합친다.
+ * 필지 없으면 리 이름 폴백. 지도 표시면은 바꾸지 않음.
+ */
+async function queryOutageAreaLabels(polygons: ZonePolygon[], ringsFallback: [number, number][][]): Promise<string> {
+  const raw =
+    polygons.length > 0
+      ? polygons
+      : ringsFallback.map((r) => [r] as ZonePolygon).filter((p) => (p[0]?.length ?? 0) >= 3);
+  const polys = await clusterPolygonsForHwpx(raw);
+  const parts: OutageAreaParcelLabel[] = [];
+  for (const poly of polys) {
+    const zoneJson = zoneGeoJsonFromPolygons([poly]);
+    if (!zoneJson) continue;
+    const label = await queryLargestParcelLabelForZone(zoneJson);
+    if (label) parts.push(label);
+  }
+  const formatted = formatOutageAreaLabels(parts);
+  if (formatted) return formatted;
+  const names = await queryOutageAreaNames(
+    raw.map((p) => p[0]!).filter((r) => r && r.length >= 3)
+  );
+  return names.join(',');
+}
+
 /**
  * 단수 알림문 한글(HWPX) — v6 stopWater «한글 다운로드»와 같은 양식.
- * 제목·사유·단수일시·대상지역(리)·단수구역도(지도 캡처 PNG).
+ * 제목·사유·단수일시·대상지역(구역별 최대 필지 지번 일대)·단수구역도(지도 캡처 PNG).
  */
 export async function exportWtlOutageHwpx(params: {
   title?: string;
@@ -3193,6 +3548,8 @@ export async function exportWtlOutageHwpx(params: {
   endAt?: string;
   ring?: [number, number][];
   rings?: [number, number][][];
+  /** 단수 면(구멍 포함). 있으면 구역별 대상지역에 사용 */
+  polygons?: ZonePolygon[];
   /** data URL 또는 순수 base64 PNG */
   imageBase64?: string;
 }): Promise<{ fileName?: string; base64?: string; areas?: string; error?: string }> {
@@ -3217,7 +3574,10 @@ export async function exportWtlOutageHwpx(params: {
   const rings = (params.rings && params.rings.length > 0 ? params.rings : [params.ring ?? []])
     .map(cleanRing)
     .filter((r) => r.length >= 3);
-  if (rings.length === 0) return { error: '단수 구역이 없습니다. 먼저 분석해 주세요.' };
+  const polygons = cleanPolygons(params.polygons);
+  if (rings.length === 0 && polygons.length === 0) {
+    return { error: '단수 구역이 없습니다. 먼저 분석해 주세요.' };
+  }
 
   let image: Buffer | null = null;
   const raw = asStr(params.imageBase64).replace(/^data:image\/png;base64,/, '');
@@ -3227,8 +3587,7 @@ export async function exportWtlOutageHwpx(params: {
     if (!image.subarray(0, 8).equals(PNG_SIGNATURE)) return { error: '단수구역도 이미지 형식이 올바르지 않습니다.' };
   }
 
-  const areaNames = await queryOutageAreaNames(rings);
-  const areas = areaNames.join(',');
+  const areas = await queryOutageAreaLabels(polygons, rings);
   try {
     const bytes = await buildStopWaterHwpx({ title, reason, startAt, endAt, areas, image });
     return { fileName: stopWaterHwpxFileName(), base64: bytes.toString('base64'), areas };
@@ -3288,135 +3647,5 @@ export async function loadWtlOutageParcelSld(): Promise<{ sld: string | null }> 
     return { sld };
   } catch {
     return { sld: null };
-  }
-}
-
-/** 단수 계량기 목록 한 행 — 엑셀 내보내기용(wtl_meta_ps 속성, 코드는 한글명) */
-export type WtlOutageMeterRowDto = {
-  ogcFid: number;
-  ftrIdn: string;
-  homNum: string;
-  homNam: string;
-  homAdr: string;
-  homCnt: string;
-  metNum: string;
-  metDip: string;
-  mofName: string;
-  sbiName: string;
-  hjdName: string;
-  istYmd: string;
-  pipIdn: string;
-  remark: string;
-};
-
-/** yyyyMMdd → yyyy-MM-dd. 이관 기본값(19000101 등 1900년 이전·무효)은 빈칸 */
-function formatMeterYmd(raw: string): string {
-  const m = /^(\d{4})(\d{2})(\d{2})$/.exec(raw.trim());
-  if (!m) return raw.trim();
-  if (Number(m[1]) <= 1900) return '';
-  return `${m[1]}-${m[2]}-${m[3]}`;
-}
-
-/** 한 번에 조회할 계량기 수 상한 */
-const METER_LIST_MAX = 5000;
-
-const meterCodeCache = new Map<string, Map<string, string>>();
-
-/** defineLayer 코드 파일(field_wtl_meta_ps__<필드>.json) → 코드:한글명. 없으면 빈 맵 */
-async function loadMeterCodeMap(fieldName: string): Promise<Map<string, string>> {
-  const hit = meterCodeCache.get(fieldName);
-  if (hit) return hit;
-  const map = new Map<string, string>();
-  try {
-    const file = path.join(
-      process.cwd(),
-      'src',
-      'config',
-      'defineLayer',
-      'codes',
-      `field_wtl_meta_ps__${fieldName}.json`
-    );
-    const raw = JSON.parse(await fs.readFile(file, 'utf8')) as Array<{
-      define_code_name?: string;
-      define_code_kor_name?: string;
-    }>;
-    for (const r of Array.isArray(raw) ? raw : []) {
-      const code = String(r.define_code_name ?? '').trim();
-      if (code) map.set(code, String(r.define_code_kor_name ?? '').trim() || code);
-    }
-  } catch {
-    /* 코드 파일이 없으면 원래 코드값 그대로 */
-  }
-  meterCodeCache.set(fieldName, map);
-  return map;
-}
-
-/**
- * 단수구역 계량기 목록 — 분석 결과 수용가의 wtl_meta_ps ogc_fid 로 속성을 조회한다.
- * 업종·계량기형식·행정동은 코드 대신 한글명. 주소 → 수용가번호 순 정렬.
- */
-export async function listWtlOutageMeters(params: {
-  fids?: unknown[];
-}): Promise<{ rows: WtlOutageMeterRowDto[]; truncated?: boolean; error?: string }> {
-  const all = [
-    ...new Set(
-      (Array.isArray(params?.fids) ? params.fids : [])
-        .map((v) => Number(v))
-        .filter((n) => Number.isInteger(n) && n > 0)
-    ),
-  ];
-  if (all.length === 0) return { rows: [] };
-  const fids = all.slice(0, METER_LIST_MAX);
-  if (!(await tableExists('layer', 'wtl_meta_ps'))) {
-    return { rows: [], error: '급수전계량기(wtl_meta_ps) 테이블이 없습니다.' };
-  }
-  try {
-    const res = await db.execute(
-      sql.raw(
-        `SELECT
-           t.ogc_fid AS "ogcFid",
-           COALESCE(trim(t.ftr_idn), '') AS "ftrIdn",
-           COALESCE(trim(t.hom_num), '') AS "homNum",
-           COALESCE(trim(t.hom_nam), '') AS "homNam",
-           COALESCE(trim(t.hom_adr), '') AS "homAdr",
-           COALESCE(trim(t.hom_cnt), '') AS "homCnt",
-           COALESCE(trim(t.met_num), '') AS "metNum",
-           COALESCE(t.met_dip::text, '') AS "metDip",
-           COALESCE(trim(t.mof_cde), '') AS "mofCde",
-           COALESCE(trim(t.sbi_cde), '') AS "sbiCde",
-           COALESCE(trim(t.hjd_cde), '') AS "hjdCde",
-           COALESCE(trim(t.ist_ymd), '') AS "istYmd",
-           COALESCE(trim(t.pip_idn), '') AS "pipIdn",
-           COALESCE(trim(t.remark), '') AS remark
-         FROM layer.wtl_meta_ps t
-         WHERE t.ogc_fid IN (${fids.join(',')})
-         ORDER BY t.hom_adr NULLS LAST, t.hom_num NULLS LAST, t.ogc_fid`
-      )
-    );
-    const [mof, sbi] = await Promise.all([loadMeterCodeMap('MET_MOF'), loadMeterCodeMap('SBI_CDE')]);
-    const label = (map: Map<string, string>, code: string) => (code ? map.get(code) ?? code : '');
-    const rows = (res.rows ?? []).map((row) => {
-      const r = row as Record<string, unknown>;
-      return {
-        ogcFid: Number(r.ogcFid),
-        ftrIdn: asStr(r.ftrIdn),
-        homNum: asStr(r.homNum),
-        homNam: asStr(r.homNam),
-        homAdr: asStr(r.homAdr),
-        homCnt: asStr(r.homCnt),
-        metNum: asStr(r.metNum),
-        metDip: asStr(r.metDip),
-        mofName: label(mof, asStr(r.mofCde)),
-        sbiName: label(sbi, asStr(r.sbiCde)),
-        // 행정동은 공용 hjd_cde_CODE.json(전국) — 레이어 코드 파일엔 이 지역 코드가 없을 수 있음
-        hjdName: toHjdCdeKorName(asStr(r.hjdCde)),
-        istYmd: formatMeterYmd(asStr(r.istYmd)),
-        pipIdn: asStr(r.pipIdn),
-        remark: asStr(r.remark),
-      };
-    });
-    return { rows, truncated: all.length > fids.length || undefined };
-  } catch (e) {
-    return { rows: [], error: e instanceof Error ? e.message : '계량기 목록 조회에 실패했습니다.' };
   }
 }

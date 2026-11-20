@@ -93,8 +93,8 @@ function resolveComplaintColumns(table: string): WaterComplaintColumns | null {
   const exact = WATER_COMPLAINT_PROFILES[table]
   if (exact) return exact
   if (table.includes('_detail')) return null
-  // 레거시 complaint_wtl(잘린 컬럼)은 제외. 상수는 uiseong_complaint_wtl
-  if (table === 'complaint_wtl') return null
+  // 레거시·마을민원(컬럼맵 다름) 제외. 상수는 uiseong_complaint_wtl
+  if (table === 'complaint_wtl' || table === 'complaint_village_wtl') return null
   if (table.includes('complaint_sply') || table.endsWith('_sply')) return WTL_LIKE
   if (table.includes('complaint_wtl') || (table.includes('complaint') && table.endsWith('_wtl'))) {
     return WTL_LIKE

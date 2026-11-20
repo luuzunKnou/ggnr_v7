@@ -116,6 +116,10 @@ export type WtlOutageHistory = {
   status: WtlOutageStatus
   householdCount: number
   result: WtlOutageResult
+  /** 저장 계정(로그인 세션 id). 표시는 createUserName 우선 */
+  createUser: string
+  /** 저장 시점 표시명(이름 없으면 계정) */
+  createUserName: string
   smsTitle?: string
   smsBody?: string
 }
@@ -127,11 +131,18 @@ export function parseOutageGateIds(gateId: string): string[] {
     .filter(Boolean)
 }
 
-export function buildOutageHistory(gates: WtlOutageGate[], result: WtlOutageResult): WtlOutageHistory {
+export function buildOutageHistory(
+  gates: WtlOutageGate[],
+  result: WtlOutageResult,
+  author?: { userId?: string | null; userName?: string | null }
+): WtlOutageHistory {
   const withPhone = result.customers.filter((c) => c.phone.trim()).length
   const now = new Date()
   const pad = (n: number) => String(n).padStart(2, '0')
   const at = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`
+  const createUser = String(author?.userId ?? '').trim()
+  const createUserName =
+    String(author?.userName ?? '').trim() || createUser
   return {
     id: `hist-${Date.now()}`,
     at,
@@ -143,5 +154,7 @@ export function buildOutageHistory(gates: WtlOutageGate[], result: WtlOutageResu
     status: '분석완료',
     householdCount: withPhone || result.customers.length,
     result,
+    createUser,
+    createUserName,
   }
 }

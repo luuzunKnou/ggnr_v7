@@ -45,14 +45,14 @@
                       <ogc:Literal>#</ogc:Literal>
                       <ogc:Function name="env">
                         <ogc:Literal>wtl_infeed_ps_fill</ogc:Literal>
-                        <ogc:Literal>FCC400</ogc:Literal>
+                        <ogc:Literal>fcc400</ogc:Literal>
                       </ogc:Function>
                     </ogc:Function>
                   </sld:CssParameter>
                   <sld:CssParameter name="fill-opacity">
                     <ogc:Function name="env">
                       <ogc:Literal>wtl_infeed_ps_fill_opacity</ogc:Literal>
-                      <ogc:Literal>0.5</ogc:Literal>
+                      <ogc:Literal>1</ogc:Literal>
                     </ogc:Function>
                   </sld:CssParameter>
                 </sld:Fill>
@@ -62,7 +62,7 @@
                       <ogc:Literal>#</ogc:Literal>
                       <ogc:Function name="env">
                         <ogc:Literal>wtl_infeed_ps_stroke</ogc:Literal>
-                        <ogc:Literal>FB9E00</ogc:Literal>
+                        <ogc:Literal>fb9e00</ogc:Literal>
                       </ogc:Function>
                     </ogc:Function>
                   </sld:CssParameter>
@@ -74,18 +74,18 @@
                   </sld:CssParameter>
                 </sld:Stroke>
               </sld:Mark>
-              <sld:Size><ogc:Function name="if_then_else"><ogc:Function name="greaterThan"><ogc:Function name="env"><ogc:Literal>ignore_scale</ogc:Literal><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>18</ogc:Literal>
+              <sld:Size>
                 <ogc:Function name="if_then_else">
                   <ogc:Function name="greaterThan">
                     <ogc:Function name="env">
                       <ogc:Literal>wtl_infeed_ps_size</ogc:Literal>
-                      <ogc:Literal>18</ogc:Literal>
+                      <ogc:Literal>0</ogc:Literal>
                     </ogc:Function>
                     <ogc:Literal>0</ogc:Literal>
                   </ogc:Function>
                   <ogc:Function name="env">
                     <ogc:Literal>wtl_infeed_ps_size</ogc:Literal>
-                    <ogc:Literal>18</ogc:Literal>
+                    <ogc:Literal>16</ogc:Literal>
                   </ogc:Function>
                   <ogc:Function name="Categorize">
                     <ogc:Function name="env">
@@ -98,9 +98,59 @@
                     <ogc:Literal>8</ogc:Literal>
                   </ogc:Function>
                 </ogc:Function>
-              </ogc:Function></sld:Size>
+              </sld:Size>
             </sld:Graphic>
           </sld:PointSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:Function name="property">
+                <ogc:Function name="env">
+                  <ogc:Literal>wtl_infeed_ps_label_property_name</ogc:Literal>
+                  <ogc:Literal/>
+                </ogc:Function>
+              </ogc:Function>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Dotum</sld:CssParameter>
+              <sld:CssParameter name="font-size">
+                <ogc:Function name="env">
+                  <ogc:Literal>wtl_infeed_ps_label_size</ogc:Literal>
+                  <ogc:Literal>0</ogc:Literal>
+                </ogc:Function>
+              </sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">normal</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:PointPlacement>
+                <sld:AnchorPoint>
+                  <sld:AnchorPointX>0.5</sld:AnchorPointX>
+                  <sld:AnchorPointY>1.0</sld:AnchorPointY>
+                </sld:AnchorPoint>
+                <sld:Displacement>
+                  <sld:DisplacementX>0</sld:DisplacementX>
+                  <sld:DisplacementY>-10</sld:DisplacementY>
+                </sld:Displacement>
+              </sld:PointPlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>1</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">
+                <ogc:Function name="strConcat">
+                  <ogc:Literal>#</ogc:Literal>
+                  <ogc:Function name="env">
+                    <ogc:Literal>wtl_infeed_ps_label_color</ogc:Literal>
+                    <ogc:Literal>fcc400</ogc:Literal>
+                  </ogc:Function>
+                </ogc:Function>
+              </sld:CssParameter>
+            </sld:Fill>
+          </sld:TextSymbolizer>
         </sld:Rule>
       </sld:FeatureTypeStyle>
     </sld:UserStyle>

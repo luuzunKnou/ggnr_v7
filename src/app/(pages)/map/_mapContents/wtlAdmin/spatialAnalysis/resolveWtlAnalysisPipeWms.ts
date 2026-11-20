@@ -11,23 +11,29 @@ export type WtlAnalysisPipeWmsParams = {
   LAYERS: string
   STYLES: string
   ENV: string
+  /** 분할 관로 등 라벨 제거 SLD — 있으면 STYLES 대신 사용 */
+  SLD_BODY?: string
 }
 
 type BuildOpts = {
   pipeWidth?: number
+  /**
+   * 급수관 고정 굵기(px). 양수일 때만 ENV로 고정.
+   * 생략 시 지하시설물과 동일하게 stroke_width ENV 없이 SLD Categorize 사용.
+   */
   splyWidth?: number
 }
 
 /**
  * 분할 레이어가 있으면 분할+급수관, 없으면 부모 관로+급수관.
- * 분할 스타일은 라벨 룰이 없고, 부모·급수관은 *_nolabel 을 쓴다.
+ * 상수·급수 모두 본편 스타일 + 라벨 ENV 비움.
  */
 export function buildWtlAnalysisPipeWmsParams(
   availableNames: Iterable<string>,
   opts: BuildOpts = {}
 ): WtlAnalysisPipeWmsParams {
   const pipeW = opts.pipeWidth ?? 3
-  const splyW = opts.splyWidth ?? 2.5
+  const splyW = opts.splyWidth
   const avail = new Set(
     [...availableNames].map((n) => String(n ?? '').trim().toLowerCase()).filter(Boolean)
   )
@@ -36,18 +42,19 @@ export function buildWtlAnalysisPipeWmsParams(
   const pipes = splits.length > 0 ? [...splits] : (['wtl_pipe_lm'] as const)
 
   const layers = [...pipes, 'wtl_sply_ls']
-  const styles = [
-    ...pipes.map((p) => (p === 'wtl_pipe_lm' ? 'wtl_pipe_lm_nolabel' : p)),
-    'wtl_sply_ls_nolabel',
-  ]
+  const styles = [...pipes, 'wtl_sply_ls']
   const envParts = [
     ...pipes.map((p) =>
       p === 'wtl_pipe_lm'
         ? `wtl_pipe_lm_stroke_width:${pipeW}`
         : `${p}_stroke_width:${pipeW}`
     ),
-    `wtl_sply_ls_stroke_width:${splyW}`,
+    'wtl_pipe_lm_label_property_name:',
+    'wtl_sply_ls_label_property_name:',
   ]
+  if (splyW != null && splyW > 0) {
+    envParts.push(`wtl_sply_ls_stroke_width:${splyW}`)
+  }
 
   return {
     LAYERS: layers.join(','),
@@ -61,6 +68,7 @@ export async function fetchWtlAnalysisPipeWmsParams(
   opts: BuildOpts = {}
 ): Promise<WtlAnalysisPipeWmsParams> {
   const fallback = buildWtlAnalysisPipeWmsParams([], opts)
+  let base = fallback
   try {
     const res = await call('', 'POST', {
       service: 'thematicMapService',
@@ -69,8 +77,33 @@ export async function fetchWtlAnalysisPipeWmsParams(
     })
     const body = (res?.data ?? res) as { success?: boolean; tableNames?: string[] }
     const names = Array.isArray(body?.tableNames) ? body.tableNames : []
-    return buildWtlAnalysisPipeWmsParams(names, opts)
+    base = buildWtlAnalysisPipeWmsParams(names, opts)
   } catch {
-    return fallback
+    base = fallback
+  }
+
+  const layers = base.LAYERS.split(',').map((s) => s.trim()).filter(Boolean)
+  const usesSplit = layers.some((l) =>
+    (WTL_PIPE_SPLIT_LAYERS as readonly string[]).includes(l)
+  )
+  if (!usesSplit) return base
+
+  try {
+    const res = await call('', 'POST', {
+      service: 'wtlTopologyService',
+      action: 'loadWtlSpatialPipeNolabelSldBody',
+      params: { tables: layers },
+    })
+    const body = (res?.data ?? res) as { sldBody?: string | null }
+    const sldBody = typeof body?.sldBody === 'string' && body.sldBody.trim() ? body.sldBody : null
+    if (!sldBody) return base
+    return {
+      LAYERS: base.LAYERS,
+      STYLES: '',
+      ENV: base.ENV,
+      SLD_BODY: sldBody,
+    }
+  } catch {
+    return base
   }
 }

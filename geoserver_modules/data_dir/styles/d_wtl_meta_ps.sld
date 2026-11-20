@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="UTF-8"?>
+<?xml version='1.0' encoding='UTF-8'?>
 <sld:StyledLayerDescriptor xmlns="http://www.opengis.net/sld" xmlns:sld="http://www.opengis.net/sld" xmlns:gml="http://www.opengis.net/gml" xmlns:ogc="http://www.opengis.net/ogc" version="1.0.0">
   <sld:NamedLayer>
     <sld:Name>Default Styler</sld:Name>
@@ -12,7 +12,6 @@
           <sld:Name>Name</sld:Name>
           <sld:Title>d_wtl_meta_ps</sld:Title>
           <sld:Abstract>Abstract</sld:Abstract>
-          <sld:MaxScaleDenominator>3000.0</sld:MaxScaleDenominator>
           <sld:PointSymbolizer>
             <sld:Graphic>
               <sld:Mark>
@@ -35,7 +34,7 @@
                   <sld:CssParameter name="fill-opacity">
                     <ogc:Function name="env">
                       <ogc:Literal>d_wtl_meta_ps_fill_opacity</ogc:Literal>
-                      <ogc:Literal>0.3</ogc:Literal>
+                      <ogc:Literal>0.7</ogc:Literal>
                     </ogc:Function>
                   </sld:CssParameter>
                 </sld:Fill>
@@ -45,19 +44,25 @@
                       <ogc:Literal>#</ogc:Literal>
                       <ogc:Function name="env">
                         <ogc:Literal>d_wtl_meta_ps_stroke</ogc:Literal>
-                        <ogc:Literal>17499d</ogc:Literal>
+                        <ogc:Literal>555555</ogc:Literal>
                       </ogc:Function>
+                    </ogc:Function>
+                  </sld:CssParameter>
+                  <sld:CssParameter name="stroke-opacity">
+                    <ogc:Function name="env">
+                      <ogc:Literal>d_wtl_meta_ps_stroke_opacity</ogc:Literal>
+                      <ogc:Literal>1</ogc:Literal>
                     </ogc:Function>
                   </sld:CssParameter>
                   <sld:CssParameter name="stroke-width">
                     <ogc:Function name="env">
                       <ogc:Literal>d_wtl_meta_ps_stroke_width</ogc:Literal>
-                      <ogc:Literal>2</ogc:Literal>
+                      <ogc:Literal>0.7</ogc:Literal>
                     </ogc:Function>
                   </sld:CssParameter>
                 </sld:Stroke>
               </sld:Mark>
-              <sld:Size><ogc:Function name="if_then_else"><ogc:Function name="greaterThan"><ogc:Function name="env"><ogc:Literal>ignore_scale</ogc:Literal><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>18</ogc:Literal>
+              <sld:Size>
                 <ogc:Function name="if_then_else">
                   <ogc:Function name="greaterThan">
                     <ogc:Function name="env">
@@ -74,45 +79,53 @@
                     <ogc:Function name="env">
                       <ogc:Literal>wms_scale_denominator</ogc:Literal>
                     </ogc:Function>
-                    <ogc:Literal>20</ogc:Literal>
-                    <ogc:Literal>500</ogc:Literal>
-                    <ogc:Literal>18</ogc:Literal>
-                    <ogc:Literal>800</ogc:Literal>
-                    <ogc:Literal>16</ogc:Literal>
+                    <ogc:Literal>12</ogc:Literal>
                     <ogc:Literal>1500</ogc:Literal>
-                    <ogc:Literal>14</ogc:Literal>
+                    <ogc:Literal>10</ogc:Literal>
                     <ogc:Literal>3000</ogc:Literal>
-                    <ogc:Literal>0</ogc:Literal>
+                    <ogc:Literal>7</ogc:Literal>
+                    <ogc:Literal>5000</ogc:Literal>
+                    <ogc:Literal>6</ogc:Literal>
+                    <ogc:Literal>10000</ogc:Literal>
+                    <ogc:Literal>5</ogc:Literal>
+                    <ogc:Literal>30000</ogc:Literal>
+                    <ogc:Literal>4</ogc:Literal>
                   </ogc:Function>
                 </ogc:Function>
-              </ogc:Function></sld:Size>
+              </sld:Size>
             </sld:Graphic>
           </sld:PointSymbolizer>
         </sld:Rule>
         <sld:Rule>
           <sld:Name>Name</sld:Name>
-          <sld:Title>wtl_meta_ps_label</sld:Title>
+          <sld:Title>d_wtl_meta_ps_label</sld:Title>
           <sld:Abstract>Abstract</sld:Abstract>
           <ogc:Filter>
-            <ogc:PropertyIsEqualTo>
-              <ogc:Function name="env">
-                <ogc:Literal>d_wtl_meta_ps_show_label</ogc:Literal>
-                <ogc:Literal>0</ogc:Literal>
+            <ogc:PropertyIsGreaterThan>
+              <ogc:Function name="strLength">
+                <ogc:Function name="env">
+                  <ogc:Literal>d_wtl_meta_ps_label_property_name</ogc:Literal>
+                  <ogc:Literal></ogc:Literal>
+                </ogc:Function>
               </ogc:Function>
-              <ogc:Literal>1</ogc:Literal>
-            </ogc:PropertyIsEqualTo>
+              <ogc:Literal>0</ogc:Literal>
+            </ogc:PropertyIsGreaterThan>
           </ogc:Filter>
-          <sld:MaxScaleDenominator>3000.0</sld:MaxScaleDenominator>
           <sld:TextSymbolizer>
             <sld:Label>
-              <ogc:PropertyName>met_num</ogc:PropertyName>
+              <ogc:Function name="property">
+                <ogc:Function name="env">
+                  <ogc:Literal>d_wtl_meta_ps_label_property_name</ogc:Literal>
+                  <ogc:Literal/>
+                </ogc:Function>
+              </ogc:Function>
             </sld:Label>
             <sld:Font>
               <sld:CssParameter name="font-family">Gulim</sld:CssParameter>
               <sld:CssParameter name="font-size">
                 <ogc:Function name="env">
                   <ogc:Literal>d_wtl_meta_ps_label_size</ogc:Literal>
-                  <ogc:Literal>12</ogc:Literal>
+                  <ogc:Literal>0</ogc:Literal>
                 </ogc:Function>
               </sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
@@ -160,14 +173,11 @@
                   <ogc:Literal>#</ogc:Literal>
                   <ogc:Function name="env">
                     <ogc:Literal>d_wtl_meta_ps_label_color</ogc:Literal>
-                    <ogc:Literal>1a1a1a</ogc:Literal>
+                    <ogc:Literal>ffffff</ogc:Literal>
                   </ogc:Function>
                 </ogc:Function>
               </sld:CssParameter>
             </sld:Fill>
-            <sld:VendorOption name="spaceAround">10</sld:VendorOption>
-            <sld:VendorOption name="goodnessOfFit">0</sld:VendorOption>
-            <sld:VendorOption name="priority">10</sld:VendorOption>
           </sld:TextSymbolizer>
         </sld:Rule>
       </sld:FeatureTypeStyle>

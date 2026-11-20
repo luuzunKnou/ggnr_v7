@@ -32,6 +32,11 @@ function to3857(coord: [number, number]): [number, number] {
   return [x, y]
 }
 
+function to4326(coord: [number, number]): [number, number] {
+  const [lon, lat] = transform(coord, 'EPSG:3857', 'EPSG:4326')
+  return [lon, lat]
+}
+
 function meanDist(line: [number, number][], pipe: [number, number][]) {
   const step = Math.max(1, Math.floor((line.length - 1) / 5))
   let sum = 0
@@ -136,6 +141,13 @@ export function useTraceCaseDraw(
   const clearStroke = useCallback(() => {
     userEditedRef.current = false
     reseedRef.current()
+  }, [])
+
+  /** 현재 칠해진 관로 전체(처음 선+추가)를 lon/lat 좌표열로 반환 */
+  const getStrokeLines4326 = useCallback((): [number, number][][] => {
+    return strokeRef.current
+      .filter((pipe) => pipe.coords.length >= 2)
+      .map((pipe) => pipe.coords.map((c) => to4326([c[0], c[1]])))
   }, [])
 
   const snap = useCallback((coord: [number, number], tol: number) => {
@@ -420,6 +432,7 @@ export function useTraceCaseDraw(
     baseCount,
     valveNear,
     clearStroke,
+    getStrokeLines4326,
     editPayload,
     casePayload,
   }

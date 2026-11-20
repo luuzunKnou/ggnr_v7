@@ -82,6 +82,10 @@ export type WtlTopoChangeRequest = {
   files: { name: string; size: number; dataUrl?: string }[]
   applyMode: 'immediate' | 'request'
   status: '요청' | '즉시반영' | '실패'
+  /** 요청·반영 계정(로그인 세션 id) */
+  requestUser: string
+  /** 표시명(이름 없으면 계정) */
+  requestUserName: string
   message?: string
 }
 

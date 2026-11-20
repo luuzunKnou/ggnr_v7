@@ -238,7 +238,51 @@ export async function list(
   return { rows, total }
 }
 
-/** layer 스키마 민원 대장 테이블 (detail·프로필 없음 제외) */
+function escLit(value: string): string {
+  return value.replace(/'/g, "''")
+}
+
+/** 프로필이 참조하는 컬럼이 실제 테이블에 있는지 (잘린 shp 컬럼명 대장 제외) */
+async function tableHasProfileColumns(tableName: string): Promise<boolean> {
+  const profile = waterComplaintProfile(tableName)
+  if (!profile) return false
+  const required = [
+    'comp_key',
+    profile.name,
+    profile.tel,
+    profile.date,
+    profile.dept,
+    profile.team,
+    profile.writer,
+    profile.address,
+    profile.content,
+    profile.cat,
+    profile.stat,
+    profile.state,
+    profile.result,
+  ].filter((c): c is string => Boolean(c))
+  const res = await db.execute(
+    sql.raw(
+      `SELECT column_name
+       FROM information_schema.columns
+       WHERE table_schema = 'layer' AND table_name = '${escLit(profile.table)}'`
+    )
+  )
+  const present = new Set(
+    (res.rows ?? []).map((row) => String((row as { column_name?: unknown }).column_name ?? ''))
+  )
+  return required.every((col) => present.has(col))
+}
+
+async function filterTablesWithProfileColumns(names: string[]): Promise<string[]> {
+  const out: string[] = []
+  for (const name of names) {
+    if (await tableHasProfileColumns(name)) out.push(name)
+  }
+  return out
+}
+
+/** layer 스키마 민원 대장 테이블 (detail·프로필 없음·컬럼 불일치 제외) */
 export async function listAvailableComplaintTables(): Promise<{
   tables: { tableName: string; label: string; category: string | null }[]
 }> {
@@ -254,6 +298,7 @@ export async function listAvailableComplaintTables(): Promise<{
   for (const row of res.rows ?? []) {
     const tableName = String((row as { table_name?: unknown }).table_name ?? '').trim()
     if (!tableName || !waterComplaintProfile(tableName)) continue
+    if (!(await tableHasProfileColumns(tableName))) continue
     const category = complaintCategoryFromTableName(tableName)
     tables.push({
       tableName,
@@ -268,10 +313,6 @@ function normalizeComplaintTableNames(tableNames: string[] | undefined): string[
   return (tableNames ?? [])
     .map((n) => String(n ?? '').trim().toLowerCase())
     .filter((n) => n && waterComplaintProfile(n))
-}
-
-function escLit(value: string): string {
-  return value.replace(/'/g, "''")
 }
 
 /** 상태 필터. 접수=빈값·null 포함. 상태 컬럼 없는 대장은 필터 시 제외 */
@@ -302,12 +343,17 @@ function detailFieldSearchSql(tableName: string, search: string | null | undefin
   return ` AND (${ors.join(' OR ')})`
 }
 
-/** 목록 «접수일» 기간 = 작성일(comp_create_date). YYYY-MM-DD */
-function createDateRangeSql(dateFrom?: string | null, dateTo?: string | null): string {
+/** 목록 «접수일» 기간 = 프로필 날짜 컬럼. YYYY-MM-DD */
+function createDateRangeSql(
+  dateColumn: string | null | undefined,
+  dateFrom?: string | null,
+  dateTo?: string | null
+): string {
   const from = String(dateFrom ?? '').trim().slice(0, 10)
   const to = String(dateTo ?? '').trim().slice(0, 10)
   if (!from && !to) return ''
-  const dayExpr = `LEFT(BTRIM(${q('comp_create_date')}::text), 10)`
+  if (!dateColumn) return ' AND FALSE'
+  const dayExpr = `LEFT(BTRIM(${q(dateColumn)}::text), 10)`
   let sqlPart = ` AND NULLIF(${dayExpr}, '') IS NOT NULL`
   if (/^\d{4}-\d{2}-\d{2}$/.test(from)) {
     sqlPart += ` AND ${dayExpr} >= '${escLit(from)}'`
@@ -325,10 +371,10 @@ function combinedUnionSql(
   dateFrom?: string | null,
   dateTo?: string | null
 ): string {
-  const dateSql = createDateRangeSql(dateFrom, dateTo)
   return names
     .map((tableName) => {
       const profile = requireProfile(tableName)
+      const dateSql = createDateRangeSql(profile.date, dateFrom, dateTo)
       return `(SELECT ${selectListSql(profile)}, '${profile.table}'::text AS source_table
               FROM layer.${q(profile.table)}
               WHERE 1=1${stateFilterSql(profile, state)}${detailFieldSearchSql(tableName, search)}${dateSql})`
@@ -350,7 +396,7 @@ export async function listCombined(
     dateTo?: string | null
   } = {}
 ) {
-  const names = normalizeComplaintTableNames(params.tableNames)
+  const names = await filterTablesWithProfileColumns(normalizeComplaintTableNames(params.tableNames))
   const limit = clampLimit(params.limit)
   const offset =
     typeof params.offset === 'number' && params.offset >= 0 ? Math.floor(params.offset) : 0
@@ -390,7 +436,7 @@ export async function findCombinedRank(params: {
   dateFrom?: string | null
   dateTo?: string | null
 }) {
-  const names = normalizeComplaintTableNames(params.tableNames)
+  const names = await filterTablesWithProfileColumns(normalizeComplaintTableNames(params.tableNames))
   const tableName = String(params.tableName ?? '').trim().toLowerCase()
   const compKey = Number(params.compKey)
   const state = String(params.state ?? '').trim() || null
