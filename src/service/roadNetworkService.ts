@@ -1032,6 +1032,61 @@ export async function saveRoadNetworkRow(
   }
 }
 
+/** 군도·농어촌 기점·종점 — 도로망도 «시종점» 토글 마커 */
+export type RoadNetworkEndpointMarkerItem = {
+  id: string;
+  kind: 'start' | 'end';
+  lon: number;
+  lat: number;
+};
+
+const ENDPOINT_POINT_SOURCES: readonly {
+  table: string;
+  kind: 'start' | 'end';
+}[] = [
+  { table: 'rdl_startpoint_ps', kind: 'start' },
+  { table: 'rdl_endpoint_ps', kind: 'end' },
+  { table: 'rdl_perch_startpoint_ps', kind: 'start' },
+  { table: 'rdl_perch_endpoint_ps', kind: 'end' },
+];
+
+/**
+ * 도로망도 기점·종점 점 레이어 좌표(4326) 목록
+ */
+export async function listRoadNetworkEndpointMarkers(): Promise<{
+  markers: RoadNetworkEndpointMarkerItem[];
+}> {
+  const markers: RoadNetworkEndpointMarkerItem[] = [];
+  for (const src of ENDPOINT_POINT_SOURCES) {
+    const tableName = await resolveLayerTableName(src.table);
+    if (!tableName) continue;
+    const tableLit = esc(src.table);
+    try {
+      const res = await db.execute(
+        sql.raw(
+          `SELECT
+             '${tableLit}' || ':' || t.ogc_fid::text AS id,
+             ST_X(ST_Transform(ST_Centroid(t.geom), 4326))::float8 AS lon,
+             ST_Y(ST_Transform(ST_Centroid(t.geom), 4326))::float8 AS lat
+           FROM layer."${tableName.replace(/"/g, '""')}" t
+           WHERE t.geom IS NOT NULL`
+        )
+      );
+      for (const row of res.rows ?? []) {
+        const r = row as { id?: string; lon?: number; lat?: number };
+        const lon = Number(r.lon);
+        const lat = Number(r.lat);
+        const id = String(r.id ?? '').trim();
+        if (!id || !Number.isFinite(lon) || !Number.isFinite(lat)) continue;
+        markers.push({ id, kind: src.kind, lon, lat });
+      }
+    } catch {
+      // 테이블·geom 없으면 해당 소스만 건너뜀
+    }
+  }
+  return { markers };
+}
+
 /**
  * 도로망도 1건 삭제 (layer.rdl_* ogc_fid)
  */

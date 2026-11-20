@@ -1,0 +1,19 @@
+<layer>
+  <name>building_number_plate</name>
+  <id>LayerInfoImpl-5c01895a:1a1bf451190:-7e99</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl-5c01895a:1a1bf451190:-7eb3</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl-5c01895a:1a1bf451190:-7e9a</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-11-09 10:21:27.937 UTC</dateCreated>
+  <dateModified>2026-11-09 10:21:29.52 UTC</dateModified>
+</layer>

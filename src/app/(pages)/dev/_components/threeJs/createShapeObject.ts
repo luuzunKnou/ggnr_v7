@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import { createCadDimensions, setCadDimensionsVisible } from './cadDimensions';
-import { createGroundContourOverlay } from './groundContours';
 import { createGroundElevMarkers } from './groundElevMarkers';
 import { createGroundRiverOverlay } from './groundRivers';
 import { createPipesOverlay } from './groundPipes';
@@ -8,6 +7,7 @@ import { createManholesOverlay } from './groundManholes';
 import {
   createInterpolatedGroundParts,
   createSectionRectGroundParts,
+  extractHighVariationEdgePositions,
 } from './groundInterpolatedMesh';
 import { getWtlLayerShapeDef } from '@/lib/wtlLayerShapeDefs';
 import { shapeHalfExtentY } from './shapeCatalog';
@@ -248,6 +248,7 @@ function buildGround(props: ShapeProps): THREE.Group {
       fillMaterial(props.color || '#84cc16', Math.max(props.opacity, 0.15), THREE.DoubleSide)
     );
     mesh.userData.isFill = true;
+    mesh.userData.isGroundSurface = true;
     group.add(mesh);
     const rimPts = [
       new THREE.Vector3(-halfU, 0.01, -halfU),
@@ -264,7 +265,7 @@ function buildGround(props: ShapeProps): THREE.Group {
     return group;
   }
 
-  // 윗면 채움 + 윗면 외곽선(옆면·아랫면 선 없음)
+  // 윗면 채움 + 윗·아랫면 외곽 + (두께 시) 네 모서리 세로 — 옆면 세로 밀집은 없음
   // 범위: AA 정사각 / 단면: 절단선 중심 ±halfWidth 띠 (관로 조회 polygon과 동일)
   const thicknessM = Math.max(0, props.height ?? 0);
   const sectionLine =
@@ -311,9 +312,12 @@ function buildGround(props: ShapeProps): THREE.Group {
   }
   const topMesh = new THREE.Mesh(parts.topGeo, topMat);
   topMesh.userData.isFill = true;
+  topMesh.userData.isGroundSurface = true;
   topMesh.renderOrder = 1;
   group.add(topMesh);
 
+  const rimColor = edgeColor(colorHex);
+  // 기존 영역 외곽선
   if (parts.outlinePositions.length >= 6) {
     const outlineGeo = new THREE.BufferGeometry();
     outlineGeo.setAttribute(
@@ -323,17 +327,36 @@ function buildGround(props: ShapeProps): THREE.Group {
     const outline = new THREE.LineSegments(
       outlineGeo,
       new THREE.LineBasicMaterial({
-        color: edgeColor(colorHex),
+        color: rimColor,
         depthTest: true,
       })
     );
     markEdgeOnly(outline);
     group.add(outline);
   }
-
-  // 등고·지반고·하천 — 범위(정사각) 발자국일 때만 (단면 사각형 메시와 격자 등고는 경계 불일치)
+  // 기복·경사 변화가 큰 면 경계만 추가 테두리 (전체 메시 조각 X)
+  // 2번째 인자(도): 작을수록 기복 테두리 더 많이 표시 (예: 8→많음, 20→적음)
+  const creasePos = extractHighVariationEdgePositions(parts.topGeo, 8.5);
+  if (creasePos.length >= 6) {
+    const creaseGeo = new THREE.BufferGeometry();
+    creaseGeo.setAttribute(
+      'position',
+      new THREE.Float32BufferAttribute(creasePos, 3)
+    );
+    const crease = new THREE.LineSegments(
+      creaseGeo,
+      new THREE.LineBasicMaterial({
+        color: rimColor,
+        depthTest: true,
+        transparent: true,
+        opacity: 0.9,
+      })
+    );
+    markEdgeOnly(crease);
+    group.add(crease);
+  }
+  // 지반고·하천 — 범위(정사각) 발자국일 때만
   if (!sectionLine) {
-    group.add(createGroundContourOverlay(field));
     group.add(createGroundElevMarkers(field));
     group.add(
       createGroundRiverOverlay(field, {

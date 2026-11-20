@@ -5,6 +5,7 @@ import type { Map, MapBrowserEvent } from 'ol';
 import { unByKey } from 'ol/Observable';
 import { easeOut } from 'ol/easing';
 import { call } from '@/lib/api';
+import { extractDefineRowKeyValue } from '../standard/defineLayerRowUtils';
 import { prepareMapForPanelAwareNavigation } from '../config/mapAutoNavigation';
 import { useMapContext } from '../MapContext';
 import { COMP_WMS_LAYER_ID } from './complaintLayerId';
@@ -30,8 +31,10 @@ export function subscribeComplaintFlyComplete(fn: () => void): () => void {
 }
 
 function pickCompKey(row: Record<string, unknown>): number | null {
-  const raw = row.comp_key ?? row.compKey ?? row.COMP_KEY;
-  const n = Number(raw);
+  /** is_key(통상 comp_key) → 없으면 ogc_fid 계열 폴백 */
+  const s = extractDefineRowKeyValue(row, 'comp_key');
+  if (s == null) return null;
+  const n = Number(s);
   return Number.isInteger(n) && n > 0 ? n : null;
 }
 

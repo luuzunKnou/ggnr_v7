@@ -16,6 +16,7 @@ import {
 import { ensureComplaintTables } from '@/service/ensureLayerAppTables';
 import {
   deleteTableRowByKey,
+  getTableRowForEdit,
   insertTableRow,
   updateTableRowByKey,
 } from '@/service/layerRowService';
@@ -198,12 +199,63 @@ export async function list(params: {
   limit?: number;
   offset?: number;
   compKey?: number;
+  state?: string | null;
 } = {}) {
   await ensureComplaintTables();
 
   let limit = typeof params?.limit === 'number' && params.limit > 0 ? params.limit : DEFAULT_LIMIT;
   if (limit > MAX_LIMIT) limit = MAX_LIMIT;
   const offset = typeof params?.offset === 'number' && params.offset >= 0 ? params.offset : 0;
+  const state = String(params?.state ?? '').trim();
+
+  if (state) {
+    const stateLit = state.replace(/'/g, "''");
+    const stateMatch =
+      state === '접수'
+        ? `(NULLIF(BTRIM(COALESCE(l.compd_state, '')), '') IS NULL OR BTRIM(l.compd_state) = '접수')`
+        : `BTRIM(l.compd_state) = '${stateLit}'`;
+    const keyFilter =
+      params?.compKey != null && Number.isInteger(Number(params.compKey))
+        ? ` AND c.comp_key = ${Number(params.compKey)}`
+        : '';
+    const base = `
+      FROM ${COMP_TABLE_SQL} c
+      LEFT JOIN LATERAL (
+        SELECT d.compd_state
+        FROM layer."compd" d
+        WHERE d.comp_key = c.comp_key
+        ORDER BY d.compd_key DESC
+        LIMIT 1
+      ) l ON TRUE
+      WHERE ${stateMatch}${keyFilter}`;
+    const countRes = await db.execute(sql.raw(`SELECT count(*)::int AS total ${base}`));
+    const total = Number((countRes.rows?.[0] as { total?: unknown } | undefined)?.total ?? 0);
+    const rowsRes = await db.execute(
+      sql.raw(
+        `SELECT c.*, l.compd_state::text AS latest_state
+         ${base}
+         ORDER BY c.comp_key DESC
+         LIMIT ${limit} OFFSET ${offset}`
+      )
+    );
+    const rowsWithState = (rowsRes.rows ?? []).map((raw) => {
+      const r = raw as Record<string, unknown>;
+      return {
+        compKey: Number(r.comp_key),
+        compDate: r.comp_date != null ? String(r.comp_date) : null,
+        compCu: r.comp_cu != null ? String(r.comp_cu) : null,
+        compCt: r.comp_ct != null ? String(r.comp_ct) : null,
+        compCg: r.comp_cg != null ? String(r.comp_cg) : null,
+        compAdr: r.comp_adr != null ? String(r.comp_adr) : null,
+        compName: r.comp_name != null ? String(r.comp_name) : null,
+        compTel: r.comp_tel != null ? String(r.comp_tel) : null,
+        compContent: r.comp_content != null ? String(r.comp_content) : null,
+        compExtra: (r.comp_extra as Record<string, unknown> | null) ?? null,
+        latestState: r.latest_state != null ? String(r.latest_state).trim() || null : null,
+      };
+    });
+    return { rows: rowsWithState, total };
+  }
 
   const where = params?.compKey != null ? eq(comp.compKey, params.compKey) : undefined;
   const rows = await db
@@ -473,6 +525,83 @@ export async function update(params: {
   }
 
   return (await get({ compKey: key })) ?? null;
+}
+
+/** 통합UI Field 상세 — layer.comp 원본 컬럼 */
+export async function getFieldDetail(params: { compKey?: number }) {
+  const key = Number(params.compKey);
+  if (!Number.isInteger(key) || key < 1) {
+    return { row: null as Record<string, string> | null, extent3857: null, geomGeoJson4326: null };
+  }
+  const edited = await getTableRowForEdit({
+    table: 'comp',
+    schema: 'layer',
+    keyField: 'comp_key',
+    keyValue: key,
+  });
+  if (!edited.row) {
+    return { row: null, extent3857: null, geomGeoJson4326: null, error: edited.error };
+  }
+  const full = await get({ compKey: key });
+  return {
+    row: edited.row,
+    extent3857: full?.extent3857 ?? null,
+    geomGeoJson4326: full?.geomGeoJson4326 ?? null,
+  };
+}
+
+/** 통합UI Field 저장 — defineLayer 표시 항목 values */
+export async function saveFieldDetail(params: {
+  compKey?: number | null;
+  values?: Record<string, string | null | undefined>;
+  lon?: number | string | null;
+  lat?: number | string | null;
+}) {
+  const rawValues = params.values ?? {};
+  const changes: Record<string, unknown> = {};
+  for (const [key, val] of Object.entries(rawValues)) {
+    const col = String(key ?? '').trim();
+    if (!col || col.toLowerCase() === 'comp_key') continue;
+    changes[col] = emptyToNull(val == null ? null : String(val));
+  }
+  const address =
+    emptyToNull(rawValues.comp_adr) ??
+    emptyToNull(rawValues.compAdr) ??
+    null;
+  const geom = await resolveCompGeomWkt5181({
+    compAdr: address,
+    lon: params.lon,
+    lat: params.lat,
+  });
+  const compKey = Number(params.compKey);
+  if (Number.isInteger(compKey) && compKey > 0) {
+    const updated = await updateTableRowByKey({
+      table: 'comp',
+      schema: 'layer',
+      keyField: 'comp_key',
+      keyValue: compKey,
+      changes,
+      allowPhysicalColumns: true,
+      geomWkt5181: geom.geomWkt5181,
+      geomClear: geom.geomClear,
+    });
+    if (!updated.success) throw new Error(updated.error ?? '저장에 실패했습니다.');
+    return getFieldDetail({ compKey });
+  }
+  const inserted = await insertTableRow({
+    table: 'comp',
+    schema: 'layer',
+    keyField: 'comp_key',
+    values: changes,
+    allowPhysicalColumns: true,
+    geomWkt5181: geom.geomWkt5181,
+  });
+  if (!inserted.success) throw new Error(inserted.error ?? '등록에 실패했습니다.');
+  const newKey = Number(inserted.keyValue);
+  if (!Number.isInteger(newKey) || newKey < 1) {
+    return { row: null, extent3857: null, geomGeoJson4326: null };
+  }
+  return getFieldDetail({ compKey: newKey });
 }
 
 /** 민원 처리내역(compd) 추가 */

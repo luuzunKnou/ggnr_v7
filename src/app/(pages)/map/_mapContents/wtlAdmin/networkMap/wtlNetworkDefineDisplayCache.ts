@@ -2,6 +2,7 @@ import {
   isDefineFieldCodeType,
   type DefineCodeRow,
 } from '@/lib/defineLayerCodeDisplay'
+import { dedupeDefineLayerFieldsByName } from '@/lib/defineLayerFieldsNormalize'
 import type { DefineFieldLike } from '../../../_mapComponents/standard/defineLayerRowUtils'
 
 export type WtlDefineDisplayBundle = {
@@ -117,7 +118,9 @@ export function loadWtlDefineDisplayBundle(
     for (const t of tryTables) {
       const rows = await fetchFields(t)
       if (rows.length > 0) {
-        fields = rows
+        fields = dedupeDefineLayerFieldsByName(
+          rows as Array<DefineFieldLike & Record<string, unknown>>
+        )
         resolvedTable = t
         break
       }

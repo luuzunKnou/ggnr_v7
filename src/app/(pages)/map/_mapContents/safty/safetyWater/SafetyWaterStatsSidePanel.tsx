@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { X } from 'lucide-react';
-import { appFetch } from '@/lib/basePath';
+import { fetchFloodObservationStats } from './floodClientApi';
 import { SafetyWaterStatsPanel, type StatsKindBlock } from './SafetyWaterStatsPanel';
 import { useSafetyWater } from './safetyWaterContext';
 import {
@@ -80,27 +80,22 @@ export function SafetyWaterStatsSidePanel({ onClose }: { onClose: () => void }) 
           setLoadingByKind((prev) => ({ ...prev, [kind]: true }));
           try {
             const stations = getStatsTargetStations(kind);
-            const res = await appFetch('/api/flood/observations/stats', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                kind,
-                time: timeType,
-                sdt,
-                edt,
-                stations: stations.map((item) => ({ code: item.code })),
-              }),
+            const res = await fetchFloodObservationStats({
+              kind,
+              time: timeType,
+              sdt,
+              edt,
+              stations: stations.map((item) => ({ code: item.code })),
             });
-            const j = (await res.json().catch(() => ({}))) as Record<string, unknown>;
             if (cancelled) return;
             if (!res.ok) {
-              console.error('[flood] loadStats failed', parseFloodError(j));
+              console.error('[flood] loadStats failed', parseFloodError(res.body));
               setItemsByKind((prev) => ({ ...prev, [kind]: [] }));
               return;
             }
             setItemsByKind((prev) => ({
               ...prev,
-              [kind]: Array.isArray(j.items) ? (j.items as SafetyWaterStatPoint[]) : [],
+              [kind]: res.items,
             }));
           } catch (e) {
             if (cancelled) return;

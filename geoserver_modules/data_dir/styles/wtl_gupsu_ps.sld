@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="UTF-8"?><sld:StyledLayerDescriptor xmlns="http://www.opengis.net/sld" xmlns:sld="http://www.opengis.net/sld" xmlns:gml="http://www.opengis.net/gml" xmlns:ogc="http://www.opengis.net/ogc" version="1.0.0">
+<?xml version="1.0" encoding="UTF-8"?><sld:StyledLayerDescriptor xmlns:sld="http://www.opengis.net/sld" xmlns="http://www.opengis.net/sld" xmlns:gml="http://www.opengis.net/gml" xmlns:ogc="http://www.opengis.net/ogc" version="1.0.0">
   <sld:NamedLayer>
     <sld:Name>Default Styler</sld:Name>
     <sld:UserStyle>
@@ -56,31 +56,41 @@
                   </sld:CssParameter>
                 </sld:Stroke>
               </sld:Mark>
-              <sld:Size><ogc:Function name="if_then_else"><ogc:Function name="greaterThan"><ogc:Function name="env"><ogc:Literal>ignore_scale</ogc:Literal><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>18</ogc:Literal>
+              <sld:Size>
                 <ogc:Function name="if_then_else">
                   <ogc:Function name="greaterThan">
                     <ogc:Function name="env">
-                      <ogc:Literal>wtl_gupsu_ps_size</ogc:Literal>
+                      <ogc:Literal>ignore_scale</ogc:Literal>
                       <ogc:Literal>0</ogc:Literal>
                     </ogc:Function>
                     <ogc:Literal>0</ogc:Literal>
                   </ogc:Function>
-                  <ogc:Function name="env">
-                    <ogc:Literal>wtl_gupsu_ps_size</ogc:Literal>
-                    <ogc:Literal>16</ogc:Literal>
-                  </ogc:Function>
-                  <ogc:Function name="Categorize">
-                    <ogc:Function name="env">
-                      <ogc:Literal>wms_scale_denominator</ogc:Literal>
+                  <ogc:Literal>18</ogc:Literal>
+                  <ogc:Function name="if_then_else">
+                    <ogc:Function name="greaterThan">
+                      <ogc:Function name="env">
+                        <ogc:Literal>wtl_gupsu_ps_size</ogc:Literal>
+                        <ogc:Literal>0</ogc:Literal>
+                      </ogc:Function>
+                      <ogc:Literal>0</ogc:Literal>
                     </ogc:Function>
-                    <ogc:Literal>25</ogc:Literal>
-                    <ogc:Literal>800</ogc:Literal>
-                    <ogc:Literal>12</ogc:Literal>
-                    <ogc:Literal>1500</ogc:Literal>
-                    <ogc:Literal>8</ogc:Literal>
+                    <ogc:Function name="env">
+                      <ogc:Literal>wtl_gupsu_ps_size</ogc:Literal>
+                      <ogc:Literal>16</ogc:Literal>
+                    </ogc:Function>
+                    <ogc:Function name="Categorize">
+                      <ogc:Function name="env">
+                        <ogc:Literal>wms_scale_denominator</ogc:Literal>
+                      </ogc:Function>
+                      <ogc:Literal>25</ogc:Literal>
+                      <ogc:Literal>800</ogc:Literal>
+                      <ogc:Literal>12</ogc:Literal>
+                      <ogc:Literal>1500</ogc:Literal>
+                      <ogc:Literal>8</ogc:Literal>
+                    </ogc:Function>
                   </ogc:Function>
                 </ogc:Function>
-              </ogc:Function></sld:Size>
+              </sld:Size>
             </sld:Graphic>
           </sld:PointSymbolizer>
         </sld:Rule>
@@ -93,7 +103,7 @@
               <ogc:Function name="strLength">
                 <ogc:Function name="env">
                   <ogc:Literal>wtl_gupsu_ps_label_property_name</ogc:Literal>
-                  <ogc:Literal></ogc:Literal>
+                  <ogc:Literal/>
                 </ogc:Function>
               </ogc:Function>
               <ogc:Literal>0</ogc:Literal>
@@ -173,3 +183,4 @@
     </sld:UserStyle>
   </sld:NamedLayer>
 </sld:StyledLayerDescriptor>
+

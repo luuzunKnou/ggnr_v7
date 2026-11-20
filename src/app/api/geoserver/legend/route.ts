@@ -183,6 +183,8 @@ async function fetchStyleFileLegend(styleName: string, width: number, height: nu
       HEIGHT: String(height),
       TRANSPARENT: 'true',
       EXCEPTIONS: 'application/vnd.ogc.se_xml',
+      // 축척 필터 규칙이 hideEmptyRules에 걸리지 않도록
+      ENV: 'ignore_scale:1',
       LEGEND_OPTIONS: 'forceLabels:off',
       SLD_BODY: retargetNamedLayer(raw, carrier),
     });
@@ -238,6 +240,8 @@ export async function GET(req: NextRequest) {
     HEIGHT: String(height),
     TRANSPARENT: 'true',
     EXCEPTIONS: 'application/vnd.ogc.se_xml',
+    // 단일 규칙+축척 필터 SLD가 hideEmptyRules로 투명 범례가 되는 것 방지
+    ENV: 'ignore_scale:1',
     LEGEND_OPTIONS: 'forceLabels:off;hideEmptyRules:true',
   });
 

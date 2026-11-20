@@ -277,6 +277,8 @@ async function readRelayCompleteNdjson(
     appliedFiles?: number;
     skippedFiles?: number;
     totalFiles?: number;
+    bytesDone?: number;
+    totalBytes?: number;
     mergeStep?: VersionRelayProgress['mergeStep'];
   }) => void
 ): Promise<VersionRelayResult & { error?: string; ok?: boolean }> {
@@ -324,6 +326,8 @@ async function readRelayCompleteNdjson(
       const skippedFiles =
         typeof parsed.skippedFiles === 'number' ? parsed.skippedFiles : undefined;
       const totalFiles = typeof parsed.totalFiles === 'number' ? parsed.totalFiles : undefined;
+      const bytesDone = typeof parsed.bytesDone === 'number' ? parsed.bytesDone : undefined;
+      const totalBytes = typeof parsed.totalBytes === 'number' ? parsed.totalBytes : undefined;
       const mergeStepRaw = String(parsed.mergeStep ?? '');
       const mergeStep =
         mergeStepRaw === 'extract' ||
@@ -334,7 +338,17 @@ async function readRelayCompleteNdjson(
           ? (mergeStepRaw as VersionRelayProgress['mergeStep'])
           : undefined;
       if (phase && message) {
-        onProgressLine({ phase, message, logLine, appliedFiles, skippedFiles, totalFiles, mergeStep });
+        onProgressLine({
+          phase,
+          message,
+          logLine,
+          appliedFiles,
+          skippedFiles,
+          totalFiles,
+          bytesDone,
+          totalBytes,
+          mergeStep,
+        });
       }
       return;
     }
@@ -960,7 +974,7 @@ export async function relayLatestSourceFromGnms(options: {
   packageProfile?: SourcePackageProfile;
   /** overwrite=현재 폴더, sibling=상위 폴더에 새 설치 */
   applyLayout?: SourceApplyLayout;
-  /** 따로 생성 폴더 접미사. 화면에서 고른 버전 폴더 이름 */
+  /** 새 폴더 생성 폴더 접미사. 화면에서 고른 버전 폴더 이름 */
   installFolderKey?: string;
   /** 선택 버전 폴더 ID (목록 folder) */
   folder: string;
@@ -1197,7 +1211,7 @@ export async function relayLatestSourceFromGnms(options: {
     throwIfAborted(signal);
     onProgress?.({
       phase: applyLayout === 'sibling' ? 'merge-apply' : 'geoserver-stop',
-      message: applyLayout === 'sibling' ? '따로 생성 준비 중...' : '적용 준비 중...',
+      message: applyLayout === 'sibling' ? '새 폴더 생성 준비 중...' : '적용 준비 중...',
       mergeStep: applyLayout === 'sibling' ? 'extract' : undefined,
     });
     log('relay complete 요청...');

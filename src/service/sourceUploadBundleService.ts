@@ -101,12 +101,25 @@ function spawnAsync(command: string, args: string[]): Promise<void> {
   });
 }
 
+/** ZIP 해제 루트 — 단일 폴더만 있으면 반복 unwrap (폴더1→폴더2→소스). 프로젝트 표식 있으면 중단 */
 async function pickExtractedRoot(extractDir: string): Promise<string> {
-  const entries = await fs.readdir(extractDir, { withFileTypes: true });
-  const files = entries.filter((e) => e.isFile());
-  const dirs = entries.filter((e) => e.isDirectory());
-  if (files.length === 0 && dirs.length === 1) return path.join(extractDir, dirs[0]!.name);
-  return extractDir;
+  const isProjectRoot = (names: string[]) =>
+    names.includes('package.json') || names.includes('00_make_ggnr_starter.bat');
+
+  let current = extractDir;
+  for (let depth = 0; depth < 5; depth++) {
+    const entries = await fs.readdir(current, { withFileTypes: true });
+    const files = entries.filter((e) => e.isFile());
+    const dirs = entries.filter((e) => e.isDirectory());
+    const fileNames = files.map((f) => f.name);
+    if (isProjectRoot(fileNames)) return current;
+    if (files.length === 0 && dirs.length === 1) {
+      current = path.join(current, dirs[0]!.name);
+      continue;
+    }
+    return current;
+  }
+  return current;
 }
 
 async function copyIntoWorkspace(srcRoot: string, dstRoot: string): Promise<number> {

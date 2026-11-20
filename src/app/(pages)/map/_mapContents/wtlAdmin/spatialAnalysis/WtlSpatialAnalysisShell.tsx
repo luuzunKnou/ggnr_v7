@@ -14,6 +14,10 @@ import { WTL_SPATIAL_TABS, type WtlSpatialTab } from './wtlSpatialSample'
 const LIST_DEFAULT = 480
 const LIST_MIN = 400
 const LIST_MAX = 720
+/** 위상검증 요청 목록 상세 패널 (다른 메뉴 상세와 같이 목록 오른쪽에 붙음) */
+const DETAIL_DEFAULT = 420
+const DETAIL_MIN = 360
+const DETAIL_MAX = 640
 
 type Props = {
   leftOffsetPx: number
@@ -26,17 +30,23 @@ export function WtlSpatialAnalysisShell({ leftOffsetPx, onTotalWidthChange, onCl
   const [tab, setTab] = useState<WtlSpatialTab>('단수구역')
   const [outageSeed, setOutageSeed] = useState<WtlOutageHandoffSeed | null>(null)
   const [handoffSeq, setHandoffSeq] = useState(0)
+  /** 위상검증 요청 목록 상세 — 열림 여부와 내용을 그릴 자리(위상검증 패널이 포털로 채움) */
+  const [topoDetailOpen, setTopoDetailOpen] = useState(false)
+  const [detailWidth, setDetailWidth] = useState(DETAIL_DEFAULT)
+  const [detailHost, setDetailHost] = useState<HTMLDivElement | null>(null)
+  const detailShown = tab === '위상검증' && topoDetailOpen
+  const totalWidth = listWidth + (detailShown ? detailWidth : 0)
 
   useEffect(() => {
-    onTotalWidthChange(listWidth)
-  }, [listWidth, onTotalWidthChange])
+    onTotalWidthChange(totalWidth)
+  }, [totalWidth, onTotalWidthChange])
 
   useEffect(() => {
     return () => onTotalWidthChange(0)
   }, [onTotalWidthChange])
 
   return (
-    <div className="pointer-events-auto shrink-0">
+    <div className="pointer-events-auto flex shrink-0">
       <MapSideListPanel
         width={listWidth}
         minWidth={LIST_MIN}
@@ -74,7 +84,7 @@ export function WtlSpatialAnalysisShell({ leftOffsetPx, onTotalWidthChange, onCl
                 })}
               </div>
             </div>
-            {/* 탭 전환 시에도 이력 유지 · 지도 레이어는 active로만 켬 */}
+            {/* 탭을 벗어나면 단수 잠금은 패널에서 비움 · 지도 레이어는 active로만 켬 */}
             <div
               className={cn(
                 'flex min-h-0 flex-1 flex-col overflow-hidden',
@@ -83,6 +93,7 @@ export function WtlSpatialAnalysisShell({ leftOffsetPx, onTotalWidthChange, onCl
             >
               <WtlOutagePanel
                 active={tab === '단수구역'}
+                mapLeftPx={leftOffsetPx + listWidth}
                 handoffSeed={outageSeed}
                 onHandoffConsumed={(seq) => {
                   setOutageSeed((prev) => (prev?.seq === seq ? null : prev))
@@ -97,6 +108,7 @@ export function WtlSpatialAnalysisShell({ leftOffsetPx, onTotalWidthChange, onCl
             >
               <WtlLeakPanel
                 active={tab === '누수분석'}
+                mapLeftPx={leftOffsetPx + listWidth}
                 onHandoffToOutage={(gates, label) => {
                   const seq = handoffSeq + 1
                   setHandoffSeq(seq)
@@ -111,15 +123,7 @@ export function WtlSpatialAnalysisShell({ leftOffsetPx, onTotalWidthChange, onCl
                 tab !== '송수경로' && 'hidden'
               )}
             >
-              <WtlSupplyPathPanel
-                active={tab === '송수경로'}
-                onHandoffToOutage={(gates, label) => {
-                  const seq = handoffSeq + 1
-                  setHandoffSeq(seq)
-                  setOutageSeed({ seq, gates, label })
-                  setTab('단수구역')
-                }}
-              />
+              <WtlSupplyPathPanel active={tab === '송수경로'} />
             </div>
             <div
               className={cn(
@@ -127,7 +131,12 @@ export function WtlSpatialAnalysisShell({ leftOffsetPx, onTotalWidthChange, onCl
                 tab !== '위상검증' && 'hidden'
               )}
             >
-              <WtlTopologyPanel active={tab === '위상검증'} />
+              <WtlTopologyPanel
+                active={tab === '위상검증'}
+                mapLeftPx={leftOffsetPx + totalWidth}
+                detailHost={detailShown ? detailHost : null}
+                onDetailOpenChange={setTopoDetailOpen}
+              />
             </div>
             {tab !== '단수구역' &&
               tab !== '누수분석' &&
@@ -138,6 +147,19 @@ export function WtlSpatialAnalysisShell({ leftOffsetPx, onTotalWidthChange, onCl
           </div>
         </div>
       </MapSideListPanel>
+      {detailShown && (
+        <MapSideListPanel
+          width={detailWidth}
+          minWidth={DETAIL_MIN}
+          maxWidth={DETAIL_MAX}
+          leftOffsetPx={leftOffsetPx + listWidth}
+          onWidthChange={setDetailWidth}
+          contentClassName="overflow-hidden"
+        >
+          {/* 내용은 위상검증 패널이 포털로 그린다(요청 데이터를 그쪽이 가지고 있음) */}
+          <div ref={setDetailHost} className="flex min-h-0 flex-1 flex-col" />
+        </MapSideListPanel>
+      )}
     </div>
   )
 }

@@ -108,7 +108,7 @@ export function CadastralControlPointDetailPanel({ pointId, onClose }: Props) {
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
       <LayerRowEditHeader
-        title={point.name || point.pointNo || '지적기준점 상세'}
+        title={`${t.label} · ${point.name || point.pointNo || '지적기준점 상세'}`}
         isEditing={false}
         saving={false}
         onEdit={NOOP}

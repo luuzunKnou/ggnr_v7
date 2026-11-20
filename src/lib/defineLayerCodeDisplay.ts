@@ -1,3 +1,4 @@
+import { normalizeDefineFieldType } from '@/lib/defineLayerFieldTypeNormalize';
 import { formatDetailScalarValue } from '@/lib/formatDetailScalar';
 
 export type DefineCodeRow = {
@@ -7,6 +8,37 @@ export type DefineCodeRow = {
 
 export function isDefineFieldCodeType(type: unknown): boolean {
   return String(type ?? '').trim().toUpperCase() === 'CODE';
+}
+
+export function isDefineFieldBooleanType(type: unknown): boolean {
+  return normalizeDefineFieldType(type) === 'BOOLEAN';
+}
+
+/** DB·폼 값 → 체크 여부 (true/t/1/y 등) */
+export function parseDefineBooleanValue(raw: unknown): boolean {
+  if (typeof raw === 'boolean') return raw;
+  if (raw == null) return false;
+  if (typeof raw === 'number') return raw !== 0 && Number.isFinite(raw);
+  const s = String(raw).trim().toLowerCase();
+  if (!s) return false;
+  if (
+    s === 'false' ||
+    s === 'f' ||
+    s === '0' ||
+    s === 'n' ||
+    s === 'no' ||
+    s === 'off'
+  ) {
+    return false;
+  }
+  return (
+    s === 'true' ||
+    s === 't' ||
+    s === '1' ||
+    s === 'y' ||
+    s === 'yes' ||
+    s === 'on'
+  );
 }
 
 function normalizeCodeKey(raw: string): string {

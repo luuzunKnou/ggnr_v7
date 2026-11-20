@@ -5,12 +5,12 @@ import type Map from 'ol/Map';
 import TileLayer from 'ol/layer/Tile';
 import XYZ from 'ol/source/XYZ';
 import { transformExtent } from 'ol/proj';
+import { buildItsTrafficTileUrl } from '@/lib/itsClient';
 import type { RoadCctvExtentWgs84 } from '../../../_mapComponents/MapContext';
 
 /**
- * 실시간 통행(5분) 타일 — CCTV 화상자료와 동일한 WGS84 bbox를
- * `/api/its/traffic-tile` 쿼리(z,x,y,minX,maxX,minY,maxY)로 전달합니다.
- * emd 범위가 없으면 레이어를 붙이지 않습니다.
+ * 실시간 통행(5분) 타일 — its.go.kr WMTS를 브라우저에서 직접 로드.
+ * CCTV와 동일한 WGS84 bbox로 레이어 extent만 제한합니다.
  */
 export function useItsTrafficTileLayer(
   mapReady: boolean,
@@ -43,16 +43,7 @@ export function useItsTrafficTileLayer(
         const z = tileCoord[0];
         const x = tileCoord[1];
         const y = tileCoord[2];
-        const q = new URLSearchParams({
-          z: String(z),
-          x: String(x),
-          y: String(y),
-          minX: String(minX),
-          maxX: String(maxX),
-          minY: String(minY),
-          maxY: String(maxY),
-        });
-        return `/api/its/traffic-tile?${q.toString()}`;
+        return buildItsTrafficTileUrl(z, x, y);
       },
     });
 

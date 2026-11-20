@@ -35,6 +35,7 @@ export const UNDERGROUND_FACILITY_GROUP_ALLOW = new Set([
   '상수',
   '급수구역',
   '하수',
+  '배수설비',
   '광역상수',
   '가스',
   '도시가스',
@@ -47,6 +48,7 @@ const UNDERGROUND_FACILITY_GROUP_ORDER = [
   '상수',
   '급수구역',
   '하수',
+  '배수설비',
   '광역상수',
   '가스',
   '도시가스',
@@ -56,6 +58,13 @@ const UNDERGROUND_FACILITY_GROUP_ORDER = [
 ];
 
 const UNDERGROUND_FACILITY_SCHEMA = 'layer';
+
+/** 지도 «지하시설물» 목록에서 제외할 테이블 (가압장 펌프/흡수정, 정수장 펌프 현황) */
+const UNDERGROUND_FACILITY_EXCLUDE_TABLES = new Set([
+  'wtl_pres_pm_ps',
+  'wtl_pres_hj_ps',
+  'wtl_puri_dt_ps',
+]);
 
 /** 그룹명 접두 일치 (LIKE '허용그룹%') */
 export function isUndergroundFacilityGroup(group: string): boolean {
@@ -120,6 +129,7 @@ export function buildUndergroundFacilityLayerGroups(
 
     const tableName = String(t.define_table_name ?? '').trim();
     if (!tableName) continue;
+    if (UNDERGROUND_FACILITY_EXCLUDE_TABLES.has(tableName.toLowerCase())) continue;
 
     const layerName = String(t.define_table_kor_name ?? tableName).trim();
     const parentTableName = String(t.define_table_parents_layer ?? '').trim() || undefined;
@@ -208,12 +218,28 @@ export function createUndergroundFacilityLayers(
   });
 }
 
+/** DB 도형 변경 후 지하시설물 WMS 이미지를 바로 다시 받는다. */
+export function refreshUndergroundFacilityWmsLayers(map: OlMap | null | undefined): void {
+  if (!map) return;
+  const stamp = String(Date.now());
+  for (const layer of map.getLayers().getArray()) {
+    if (!layer.get('undergroundFacilityLayer')) continue;
+    const source = (layer as ImageLayer<ImageWMS>).getSource();
+    if (!source || typeof source.updateParams !== 'function') continue;
+    source.updateParams({ ...source.getParams(), _dc: stamp });
+    source.changed();
+    layer.changed();
+  }
+  map.render();
+}
+
 export function useUndergroundFacilityLayerSync(
   map: OlMap | null,
   mapReady: boolean,
   activeControls: string[],
   visibleTableNames?: Set<string> | null,
-  availableTableNames?: Set<string> | null
+  availableTableNames?: Set<string> | null,
+  suppressDrawTableNames?: ReadonlySet<string> | null
 ) {
   useEffect(() => {
     if (!mapReady || !map) return;
@@ -223,11 +249,15 @@ export function useUndergroundFacilityLayerSync(
     map.getLayers().getArray().forEach((l) => {
       if (!l.get('undergroundFacilityLayer')) return;
       const tableName = l.get('layerTableName') as string | undefined;
+      if (tableName != null && suppressDrawTableNames?.has(tableName)) {
+        l.setVisible(false);
+        return;
+      }
       const inCatalog =
         catalogReady && tableName != null && availableTableNames.has(tableName);
       const selected =
         showAll || (tableName != null && (visibleTableNames?.has(tableName) ?? false));
       l.setVisible(groupOn && inCatalog && selected);
     });
-  }, [map, mapReady, activeControls, visibleTableNames, availableTableNames]);
+  }, [map, mapReady, activeControls, visibleTableNames, availableTableNames, suppressDrawTableNames]);
 }

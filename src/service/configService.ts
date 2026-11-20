@@ -398,6 +398,8 @@ export function getMapConfig(_params?: unknown): {
   OPENAI_API_KEY: string
   SAFEMAP_API_KEY: string
   SAFETYDATA_API_KEY: string
+  /** 한강홍수통제소(HRFCO) — 침수현황 클라이언트 직접 호출 */
+  FLOOD_API_KEY: string
   DATA_PORTAL_KEY: string
   dataPotalKey: string
   KAKAO_MAP_API_KEY: string
@@ -405,6 +407,8 @@ export function getMapConfig(_params?: unknown): {
   JUSO_CONFM_KEY: string
   /** 도로명주소 좌표API(addrCoordApi) 승인키. 없으면 JUSO_CONFM_KEY 재사용 */
   JUSO_COORD_CONFM_KEY: string
+  /** ITS CCTV(openapi.its.go.kr) — 브라우저 직접 호출용 */
+  ITS_CCTV_API_KEY: string
   USE_KRAS: boolean
   USE_SEUM: boolean
 } {
@@ -414,11 +418,13 @@ export function getMapConfig(_params?: unknown): {
     OPENAI_API_KEY: '',
     SAFEMAP_API_KEY: '',
     SAFETYDATA_API_KEY: '',
+    FLOOD_API_KEY: '',
     DATA_PORTAL_KEY: '',
     dataPotalKey: '',
     KAKAO_MAP_API_KEY: '',
     JUSO_CONFM_KEY: '',
     JUSO_COORD_CONFM_KEY: '',
+    ITS_CCTV_API_KEY: '',
     USE_KRAS: false,
     USE_SEUM: true,
   }
@@ -443,11 +449,13 @@ export function getMapConfig(_params?: unknown): {
       OPENAI_API_KEY: vars.OPENAI_API_KEY?.trim() ?? '',
       SAFEMAP_API_KEY: safemapKey,
       SAFETYDATA_API_KEY: vars.SAFETYDATA_API_KEY?.trim() ?? '',
+      FLOOD_API_KEY: vars.FLOOD_API_KEY?.trim() ?? '',
       DATA_PORTAL_KEY: dataPortalKey,
       dataPotalKey: dataPortalKey,
       KAKAO_MAP_API_KEY: vars.KAKAO_MAP_API_KEY?.trim() ?? '',
       JUSO_CONFM_KEY: vars.JUSO_CONFM_KEY?.trim() ?? '',
       JUSO_COORD_CONFM_KEY: vars.JUSO_COORD_CONFM_KEY?.trim() ?? '',
+      ITS_CCTV_API_KEY: vars.ITS_CCTV_API_KEY?.trim() ?? '',
       /** 행망(KRAS·KOREPS) — 운영만. 묶음 전체가 실패할 때만 브이월드 */
       USE_KRAS: useHangmangKras(),
       USE_SEUM: true,
@@ -496,6 +504,155 @@ export function getLandLinkageConfig(_params?: unknown): {
 /** runtime.env 시군구 코드. 법정동·행정동 코드 목록 필터에 사용 */
 export function getSggCode(_params?: unknown): { sggCode: string } {
   return { sggCode: getRuntimeEnvVars().SGG_CODE?.trim() ?? "" }
+}
+
+/**
+ * runtime.env SERVICE_COORDINATE (EPSG:5181, `x, y`).
+ * 없거나 파싱 실패 시 null.
+ */
+export function getServiceCoordinate5181(_params?: unknown): {
+  x: number
+  y: number
+} | null {
+  const raw = getRuntimeEnvVars().SERVICE_COORDINATE?.trim() ?? ""
+  if (!raw) return null
+  const m = raw.match(/^(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)$/)
+  if (!m) return null
+  const x = Number(m[1])
+  const y = Number(m[2])
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return null
+  return { x, y }
+}
+
+/**
+ * 지도 중심이 public_layer.sgg 밖이면 이동 좌표(EPSG:3857)를 반환.
+ * - SERVICE_COORDINATE 있으면 그 좌표(5181→3857)
+ * - 없으면 sgg 도형 중심
+ * 안이면 move=false.
+ */
+export async function resolveServiceMapFocus(params?: {
+  x3857?: number
+  y3857?: number
+}): Promise<{
+  move: boolean
+  center3857?: [number, number]
+  source?: "service" | "sgg"
+}> {
+  noStore()
+  const x3857 = Number(params?.x3857)
+  const y3857 = Number(params?.y3857)
+  if (!Number.isFinite(x3857) || !Number.isFinite(y3857)) {
+    return { move: false }
+  }
+
+  const { db } = await import("@/database/db")
+  const { sql } = await import("drizzle-orm")
+
+  const esc = (v: string) => String(v ?? "").replace(/'/g, "''")
+  const schema = "public_layer"
+  const table = "sgg"
+
+  let exists = false
+  try {
+    const ex = await db.execute(
+      sql.raw(
+        `SELECT to_regclass('${esc(schema)}.${esc(table)}') IS NOT NULL AS ok`
+      )
+    )
+    exists = (ex.rows?.[0] as { ok?: boolean } | undefined)?.ok === true
+  } catch {
+    exists = false
+  }
+  if (!exists) return { move: false }
+
+  let geomCol = "geom"
+  let srid = 5181
+  try {
+    const meta = await db.execute(
+      sql.raw(
+        `SELECT f_geometry_column AS name, COALESCE(srid, 0)::int AS srid
+         FROM geometry_columns
+         WHERE f_table_schema = '${esc(schema)}' AND f_table_name = '${esc(table)}'
+         LIMIT 1`
+      )
+    )
+    const row = meta.rows?.[0] as { name?: string; srid?: number } | undefined
+    if (row?.name) geomCol = String(row.name).trim()
+    const s = Number(row?.srid) || 0
+    if (s > 0) srid = s
+  } catch {
+    /* default geom/5181 */
+  }
+
+  const g = `"${geomCol.replace(/"/g, '""')}"`
+  const stamped = `ST_MakeValid(ST_SetSRID(${g}, ${srid}))`
+  const pt = `ST_Transform(ST_SetSRID(ST_MakePoint(${x3857}, ${y3857}), 3857), ${srid})`
+
+  let inside = false
+  let sggCx3857: number | null = null
+  let sggCy3857: number | null = null
+  try {
+    const res = await db.execute(
+      sql.raw(
+        `WITH sgg AS (
+           SELECT ${stamped} AS g
+           FROM "${schema}"."${table}"
+           WHERE ${g} IS NOT NULL
+         )
+         SELECT
+           EXISTS (
+             SELECT 1 FROM sgg WHERE ST_Contains(g, ${pt})
+           ) AS inside,
+           ST_X(ST_Transform(ST_Centroid(ST_UnaryUnion(ST_Collect(g))), 3857)) AS cx,
+           ST_Y(ST_Transform(ST_Centroid(ST_UnaryUnion(ST_Collect(g))), 3857)) AS cy
+         FROM sgg`
+      )
+    )
+    const row = res.rows?.[0] as
+      | { inside?: boolean; cx?: unknown; cy?: unknown }
+      | undefined
+    inside = row?.inside === true
+    const cx = Number(row?.cx)
+    const cy = Number(row?.cy)
+    if (Number.isFinite(cx) && Number.isFinite(cy)) {
+      sggCx3857 = cx
+      sggCy3857 = cy
+    }
+  } catch {
+    return { move: false }
+  }
+
+  if (inside) return { move: false }
+
+  const service = getServiceCoordinate5181()
+  if (service) {
+    try {
+      const res = await db.execute(
+        sql.raw(
+          `SELECT
+             ST_X(ST_Transform(ST_SetSRID(ST_MakePoint(${service.x}, ${service.y}), 5181), 3857)) AS cx,
+             ST_Y(ST_Transform(ST_SetSRID(ST_MakePoint(${service.x}, ${service.y}), 5181), 3857)) AS cy`
+        )
+      )
+      const row = res.rows?.[0] as { cx?: unknown; cy?: unknown } | undefined
+      const cx = Number(row?.cx)
+      const cy = Number(row?.cy)
+      if (Number.isFinite(cx) && Number.isFinite(cy)) {
+        return { move: true, center3857: [cx, cy], source: "service" }
+      }
+    } catch {
+      /* fall through to sgg center */
+    }
+  }
+
+  if (sggCx3857 != null && sggCy3857 != null) {
+    return {
+      move: true,
+      center3857: [sggCx3857, sggCy3857],
+      source: "sgg",
+    }
+  }
+  return { move: false }
 }
 
 const SAFETYDATA_DSSP_IF_00117 = "https://www.safetydata.go.kr/V2/api/DSSP-IF-00117"
@@ -668,6 +825,56 @@ export function getIndexSliderImages(projectName: string): string[] {
     else out.push("")
   }
   return out
+}
+
+export type IndexSliderSlideText = { title: string; content: string }
+
+function resolveIndexSliderSlidesPath(): string {
+  const cwd = typeof process !== "undefined" ? process.cwd() : ""
+  const fromPackage = getProjectRoot()
+  const roots = [cwd, fromPackage].filter(Boolean)
+  const seen = new Set<string>()
+  for (const root of roots) {
+    const n = root?.replace(/\\/g, "/")
+    if (!n || seen.has(n)) continue
+    seen.add(n)
+    const p = join(root, "src", "config", "indexSliderSlides.json")
+    if (existsSync(p)) return p
+  }
+  return join(fromPackage || cwd, "src", "config", "indexSliderSlides.json")
+}
+
+function normalizeIndexSliderSlides(raw: unknown): IndexSliderSlideText[] {
+  if (!Array.isArray(raw)) return []
+  return raw
+    .map((item) => {
+      if (!item || typeof item !== "object") return null
+      const o = item as Record<string, unknown>
+      const title = typeof o.title === "string" ? o.title.trim() : ""
+      const content = typeof o.content === "string" ? o.content.trim() : ""
+      if (!title && !content) return null
+      return { title, content }
+    })
+    .filter((x): x is IndexSliderSlideText => x != null)
+}
+
+/**
+ * INDEX ParcelSlider 제목·설명.
+ * src/config/indexSliderSlides.json — 프로젝트 키 일치 시 해당 배열, 없으면 default.
+ */
+export function getIndexSliderSlides(projectName?: string): IndexSliderSlideText[] {
+  noStore()
+  const name = (projectName ?? process.env.GGNR_PROJECT ?? "").trim()
+  const path = resolveIndexSliderSlidesPath()
+  if (!existsSync(path)) return []
+  try {
+    const parsed = JSON.parse(readFileSync(path, "utf-8")) as Record<string, unknown>
+    const projectSlides = name ? normalizeIndexSliderSlides(parsed[name]) : []
+    if (projectSlides.length > 0) return projectSlides
+    return normalizeIndexSliderSlides(parsed.default)
+  } catch {
+    return []
+  }
 }
 
 /**

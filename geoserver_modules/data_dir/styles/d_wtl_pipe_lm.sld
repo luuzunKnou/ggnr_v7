@@ -64,7 +64,7 @@
         </sld:Rule>
         <sld:Rule>
           <sld:Name>Name</sld:Name>
-          <sld:Title>d_wtl_pipe_lm_label</sld:Title>
+          <sld:Title>wtl_pipe_lm_label</sld:Title>
           <sld:Abstract>Abstract</sld:Abstract>
           <ogc:Filter>
             <ogc:And>
@@ -161,7 +161,7 @@
         </sld:Rule>
         <sld:Rule>
           <sld:Name>flow_arrow</sld:Name>
-          <sld:Title>d_wtl_pipe_lm_arrow</sld:Title>
+          <sld:Title>wtl_pipe_lm_arrow</sld:Title>
           <ogc:Filter>
             <ogc:And>
               <ogc:PropertyIsLessThanOrEqualTo>
@@ -275,7 +275,7 @@
         </sld:Rule>
         <sld:Rule>
           <sld:Name>Name</sld:Name>
-          <sld:Title>d_wtl_pipe_lm_saa917</sld:Title>
+          <sld:Title>wtl_pipe_lm_saa917</sld:Title>
           <sld:Abstract>Abstract</sld:Abstract>
           <ogc:Filter>
             <ogc:And>
@@ -330,7 +330,7 @@
         </sld:Rule>
         <sld:Rule>
           <sld:Name>Name</sld:Name>
-          <sld:Title>d_wtl_pipe_lm_saa917_label</sld:Title>
+          <sld:Title>wtl_pipe_lm_saa917_label</sld:Title>
           <sld:Abstract>Abstract</sld:Abstract>
           <ogc:Filter>
             <ogc:And>
@@ -427,7 +427,7 @@
         </sld:Rule>
         <sld:Rule>
           <sld:Name>Name</sld:Name>
-          <sld:Title>d_wtl_pipe_lm_stddip</sld:Title>
+          <sld:Title>wtl_pipe_lm_stddip</sld:Title>
           <sld:Abstract>Abstract</sld:Abstract>
           <ogc:Filter>
             <ogc:And>
@@ -481,7 +481,7 @@
         </sld:Rule>
         <sld:Rule>
           <sld:Name>Name</sld:Name>
-          <sld:Title>d_wtl_pipe_lm_stddip_label</sld:Title>
+          <sld:Title>wtl_pipe_lm_stddip_label</sld:Title>
           <sld:Abstract>Abstract</sld:Abstract>
           <ogc:Filter>
             <ogc:And>
@@ -578,7 +578,7 @@
         </sld:Rule>
         <sld:Rule>
           <sld:Name>flow_arrow</sld:Name>
-          <sld:Title>d_wtl_pipe_lm_stddip_arrow</sld:Title>
+          <sld:Title>wtl_pipe_lm_stddip_arrow</sld:Title>
           <ogc:Filter>
             <ogc:And>
               <ogc:PropertyIsGreaterThan>
@@ -692,7 +692,7 @@
         </sld:Rule>
         <sld:Rule>
           <sld:Name>Name</sld:Name>
-          <sld:Title>d_wtl_pipe_lm_stddip_saa917</sld:Title>
+          <sld:Title>wtl_pipe_lm_stddip_saa917</sld:Title>
           <sld:Abstract>Abstract</sld:Abstract>
           <ogc:Filter>
             <ogc:And>
@@ -747,7 +747,7 @@
         </sld:Rule>
         <sld:Rule>
           <sld:Name>Name</sld:Name>
-          <sld:Title>d_wtl_pipe_lm_stddip_saa917_label</sld:Title>
+          <sld:Title>wtl_pipe_lm_stddip_saa917_label</sld:Title>
           <sld:Abstract>Abstract</sld:Abstract>
           <ogc:Filter>
             <ogc:And>

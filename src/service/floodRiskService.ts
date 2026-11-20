@@ -349,3 +349,35 @@ export async function listFloodRiskParcels(params: {
 
   return { success: true, items };
 }
+
+/**
+ * 침수현황 관측소 필터용 — public_layer.sgg 시군구명.
+ * 클라이언트 HRFCO 직접 호출 시 bbox와 함께 사용.
+ */
+export async function listFloodFilterSggNames(_params?: unknown): Promise<{
+  success: boolean;
+  items: string[];
+}> {
+  try {
+    const res = await db.execute(
+      sql.raw(
+        `SELECT DISTINCT trim(sgg_nm::text) AS sgg_nm
+         FROM public_layer.sgg
+         WHERE sgg_nm IS NOT NULL
+           AND trim(sgg_nm::text) <> ''
+         ORDER BY 1
+         LIMIT 50`
+      )
+    );
+    const items: string[] = [];
+    for (const row of res.rows ?? []) {
+      const n = String((row as { sgg_nm?: unknown }).sgg_nm ?? '').trim();
+      if (n) items.push(n);
+    }
+    return { success: true, items };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.warn(`[flood] listFloodFilterSggNames 실패: ${msg}`);
+    return { success: true, items: [] };
+  }
+}

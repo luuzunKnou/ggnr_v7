@@ -3,7 +3,14 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { ChevronUp, X } from 'lucide-react'
 import { call } from '@/lib/api'
-import { formatDefineFieldDisplayValue } from '@/lib/defineLayerCodeDisplay'
+import {
+  formatBooleanYeobu,
+  shouldUseBooleanCheckbox,
+} from '@/lib/defineBooleanField'
+import {
+  formatDefineFieldDisplayValue,
+  parseDefineBooleanValue,
+} from '@/lib/defineLayerCodeDisplay'
 import { cn } from '@/lib/utils'
 import { MapFloatingPanel } from '../../../_mapComponents/MapFloatingPanel'
 import { useMapContext } from '../../../_mapComponents/MapContext'
@@ -14,6 +21,7 @@ import {
   getRowValueByField,
   isDefineFieldFlagTrue,
   selectDefineLayerDetailFields,
+  uniqueDefineLayerFields,
   type DefineFieldLike,
 } from '../../../_mapComponents/standard/defineLayerRowUtils'
 import {
@@ -33,8 +41,15 @@ type Props = {
   row: WtlFacilityRelatedDetailRow
   bundle: WtlDefineDisplayBundle | null
   onClose: () => void
+  /** 물리 테이블명 — BOOLEAN 체크박스용 DB 타입 조회 */
+  table?: string | null
+  schema?: string | null
   /** 겹침 방지용 위치·순서 오프셋(px) */
   stackOffset?: number
+  /** 미지정 시 stackOffset>0 → detailRelated, 아니면 detailFloating */
+  zLayer?: MapUiZLayer
+  /** Search 아이콘 등 — 지정 시 해당 화면 좌표에 모달 배치 */
+  anchorPosition?: { top: number; left: number } | null
   /** 다른 상세를 새로 열어도 접힘 유지 */
   collapsed: boolean
   onToggleCollapsed: () => void
@@ -54,6 +69,7 @@ function FloatingChrome({
   onClose,
   stackOffset,
   left,
+  anchorPosition,
   zLayer,
   collapsed,
   onToggleCollapsed,
@@ -64,6 +80,7 @@ function FloatingChrome({
   onClose: () => void
   stackOffset: number
   left: number
+  anchorPosition?: { top: number; left: number } | null
   zLayer: MapUiZLayer
   collapsed: boolean
   onToggleCollapsed: () => void
@@ -77,8 +94,10 @@ function FloatingChrome({
       maxHeight="70vh"
       className="bg-background backdrop-blur-none"
       defaultPosition={{
-        top: COMPLAINT_DETAIL_PANEL_DEFAULT_TOP + stackOffset,
-        left,
+        top:
+          anchorPosition?.top ??
+          COMPLAINT_DETAIL_PANEL_DEFAULT_TOP + stackOffset,
+        left: anchorPosition?.left ?? left,
       }}
       header={
         <>
@@ -95,15 +114,12 @@ function FloatingChrome({
               aria-hidden
             />
           </button>
-          <div className="min-w-0 flex-1 pr-2">
-            <span className="block truncate text-xs font-medium text-foreground" title={title}>
+          <div className="standard-detail-float-heading pr-2">
+            <span className="standard-detail-float-layer" title={title}>
               {title}
             </span>
             {subtitle ? (
-              <span
-                className="mt-0.5 block truncate text-[11px] text-muted-foreground"
-                title={subtitle}
-              >
+              <span className="standard-detail-float-title-below" title={subtitle}>
                 {subtitle}
               </span>
             ) : null}
@@ -162,12 +178,17 @@ export function WtlMappedFacilityFloating({
   onClose,
   collapsed,
   onToggleCollapsed,
+  anchorPosition = null,
 }: {
   target: WtlMappedFacilityTarget
   onClose: () => void
   collapsed: boolean
   onToggleCollapsed: () => void
+  /** Search 아이콘 화면 좌표 — 있으면 그 위치에 모달 오픈 */
+  anchorPosition?: { top: number; left: number } | null
 }) {
+  /** 지도 기본 모달(LayerClickDetail)과 동일 티어 */
+  const facilityInfoZLayer: MapUiZLayer = 'detailFloating'
   const [row, setRow] = useState<WtlFacilityRelatedDetailRow | null>(null)
   const [bundle, setBundle] = useState<WtlDefineDisplayBundle | null>(null)
   const [loading, setLoading] = useState(true)
@@ -238,8 +259,12 @@ export function WtlMappedFacilityFloating({
         title={target.title}
         row={row}
         bundle={bundle}
+        table={target.table}
+        schema={target.schema}
         onClose={onClose}
         stackOffset={36}
+        zLayer={facilityInfoZLayer}
+        anchorPosition={anchorPosition}
         collapsed={collapsed}
         onToggleCollapsed={onToggleCollapsed}
       />
@@ -252,7 +277,8 @@ export function WtlMappedFacilityFloating({
       onClose={onClose}
       stackOffset={36}
       left={floatingLeftPx}
-      zLayer="detailRelated"
+      anchorPosition={anchorPosition}
+      zLayer={facilityInfoZLayer}
       collapsed={collapsed}
       onToggleCollapsed={onToggleCollapsed}
     >
@@ -272,20 +298,78 @@ export function WtlFacilityRelatedDetailFloating({
   title,
   row,
   bundle,
+  table: tableProp,
+  schema: schemaProp,
   onClose,
   stackOffset = 0,
+  zLayer: zLayerProp,
+  anchorPosition = null,
   collapsed,
   onToggleCollapsed,
 }: Props) {
   const mapContext = useMapContext()
   const floatingLeftPx = (mapContext?.mapPaddingLeft ?? 0) + 20 + stackOffset
+  const zLayer: MapUiZLayer =
+    zLayerProp ?? (stackOffset > 0 ? 'detailRelated' : 'detailFloating')
+  const [columnTypes, setColumnTypes] = useState<Record<string, string>>({})
+  const [columnTypesReady, setColumnTypesReady] = useState(false)
+
+  const tableName = String(tableProp || bundle?.resolvedTable || '')
+    .trim()
+    .replace(/^.*\./, '')
+    .toLowerCase()
+  const schema =
+    String(schemaProp ?? '')
+      .trim()
+      .toLowerCase() || 'layer'
+
+  useEffect(() => {
+    if (!tableName) {
+      setColumnTypes({})
+      setColumnTypesReady(false)
+      return
+    }
+    let cancelled = false
+    setColumnTypesReady(false)
+    void call('', 'POST', {
+      service: 'layerRowService',
+      action: 'listTableColumnTypes',
+      params: { table: tableName, schema },
+    })
+      .then((res) => {
+        if (cancelled) return
+        const data = (res?.data ?? res) as
+          | { columns?: Array<{ name?: string; dataType?: string }> }
+          | undefined
+        const next: Record<string, string> = {}
+        for (const c of Array.isArray(data?.columns) ? data.columns : []) {
+          const name = String(c?.name ?? '')
+            .trim()
+            .toLowerCase()
+          const dataType = String(c?.dataType ?? '')
+            .trim()
+            .toLowerCase()
+          if (name && dataType) next[name] = dataType
+        }
+        setColumnTypes(next)
+        setColumnTypesReady(true)
+      })
+      .catch(() => {
+        if (cancelled) return
+        setColumnTypes({})
+        setColumnTypesReady(true)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [tableName, schema, row.ogcFid])
 
   const detailFields = useMemo(() => {
     const all = bundle?.fields ?? []
     const selected = selectDefineLayerDetailFields(all)
     if (selected.length > 0) return selected
     if (all.length > 0) {
-      return all.filter((f) => {
+      return uniqueDefineLayerFields(all).filter((f) => {
         const name = String(f.define_field_name ?? '')
           .trim()
           .toLowerCase()
@@ -323,7 +407,8 @@ export function WtlFacilityRelatedDetailFloating({
       onClose={onClose}
       stackOffset={stackOffset}
       left={floatingLeftPx}
-      zLayer={stackOffset > 0 ? 'detailRelated' : 'detailFloating'}
+      anchorPosition={anchorPosition}
+      zLayer={zLayer}
       collapsed={collapsed}
       onToggleCollapsed={onToggleCollapsed}
     >
@@ -336,6 +421,12 @@ export function WtlFacilityRelatedDetailFloating({
               const key = String(f.define_field_name ?? '').trim()
               const label = getDefineFieldDisplayLabel(key, f.define_field_kor_name)
               const raw = getRowValueByField(row.record, key)
+              const useBoolCheck = shouldUseBooleanCheckbox(
+                f.define_field_type,
+                columnTypes[key.toLowerCase()],
+                columnTypesReady
+              )
+              const boolChecked = parseDefineBooleanValue(raw)
               const value = formatDefineFieldDisplayValue(
                 raw,
                 f.define_field_type,
@@ -353,9 +444,25 @@ export function WtlFacilityRelatedDetailFloating({
                       isDefineFieldFlagTrue(f.define_field_show_title) &&
                         'standard-detail-attr-value-title'
                     )}
-                    title={value}
+                    title={
+                      useBoolCheck ? formatBooleanYeobu(raw, '—') : value
+                    }
                   >
-                    {value}
+                    {useBoolCheck ? (
+                      <input
+                        type="checkbox"
+                        className="pointer-events-none h-3.5 w-3.5 accent-primary"
+                        title={formatBooleanYeobu(raw, '—')}
+                        aria-label={label}
+                        aria-readonly="true"
+                        checked={boolChecked}
+                        readOnly
+                        tabIndex={-1}
+                        onChange={() => {}}
+                      />
+                    ) : (
+                      value
+                    )}
                   </div>
                 </div>
               )

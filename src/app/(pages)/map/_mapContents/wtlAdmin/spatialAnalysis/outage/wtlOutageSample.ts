@@ -1,4 +1,4 @@
-/** 단수구역 타입·이력 유틸 (세션 전용, 저장소 없음) */
+/** 단수구역 타입·이력 유틸 (세션 전용) */
 
 export type WtlOutageStatus =
   | '분석완료'
@@ -34,12 +34,22 @@ export type WtlOutageParcel = {
   jibun: string
   jimok: string
   area: string
+  /** 필지 중심 [lon, lat] */
+  point?: [number, number]
 }
 
 export type WtlOutageAddress = {
   id: string
+  /** 도로명 */
   road: string
+  /** 지번 */
   jibun: string
+  /** 수용가번호 */
+  customerNo: string
+  /** 대표 위치 [lon, lat] */
+  point?: [number, number]
+  /** 대표 급수전 ogc_fid */
+  ogcFid?: number
 }
 
 export type WtlOutageCustomer = {
@@ -48,15 +58,51 @@ export type WtlOutageCustomer = {
   address: string
   phone: string
   meterNo: string
+  /** 수용가 위치 [lon, lat] */
+  point?: [number, number]
+  /** wtl_meta_ps ogc_fid */
+  ogcFid?: number
 }
 
 export type WtlOutageResult = {
   gateId: string
   ring: [number, number][]
+  /** 잠금이 여러 개일 때 모든 단수 면 */
+  rings?: [number, number][][]
+  /** 단수 면(구멍 포함): [바깥 고리, ...구멍]. 있으면 rings보다 우선 */
+  polygons?: [number, number][][][]
   pipes: [number, number][][]
   parcels: WtlOutageParcel[]
   addresses: WtlOutageAddress[]
   customers: WtlOutageCustomer[]
+  /** 관로 주변 버퍼(m). 없으면 기본 28 */
+  bufferM?: number
+  /** pipes와 같은 순서의 선별 버퍼(m). 지도 외곽선 편집 시 생김 */
+  lineBuffers?: number[]
+  /** 초기 면 생성 기준: 계량기(meter) 또는 관로 버퍼(pipe) */
+  zoneBasis?: 'meter' | 'pipe'
+  /** 계량기 기준일 때 단수 대상 계량기 수 */
+  meterCount?: number
+  /** 계량기가 속하거나 인접한 건물군 면(4326) — 편집 재계산 때도 함께 합친다 */
+  buildingRings?: [number, number][][]
+  /** 건물군에 묶인 계량기 수 */
+  buildingMeterCount?: number
+  /** 계량기는 없지만 주변에 급수 중인 관로가 없어 단수로 넣은 건물군 수 */
+  meterlessBuildingCount?: number
+}
+
+export const OUTAGE_ZONE_BUFFER_DEFAULT_M = 28
+
+/** 단수 면(구멍 포함) — polygons가 없으면(이전 결과·읍면동리) 바깥 고리만으로 */
+export function outagePolygonsOf(
+  result: Pick<WtlOutageResult, 'polygons' | 'rings' | 'ring'> | null | undefined
+): [number, number][][][] {
+  if (!result) return []
+  if (result.polygons && result.polygons.length > 0) {
+    return result.polygons.filter((p) => (p[0]?.length ?? 0) >= 3)
+  }
+  const rings = result.rings && result.rings.length > 0 ? result.rings : [result.ring]
+  return rings.filter((r) => r.length >= 3).map((r) => [r])
 }
 
 export type WtlOutageHistory = {
@@ -71,6 +117,7 @@ export type WtlOutageHistory = {
   householdCount: number
   result: WtlOutageResult
   smsTitle?: string
+  smsBody?: string
 }
 
 export function parseOutageGateIds(gateId: string): string[] {

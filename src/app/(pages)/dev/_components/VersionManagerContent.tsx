@@ -76,6 +76,32 @@ function emptySideProgress(): SideProgress {
   return { message: '대기 중', pct: null, logs: [], error: null };
 }
 
+function formatProgressBytes(n: number): string {
+  if (n < 1024) return `${n}B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)}KB`;
+  if (n < 1024 * 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)}MB`;
+  return `${(n / (1024 * 1024 * 1024)).toFixed(2)}GB`;
+}
+
+function mergeApplyDetailFromProgress(p: {
+  mergeStep?: MergeApplyEtaStep | null;
+  appliedFiles?: number;
+  totalFiles?: number;
+  bytesDone?: number;
+  totalBytes?: number;
+}): string | undefined {
+  const step = p.mergeStep ?? null;
+  if (step === 'extract' && p.bytesDone != null && p.totalBytes != null && p.totalBytes > 0) {
+    return `압축 해제 ${formatProgressBytes(p.bytesDone)}/${formatProgressBytes(p.totalBytes)}`;
+  }
+  if (p.appliedFiles != null) {
+    return p.totalFiles != null && p.totalFiles > 0
+      ? `병합 ${p.appliedFiles}/${p.totalFiles}`
+      : `병합 ${p.appliedFiles}건`;
+  }
+  return undefined;
+}
+
 function pickDefaultFolder(entries: GnmsVersionListEntry[]): string {
   const latest = entries.find((e) => e.isLatest);
   return (latest ?? entries[0])?.folder ?? '';
@@ -119,6 +145,7 @@ export function VersionManagerContent() {
   const busyRef = useRef(false);
   const historyRetryTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const mergeCountRef = useRef<{ applied: number; total: number } | null>(null);
+  const mergeExtractBytesRef = useRef<{ done: number; total: number } | null>(null);
   const mergeStepRef = useRef<MergeApplyEtaStep | null>(null);
   const siblingHandoffRef = useRef(false);
 
@@ -293,12 +320,24 @@ export function VersionManagerContent() {
       const schemaMemo = formatSchemaSyncHistoryMemo(previewResult);
       const json = await confirmSchemaSyncApply(pendingId, (p) => {
         if (p.logLine) pushLog(p.logLine.replace(/^\[SourceCodeUpload\]\s*/i, ''));
+        if (p.phase === 'merge-apply') {
+          if (p.mergeStep) mergeStepRef.current = p.mergeStep;
+          if (p.appliedFiles != null && p.totalFiles != null) {
+            mergeCountRef.current = { applied: p.appliedFiles, total: p.totalFiles };
+          }
+          if (p.bytesDone != null && p.totalBytes != null && p.totalBytes > 0) {
+            mergeExtractBytesRef.current = { done: p.bytesDone, total: p.totalBytes };
+          }
+        }
+        const extractBytes = mergeExtractBytesRef.current;
         const mergePct =
           p.phase === 'merge-apply'
             ? mergeApplyStepPct(
                 p.mergeStep ?? mergeStepRef.current ?? 'copy',
-                p.appliedFiles ?? 0,
-                p.totalFiles ?? 0
+                p.appliedFiles ?? mergeCountRef.current?.applied ?? 0,
+                p.totalFiles ?? mergeCountRef.current?.total ?? 0,
+                p.bytesDone ?? extractBytes?.done,
+                p.totalBytes ?? extractBytes?.total
               )
             : null;
         const pct =
@@ -317,10 +356,6 @@ export function VersionManagerContent() {
             message: p.message,
             pct: pct ?? prev.pct,
           }));
-        }
-        if (p.phase === 'merge-apply' && p.appliedFiles != null && p.totalFiles != null) {
-          mergeCountRef.current = { applied: p.appliedFiles, total: p.totalFiles };
-          mergeStepRef.current = p.mergeStep ?? 'copy';
         }
       }, schemaMemo);
       if (!json.ok) {
@@ -351,6 +386,7 @@ export function VersionManagerContent() {
     logRef.current = [];
     versionDetailRef.current = '';
     mergeCountRef.current = null;
+    mergeExtractBytesRef.current = null;
     mergeStepRef.current = null;
     setProgress({
       ...emptySideProgress(),
@@ -389,24 +425,33 @@ export function VersionManagerContent() {
             if (p.totalFiles != null && p.totalFiles > 0 && p.appliedFiles != null) {
               mergeCountRef.current = { applied: p.appliedFiles, total: p.totalFiles };
             }
-          } else {
+            if (p.bytesDone != null && p.totalBytes != null && p.totalBytes > 0) {
+              mergeExtractBytesRef.current = { done: p.bytesDone, total: p.totalBytes };
+            }
+          } else if (p.phase !== 'download' && p.phase !== 'relay-chunk') {
             mergeCountRef.current = null;
+            mergeExtractBytesRef.current = null;
             mergeStepRef.current = null;
           }
           const merge = mergeCountRef.current;
+          const extractBytes = mergeExtractBytesRef.current;
           const mergePct =
             p.phase === 'merge-apply'
               ? mergeApplyStepPct(
                   mergeStepRef.current,
                   merge?.applied ?? 0,
-                  merge?.total ?? 0
+                  merge?.total ?? 0,
+                  p.bytesDone ?? extractBytes?.done,
+                  p.totalBytes ?? extractBytes?.total
                 )
               : null;
           const pct =
             mergePct != null
               ? mergePct
-              : p.totalBytes && p.bytesDone != null
-                ? Math.min(54, Math.round((p.bytesDone / p.totalBytes) * 54))
+              : p.phase === 'download' || p.phase === 'relay-chunk'
+                ? p.totalBytes && p.bytesDone != null
+                  ? Math.min(54, Math.round((p.bytesDone / p.totalBytes) * 54))
+                  : null
                 : p.phase === 'latest'
                   ? 5
                   : p.phase === 'relay-init'
@@ -423,9 +468,7 @@ export function VersionManagerContent() {
                               ? 98
                               : p.phase === 'app-stop'
                                 ? 99
-                                : p.phase === 'download'
-                                  ? 20
-                                  : null;
+                                : null;
           if (p.phase === 'latest' && p.message.includes('version=')) {
             versionDetailRef.current = p.message.replace(/^latest:\s*/i, '');
           }
@@ -445,10 +488,14 @@ export function VersionManagerContent() {
                 totalBytes: p.totalBytes,
                 versionDetail: versionDetailRef.current || undefined,
                 applyDetail:
-                  p.phase === 'merge-apply' && p.appliedFiles != null
-                    ? p.totalFiles != null && p.totalFiles > 0
-                      ? `병합 ${p.appliedFiles}/${p.totalFiles}`
-                      : `병합 ${p.appliedFiles}건`
+                  p.phase === 'merge-apply'
+                    ? mergeApplyDetailFromProgress({
+                        mergeStep: mergeStepRef.current,
+                        appliedFiles: p.appliedFiles,
+                        totalFiles: p.totalFiles,
+                        bytesDone: p.bytesDone ?? extractBytes?.done,
+                        totalBytes: p.totalBytes ?? extractBytes?.total,
+                      })
                     : undefined,
                 npmInstallDetail:
                   p.phase === 'npm-install' || p.phase === 'schema-wait' || p.phase === 'build'
@@ -915,7 +962,7 @@ export function VersionManagerContent() {
                   />
                   덮어쓰기
                 </label>
-                <label className="flex cursor-pointer items-center gap-1" title="따로 생성">
+                <label className="flex cursor-pointer items-center gap-1" title="새 폴더 생성">
                   <input
                     type="radio"
                     name="applyLayout"
@@ -924,7 +971,7 @@ export function VersionManagerContent() {
                     disabled={busy}
                     onChange={() => setApplyLayout('sibling')}
                   />
-                  따로 생성
+                  새 폴더 생성
                 </label>
               </div>
               {sibling ? (

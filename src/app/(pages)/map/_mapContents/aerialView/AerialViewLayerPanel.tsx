@@ -207,13 +207,14 @@ export function AerialViewLayerPanel({
         className
       )}
     >
-      <div className="flex shrink-0 items-center justify-between border-b border-slate-100 px-3 py-2 dark:border-white/10">
-        <span className="text-[13px] font-medium text-foreground">드론영상</span>
+      <div className="standard-map-float-header shrink-0">
+        <span className="standard-map-float-header-title">드론영상</span>
         {onClose ? (
           <button
             type="button"
             onClick={onClose}
-            className="text-xs text-muted-foreground hover:text-foreground"
+            className="standard-map-float-header-close px-1 text-xs"
+            title="닫기"
             aria-label="닫기"
           >
             닫기
@@ -318,7 +319,7 @@ export function AerialViewLayerPanel({
                           <li key={row.id} data-aerial-unit={row.id} data-aerial-kind={group.kind}>
                             <label
                               className={cn(
-                                'flex cursor-pointer items-center gap-2 px-3 py-1 hover:bg-slate-50 dark:hover:bg-white/10',
+                                'standard-map-float-row-hover flex cursor-pointer items-center gap-2 px-3 py-1',
                                 checked && 'bg-blue-50 dark:bg-white/20'
                               )}
                             >

@@ -433,9 +433,9 @@ export function RiverBasicPlanDetailPanel({
   useEffect(() => {
     if (!setServiceWmsCqlByLayer || !riverName.trim()) return;
     setServiceWmsCqlByLayer(
-      buildRiverBasicPlanMapCqlByLayer(tab, riverName, selected)
+      buildRiverBasicPlanMapCqlByLayer(tab, riverName, selected, riverCodeFilter)
     );
-  }, [tab, riverName, selected, setServiceWmsCqlByLayer]);
+  }, [tab, riverName, selected, riverCodeFilter, setServiceWmsCqlByLayer]);
 
   /** 색인도 식별 시 현재 선택 연도 우선 매칭용 */
   useEffect(() => {
@@ -526,6 +526,7 @@ export function RiverBasicPlanDetailPanel({
   useRiverBasicPlanJbLabels({
     tab,
     riverName,
+    riverCode: riverCodeFilter,
     active: Boolean(mapContext?.mapReady) && jbLayerOn && Boolean(riverName.trim()),
     pulseOgcFids: jbPulseOgcFids,
   });
@@ -912,6 +913,7 @@ export function RiverBasicPlanDetailPanel({
             planLen: selected.planLen,
             rivpName: selected.rivpName,
             rivpSuffix: selected.rivpSuffix,
+            riverCode: riverCodeFilter || undefined,
           },
         });
         if (!alive) return;
@@ -929,7 +931,7 @@ export function RiverBasicPlanDetailPanel({
     return () => {
       alive = false;
     };
-  }, [tab, riverName, selected]);
+  }, [tab, riverName, selected, riverCodeFilter]);
 
   useEffect(() => {
     setIndexViewMode(false);
@@ -1015,6 +1017,7 @@ export function RiverBasicPlanDetailPanel({
             planYear: selected.planYear,
             planName: selected.planName,
             planLen: selected.planLen,
+            riverCode: riverCodeFilter || undefined,
             indexOgcFid: mapRequestedIndexOgcFid,
           },
         });
@@ -1074,7 +1077,7 @@ export function RiverBasicPlanDetailPanel({
     return () => {
       alive = false;
     };
-  }, [indexViewMode, mapRequestedIndexOgcFid, tab, riverName, selected]);
+  }, [indexViewMode, mapRequestedIndexOgcFid, tab, riverName, selected, riverCodeFilter]);
 
   useEffect(() => {
     if (!riverName || !selected) {
@@ -1096,6 +1099,7 @@ export function RiverBasicPlanDetailPanel({
             planYear: selected.planYear,
             planName: selected.planName,
             planLen: selected.planLen,
+            riverCode: riverCodeFilter || undefined,
           },
         });
         if (!alive) return;
@@ -1129,7 +1133,7 @@ export function RiverBasicPlanDetailPanel({
     return () => {
       alive = false;
     };
-  }, [tab, riverName, selected?.planYear, selected?.planName, selected]);
+  }, [tab, riverName, selected?.planYear, selected?.planName, selected, riverCodeFilter]);
 
   const mapInstanceRef = mapContext?.mapInstanceRef;
   const setRiverBasicPlanDrawingFromMap = mapContext?.setRiverBasicPlanDrawingFromMap;
@@ -1353,10 +1357,10 @@ export function RiverBasicPlanDetailPanel({
     { label: "보고서", icon: FileText },
     { label: "하천구역", icon: Waves },
     { label: "색인도", icon: Map },
-    { label: "구조물도", icon: Construction },
     { label: "종단면도", icon: FlipHorizontal },
     { label: "횡단면도", icon: FlipVertical },
     { label: "사업계획", icon: ClipboardList },
+    { label: "구조물도", icon: Construction },
   ];
 
   /** 사업계획 — 포함 레이어(현재 제방)만 토글. 구조물도와 동일 패턴, 다른 레이어는 건드리지 않음 */
@@ -1578,7 +1582,7 @@ export function RiverBasicPlanDetailPanel({
       )}
 
       <div className="shrink-0 border-b border-border px-3 py-2 bg-background">
-        <div className="grid grid-cols-12 gap-1 [&>*:nth-child(-n+4)]:col-span-3 [&>*:nth-child(n+5)]:col-span-4">
+        <div className="grid grid-cols-12 gap-1 [&>*:nth-child(-n+3)]:col-span-4 [&>*:nth-child(n+4)]:col-span-3">
           {actionButtons.map(({ label, icon: Icon }) => {
             if (label === "보고서") {
               const disabled = !showReportButton || reportButtonDisabled;

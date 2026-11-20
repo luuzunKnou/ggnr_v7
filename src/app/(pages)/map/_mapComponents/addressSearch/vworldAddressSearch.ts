@@ -1,23 +1,34 @@
 /**
- * VWorld 검색 API 2.0 — 우선 `/api/vworld/search` 서버 프록시,
- * 실패 시 JSONP → 행정안전부 도로명주소(addrLinkApi) 순 폴백
+ * VWorld 검색 API 2.0 — 브라우저 JSONP 직접 호출.
+ * 실패 시 행정안전부 도로명주소(addrLinkApi)를 브라우저에서 직접 호출(CORS *).
+ * 폐쇄 서버를 거치지 않아 운영 서버 아웃바운드와 무관하게 PC 개방망에서 동작한다.
  * @see https://www.vworld.kr/dev/v4dv_search2_s001.do
  * @see https://business.juso.go.kr/addrlink/addrLinkApi.do
  */
 
-import { withBasePath } from '@/lib/basePath';
+import { call } from '@/lib/api';
+import { searchJusoAddress } from '@/lib/jusoAddrLink';
 
 const VWORLD_SEARCH_BASE = 'https://api.vworld.kr/req/search';
 const VWORLD_ADDRESS_BASE = 'https://api.vworld.kr/req/address';
 
 type SearchOneOutcome = {
   items: VWorldAddressItem[];
-  /** 프록시·JSONP 등 업스트림 요청 실패 (결과 없음과 구분) */
+  /** JSONP 로드·업스트림 오류 (결과 없음·NOT_FOUND 과 구분) */
   upstreamFailed: boolean;
 };
 
 /** 동일 검색어 juso 폴백 중복 호출 방지 */
 const jusoInflight = new Map<string, Promise<VWorldAddressItem[]>>();
+
+type JusoClientKeys = {
+  confmKey: string;
+  coordConfmKey: string;
+  vworldKey: string;
+};
+
+let jusoKeysCache: JusoClientKeys | null = null;
+let jusoKeysInflight: Promise<JusoClientKeys> | null = null;
 
 export interface VWorldAddressItem {
   /** VWorld 응답 id (중복 제거용) */
@@ -107,6 +118,10 @@ export interface PreferRegion {
 export interface SearchAddressOptions {
   /** VWorld API 키 (미지정 시 VWORLD_API_KEY 사용) */
   apiKey?: string;
+  /** 행정안전부 도로명주소 검색 API 승인키 (폴백용). 없으면 getMapConfig로 조회 */
+  jusoConfmKey?: string;
+  /** 도로명주소 좌표 API 승인키. 없으면 jusoConfmKey / getMapConfig */
+  jusoCoordConfmKey?: string;
   /** 좌표계 (기본 EPSG:4326) */
   crs?: string;
   /** 최대 결과 개수 (기본 5) — 화면에 반환할 건수 */
@@ -251,7 +266,7 @@ export async function searchAddress(
         return sortAndSliceByPreferRegion(merged, maxResults, preferRegion);
       }
       if (roadOut.upstreamFailed || parcelOut.upstreamFailed) {
-        const jusoItems = await searchAddressViaJuso(trimmed, maxResults);
+        const jusoItems = await searchAddressViaJuso(trimmed, maxResults, options);
         return sortAndSliceByPreferRegion(jusoItems, maxResults, preferRegion);
       }
       return [];
@@ -268,7 +283,7 @@ export async function searchAddress(
       return sortAndSliceByPreferRegion(out.items, maxResults, preferRegion);
     }
     if (out.upstreamFailed) {
-      const jusoItems = await searchAddressViaJuso(trimmed, maxResults);
+      const jusoItems = await searchAddressViaJuso(trimmed, maxResults, options);
       return sortAndSliceByPreferRegion(jusoItems, maxResults, preferRegion);
     }
     return [];
@@ -409,60 +424,88 @@ function buildSearchParams(
   return params;
 }
 
-async function searchAddressViaProxy(
-  params: URLSearchParams,
-  maxResults: number
-): Promise<VWorldAddressItem[] | 'upstream_failed' | null> {
-  if (typeof window === 'undefined') return null;
-  try {
-    const res = await fetch(`${withBasePath('/api/vworld/search')}?${params.toString()}`, {
-      cache: 'no-store',
-    });
-    if (!res.ok) return 'upstream_failed';
-    const data = (await res.json()) as VWorldSearchResponse;
-    const status = String(data?.response?.status ?? '').toUpperCase();
-    /** OK·NOT_FOUND 만 정상 응답. ERROR 등은 요청 실패로 보고 juso 폴백 */
-    if (status === 'OK') return parseSearchResponse(data, maxResults);
-    if (status === 'NOT_FOUND') return [];
-    return 'upstream_failed';
-  } catch {
-    return null;
+async function resolveJusoClientKeys(
+  options?: SearchAddressOptions
+): Promise<JusoClientKeys> {
+  const fromOpts: JusoClientKeys = {
+    confmKey: String(options?.jusoConfmKey ?? '').trim(),
+    coordConfmKey: String(options?.jusoCoordConfmKey ?? '').trim(),
+    vworldKey: String(options?.apiKey ?? '').trim(),
+  };
+  if (fromOpts.confmKey) {
+    return {
+      confmKey: fromOpts.confmKey,
+      coordConfmKey: fromOpts.coordConfmKey || fromOpts.confmKey,
+      vworldKey: fromOpts.vworldKey,
+    };
   }
+  if (jusoKeysCache?.confmKey) {
+    return {
+      ...jusoKeysCache,
+      vworldKey: fromOpts.vworldKey || jusoKeysCache.vworldKey,
+    };
+  }
+  if (jusoKeysInflight) return jusoKeysInflight;
+
+  jusoKeysInflight = call('', 'POST', {
+    service: 'configService',
+    action: 'getMapConfig',
+    params: {},
+  })
+    .then((res) => {
+      const data = (res?.data ?? res) as Record<string, unknown>;
+      const confmKey = String(data?.JUSO_CONFM_KEY ?? '').trim();
+      const coordConfmKey =
+        String(data?.JUSO_COORD_CONFM_KEY ?? '').trim() || confmKey;
+      const vworldKey =
+        fromOpts.vworldKey || String(data?.VWORLD_API_KEY ?? '').trim();
+      jusoKeysCache = { confmKey, coordConfmKey, vworldKey };
+      return jusoKeysCache;
+    })
+    .catch(() => {
+      jusoKeysCache = { confmKey: '', coordConfmKey: '', vworldKey: fromOpts.vworldKey };
+      return jusoKeysCache;
+    })
+    .finally(() => {
+      jusoKeysInflight = null;
+    });
+
+  return jusoKeysInflight;
 }
 
 /**
- * 행정안전부 도로명주소 API 서버 프록시 폴백
+ * 행정안전부 도로명주소 — 브라우저에서 business.juso.go.kr 직접 호출 (CORS *)
  */
 function searchAddressViaJuso(
   trimmed: string,
-  maxResults: number
+  maxResults: number,
+  options?: SearchAddressOptions
 ): Promise<VWorldAddressItem[]> {
   if (typeof window === 'undefined') return Promise.resolve([]);
   const key = `${trimmed}\0${maxResults}`;
   const existing = jusoInflight.get(key);
   if (existing) return existing;
 
-  const params = new URLSearchParams({
-    keyword: trimmed,
-    size: String(Math.min(maxResults, 20)),
-  });
-  const promise = fetch(`${withBasePath('/api/juso/search')}?${params.toString()}`, {
-    cache: 'no-store',
-  })
-    .then(async (res) => {
-      if (!res.ok) {
-        console.warn('[vworldAddressSearch] juso fallback HTTP', res.status);
+  const promise = resolveJusoClientKeys(options)
+    .then(async (keys) => {
+      if (!keys.confmKey) {
+        console.warn('[vworldAddressSearch] juso fallback: JUSO_CONFM_KEY 없음');
         return [] as VWorldAddressItem[];
       }
-      const data = (await res.json()) as { items?: VWorldAddressItem[] };
-      const items = Array.isArray(data?.items) ? data.items : [];
+      const items = await searchJusoAddress({
+        keyword: trimmed,
+        confmKey: keys.confmKey,
+        coordConfmKey: keys.coordConfmKey || keys.confmKey,
+        vworldKey: keys.vworldKey,
+        maxResults,
+      });
       return items.filter(
         (it) =>
           it?.point &&
           Number.isFinite(it.point.x) &&
           Number.isFinite(it.point.y) &&
           String(it.address ?? '').trim()
-      );
+      ) as VWorldAddressItem[];
     })
     .catch((err) => {
       console.warn('[vworldAddressSearch] juso fallback failed', err);
@@ -482,17 +525,18 @@ function searchAddressOne(
   apiKey: string
 ): Promise<SearchOneOutcome> {
   const maxResults = options.maxResults ?? 5;
-  const proxyParams = buildSearchParams(trimmed, { ...options, type: 'address' });
-  return searchAddressViaProxy(proxyParams, maxResults).then(async (viaProxy) => {
-    if (Array.isArray(viaProxy)) return { items: viaProxy, upstreamFailed: false };
-    if (!apiKey) {
-      console.warn('[vworldAddressSearch] VWORLD_API_KEY not set');
+  if (!apiKey) {
+    console.warn('[vworldAddressSearch] VWORLD_API_KEY not set');
+    return Promise.resolve({ items: [], upstreamFailed: true });
+  }
+  return searchOneJsonp(trimmed, { ...options, type: 'address' }, apiKey).then(
+    ({ items, scriptFailed, statusFailed }) => {
+      if (!scriptFailed && !statusFailed) {
+        return { items: items.slice(0, maxResults), upstreamFailed: false };
+      }
       return { items: [], upstreamFailed: true };
     }
-    const jsonpItems = await searchOneJsonp(trimmed, { ...options, type: 'address' }, apiKey);
-    if (jsonpItems.length > 0) return { items: jsonpItems, upstreamFailed: true };
-    return { items: [], upstreamFailed: true };
-  });
+  );
 }
 
 /** type=place — category 없음 (juso 폴백 없음: 장소/POI 미지원) */
@@ -507,28 +551,38 @@ function searchPlaceOne(
     maxResults,
     type: 'place',
   };
-  const proxyParams = buildSearchParams(trimmed, placeOpts);
-  return searchAddressViaProxy(proxyParams, maxResults).then((viaProxy) => {
-    const finish = (items: VWorldAddressItem[]) =>
-      items.map((it) => ({ ...it, kind: 'place' as const }));
-    if (Array.isArray(viaProxy)) return finish(viaProxy);
-    if (!apiKey) {
-      console.warn('[vworldAddressSearch] VWORLD_API_KEY not set');
-      return [];
-    }
-    return searchOneJsonp(trimmed, placeOpts, apiKey).then(finish);
-  });
+  const finish = (items: VWorldAddressItem[]) =>
+    items.map((it) => ({ ...it, kind: 'place' as const }));
+  if (!apiKey) {
+    console.warn('[vworldAddressSearch] VWORLD_API_KEY not set');
+    return Promise.resolve([]);
+  }
+  return searchOneJsonp(trimmed, placeOpts, apiKey).then(({ items }) =>
+    finish(items.slice(0, maxResults))
+  );
 }
+
+type JsonpSearchResult = {
+  items: VWorldAddressItem[];
+  /** script onerror — 네트워크·스크립트 로드 실패 */
+  scriptFailed: boolean;
+  /** 응답은 왔으나 OK/NOT_FOUND 가 아님 */
+  statusFailed: boolean;
+};
 
 function searchOneJsonp(
   trimmed: string,
   options: SearchAddressOptions,
   apiKey: string
-): Promise<VWorldAddressItem[]> {
+): Promise<JsonpSearchResult> {
   const { maxResults = 5 } = options;
   const params = buildSearchParams(trimmed, options, apiKey);
 
-  return new Promise<VWorldAddressItem[]>((resolve) => {
+  return new Promise<JsonpSearchResult>((resolve) => {
+    if (typeof document === 'undefined' || !document.head) {
+      resolve({ items: [], scriptFailed: true, statusFailed: false });
+      return;
+    }
     const callbackName = `__vworldSearch_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 
     const script = document.createElement('script');
@@ -538,12 +592,27 @@ function searchOneJsonp(
       if (script.parentNode) script.remove();
     };
 
-    (window as unknown as Record<string, (data: VWorldSearchResponse) => void>)[callbackName] = (data: VWorldSearchResponse) => {
+    (window as unknown as Record<string, (data: VWorldSearchResponse) => void>)[callbackName] = (
+      data: VWorldSearchResponse
+    ) => {
       cleanup();
       try {
-        resolve(parseSearchResponse(data, maxResults));
+        const status = String(data?.response?.status ?? '').toUpperCase();
+        if (status === 'OK') {
+          resolve({
+            items: parseSearchResponse(data, maxResults),
+            scriptFailed: false,
+            statusFailed: false,
+          });
+          return;
+        }
+        if (status === 'NOT_FOUND') {
+          resolve({ items: [], scriptFailed: false, statusFailed: false });
+          return;
+        }
+        resolve({ items: [], scriptFailed: false, statusFailed: true });
       } catch {
-        resolve([]);
+        resolve({ items: [], scriptFailed: false, statusFailed: true });
       }
     };
 
@@ -552,7 +621,7 @@ function searchOneJsonp(
     script.onerror = () => {
       cleanup();
       console.warn('[vworldAddressSearch] JSONP script load failed');
-      resolve([]);
+      resolve({ items: [], scriptFailed: true, statusFailed: false });
     };
     document.head.appendChild(script);
   });

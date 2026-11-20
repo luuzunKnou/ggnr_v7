@@ -1,10 +1,16 @@
 'use client';
 
 import { useState, useCallback } from 'react';
+import { useSession } from 'next-auth/react';
 import { Switch } from '@/app/shadcnComponents/ui/switch';
+import { isSuperUser } from '@/lib/auth/superUser';
 import { cn } from '@/lib/utils';
 import { getLegendGraphicUrl } from '@/app/(pages)/map/_mapComponents/layerFactory/serviceLayerFactory';
-import { MAP_LAYER_PANEL_MAX_H_CLASS, MAP_LAYER_PANEL_SURFACE_CLASS } from './mapLayerPanelLayout';
+import {
+  MAP_LAYER_PANEL_MAX_H_CLASS,
+  MAP_LAYER_PANEL_SURFACE_CLASS,
+  layerHoverTitle,
+} from './mapLayerPanelLayout';
 
 export interface LayerOption {
   tableName: string;
@@ -37,6 +43,9 @@ export function JimokLandownLayerSelector({
   className,
   showBulkActions = true,
 }: JimokLandownLayerSelectorProps) {
+  const { data: session } = useSession();
+  const showEngInTitle = isSuperUser(session?.user?.id);
+
   const toggle = (tableName: string, checked: boolean) => {
     const next = new Set(selectedTableNames);
     if (checked) next.add(tableName);
@@ -69,13 +78,13 @@ export function JimokLandownLayerSelector({
         className
       )}
     >
-      <div className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-slate-50 px-3 py-2 dark:border-white/10 dark:bg-white/5">
-        <span className="text-[13px] font-medium text-slate-800 dark:text-white/90">{title}</span>
+      <div className="standard-map-float-header shrink-0">
+        <span className="standard-map-float-header-title">{title}</span>
         {onClose && (
           <button
             type="button"
             onClick={onClose}
-            className="cursor-pointer rounded px-1 text-xs text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-white/10 dark:hover:text-white"
+            className="standard-map-float-header-close px-1 text-xs"
             aria-label="닫기"
             title="닫기"
           >
@@ -115,7 +124,7 @@ export function JimokLandownLayerSelector({
               <label
                 key={opt.tableName}
                 className={cn(
-                  'flex cursor-pointer items-center justify-between gap-2 py-0.5 pl-2 pr-4 transition-colors hover:bg-slate-50 dark:hover:bg-white/10',
+                  'standard-map-float-row-hover flex cursor-pointer items-center justify-between gap-2 py-0.5 pl-2 pr-4',
                   checked && 'bg-blue-50 dark:bg-white/20'
                 )}
               >
@@ -140,6 +149,11 @@ export function JimokLandownLayerSelector({
                       checked
                         ? 'font-medium text-primary'
                         : 'text-slate-700 dark:text-white/90'
+                    )}
+                    title={layerHoverTitle(
+                      opt.layerName,
+                      opt.tableName,
+                      showEngInTitle
                     )}
                   >
                     {opt.layerName}

@@ -11,7 +11,9 @@ import VectorSource from 'ol/source/Vector'
 import { Fill, Stroke, Style } from 'ol/style'
 import '../../../../_mapComponents/config/projections'
 import { useMapContext } from '../../../../_mapComponents/MapContext'
-import { geomToRing4326, ringToPolygon3857, type LonLat } from './wtlOutageGeom'
+import { unByKey } from 'ol/Observable'
+import { getViewProjectionCode } from '../topology/topoMapProjection'
+import { geomToRing4326, ringToViewPolygon, type LonLat } from './wtlOutageGeom'
 
 const EDIT_STYLE = new Style({
   fill: new Fill({ color: 'rgba(234, 88, 12, 0.22)' }),
@@ -53,6 +55,16 @@ export function useWtlOutageGeomEdit({ mode, ring, onRingChange }: Props) {
     layer.set('wtlOutageGeomEdit', true)
     map.addLayer(layer)
 
+    // 도형은 현재 지도 좌표계로 그린다. 배경 전환으로 좌표계가 바뀌면 편집 중 도형을 새 좌표계로 옮긴다
+    let viewProj = getViewProjectionCode(map)
+    const viewKey = map.on('change:view', () => {
+      const next = getViewProjectionCode(map)
+      if (next === viewProj) return
+      draw?.abortDrawing()
+      for (const f of source.getFeatures()) f.getGeometry()?.transform(viewProj, next)
+      viewProj = next
+    })
+
     const dblClickZoom = map
       .getInteractions()
       .getArray()
@@ -83,7 +95,7 @@ export function useWtlOutageGeomEdit({ mode, ring, onRingChange }: Props) {
         onRingRef.current(null)
         return
       }
-      const next = geomToRing4326(geom)
+      const next = geomToRing4326(geom, viewProj)
       onRingRef.current(next.length >= 3 ? next : null)
     }
 
@@ -114,7 +126,7 @@ export function useWtlOutageGeomEdit({ mode, ring, onRingChange }: Props) {
     }
 
     if (mode === 'modify') {
-      const poly = ringRef.current ? ringToPolygon3857(ringRef.current) : null
+      const poly = ringRef.current ? ringToViewPolygon(ringRef.current, viewProj) : null
       if (poly) {
         source.addFeature(new Feature({ geometry: poly }))
         emitFromSource()
@@ -127,6 +139,7 @@ export function useWtlOutageGeomEdit({ mode, ring, onRingChange }: Props) {
     }
 
     return () => {
+      unByKey(viewKey)
       detachDraw()
       detachModify()
       map.removeLayer(layer)

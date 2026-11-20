@@ -317,6 +317,16 @@ function primFromProps(props: ShapeProps, name: string): PrimFeat | null {
 function pipeLocalPts(pipe: PipeSegment, field: GroundHeightField): LocalPt[] {
   const out: LocalPt[] = [];
   const coords = pipe.coords3857 ?? [];
+  const diameterM = Math.max(
+    0.02,
+    Number.isFinite(pipe.diameterM) && pipe.diameterM > 0 ? pipe.diameterM : 0.1
+  );
+  const outerR = diameterM / 2;
+  const minBurialM = outerR + 0.05;
+  const fallbackDepthM = Math.max(
+    minBurialM,
+    Number.isFinite(pipe.depthM) && pipe.depthM > 0 ? pipe.depthM : 1.2
+  );
   for (let i = 0; i < coords.length; i++) {
     const [x, y] = coords[i]!;
     const loc = toLocal(x, y, field);
@@ -326,7 +336,11 @@ function pipeLocalPts(pipe: PipeSegment, field: GroundHeightField): LocalPt[] {
       pipe.depthsM && pipe.depthsM.length === coords.length
         ? pipe.depthsM[i]
         : pipe.depthM;
-    const depth = Math.max(0.05, depthRaw ?? pipe.depthM);
+    const depthNum = Number(depthRaw);
+    const depth = Math.max(
+      minBurialM,
+      Number.isFinite(depthNum) && depthNum > 0 ? depthNum : fallbackDepthM
+    );
     out.push({
       x: loc.x,
       z: loc.z,

@@ -272,7 +272,8 @@ export function DataHistoryCardSection({
                     role="button"
                     tabIndex={0}
                     className={cn(
-                      'standard-list-row cursor-pointer border-b border-border last:border-b-0',
+                      'standard-list-row cursor-pointer',
+                      !isPanel && 'border-b border-border last:border-b-0',
                       selected && 'standard-list-row-selected'
                     )}
                     onClick={() => openEditModal(it)}
@@ -367,9 +368,11 @@ export function DataHistoryCardSection({
       )
     }
     return (
-      <div className="flex h-full min-h-0 flex-col overflow-hidden px-2 pt-2">
-        {searchBar}
-        {error ? <p className="standard-detail-error-spaced shrink-0">{error}</p> : null}
+      <div className="flex h-full min-h-0 flex-col overflow-hidden">
+        <div className="shrink-0 px-2 pt-2">
+          {searchBar}
+          {error ? <p className="standard-detail-error-spaced shrink-0">{error}</p> : null}
+        </div>
         {tableBody}
         {modal}
       </div>

@@ -46,6 +46,14 @@ export function buildGnmsBaseDataExportUrl(gnmsUrl: string): string {
   return `${base}/api/base-data/export`;
 }
 
+/** sync export URL → async 시작 URL (`…/export/async`) */
+export function buildGnmsBaseDataExportAsyncUrl(exportUrl: string): string {
+  const base = String(exportUrl ?? '').trim().replace(/\/+$/, '');
+  if (!base) return '';
+  if (/\/async$/i.test(base)) return base;
+  return `${base}/async`;
+}
+
 /**
  * GNMS source/version API base 기준 URL 조합.
  * base 예: http://dggs.kr/gnms/api/source/version

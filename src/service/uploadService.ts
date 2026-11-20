@@ -3,8 +3,10 @@
  * 베이스 = resolveGgnrDataDir() (목록과 동일, G:→UNC 포함).
  * 3dtiles_*, tiles_*, shp_data, excel_data, file_data/... 루트에 저장.
  */
+import { createReadStream, createWriteStream } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { pipeline } from 'node:stream/promises';
 import { nanoid } from 'nanoid';
 import { getSessionUsrId } from '@/lib/auth/guard';
 import { userCanAccessServiceFileData } from '@/lib/serviceFileDataAccess';
@@ -14,7 +16,21 @@ import { resolveGgnrDataDir } from '@/lib/turbopackFsPath';
 import { appendUploadConvertHistory, ensureBaseStructure } from './fileManagerService';
 import { runLasPipeline } from './pipelineService';
 
-const CHUNK_SIZE = 512 * 1024; // 512KB
+const CHUNK_SIZE_DEFAULT = 512 * 1024; // 512KB
+const MB = 1024 * 1024;
+
+/**
+ * 파일 크기에 따라 청크 크기 조절.
+ * 45GB급을 512KB로 나누면 ~9만 요청이라 중간에 멈춘 것처럼 보이거나 실제 타임아웃 난다.
+ * Next.js 기본 요청 본문 한도가 10MB라 청크는 최대 8MB로 둔다(초과 시 잘려서 파일이 깨짐).
+ */
+function resolveChunkSize(totalSize: number): number {
+  const n = Number(totalSize);
+  if (!Number.isFinite(n) || n <= 0) return CHUNK_SIZE_DEFAULT;
+  if (n >= 1024 * MB) return 8 * MB; // ≥1GB → 8MB (10MB 한도 미만)
+  if (n >= 100 * MB) return 4 * MB;
+  return CHUNK_SIZE_DEFAULT;
+}
 
 /** 목록(fileManager)과 동일 — G: → UNC 치환 포함 */
 function getBaseDir(): string {
@@ -86,7 +102,8 @@ export async function initChunkedUpload(params: {
   ) {
     throw new Error('uploadType must be tif, las, shp, excel, fileData, satelliteTif, source, or fileManager');
   }
-  const expectedChunks = Math.ceil(totalSize / CHUNK_SIZE) || 1;
+  const chunkSize = resolveChunkSize(totalSize);
+  const expectedChunks = Math.ceil(totalSize / chunkSize) || 1;
   const uploadId = nanoid();
   const tempDir = getUploadTempDir(uploadId);
   await fs.mkdir(tempDir, { recursive: true });
@@ -95,12 +112,12 @@ export async function initChunkedUpload(params: {
     fileName,
     totalSize,
     expectedChunks,
-    chunkSize: CHUNK_SIZE,
+    chunkSize,
   };
   await fs.writeFile(path.join(tempDir, 'meta.json'), JSON.stringify(meta), 'utf-8');
   return {
     uploadId,
-    chunkSize: CHUNK_SIZE,
+    chunkSize,
     expectedChunks,
   };
 }
@@ -124,7 +141,8 @@ export async function initAerialMediaUpload(params: {
   if (!baseName || baseName === '.' || baseName === '..') {
     throw new Error('유효하지 않은 파일명입니다.');
   }
-  const expectedChunks = Math.ceil(params.totalSize / CHUNK_SIZE) || 1;
+  const chunkSize = resolveChunkSize(params.totalSize);
+  const expectedChunks = Math.ceil(params.totalSize / chunkSize) || 1;
   const uploadId = nanoid();
   const tempDir = getUploadTempDir(uploadId);
   await fs.mkdir(tempDir, { recursive: true });
@@ -133,13 +151,13 @@ export async function initAerialMediaUpload(params: {
     fileName: baseName,
     totalSize: params.totalSize,
     expectedChunks,
-    chunkSize: CHUNK_SIZE,
+    chunkSize,
     relativeDir: rel,
   };
   await fs.writeFile(path.join(tempDir, 'meta.json'), JSON.stringify(meta), 'utf-8');
   return {
     uploadId,
-    chunkSize: CHUNK_SIZE,
+    chunkSize,
     expectedChunks,
   };
 }
@@ -168,7 +186,8 @@ export async function initServiceFileDataUpload(params: {
   if (!relDir) {
     throw new Error('유효하지 않은 layer 또는 key 입니다.');
   }
-  const expectedChunks = Math.ceil(params.totalSize / CHUNK_SIZE) || 1;
+  const chunkSize = resolveChunkSize(params.totalSize);
+  const expectedChunks = Math.ceil(params.totalSize / chunkSize) || 1;
   const uploadId = nanoid();
   const tempDir = getUploadTempDir(uploadId);
   await fs.mkdir(tempDir, { recursive: true });
@@ -177,7 +196,7 @@ export async function initServiceFileDataUpload(params: {
     fileName: safeName,
     totalSize: params.totalSize,
     expectedChunks,
-    chunkSize: CHUNK_SIZE,
+    chunkSize,
     layerName: params.layerName.trim(),
     keyValue: String(params.keyValue),
     ownerUsrId: params.ownerUsrId,
@@ -187,7 +206,7 @@ export async function initServiceFileDataUpload(params: {
   await fs.writeFile(path.join(tempDir, 'meta.json'), JSON.stringify(meta), 'utf-8');
   return {
     uploadId,
-    chunkSize: CHUNK_SIZE,
+    chunkSize,
     expectedChunks,
   };
 }
@@ -336,15 +355,28 @@ export async function completeChunkedUpload(params: { uploadId: string }): Promi
     ? path.join(targetDir, ...segments)
     : path.join(targetDir, segments[segments.length - 1] ?? normalized);
   await fs.mkdir(path.dirname(targetPath), { recursive: true });
-  const buffers: Buffer[] = [];
-  for (let i = 0; i < meta.expectedChunks; i++) {
-    const chunkPath = path.join(tempDir, `chunk_${i}`);
-    const buf = await fs.readFile(chunkPath);
-    buffers.push(buf);
+  // 청크를 한 번에 Buffer.concat 하면 4GB(2^32) 초과 파일에서 RangeError.
+  // 스트림으로 이어 쓴다 (대용량·네트워크 디스크에서 readFile+write 보다 안정적).
+  const writeStream = createWriteStream(targetPath);
+  try {
+    for (let i = 0; i < meta.expectedChunks; i++) {
+      const chunkPath = path.join(tempDir, `chunk_${i}`);
+      await pipeline(createReadStream(chunkPath), writeStream, { end: false });
+    }
+    await new Promise<void>((resolve, reject) => {
+      writeStream.end(() => resolve());
+      writeStream.on('error', reject);
+    });
+  } catch (err) {
+    writeStream.destroy();
+    await fs.unlink(targetPath).catch(() => undefined);
+    throw err;
   }
-  await fs.writeFile(targetPath, Buffer.concat(buffers));
   const stat = await fs.stat(targetPath);
-  await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+  // 수천 개 청크 삭제는 응답 뒤에 (네트워크 디스크에서 수분 걸릴 수 있음)
+  setImmediate(() => {
+    void fs.rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
+  });
   const savedPath = preserveRelativePath
     ? joinRelativePath(subDir, segments.join('/'))
     : joinRelativePath(subDir, segments[segments.length - 1] ?? path.basename(normalized));

@@ -5,3 +5,10 @@
   stroke-opacity: 0.85;
   stroke-dasharray: 6 4;
 }
+
+[@sd > 10000] [env('ignore_scale', '0') = '1'] {
+  stroke: #C4A882;
+  stroke-width: 0.6;
+  stroke-opacity: 0.85;
+  stroke-dasharray: 6 4;
+}

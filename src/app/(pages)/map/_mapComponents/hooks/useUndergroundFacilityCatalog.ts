@@ -19,6 +19,8 @@ type DefineTableRow = {
   define_table_idx?: string | number;
 };
 
+type SysRow = { sys_key?: string; layerGroupList?: string[] };
+
 export type UndergroundFacilityCatalog = {
   loading: boolean;
   groups: ThematicMapLayerGroup[];
@@ -28,11 +30,14 @@ export type UndergroundFacilityCatalog = {
 
 /**
  * 서버에서 layer 스키마 부모 존재·분할 조건 데이터 유무 + 프로젝트 분할 merge 정의를 조회한 뒤 목록 구성.
+ * 현재 시스템 layerGroupList에 맞춰 그룹을 필터(데이터 조회와 동일: 미소속은 공통, 할당 그룹은 현재 시스템만).
  */
-export function useUndergroundFacilityCatalog(): UndergroundFacilityCatalog {
+export function useUndergroundFacilityCatalog(systemKey = ''): UndergroundFacilityCatalog {
   const [loading, setLoading] = useState(true);
   const [layersWithData, setLayersWithData] = useState<Set<string> | null>(null);
   const [defineTables, setDefineTables] = useState<DefineTableRow[] | null>(null);
+  const [allSystems, setAllSystems] = useState<SysRow[] | null>(null);
+  const [enabledSystems, setEnabledSystems] = useState<SysRow[] | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -48,8 +53,18 @@ export function useUndergroundFacilityCatalog(): UndergroundFacilityCatalog {
         action: 'getDefineLayerTables',
         params: {},
       }),
+      call('', 'POST', {
+        service: 'configService',
+        action: 'getSystemListAll',
+        params: {},
+      }),
+      call('', 'POST', {
+        service: 'configService',
+        action: 'getSystemList',
+        params: {},
+      }),
     ])
-      .then(([availRes, tablesRes]) => {
+      .then(([availRes, tablesRes, sysAllRes, sysEnabledRes]) => {
         if (cancelled) return;
         const avail = (availRes?.data ?? availRes) as {
           success?: boolean;
@@ -68,11 +83,22 @@ export function useUndergroundFacilityCatalog(): UndergroundFacilityCatalog {
             ? (tablesData as DefineTableRow[])
             : [];
         setDefineTables(rows);
+
+        const allSys: SysRow[] = Array.isArray((sysAllRes?.data ?? sysAllRes)?.systems)
+          ? ((sysAllRes?.data ?? sysAllRes).systems as SysRow[])
+          : [];
+        const enabledSys: SysRow[] = Array.isArray((sysEnabledRes?.data ?? sysEnabledRes)?.systems)
+          ? ((sysEnabledRes?.data ?? sysEnabledRes).systems as SysRow[])
+          : [];
+        setAllSystems(allSys);
+        setEnabledSystems(enabledSys);
       })
       .catch(() => {
         if (!cancelled) {
           setLayersWithData(new Set());
           setDefineTables([]);
+          setAllSystems([]);
+          setEnabledSystems([]);
         }
       })
       .finally(() => {
@@ -84,12 +110,41 @@ export function useUndergroundFacilityCatalog(): UndergroundFacilityCatalog {
   }, []);
 
   const groups = useMemo(() => {
-    if (layersWithData == null || defineTables == null) return [];
-    return buildUndergroundFacilityLayerGroups(null, layersWithData, defineTables).map((group) => ({
-      ...group,
-      layers: sortLayersByDefineIdx(group.layers),
-    }));
-  }, [layersWithData, defineTables]);
+    if (layersWithData == null || defineTables == null || allSystems == null || enabledSystems == null) {
+      return [];
+    }
+
+    const assignedGroups = new Set<string>();
+    for (const s of [...allSystems, ...enabledSystems]) {
+      for (const g of Array.isArray(s.layerGroupList) ? s.layerGroupList : []) {
+        const name = String(g ?? '').trim();
+        if (name) assignedGroups.add(name);
+      }
+    }
+
+    const currentKey = systemKey.trim().toLowerCase();
+    const currentSys =
+      enabledSystems.find((s) => String(s.sys_key ?? '').trim().toLowerCase() === currentKey) ??
+      allSystems.find((s) => String(s.sys_key ?? '').trim().toLowerCase() === currentKey);
+    const currentSystemGroups = new Set(
+      (Array.isArray(currentSys?.layerGroupList) ? currentSys!.layerGroupList! : [])
+        .map((g) => String(g ?? '').trim())
+        .filter(Boolean)
+    );
+
+    const isGroupVisible = (groupName: string) => {
+      if (!currentKey) return true;
+      if (!assignedGroups.has(groupName)) return true;
+      return currentSystemGroups.has(groupName);
+    };
+
+    return buildUndergroundFacilityLayerGroups(null, layersWithData, defineTables)
+      .filter((group) => isGroupVisible(String(group.title ?? '').trim()))
+      .map((group) => ({
+        ...group,
+        layers: sortLayersByDefineIdx(group.layers),
+      }));
+  }, [layersWithData, defineTables, allSystems, enabledSystems, systemKey]);
 
   const layers = useMemo(() => groups.flatMap((g) => g.layers), [groups]);
 

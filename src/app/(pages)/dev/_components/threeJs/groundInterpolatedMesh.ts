@@ -11,9 +11,84 @@ import { sampleHeight, sampleSurfaceY } from './groundSteppedMesh';
 export type InterpolatedGroundParts = {
   /** 윗면만 — 색상 채움용 */
   topGeo: THREE.BufferGeometry;
-  /** 아랫면·옆면 외곽선 (LineSegments용 xyz 쌍) */
+  /** 영역 경계 외곽 + (두께 시) 아랫변·모서리 세로 (LineSegments용 xyz 쌍) */
   outlinePositions: number[];
+  /**
+   * 윗면 폴리곤(삼각형) 모든 변 — 격자·메시 조각 외곽.
+   * 대각선 포함(삼각 분할). LineSegments용 xyz 쌍.
+   */
+  faceEdgePositions: number[];
 };
+
+/** 인덱스 메시의 모든 고유 변 → LineSegments 위치 (y에 eps) */
+export function extractMeshFaceEdgePositions(
+  geo: THREE.BufferGeometry,
+  yEps = 0.02
+): number[] {
+  const pos = geo.getAttribute('position');
+  const index = geo.getIndex();
+  if (!pos || pos.count < 3) return [];
+  const seen = new Set<string>();
+  const out: number[] = [];
+  const pushEdge = (ia: number, ib: number) => {
+    const lo = Math.min(ia, ib);
+    const hi = Math.max(ia, ib);
+    const key = `${lo},${hi}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push(
+      pos.getX(ia),
+      pos.getY(ia) + yEps,
+      pos.getZ(ia),
+      pos.getX(ib),
+      pos.getY(ib) + yEps,
+      pos.getZ(ib)
+    );
+  };
+  if (index) {
+    for (let t = 0; t + 2 < index.count; t += 3) {
+      const a = index.getX(t);
+      const b = index.getX(t + 1);
+      const c = index.getX(t + 2);
+      pushEdge(a, b);
+      pushEdge(b, c);
+      pushEdge(c, a);
+    }
+  } else {
+    for (let t = 0; t + 2 < pos.count; t += 3) {
+      pushEdge(t, t + 1);
+      pushEdge(t + 1, t + 2);
+      pushEdge(t + 2, t);
+    }
+  }
+  return out;
+}
+
+/**
+ * 면 사이 각이 큰(기복·경사 변화 큰) 변만 — 지형 테두리 보강.
+ * thresholdDeg: 인접 면 법선 각도(도). 클수록 급한 꺾임만.
+ */
+export function extractHighVariationEdgePositions(
+  geo: THREE.BufferGeometry,
+  thresholdDeg = 16,
+  yEps = 0.025
+): number[] {
+  if (!geo.getAttribute('position') || geo.getAttribute('position')!.count < 3) {
+    return [];
+  }
+  const edges = new THREE.EdgesGeometry(geo, thresholdDeg);
+  const pos = edges.getAttribute('position');
+  if (!pos || pos.count < 2) {
+    edges.dispose();
+    return [];
+  }
+  const out: number[] = [];
+  for (let i = 0; i < pos.count; i++) {
+    out.push(pos.getX(i), pos.getY(i) + yEps, pos.getZ(i));
+  }
+  edges.dispose();
+  return out;
+}
 
 /**
  * 절단선 중심 ±halfWidth **축정렬이 아닌 사각형** 지형 메시.
@@ -34,7 +109,7 @@ export function createSectionRectGroundParts(
   const halfW = Math.max(1e-6, axes.halfWidthM);
   const nu = Math.max(2, Math.ceil((halfL * 2) / stepU) + 1);
   const nv = Math.max(2, Math.ceil((halfW * 2) / stepU) + 1);
-  void thicknessM;
+  const thick = Math.max(0, thicknessM);
 
   const xzAt = (iu: number, iv: number) => {
     const u = -halfL + (iu / (nu - 1)) * (halfL * 2);
@@ -96,7 +171,7 @@ export function createSectionRectGroundParts(
     outlinePositions.push(x0, y0, z0, x1, y1, z1);
   };
 
-  // 사각형 네 변 외곽 (표면 높이 따라감)
+  // 윗면 네 변 외곽 (표면 높이 따라감). 두께 있으면 아랫변·네 모서리 세로
   const corners = sectionRectCornersLocal(axes);
   for (let i = 0; i < 4; i++) {
     const a = corners[i]!;
@@ -111,12 +186,25 @@ export function createSectionRectGroundParts(
       const z1 = a.z + (b.z - a.z) * t1;
       const y0 = sampleSurfaceY(field, x0, z0);
       const y1 = sampleSurfaceY(field, x1, z1);
-      // 윗면 외곽만 — 옆면·아랫면 선 없음
       pushSeg(x0, y0, z0, x1, y1, z1);
+      if (thick > 1e-6) {
+        pushSeg(x0, y0 - thick, z0, x1, y1 - thick, z1);
+      }
     }
   }
 
-  return { topGeo, outlinePositions };
+  if (thick > 1e-6) {
+    for (const c of corners) {
+      const yTop = sampleSurfaceY(field, c.x, c.z);
+      pushSeg(c.x, yTop, c.z, c.x, yTop - thick, c.z);
+    }
+  }
+
+  return {
+    topGeo,
+    outlinePositions,
+    faceEdgePositions: extractMeshFaceEdgePositions(topGeo),
+  };
 }
 
 /**
@@ -134,7 +222,7 @@ export function createInterpolatedGroundParts(
   const stepU = field.stepM / scale;
   const mid = (size - 1) / 2;
   const fallback = field.baseElevM;
-  void thicknessM;
+  const thick = Math.max(0, thicknessM);
 
   const has = (i: number, j: number) => sampleHeight(field, i, j) != null;
   const elevAt = (i: number, j: number): number => {
@@ -143,6 +231,7 @@ export function createInterpolatedGroundParts(
   };
 
   const topY = (i: number, j: number) => elevToSceneY(elevAt(i, j));
+  const botY = (i: number, j: number) => topY(i, j) - thick;
   const xz = (i: number, j: number) => ({
     x: (i - mid) * stepU,
     z: -(j - mid) * stepU,
@@ -210,8 +299,11 @@ export function createInterpolatedGroundParts(
     if (!has(i0, j0) || !has(i1, j1)) return;
     const a = xz(i0, j0);
     const b = xz(i1, j1);
-    // 윗면 외곽만 — 옆면·아랫면 선 없음
+    // 윗면 외곽 + (두께 시) 아랫변 — 옆면 세로는 모서리만
     pushSeg(a.x, topY(i0, j0), a.z, b.x, topY(i1, j1), b.z);
+    if (thick > 1e-6) {
+      pushSeg(a.x, botY(i0, j0), a.z, b.x, botY(i1, j1), b.z);
+    }
   };
 
   // 유효 셀 경계만 외곽 (이웃 셀 없거나 불완전하면 변 그림)
@@ -225,7 +317,26 @@ export function createInterpolatedGroundParts(
     }
   }
 
-  return { topGeo, outlinePositions };
+  // 두께가 있으면 격자 네 모서리 세로선만
+  if (thick > 1e-6) {
+    const last = size - 1;
+    for (const [i, j] of [
+      [0, 0],
+      [last, 0],
+      [last, last],
+      [0, last],
+    ] as const) {
+      if (!has(i, j)) continue;
+      const p = xz(i, j);
+      pushSeg(p.x, topY(i, j), p.z, p.x, botY(i, j), p.z);
+    }
+  }
+
+  return {
+    topGeo,
+    outlinePositions,
+    faceEdgePositions: extractMeshFaceEdgePositions(topGeo),
+  };
 }
 
 /** @deprecated createInterpolatedGroundParts 사용 */

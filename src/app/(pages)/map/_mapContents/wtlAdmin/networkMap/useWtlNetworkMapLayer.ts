@@ -1,34 +1,24 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import type { MapBrowserEvent } from 'ol'
 import type { Map as OLMap } from 'ol'
-import GeoJSON from 'ol/format/GeoJSON'
 import { unByKey } from 'ol/Observable'
 import ImageLayer from 'ol/layer/Image'
-import VectorLayer from 'ol/layer/Vector'
 import ImageWMS from 'ol/source/ImageWMS'
-import VectorSource from 'ol/source/Vector'
 import tablesJson from '@/config/defineLayer/tables.json'
 import { getGeoServerBase } from '@/lib/geoserverUrl'
 import { geoserverWmsImageLoadFunction } from '@/lib/geoserverWmsImageLoad'
 import { call } from '@/lib/api'
-import { Stroke, Style } from 'ol/style'
-import type { StyleFunction } from 'ol/style/Style'
-import type { FeatureLike } from 'ol/Feature'
 import {
-  compareFeaturesByGeometryStackOrder,
-  GEOM_STACK_UI_ZINDEX_MIN,
+  clearMapLayerClickDetailHighlight,
+  setMapLayerClickDetailHighlight,
+} from '@/lib/mapLayerClickDetailHighlight'
+import {
   isPointSymbolLayerName,
-  LAYER_GEOM_STACK_SKIP_KEY,
   markLayerGeomStack,
   type LayerStackKind,
 } from '@/lib/mapLayerGeometryOrder'
-import {
-  createDataQuerySelectionRowHighlightStyle,
-  DATA_QUERY_SELECTION_PULSE_STEP,
-  insertLayerBelowServiceLayer,
-} from '@/lib/mapDataQueryMapHighlight'
 import '../../../_mapComponents/config/projections'
 import { WORKSPACE } from '../../../_mapComponents/layerFactory/serviceLayerFactory'
 import { useMapContext } from '../../../_mapComponents/MapContext'
@@ -42,28 +32,6 @@ import {
   type WtlNetMapSourceId,
 } from './wtlNetworkMapSources'
 import type { WtlNetworkRow } from './wtlNetworkTypes'
-
-/** 하천기본계획 색인도 선택과 동일 — 폴리곤은 윤곽만, 그 외는 데이터조회 펄스 */
-function createWtlNetworkSelectionStyle(getPulsePhase: () => number): StyleFunction {
-  const base = createDataQuerySelectionRowHighlightStyle(getPulsePhase)
-  return (feature: FeatureLike, resolution: number) => {
-    const geomType = feature.getGeometry()?.getType()
-    if (geomType === 'Polygon' || geomType === 'MultiPolygon') {
-      const t = Math.sin(getPulsePhase())
-      const whiteOp = 0.6 + 0.35 * t
-      const redOp = 0.5 + 0.3 * t
-      return [
-        new Style({
-          stroke: new Stroke({ color: `rgba(255, 255, 255, ${whiteOp})`, width: 7 + t }),
-        }),
-        new Style({
-          stroke: new Stroke({ color: `rgba(220, 38, 38, ${redOp})`, width: 4 + 0.8 * t }),
-        }),
-      ]
-    }
-    return base(feature, resolution)
-  }
-}
 
 /**
  * 좌·우 패널(view.padding)에 가려진 픽셀을 뺀 지도 범위.
@@ -130,22 +98,6 @@ function applyCqlToImageWms(layer: ImageLayer<ImageWMS>, cql: string | undefined
   else source.updateParams({ CQL_FILTER: undefined })
 }
 
-function selectionFeatures(map: OLMap, geom: unknown) {
-  if (!geom || typeof geom !== 'object' || !('type' in geom) || !('coordinates' in geom)) return []
-  const viewProj = map.getView().getProjection()?.getCode() || 'EPSG:3857'
-  const features = new GeoJSON().readFeatures(
-    {
-      type: 'FeatureCollection',
-      features: [{ type: 'Feature', geometry: geom, properties: {} }],
-    },
-    { dataProjection: 'EPSG:4326', featureProjection: viewProj }
-  )
-  if (features.length === 0) return []
-  const geomType = features[0].getGeometry()?.getType()
-  if (geomType === 'Point' || geomType === 'MultiPoint') features[0].set('isRadarPoint', true)
-  return features
-}
-
 export type WtlNetworkDetailRelatedLayer = {
   table: string
   ftrIdn: string
@@ -159,7 +111,12 @@ type Props = {
   /** 서버 listWtlNetMapSources로 확정된 출처 id */
   availableSourceIds: readonly string[]
   selected: WtlNetworkRow | null
-  onSelect: (row: WtlNetworkRow) => void
+  /** hits: 클릭 지점 다중 피처(점→선→면 정렬). 목록 선택은 hits 없이 호출 */
+  onSelect: (
+    row: WtlNetworkRow,
+    hits?: WtlNetworkRow[],
+    screenAnchor?: { top: number; left: number } | null
+  ) => void
   onExtentChange: (bbox3857: [number, number, number, number] | null) => void
   /** 화면 내 조회 시 이동 중 진행 중 요청 취소용 */
   onMapMoveStart?: () => void
@@ -194,14 +151,12 @@ export function useWtlNetworkMapLayer({
   const wmsBySourceRef = useRef<Map<WtlNetMapSourceId, ImageLayer<ImageWMS>>>(new Map())
   /** 상세 연관(펌프·흡수정 등) 전용 WMS */
   const detailRelatedWmsRef = useRef<ImageLayer<ImageWMS> | null>(null)
-  const highlightSourceRef = useRef<VectorSource | null>(null)
-  const pulsePhaseRef = useRef(0)
-  const [radarActive, setRadarActive] = useState(false)
   const onSelectRef = useRef(onSelect)
   const onExtentRef = useRef(onExtentChange)
   const onMoveStartRef = useRef(onMapMoveStart)
   const keysRef = useRef(enabledLayerKeys)
   const sourcesRef = useRef(mapSources)
+  const searchFilterRef = useRef(searchFilter)
   /** 측정·공간그리기·도형편집 등 지도 입력 중에는 레이어 클릭 선택 금지 */
   const drawBlocksClickRef = useRef(false)
   const suppressIdentifyUntilRef = useRef(mapContext?.suppressMapIdentifyUntilRef)
@@ -211,6 +166,7 @@ export function useWtlNetworkMapLayer({
   onMoveStartRef.current = onMapMoveStart
   keysRef.current = enabledLayerKeys
   sourcesRef.current = mapSources
+  searchFilterRef.current = searchFilter
   drawBlocksClickRef.current = Boolean(
     mapContext?.spatialDrawRequest ||
       mapContext?.mapMeasureTool ||
@@ -274,6 +230,7 @@ export function useWtlNetworkMapLayer({
       const keys = [...keysRef.current]
       const sources = [...sourcesRef.current]
       if (keys.length === 0 || sources.length === 0) return
+      const f = searchFilterRef.current
       void (async () => {
         try {
           const res = await call('', 'POST', {
@@ -284,11 +241,36 @@ export function useWtlNetworkMapLayer({
               y: evt.coordinate[1],
               layerKeys: keys,
               mapSources: sources,
-              tolerance: 2,
+              /** 클릭 버퍼(m, 3857). 작을수록 여백 좁음 */
+              tolerance: 5,
+              keyword: f?.keyword,
+              yearFrom: f?.yearFrom,
+              yearTo: f?.yearTo,
+              diameterFrom: f?.diameterFrom,
+              diameterTo: f?.diameterTo,
+              materials: f?.materials ? [...f.materials] : undefined,
             },
           })
-          const row = (res?.data ?? res)?.row as WtlNetworkRow | null | undefined
-          if (row) onSelectRef.current(row)
+          const data = (res?.data ?? res) as
+            | { row?: WtlNetworkRow | null; rows?: WtlNetworkRow[] }
+            | undefined
+          const rows = Array.isArray(data?.rows)
+            ? data.rows.filter(Boolean)
+            : data?.row
+              ? [data.row]
+              : []
+          const row = rows[0] ?? data?.row ?? null
+          if (row) {
+            const oe = evt.originalEvent
+            const screenAnchor =
+              oe && 'clientX' in oe && 'clientY' in oe
+                ? {
+                    left: Math.round((oe as PointerEvent).clientX),
+                    top: Math.round((oe as PointerEvent).clientY),
+                  }
+                : null
+            onSelectRef.current(row, rows, screenAnchor)
+          }
         } catch {
           /* ignore */
         }
@@ -319,39 +301,6 @@ export function useWtlNetworkMapLayer({
       unByKey(key)
     }
   }, [mapPaddingLeft, mapContext?.mapInstanceRef, mapContext?.mapReady])
-
-  useEffect(() => {
-    const map = mapContext?.mapInstanceRef?.current
-    if (!map || !mapContext?.mapReady) return
-    const source = new VectorSource()
-    highlightSourceRef.current = source
-    const layer = new VectorLayer({
-      source,
-      zIndex: GEOM_STACK_UI_ZINDEX_MIN,
-      renderOrder: compareFeaturesByGeometryStackOrder,
-      style: createWtlNetworkSelectionStyle(() => pulsePhaseRef.current),
-    })
-    layer.set(LAYER_GEOM_STACK_SKIP_KEY, true)
-    layer.set('wtlNetworkHighlight', true)
-    insertLayerBelowServiceLayer(map, layer)
-    return () => {
-      map.removeLayer(layer)
-      highlightSourceRef.current = null
-      setRadarActive(false)
-    }
-  }, [mapContext?.mapInstanceRef, mapContext?.mapReady])
-
-  useEffect(() => {
-    if (!radarActive) return
-    let rafId = 0
-    const loop = () => {
-      pulsePhaseRef.current += DATA_QUERY_SELECTION_PULSE_STEP
-      highlightSourceRef.current?.changed()
-      rafId = requestAnimationFrame(loop)
-    }
-    rafId = requestAnimationFrame(loop)
-    return () => cancelAnimationFrame(rafId)
-  }, [radarActive])
 
   // 출처(상수/대진) 관망 WMS는 쓰지 않음 — 지하시설물 패널만 표시(이중 등록 방지)
   useEffect(() => {
@@ -499,18 +448,18 @@ export function useWtlNetworkMapLayer({
     mapContext?.mapReady,
   ])
 
-  /** 선택 시 강조만 — 맵 이동(fit)하지 않음. 상세 모달은 Shell pickRow와 동일 */
+  /** 선택 시 강조만 — 공통 선택자 레이어. 맵 이동(fit)하지 않음 */
   useEffect(() => {
     const map = mapContext?.mapInstanceRef?.current
-    const source = highlightSourceRef.current
-    if (!map || !source) return
-    source.clear()
-    const features = selectionFeatures(map, selected?.geom)
-    if (features.length === 0) {
-      setRadarActive(false)
+    if (!map || !mapContext?.mapReady) return
+    const geom = selected?.geom ?? null
+    if (geom == null) {
+      clearMapLayerClickDetailHighlight(map, 'wtlNetwork')
       return
     }
-    source.addFeatures(features)
-    setRadarActive(true)
+    setMapLayerClickDetailHighlight(map, 'wtlNetwork', geom)
+    return () => {
+      clearMapLayerClickDetailHighlight(map, 'wtlNetwork')
+    }
   }, [selected, mapContext?.mapInstanceRef, mapContext?.mapReady])
 }

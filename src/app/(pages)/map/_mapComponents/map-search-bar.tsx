@@ -293,6 +293,9 @@ export function MapSearchBar({
   const router = useRouter();
   const searchParams = useSearchParams();
   const mapContext = useMapContext();
+  /** Provider value는 매 렌더 새 객체 — effect deps에 mapContext 넣지 않기 위해 ref 유지 */
+  const mapContextRef = useRef(mapContext);
+  mapContextRef.current = mapContext;
   const { data: session } = useSession();
   const { levels: consoleMenuLevels, loading: consoleAccessLoading } = useConsoleMenuAccess();
 
@@ -548,8 +551,8 @@ export function MapSearchBar({
   }, [addressPanelOpen]);
 
   const updateCenterPlaceholderFromMap = useCallback(async () => {
-    const map = mapContext?.mapInstanceRef?.current;
-    const apiKey = vworldApiKey.trim();
+    const map = mapContextRef.current?.mapInstanceRef?.current;
+    const apiKey = (mapContextRef.current?.vworldApiKey ?? vworldApiKey).trim();
     if (!map || !apiKey) return;
     const center = map.getView().getCenter();
     if (!center) return;
@@ -566,10 +569,10 @@ export function MapSearchBar({
       if (reqId !== centerPlaceholderReqIdRef.current) return;
       setCenterPlaceholder('주소/지번/장소 검색');
     }
-  }, [mapContext, vworldApiKey]);
+  }, [vworldApiKey]);
 
   useEffect(() => {
-    const map = mapContext?.mapInstanceRef?.current;
+    const map = mapContextRef.current?.mapInstanceRef?.current;
     if (!map || !vworldApiKey.trim()) return;
     let timer: ReturnType<typeof setTimeout> | null = null;
     const onMoveEnd = () => {
@@ -584,7 +587,7 @@ export function MapSearchBar({
       if (timer) clearTimeout(timer);
       map.un('moveend', onMoveEnd);
     };
-  }, [mapContext, vworldApiKey, updateCenterPlaceholderFromMap]);
+  }, [vworldApiKey, updateCenterPlaceholderFromMap]);
 
   const fetchSystemList = useCallback(() => {
     call('', 'POST', { service: 'configService', action: 'getSystemList', params: {} })
@@ -622,10 +625,16 @@ export function MapSearchBar({
       .then((res) => {
         const data = res?.data ?? res;
         const key = (data?.VWORLD_API_KEY ?? '').trim();
-        mapContext?.setVworldApiKey?.(key);
+        const ctx = mapContextRef.current;
+        if ((ctx?.vworldApiKey ?? '') === key) return;
+        ctx?.setVworldApiKey?.(key);
       })
-      .catch(() => mapContext?.setVworldApiKey?.(''));
-  }, [mapContext]);
+      .catch(() => {
+        const ctx = mapContextRef.current;
+        if ((ctx?.vworldApiKey ?? '') === '') return;
+        ctx?.setVworldApiKey?.('');
+      });
+  }, []);
   useEffect(() => {
     fetchMapConfig();
   }, [fetchMapConfig]);

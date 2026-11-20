@@ -125,11 +125,23 @@ export function useServiceFileData(params: {
    * 기본 true — 표준 상세 등 용량 표시 화면.
    */
   includeMeta?: boolean;
-}): { files: ServiceFileDataRow[]; loading: boolean; error: string | null } {
+}): {
+  files: ServiceFileDataRow[];
+  loading: boolean;
+  error: string | null;
+  /** 서버 삭제 성공 후 로컬 목록만 갱신 (전체 재조회 없음) */
+  removeFile: (fileName: string) => void;
+} {
   const [files, setFiles] = useState<ServiceFileDataRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const includeMeta = params.includeMeta !== false;
+
+  const removeFile = useCallback((fileName: string) => {
+    const name = String(fileName ?? '').trim();
+    if (!name) return;
+    setFiles((prev) => prev.filter((f) => f.name !== name));
+  }, []);
 
   useEffect(() => {
     const ser = params.serEng.trim();
@@ -191,7 +203,7 @@ export function useServiceFileData(params: {
     includeMeta,
   ]);
 
-  return { files, loading, error };
+  return { files, loading, error, removeFile };
 }
 
 export type ServiceFileChunkUploadState = {

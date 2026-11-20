@@ -12,7 +12,7 @@
   "점용기간 부터": "value_011",
   "점용기간 까지": "value_012",
   "피허가자 주소": "value_007",
-  "연락처": "value_008",
+  "연락처": "tel_no",
   "피허가자명": "value_009",
   "점용면적(㎡)": "value_010",
   "점용시작일": "value_011",
@@ -20,7 +20,7 @@
   "key": "value_001",
   "사업구분": "value_002",
   "예산": "value_003",
-  "읍면동": "value_004",
+  "읍면동": "emd",
   "위    치 읍면": "value_005",
   "위    치 리동": "value_006",
   "위    치 번지": "value_007",
@@ -124,7 +124,7 @@
   "전화번호": "value_008",
   "점용기간": "use_start",
   "점용기간_2": "use_end",
-  "연번": "value_001",
+  "연번": "seq",
   "추진현황 용역사": "value_009",
   "사업량 용역사_2": "value_013",
   "신청서 용역사": "value_014",
@@ -315,7 +315,7 @@
   "구분": "value_008",
   "구분_2": "value_009",
   "국유/공유": "value_010",
-  "소재지": "value_011",
+  "소재지": "address",
   "신청자": "value_012",
   "신청자_2": "value_013",
   "사용허가기간": "value_014",
@@ -514,5 +514,6 @@
   "create_user": "create_user",
   "user_insert": "user_insert",
   "create_time": "create_time",
-  "source": "source"
+  "source": "source",
+  "경로당명": "name"
 }

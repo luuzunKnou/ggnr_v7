@@ -4,7 +4,7 @@
     <sld:UserStyle>
       <sld:Name>Default Styler</sld:Name>
       <sld:Title>d_wtl_manh_ps</sld:Title>
-      <sld:Abstract>d_wtl_manh_ps</sld:Abstract>
+      <sld:Abstract>wtl_manh_ps</sld:Abstract>
       <sld:FeatureTypeStyle>
         <sld:Name>name</sld:Name>
         <sld:Rule>
@@ -90,7 +90,7 @@
         </sld:Rule>
         <sld:Rule>
           <sld:Name>Name</sld:Name>
-          <sld:Title>d_wtl_manh_ps_label</sld:Title>
+          <sld:Title>wtl_manh_ps_label</sld:Title>
           <sld:Abstract>Abstract</sld:Abstract>
           <ogc:Filter>
             <ogc:PropertyIsGreaterThan>
@@ -179,4 +179,3 @@
     </sld:UserStyle>
   </sld:NamedLayer>
 </sld:StyledLayerDescriptor>
-

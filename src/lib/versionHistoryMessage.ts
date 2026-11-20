@@ -13,7 +13,7 @@ export const HISTORY_OPTION_RESTART_EXIT = '프로세스 종료(nssm)';
 export const HISTORY_OPTION_RESTART_LAUNCHER = 'Node 런처(Node 내 앱 재실행)';
 export const HISTORY_OPTION_RESTART_NONE = '재시작 안 함';
 export const HISTORY_OPTION_APPLY_OVERWRITE = '덮어쓰기';
-export const HISTORY_OPTION_APPLY_SIBLING = '따로 생성';
+export const HISTORY_OPTION_APPLY_SIBLING = '새 폴더 생성';
 
 export type SourceApplyLayout = 'overwrite' | 'sibling';
 
