@@ -1,6 +1,6 @@
 'use client'
 
-import { Fragment, useEffect, useMemo, useState, Suspense } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import {
   formatBooleanYeobu,
@@ -48,6 +48,7 @@ type AttrRow = {
 
 function BlankBody() {
   const searchParams = useSearchParams()
+  const rootRef = useRef<HTMLDivElement | null>(null)
   const sid = String(searchParams.get('sid') ?? '').trim()
   const [payload, setPayload] = useState<LayerClickDetailBlankPayload | null>(
     () => (sid ? readLayerClickDetailBlankPayload(sid) : null)
@@ -261,7 +262,10 @@ function BlankBody() {
   const layerLine = String(hit.korName ?? '').trim()
 
   return (
-    <div className="flex min-h-screen flex-col bg-background text-foreground">
+    <div
+      ref={rootRef}
+      className="flex min-h-screen flex-col bg-background text-foreground"
+    >
       <header className="flex shrink-0 items-center gap-2 border-b border-border bg-muted/40 px-4 py-2">
         {layerLine && layerLine !== titleLine ? (
           <span className="text-xs text-muted-foreground" title={layerLine}>
@@ -339,6 +343,7 @@ function BlankBody() {
           fields={fields}
           bodyHeightPx={300}
           relatedChildAsModal
+          relatedModalAnchorHostRef={rootRef}
           mapTabContent={
             <LayerClickDetailBlankMapTab
               hit={hit}

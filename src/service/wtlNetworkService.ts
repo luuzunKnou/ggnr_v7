@@ -3511,6 +3511,11 @@ function safeShpEntryName(raw: string): string {
   );
 }
 
+/** ZIP 폴더명 — 경로 금지문자만 제거(한글 출처명 유지) */
+function safeZipFolderName(raw: string): string {
+  return safeShpEntryName(raw) || 'source';
+}
+
 /** WKT 좌표열에서 envelope (EPSG:5181 가정) */
 function envelopeFromWkt5181(wkt: string): [number, number, number, number] | null {
   const nums = String(wkt ?? '')
@@ -3894,34 +3899,40 @@ export async function exportWtlNetworkShpZip(
   }
 
   const multi = exportTargets.length > 1 || wantExtras || exportTargets.length === 0;
+  const multiSource =
+    new Set(exportTargets.map((t) => t.source.id)).size > 1;
 
   for (const { source, physicalTable, def } of exportTargets) {
     const sqlText = await buildShpExportSql(def, physicalTable, filterOpts);
-    const layerName = safeShpEntryName(
-      `${source.id}_${def.defineTable || def.key || physicalTable}`
+    /** SHP 본명 — 레이어 키만 (출처 id를 붙이면 한글 출처가 __레이어명 으로 깨짐) */
+    const shpBaseName = safeShpEntryName(
+      def.defineTable || def.key || physicalTable
     );
+    const folderName = multiSource
+      ? safeZipFolderName(source.label || source.id)
+      : shpBaseName;
     const result = await exportLayerTableToShp({
       tableName: physicalTable,
       schema: 'layer',
       sql: sqlText,
-      layerName,
+      layerName: shpBaseName,
       targetSrs,
       output: multi ? 'files' : 'zip',
     });
     if (!result.success) {
-      errors.push(`${layerName}: ${result.error ?? '실패'}`);
+      errors.push(`${shpBaseName}: ${result.error ?? '실패'}`);
       continue;
     }
     if (multi) {
       if (!result.files?.length) {
-        errors.push(`${layerName}: 파일이 비어 있습니다.`);
+        errors.push(`${shpBaseName}: 파일이 비어 있습니다.`);
         continue;
       }
-      parts.push({ folderName: layerName, files: result.files });
+      parts.push({ folderName, files: result.files });
     } else if (result.zipBuffer) {
-      parts.push({ folderName: layerName, zipBuffer: result.zipBuffer });
+      parts.push({ folderName: shpBaseName, zipBuffer: result.zipBuffer });
     } else {
-      errors.push(`${layerName}: ZIP이 비어 있습니다.`);
+      errors.push(`${shpBaseName}: ZIP이 비어 있습니다.`);
     }
   }
 

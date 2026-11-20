@@ -5,6 +5,7 @@ import {
   isDefineFieldCodeType,
   type DefineCodeRow,
 } from '@/lib/defineLayerCodeDisplay';
+import { appFetch } from '@/lib/basePath';
 
 type FieldLike = {
   define_field_name?: string;
@@ -40,7 +41,10 @@ function tablesToTry(
 
 async function fetchCodes(tableFieldKey: string): Promise<DefineCodeRow[]> {
   try {
-    const res = await fetch(`/api/config/defineLayer/codes/${encodeURIComponent(tableFieldKey)}`);
+    const res = await appFetch(
+      `/api/config/defineLayer/codes/${encodeURIComponent(tableFieldKey)}`
+    );
+    if (!res.ok) return [];
     const body = (await res.json()) as { data?: DefineCodeRow[] };
     return Array.isArray(body?.data) ? body.data : [];
   } catch {

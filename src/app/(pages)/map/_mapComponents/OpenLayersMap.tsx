@@ -1811,6 +1811,9 @@ export default function OpenLayersMap({
   const layerClickDetail = useLayerClickDetail();
   const openLayerClickDetailRef = useRef(layerClickDetail.openFromIdentify);
   openLayerClickDetailRef.current = layerClickDetail.openFromIdentify;
+  /** 그리기 시작 시 기본 모달만 닫기(고정창 kept 유지) */
+  const closeLayerClickPrimaryRef = useRef(layerClickDetail.close);
+  closeLayerClickPrimaryRef.current = layerClickDetail.close;
   /** 시설·설비 다건 → 기본 모달 선택 시 getFacilityAtPoint용 클릭 좌표 */
   const layerClickIdentifyCoordRef = useRef<[number, number] | null>(null);
   const [viewportSize, setViewportSize] = useState({ w: 1280, h: 720 });
@@ -3183,6 +3186,22 @@ export default function OpenLayersMap({
     layerRowGeomEdit,
     resetMeasurementsPanelOpen,
     closeResetMeasurementsPanel,
+  ]);
+
+  // 지도 그리기 시작 시 — 고정창(kept) 제외하고 기본·다중선택 모달 닫기
+  useEffect(() => {
+    const drawingActive =
+      !!spatialDrawRequest ||
+      !!layerRowGeomEdit ||
+      (mapContext?.mapDrawInputSuspended ?? false) ||
+      activeControls.some((id) => MEASUREMENT_IDS.includes(id));
+    if (!drawingActive) return;
+    closeLayerClickPrimaryRef.current();
+  }, [
+    spatialDrawRequest,
+    layerRowGeomEdit,
+    mapContext?.mapDrawInputSuspended,
+    activeControls,
   ]);
 
   // 인터랙션 관리 (draw, snap 등)

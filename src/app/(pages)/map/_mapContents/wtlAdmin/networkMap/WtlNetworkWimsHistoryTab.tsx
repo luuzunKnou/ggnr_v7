@@ -3,11 +3,18 @@
 /**
  * 급수전계량기 상세 — WIMS 검침 이력
  * 계량기기물번호(MET_NUM)·수용가번호(HOM_NUM)로 /api/wims/list 조회
- * UI는 «데이터 이력관리» 탭(standard-detail-tab-table)과 동일 골격
+ * 행 클릭 시 펌프현황과 동일 — 부모 모달 옆 플로팅 상세
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Download, Loader2 } from 'lucide-react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type RefObject,
+} from 'react'
+import { ChevronUp, Download, Loader2, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
   downloadWimsExcel,
@@ -16,39 +23,27 @@ import {
   WimsClientError,
 } from '@/app/(pages)/map/_mapComponents/landInfo/wimsClient'
 import { getRowValueByField } from '@/app/(pages)/map/_mapComponents/standard/defineLayerRowUtils'
+import { MapFloatingPanel } from '@/app/(pages)/map/_mapComponents/MapFloatingPanel'
+import { COMPLAINT_DETAIL_PANEL_DEFAULT_TOP } from '@/app/(pages)/map/_mapComponents/complaint/complaintPanelLayout'
+import { computeRelatedChildModalBesideParent } from '@/app/(pages)/map/_mapContents/layerClickDetail/relatedChildModalPlacement'
+import {
+  WIMS_HISTORY_DETAIL_COLUMNS,
+  WIMS_HISTORY_LIST_COLUMNS,
+} from '@/lib/wimsHistoryColumns'
 import {
   WIMS_GOJIKIND,
+  WIMS_JOCODE,
   WIMS_PAGE_SIZE,
   type WimsHistoryRow,
 } from '@/lib/wimsTypes'
 import { WtlFacilityTableLoadingRow } from '../facility/WtlFacilityTableLoadingRow'
 import type { WtlNetworkRow } from './wtlNetworkTypes'
 
-/**
- * 컬럼 정의 · 너비(%) 조절
- * - widthPct: 표 전체 대비 비율. 합계 100 권장.
- * - 조절 위치: 이 파일 상단 COLUMNS 배열의 widthPct
- */
-const COLUMNS: {
-  key: keyof WimsHistoryRow
-  label: string
-  kind: 'code' | 'date' | 'number' | 'text'
-  /** 테이블 열 너비 (%) */
-  widthPct: number
-}[] = [
-  { key: 'gojikind', label: '종류', kind: 'code', widthPct: 8 },
-  { key: 'meterDay', label: '검침일', kind: 'date', widthPct: 15 },
-  { key: 'nabgiDate', label: '납기마감일', kind: 'date', widthPct: 15 },
-  { key: 'meterNo', label: '계량기번호', kind: 'text', widthPct: 15 },
-  { key: 'useQty', label: '사용량', kind: 'number', widthPct: 12 },
-  { key: 'freeQty', label: '사용료', kind: 'number', widthPct: 12 },
-  { key: 'induty', label: '업종', kind: 'text', widthPct: 10 },
-  { key: 'delYn', label: '상태', kind: 'text', widthPct: 12 },
-]
-
-const COL_COUNT = COLUMNS.length
+const LIST_COLUMNS = WIMS_HISTORY_LIST_COLUMNS
+const DETAIL_COLUMNS = WIMS_HISTORY_DETAIL_COLUMNS
+const COL_COUNT = LIST_COLUMNS.length
 /** 화면에 보이는 th 컬럼 키 — 통합검색 대상 */
-const SEARCH_KEYS = COLUMNS.map((c) => c.key)
+const SEARCH_KEYS = LIST_COLUMNS.map((c) => c.key)
 
 function trimId(value: unknown): string {
   return String(value ?? '').trim()
@@ -80,6 +75,7 @@ function formatCell(
   kind: string
 ): string {
   const raw = trimId(row[key])
+  if (kind === 'code' && key === 'jocode') return WIMS_JOCODE[raw] ?? raw
   if (kind === 'code' && key === 'gojikind') return WIMS_GOJIKIND[raw] ?? raw
   if (kind === 'date') return formatYmd(raw)
   if (kind === 'number') return formatNumber(raw)
@@ -100,6 +96,18 @@ function resolveMeterPair(item: WtlNetworkRow): {
   return { customerNo, meterNo }
 }
 
+function isSameHistoryRow(a: WimsHistoryRow, b: WimsHistoryRow): boolean {
+  return (
+    a.ymCustNo === b.ymCustNo &&
+    a.meterDay === b.meterDay &&
+    a.customerNo === b.customerNo &&
+    a.meterNo === b.meterNo &&
+    a.gojikind === b.gojikind &&
+    a.useQty === b.useQty &&
+    a.freeQty === b.freeQty
+  )
+}
+
 export function isWtlMetaPsLayer(item: WtlNetworkRow): boolean {
   const keys = [item.layerKey, item.fieldsTable, item.fieldsTableFallback]
     .map((v) => String(v ?? '').trim().toLowerCase())
@@ -109,9 +117,14 @@ export function isWtlMetaPsLayer(item: WtlNetworkRow): boolean {
 
 type Props = {
   item: WtlNetworkRow
+  /** 지도 기본 모달 루트 — 있으면 상세를 그 옆(공간 없으면 위)에 배치 */
+  relatedModalAnchorHostRef?: RefObject<HTMLElement | null>
 }
 
-export function WtlNetworkWimsHistoryTab({ item }: Props) {
+export function WtlNetworkWimsHistoryTab({
+  item,
+  relatedModalAnchorHostRef,
+}: Props) {
   const pair = useMemo(() => resolveMeterPair(item), [item])
   const pairKey = `${pair.customerNo}\0${pair.meterNo}`
   const reqRef = useRef(0)
@@ -127,6 +140,12 @@ export function WtlNetworkWimsHistoryTab({ item }: Props) {
   const [excelBusy, setExcelBusy] = useState(false)
   const [searchInput, setSearchInput] = useState('')
   const [keyword, setKeyword] = useState('')
+  const [selectedRow, setSelectedRow] = useState<WimsHistoryRow | null>(null)
+  const [detailCollapsed, setDetailCollapsed] = useState(false)
+  const [detailAnchor, setDetailAnchor] = useState<{
+    top: number
+    left: number
+  } | null>(null)
 
   const totalPages = Math.max(1, Math.ceil(total / WIMS_PAGE_SIZE))
   const loading = statusLoading || listLoading
@@ -208,11 +227,36 @@ export function WtlNetworkWimsHistoryTab({ item }: Props) {
     setError(null)
     setSearchInput('')
     setKeyword('')
+    setSelectedRow(null)
+    setDetailAnchor(null)
+    setDetailCollapsed(false)
     if (statusLoading) return
     void fetchPage(1, '')
     // pair 변경 시에만 초기 조회 — keyword/fetchPage 순환 방지
     // eslint-disable-next-line react-hooks/exhaustive-deps -- pairKey·statusLoading만
   }, [pairKey, statusLoading])
+
+  const openDetail = useCallback(
+    (row: WimsHistoryRow) => {
+      setSelectedRow(row)
+      setDetailCollapsed(false)
+      const host = relatedModalAnchorHostRef?.current
+      if (host) {
+        const rect = host.getBoundingClientRect()
+        if (rect.width > 0 && rect.height > 0) {
+          setDetailAnchor(computeRelatedChildModalBesideParent(rect))
+          return
+        }
+      }
+      setDetailAnchor(null)
+    },
+    [relatedModalAnchorHostRef]
+  )
+
+  const closeDetail = useCallback(() => {
+    setSelectedRow(null)
+    setDetailAnchor(null)
+  }, [])
 
   const onSearch = () => {
     const next = searchInput.trim()
@@ -274,6 +318,10 @@ export function WtlNetworkWimsHistoryTab({ item }: Props) {
     )
   }
 
+  const detailSubtitle = selectedRow
+    ? `${cellText(formatYmd(selectedRow.meterDay))} / ${cellText(selectedRow.meterNo)}`
+    : ''
+
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
       <div className="flex shrink-0 items-center gap-1 border-b border-border px-2 py-1">
@@ -315,13 +363,13 @@ export function WtlNetworkWimsHistoryTab({ item }: Props) {
       <div className="standard-list-scroll">
         <table className="standard-detail-tab-table" style={{ tableLayout: 'fixed' }}>
           <colgroup>
-            {COLUMNS.map((col) => (
-              <col key={col.key} style={{ width: `${col.widthPct}%` }} />
+            {LIST_COLUMNS.map((col) => (
+              <col key={col.key} style={{ width: `${col.widthPct ?? 0}%` }} />
             ))}
           </colgroup>
           <thead className="standard-detail-table-thead">
             <tr>
-              {COLUMNS.map((col) => (
+              {LIST_COLUMNS.map((col) => (
                 <th
                   key={col.key}
                   className="standard-detail-table-th standard-table-th-left max-w-none whitespace-nowrap"
@@ -351,29 +399,38 @@ export function WtlNetworkWimsHistoryTab({ item }: Props) {
                 </td>
               </tr>
             ) : (
-              rows.map((row, i) => (
-                <tr
-                  key={`${row.ymCustNo}-${row.meterDay}-${row.meterNo}-${i}`}
-                  className="standard-list-row"
-                >
-                  {COLUMNS.map((col) => {
-                    const text = cellText(formatCell(row, col.key, col.kind))
-                    return (
-                      <td
-                        key={col.key}
-                        className={cn(
-                          'standard-detail-tab-td',
-                          (col.kind === 'date' || col.key === 'gojikind') &&
-                            'whitespace-nowrap'
-                        )}
-                        title={text}
-                      >
-                        {text}
-                      </td>
-                    )
-                  })}
-                </tr>
-              ))
+              rows.map((row, i) => {
+                const selected =
+                  selectedRow != null && isSameHistoryRow(selectedRow, row)
+                return (
+                  <tr
+                    key={`${row.ymCustNo}-${row.meterDay}-${row.meterNo}-${i}`}
+                    className={cn(
+                      'standard-list-row',
+                      selected && 'standard-list-row-selected'
+                    )}
+                    title="상세보기"
+                    onClick={() => openDetail(row)}
+                  >
+                    {LIST_COLUMNS.map((col) => {
+                      const text = cellText(formatCell(row, col.key, col.kind))
+                      return (
+                        <td
+                          key={col.key}
+                          className={cn(
+                            'standard-detail-tab-td',
+                            (col.kind === 'date' || col.key === 'gojikind') &&
+                              'whitespace-nowrap'
+                          )}
+                          title={text}
+                        >
+                          {text}
+                        </td>
+                      )
+                    })}
+                  </tr>
+                )
+              })
             )}
           </tbody>
         </table>
@@ -422,6 +479,106 @@ export function WtlNetworkWimsHistoryTab({ item }: Props) {
           전체 내려받기
         </button>
       </div>
+
+      {selectedRow ? (
+        <MapFloatingPanel
+          key={`wims-${selectedRow.ymCustNo}-${selectedRow.meterDay}-${detailAnchor?.left ?? 'd'}-${detailAnchor?.top ?? 'd'}`}
+          viewport
+          zLayer="detailRelated"
+          width="420px"
+          maxHeight="70vh"
+          className="bg-background backdrop-blur-none"
+          defaultPosition={{
+            top: detailAnchor?.top ?? COMPLAINT_DETAIL_PANEL_DEFAULT_TOP,
+            left: detailAnchor?.left ?? 56,
+          }}
+          header={
+            <>
+              <button
+                type="button"
+                title={detailCollapsed ? '펼치기' : '접기'}
+                aria-label={detailCollapsed ? '펼치기' : '접기'}
+                aria-expanded={!detailCollapsed}
+                onClick={() => setDetailCollapsed((v) => !v)}
+                className="standard-panel-close mr-2 cursor-pointer"
+              >
+                <ChevronUp
+                  className={cn('h-4 w-4', detailCollapsed && 'rotate-180')}
+                  aria-hidden
+                />
+              </button>
+              <div className="standard-detail-float-heading pr-2">
+                <span
+                  className="standard-detail-float-layer"
+                  title="WIMS 검침 이력 상세"
+                >
+                  WIMS 검침 이력 상세
+                </span>
+                {detailSubtitle ? (
+                  <span
+                    className="standard-detail-float-title-below"
+                    title={detailSubtitle}
+                  >
+                    {detailSubtitle}
+                  </span>
+                ) : null}
+              </div>
+              <button
+                type="button"
+                title="닫기"
+                onClick={closeDetail}
+                className="standard-panel-close cursor-pointer"
+                aria-label="닫기"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </>
+          }
+        >
+          <div
+            className={cn(
+              'flex min-h-0 flex-1 flex-col overflow-hidden bg-background',
+              detailCollapsed && 'hidden'
+            )}
+          >
+            <div className="standard-detail-scroll">
+              <div className="standard-detail-attr-table">
+                {DETAIL_COLUMNS.map((col) => {
+                  const text = cellText(
+                    formatCell(selectedRow, col.key, col.kind)
+                  )
+                  return (
+                    <div key={col.key} className="contents">
+                      <div className="standard-detail-attr-label standard-detail-attr-cell-border">
+                        {col.label}
+                      </div>
+                      <div
+                        className={cn(
+                          'standard-detail-attr-value standard-detail-attr-cell-border text-foreground',
+                          col.title && 'standard-detail-attr-value-title'
+                        )}
+                        title={text}
+                      >
+                        {text}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+            <div className="standard-detail-edit-footer">
+              <button
+                type="button"
+                title="닫기"
+                onClick={closeDetail}
+                className="standard-detail-hdr-btn"
+              >
+                닫기
+              </button>
+            </div>
+          </div>
+        </MapFloatingPanel>
+      ) : null}
     </div>
   )
 }

@@ -7,11 +7,17 @@ import { safeTableName } from "@/lib/shpTableName"
 
 const FIELDS_DIR = path.join(process.cwd(), "src", "config", "defineLayer", "fields")
 
+function fieldIdxNum(raw: unknown): number {
+  const n = parseInt(String(raw ?? "999999"), 10)
+  // idx "0" 허용 — falsy/NaN 만 맨 뒤
+  return Number.isFinite(n) ? n : 999999
+}
+
 /** 정렬: 1. define_field_idx 2. define_field_name */
 function sortFields<T extends Record<string, unknown>>(arr: T[]): T[] {
   return [...arr].sort((a, b) => {
-    const idxA = parseInt(String(a.define_field_idx ?? "999999"), 10)
-    const idxB = parseInt(String(b.define_field_idx ?? "999999"), 10)
+    const idxA = fieldIdxNum(a.define_field_idx)
+    const idxB = fieldIdxNum(b.define_field_idx)
     if (idxA !== idxB) return idxA - idxB
     const nameA = String(a.define_field_name ?? "").toLowerCase()
     const nameB = String(b.define_field_name ?? "").toLowerCase()

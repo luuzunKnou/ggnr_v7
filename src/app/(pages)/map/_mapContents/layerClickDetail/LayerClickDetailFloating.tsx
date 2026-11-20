@@ -18,6 +18,7 @@ import {
   X,
 } from 'lucide-react'
 import { call } from '@/lib/api'
+import { appFetch } from '@/lib/basePath'
 import { useSerWriteAccess } from '@/hooks/useSerWriteAccess'
 import {
   formatBooleanYeobu,
@@ -460,9 +461,12 @@ export function LayerClickDetailFloating({
     let cancelled = false
     setFieldsLoading(true)
     setFieldsTable(fieldsTableKey)
-    void fetch(`/api/config/defineLayer/fields/${encodeURIComponent(fieldsTableKey)}`)
-      .then((r) => r.json())
-      .then((body: { data?: DefineFieldLike[] }) => {
+    void appFetch(`/api/config/defineLayer/fields/${encodeURIComponent(fieldsTableKey)}`)
+      .then(async (r) => {
+        if (!r.ok) throw new Error(`fields ${r.status}`)
+        return (await r.json()) as { data?: DefineFieldLike[] }
+      })
+      .then((body) => {
         if (cancelled) return
         setFields(Array.isArray(body?.data) ? body.data : [])
       })
