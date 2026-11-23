@@ -1383,6 +1383,8 @@ async function applySourceZipAsSibling(options: ApplySourceZipOptions): Promise<
   let createdTarget = false;
   let buildOk = false;
   let historyRecorded = false;
+  /** 실패 시 해제 폴더·ZIP 임시본 유지 (설치 bat 확인용). 성공 시 finally에서 삭제 */
+  let keepExtractDir = false;
   const historyVersion = resolveAppliedVersionLabel(version);
   const ipTrim = clientIp?.trim() || undefined;
   const netLabel = includeNodeModules ? '폐쇄망' : '개방망';
@@ -1430,11 +1432,21 @@ async function applySourceZipAsSibling(options: ApplySourceZipOptions): Promise<
           ...(pulse.totalBytes != null ? { totalBytes: pulse.totalBytes } : {}),
         }),
     });
-    const extractedRoot = await pickExtractedRoot(extractDir);
-    const starterBat = path.join(extractedRoot, '00_make_ggnr_starter.bat');
-    if (!(await pathExists(starterBat))) {
-      throw new Error('받은 소스에 설치 파일이 없습니다.');
+    const zipHasStarter = await zipContainsStarterBat(zipPath);
+    const extractedRoot = await findStarterBatRoot(extractDir);
+    if (!extractedRoot) {
+      keepExtractDir = true;
+      const top = await describeExtractTop(extractDir);
+      if (zipHasStarter) {
+        throw new Error(
+          `받은 소스 ZIP에는 설치 파일이 있으나 압축 해제 후 찾지 못했습니다. 해제 폴더=${extractDir} 상위=${top}`
+        );
+      }
+      throw new Error(
+        `받은 소스에 설치 파일이 없습니다. 해제 폴더=${extractDir} 상위=${top}`
+      );
     }
+    await emit('merge-apply', `설치 루트 확인: ${path.basename(extractedRoot)}`);
 
     if (await pathExists(targetDir)) {
       throw new Error(`이미 같은 버전 폴더가 있습니다: ${targetDir}`);
@@ -1453,7 +1465,7 @@ async function applySourceZipAsSibling(options: ApplySourceZipOptions): Promise<
         clearInterval(timer);
       }
     }
-    if (!(await pathExists(path.join(targetDir, '00_make_ggnr_starter.bat')))) {
+    if (!(await pathExists(path.join(targetDir, STARTER_BAT_NAME)))) {
       throw new Error('새 폴더에 설치 파일을 만들지 못했습니다.');
     }
 
@@ -1524,19 +1536,29 @@ async function applySourceZipAsSibling(options: ApplySourceZipOptions): Promise<
       pendingSchemaConfirm: false,
     };
   } catch (err) {
+    keepExtractDir = true;
     const message = err instanceof Error ? err.message : String(err);
     if (createdTarget && !buildOk) {
       await fs.rm(targetDir, { recursive: true, force: true }).catch((rmErr) => {
         console.error('[SourceCodeUpload] 실패한 설치 폴더 삭제 실패', rmErr);
       });
     }
-    await recordFail(message);
-    const tagged = new Error(message) as Error & { historyRecorded?: boolean };
+    const withKeep =
+      message.includes('해제 폴더=')
+        ? message
+        : `${message} (해제 폴더 유지: ${extractDir})`;
+    console.warn(`[SourceCodeUpload] 새 폴더 생성 실패 — 해제 폴더 유지: ${extractDir}`);
+    await recordFail(withKeep);
+    const tagged = new Error(withKeep) as Error & { historyRecorded?: boolean };
     tagged.historyRecorded = historyRecorded;
     throw tagged;
   } finally {
     releaseSourceApplyLock(lockOwner);
-    await fs.rm(tmpBase, { recursive: true, force: true }).catch(() => {});
+    if (keepExtractDir) {
+      console.warn(`[SourceCodeUpload] sibling 임시 유지: ${tmpBase}`);
+    } else {
+      await fs.rm(tmpBase, { recursive: true, force: true }).catch(() => {});
+    }
   }
 }
 
@@ -1875,10 +1897,13 @@ async function extractZip(zipPath: string, destDir: string): Promise<void> {
   await spawnAsync('unzip', ['-oq', zipPath, '-d', destDir]);
 }
 
+const STARTER_BAT_NAME = '00_make_ggnr_starter.bat';
+const STARTER_BAT_SEARCH_DEPTH = 6;
+
 /** ZIP 해제 루트 — 단일 폴더만 있으면 반복 unwrap (폴더1→폴더2→소스). 프로젝트 표식 있으면 중단 */
 async function pickExtractedRoot(extractDir: string): Promise<string> {
   const isProjectRoot = (names: string[]) =>
-    names.includes('package.json') || names.includes('00_make_ggnr_starter.bat');
+    names.includes('package.json') || names.includes(STARTER_BAT_NAME);
 
   let current = extractDir;
   for (let depth = 0; depth < 5; depth++) {
@@ -1894,6 +1919,132 @@ async function pickExtractedRoot(extractDir: string): Promise<string> {
     return current;
   }
   return current;
+}
+
+/** ZIP central directory에 설치 bat 엔트리가 있는지 (경로·`./` 접두 무관) */
+async function zipContainsStarterBat(zipPath: string): Promise<boolean> {
+  let fh: Awaited<ReturnType<typeof fs.open>> | null = null;
+  try {
+    fh = await fs.open(zipPath, 'r');
+    const { size } = await fh.stat();
+    if (size < 22) return false;
+    const tailLen = Math.min(65_557, size);
+    const buf = Buffer.alloc(tailLen);
+    await fh.read(buf, 0, tailLen, size - tailLen);
+    let eocd = -1;
+    for (let i = buf.length - 22; i >= 0; i--) {
+      if (buf[i] === 0x50 && buf[i + 1] === 0x4b && buf[i + 2] === 0x05 && buf[i + 3] === 0x06) {
+        eocd = i;
+        break;
+      }
+    }
+    if (eocd < 0) return false;
+    const totalEntries = buf.readUInt16LE(eocd + 10);
+    const cdSize = buf.readUInt32LE(eocd + 12);
+    const cdOffset = buf.readUInt32LE(eocd + 16);
+    if (totalEntries === 0xffff || cdSize === 0xffffffff || cdOffset === 0xffffffff) {
+      return zipContainsStarterBatWin32(zipPath);
+    }
+    if (cdSize === 0 || cdOffset + cdSize > size) return false;
+    const cd = Buffer.alloc(cdSize);
+    await fh.read(cd, 0, cdSize, cdOffset);
+    let off = 0;
+    let counted = 0;
+    const needle = STARTER_BAT_NAME.toLowerCase();
+    while (off + 46 <= cd.length && counted < totalEntries) {
+      if (cd.readUInt32LE(off) !== 0x02014b50) break;
+      const nameLen = cd.readUInt16LE(off + 28);
+      const extraLen = cd.readUInt16LE(off + 30);
+      const commentLen = cd.readUInt16LE(off + 32);
+      const name = cd.subarray(off + 46, off + 46 + nameLen).toString('utf8').replace(/\\/g, '/');
+      const base = name.split('/').pop()?.toLowerCase() ?? '';
+      if (base === needle) return true;
+      counted += 1;
+      off += 46 + nameLen + extraLen + commentLen;
+    }
+    return false;
+  } catch {
+    return zipContainsStarterBatWin32(zipPath);
+  } finally {
+    await fh?.close().catch(() => undefined);
+  }
+}
+
+async function zipContainsStarterBatWin32(zipPath: string): Promise<boolean> {
+  if (process.platform !== 'win32') return false;
+  const literal = zipPath.replace(/'/g, "''");
+  const script = [
+    "Add-Type -AssemblyName System.IO.Compression.FileSystem",
+    `$z = [System.IO.Compression.ZipFile]::OpenRead('${literal}')`,
+    'try {',
+    `  @($z.Entries | Where-Object { $_.Name -ieq '${STARTER_BAT_NAME}' }).Count -gt 0`,
+    '} finally { $z.Dispose() }',
+  ].join('; ');
+  try {
+    const { code, stdout } = await new Promise<{ code: number; stdout: string }>((resolve, reject) => {
+      const child = spawn('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script], {
+        shell: false,
+        windowsHide: true,
+      });
+      let stdout = '';
+      child.stdout?.on('data', (c: Buffer | string) => {
+        stdout += typeof c === 'string' ? c : c.toString('utf8');
+      });
+      child.on('error', reject);
+      child.on('close', (c) => resolve({ code: c ?? 1, stdout }));
+    });
+    if (code !== 0) return false;
+    return /true/i.test(stdout.trim().split(/\r?\n/).pop() ?? '');
+  } catch {
+    return false;
+  }
+}
+
+async function describeExtractTop(extractDir: string): Promise<string> {
+  try {
+    const entries = await fs.readdir(extractDir, { withFileTypes: true });
+    if (entries.length === 0) return '(비어 있음)';
+    return entries
+      .slice(0, 12)
+      .map((e) => `${e.isDirectory() ? '[D]' : '[F]'}${e.name}`)
+      .join(', ');
+  } catch {
+    return '(읽기 실패)';
+  }
+}
+
+/**
+ * 설치 bat이 있는 실제 소스 루트.
+ * unwrap 후 없으면 하위 폴더를 제한 깊이로 탐색 (`./버전폴더/...`·이중 래핑 대비).
+ */
+async function findStarterBatRoot(extractDir: string): Promise<string | null> {
+  const picked = await pickExtractedRoot(extractDir);
+  if (await pathExists(path.join(picked, STARTER_BAT_NAME))) return picked;
+
+  const queue: Array<{ dir: string; depth: number }> = [{ dir: extractDir, depth: 0 }];
+  const seen = new Set<string>();
+  while (queue.length > 0) {
+    const item = queue.shift();
+    if (!item) break;
+    const { dir, depth } = item;
+    const key = path.resolve(dir).toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    if (await pathExists(path.join(dir, STARTER_BAT_NAME))) return dir;
+    if (depth >= STARTER_BAT_SEARCH_DEPTH) continue;
+    let entries;
+    try {
+      entries = await fs.readdir(dir, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      if (entry.name === 'node_modules' || entry.name === '.git' || entry.name === '.next') continue;
+      queue.push({ dir: path.join(dir, entry.name), depth: depth + 1 });
+    }
+  }
+  return null;
 }
 
 function isBusyLockError(err: unknown): boolean {
