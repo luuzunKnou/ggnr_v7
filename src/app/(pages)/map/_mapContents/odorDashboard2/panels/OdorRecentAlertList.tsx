@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { ChevronsRight } from 'lucide-react'
 import {
   MOCK_RECENT_ALERTS,
@@ -9,6 +9,7 @@ import {
   type OdorAlertItem,
 } from '@/app/(pages)/(index)/odorPh/odorPhDashboardMock'
 import { cn } from '@/lib/utils'
+import { ODOR_DASHBOARD2_ALERT_PAGE_SIZE } from '../odorDashboard2Config'
 
 type Props = {
   items?: OdorAlertItem[]
@@ -27,6 +28,7 @@ export function OdorRecentAlertList({
   selectedAlertId = null,
 }: Props) {
   const [agencyFilter, setAgencyFilter] = useState<string>('all')
+  const [page, setPage] = useState(1)
 
   const agencies = useMemo(() => {
     const set = new Set<string>()
@@ -44,6 +46,24 @@ export function OdorRecentAlertList({
       (a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime()
     )
   }, [items, agencyFilter])
+
+  const pageCount = Math.max(1, Math.ceil(rows.length / ODOR_DASHBOARD2_ALERT_PAGE_SIZE) || 1)
+  const safePage = Math.min(page, pageCount)
+  const paged = useMemo(() => {
+    const start = (safePage - 1) * ODOR_DASHBOARD2_ALERT_PAGE_SIZE
+    return rows.slice(start, start + ODOR_DASHBOARD2_ALERT_PAGE_SIZE)
+  }, [rows, safePage])
+
+  useEffect(() => {
+    setPage(1)
+  }, [agencyFilter])
+
+  useEffect(() => {
+    if (page > pageCount) setPage(pageCount)
+  }, [page, pageCount])
+
+  const from = rows.length === 0 ? 0 : (safePage - 1) * ODOR_DASHBOARD2_ALERT_PAGE_SIZE + 1
+  const to = Math.min(safePage * ODOR_DASHBOARD2_ALERT_PAGE_SIZE, rows.length)
 
   return (
     <section
@@ -96,59 +116,114 @@ export function OdorRecentAlertList({
         ))}
       </div>
 
-      <ul className="min-h-0 flex-1 space-y-1.5 overflow-y-auto pr-1">
-        {rows.length === 0 ? (
-          <li className="py-6 text-center text-xs text-muted-foreground">최근 경보가 없습니다.</li>
-        ) : (
-          rows.map((row) => (
-            <li
-              key={row.id}
-              role="button"
-              tabIndex={0}
-              title={`${row.sensorKorNm} 상세`}
-              onClick={() => onSelectAlert?.(row)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault()
-                  onSelectAlert?.(row)
-                }
-              }}
-              className={cn(
-                'flex cursor-pointer items-center gap-2 rounded-md border border-border/60 bg-muted/20 px-2.5 py-2 transition-colors',
-                'hover:bg-slate-100 dark:hover:bg-white/15',
-                selectedAlertId === row.id &&
-                  'border-primary/40 bg-primary/10 hover:bg-primary/15 dark:hover:bg-primary/25'
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded border border-border">
+        <div className="standard-list-scroll min-h-0 flex-1">
+          <table className="standard-list-table">
+            <thead className="standard-table-thead">
+              <tr>
+                <th className="standard-table-th standard-table-th-left">지점</th>
+                <th className="standard-table-th standard-table-th-left w-[22%]">발생</th>
+                <th className="standard-table-th standard-table-th-left w-[18%]">농도</th>
+                <th className="standard-table-th standard-table-th-left w-[16%]">설비</th>
+              </tr>
+            </thead>
+            <tbody>
+              {paged.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="standard-table-empty">
+                    최근 경보가 없습니다.
+                  </td>
+                </tr>
+              ) : (
+                paged.map((row) => {
+                  const selected = selectedAlertId === row.id
+                  return (
+                    <tr
+                      key={row.id}
+                      role="button"
+                      tabIndex={0}
+                      title={`${row.sensorKorNm} 상세`}
+                      onClick={() => onSelectAlert?.(row)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          onSelectAlert?.(row)
+                        }
+                      }}
+                      className={cn(
+                        'standard-list-row cursor-pointer',
+                        selected && 'standard-list-row-selected'
+                      )}
+                    >
+                      <td className="standard-table-td-text" title={row.sensorKorNm}>
+                        <span className="flex min-w-0 items-center gap-1.5">
+                          <span
+                            className="h-2 w-2 shrink-0 rounded-full"
+                            style={{ backgroundColor: gradeDotColor(row.grade) }}
+                            title={`${row.grade}등급`}
+                            aria-label={`${row.grade}등급`}
+                          />
+                          <span className="min-w-0">
+                            <span className="block truncate font-medium">{row.sensorKorNm}</span>
+                            <span className="block truncate text-[10px] text-muted-foreground">
+                              {row.sensorNm} · {row.agency}
+                            </span>
+                          </span>
+                        </span>
+                      </td>
+                      <td
+                        className="standard-table-td-date"
+                        title={formatAlertTime(row.occurredAt)}
+                      >
+                        {formatAlertTime(row.occurredAt)}
+                      </td>
+                      <td className="standard-table-td-date tabular-nums font-semibold">
+                        {row.ppm.toFixed(1)}
+                      </td>
+                      <td
+                        className={cn(
+                          'standard-table-td-compact',
+                          row.abatementRunning && 'text-primary'
+                        )}
+                      >
+                        {row.abatementRunning ? '가동' : '정지'}
+                      </td>
+                    </tr>
+                  )
+                })
               )}
+            </tbody>
+          </table>
+        </div>
+        <div className="standard-list-footer flex shrink-0 items-center justify-between gap-2">
+          <span className="tabular-nums">
+            {rows.length === 0
+              ? '0건'
+              : `${from}–${to} / ${rows.length.toLocaleString()}건`}
+          </span>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              title="이전"
+              disabled={safePage <= 1}
+              className="standard-detail-action-btn cursor-pointer disabled:cursor-not-allowed"
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
             >
-              <span
-                className="h-2 w-2 shrink-0 rounded-full"
-                style={{ backgroundColor: gradeDotColor(row.grade) }}
-                title={`${row.grade}등급`}
-                aria-label={`${row.grade}등급`}
-              />
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-medium text-foreground">{row.sensorKorNm}</div>
-                <div className="truncate text-[11px] text-muted-foreground">
-                  {row.sensorNm} · {formatAlertTime(row.occurredAt)} ·{' '}
-                  <span
-                    className={cn(
-                      row.abatementRunning
-                        ? 'text-blue-600 dark:text-blue-400'
-                        : 'text-muted-foreground'
-                    )}
-                  >
-                    {row.abatementRunning ? '저감가동' : '미가동'}
-                  </span>
-                </div>
-              </div>
-              <span className="shrink-0 text-[12px] font-semibold tabular-nums text-foreground">
-                {row.ppm.toFixed(1)}
-                <span className="ml-0.5 text-[10px] font-normal text-muted-foreground">ppm</span>
-              </span>
-            </li>
-          ))
-        )}
-      </ul>
+              이전
+            </button>
+            <span className="px-1 text-[11px] text-muted-foreground">{safePage}페이지</span>
+            <button
+              type="button"
+              title="다음"
+              disabled={safePage >= pageCount}
+              className="standard-detail-action-btn cursor-pointer disabled:cursor-not-allowed"
+              onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
+            >
+              다음
+            </button>
+          </div>
+        </div>
+      </div>
     </section>
   )
 }

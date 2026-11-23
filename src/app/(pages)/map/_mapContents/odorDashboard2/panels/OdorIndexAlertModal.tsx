@@ -14,6 +14,7 @@ import {
   useOdorAlertStore,
 } from '@/app/(pages)/map/_mapContents/odorAlert/odorAlertStore'
 import { cn } from '@/lib/utils'
+import { MAP_UI_Z_CLASS } from '@/lib/mapUiZIndex'
 
 /** 목록·상세 연동용 — 모달에서 보고 있던 경보 */
 export type OdorAlertModalFocus = {
@@ -96,8 +97,8 @@ export function OdorIndexAlertModal({
   return (
     <div
       className={cn(
-        'pointer-events-auto z-[80] w-[min(100%,22rem)]',
-        className ?? 'absolute bottom-4 right-4'
+        'pointer-events-auto w-[min(100%,22rem)]',
+        className ?? cn('fixed bottom-4 right-4', MAP_UI_Z_CLASS.nestedDialog)
       )}
       style={style}
       role="dialog"

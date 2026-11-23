@@ -1,4 +1,5 @@
 import { MOCK_ODOR_SENSORS_FROM_DB } from '@/service/odorSensorMock'
+import { ODOR_SYSTEM_STATUS_INFRA_SITE_LONLAT } from '@/app/(pages)/map/_mapContents/odorSystemStatus/odorSystemStatusConfig'
 import type { OdorCommGraph, OdorCommLink, OdorCommNode } from './odorSystemStatusTypes'
 
 const ID = {
@@ -10,6 +11,9 @@ const ID = {
   garam: 'comm-agency-garam',
   dio: 'comm-agency-dio',
 } as const
+
+/** 죽도 빗물펌프장 — Master·IoT·DB·AP */
+const [INFRA_LON, INFRA_LAT] = ODOR_SYSTEM_STATUS_INFRA_SITE_LONLAT
 
 function minutesAgoIso(nowMs: number, minutes: number): string {
   return new Date(nowMs - minutes * 60_000).toISOString()
@@ -30,6 +34,8 @@ export function createOdorSystemStatusGraph(nowMs: number = Date.now()): OdorCom
       parentId: null,
       lastRecvAt: minutesAgoIso(nowMs, 1),
       collectRate: 99,
+      lon: INFRA_LON,
+      lat: INFRA_LAT,
       detail: {
         peerLine: 'Ap 서버 ↔ 행정망',
         runStatus: '정상',
@@ -42,6 +48,8 @@ export function createOdorSystemStatusGraph(nowMs: number = Date.now()): OdorCom
       parentId: ID.ipsec,
       lastRecvAt: minutesAgoIso(nowMs, 1),
       collectRate: 99,
+      lon: INFRA_LON,
+      lat: INFRA_LAT,
       detail: {
         runStatus: '정상 가동',
         redundancy: '이중화(Active-Standby)',
@@ -70,6 +78,8 @@ export function createOdorSystemStatusGraph(nowMs: number = Date.now()): OdorCom
       parentId: ID.utm,
       lastRecvAt: minutesAgoIso(nowMs, 2),
       collectRate: 99,
+      lon: INFRA_LON,
+      lat: INFRA_LAT,
       detail: {
         runStatus: '정상 가동',
         redundancy: '이중화(Active-Standby)',
@@ -84,6 +94,8 @@ export function createOdorSystemStatusGraph(nowMs: number = Date.now()): OdorCom
       parentId: ID.iot,
       lastRecvAt: minutesAgoIso(nowMs, 2),
       collectRate: 99,
+      lon: INFRA_LON,
+      lat: INFRA_LAT,
       detail: {
         runStatus: '정상 가동',
         redundancy: '이중화(Active-Standby)',

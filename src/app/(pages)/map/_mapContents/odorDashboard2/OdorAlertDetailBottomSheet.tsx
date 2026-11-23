@@ -82,7 +82,7 @@ export function OdorAlertDetailBottomSheet({
   return createPortal(
     <div
       className={cn(
-        'pointer-events-auto fixed z-[70] flex flex-col overflow-hidden',
+        'pointer-events-auto fixed flex flex-col overflow-hidden',
         MAP_LAYER_PANEL_SURFACE_CLASS,
         '!opacity-100',
         MAP_UI_Z_CLASS.detailFloating,

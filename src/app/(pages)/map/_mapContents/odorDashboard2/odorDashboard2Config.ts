@@ -26,6 +26,8 @@ export const ODOR_DASHBOARD2_FLOAT_RIGHT_INSET = 16 + 45 + 12
 export const ODOR_DASHBOARD2_DETAIL_LEFT_GAP = 8
 
 export const ODOR_DASHBOARD2_STATION_PAGE_SIZE = 12
+/** 최근·주의 경보 목록 페이지 크기 */
+export const ODOR_DASHBOARD2_ALERT_PAGE_SIZE = 5
 
 export const ODOR_GRADE_POINT_FILL = {
   normal: '#22c55e',

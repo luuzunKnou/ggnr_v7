@@ -2,7 +2,7 @@
 
 import dynamic from 'next/dynamic'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { ArrowDown, ArrowUp, ArrowUpDown, Download, Search } from 'lucide-react'
+import { ArrowDown, ArrowUp, ArrowUpDown, Download, Search, Settings } from 'lucide-react'
 import {
   buildOdorAlertDetailMock,
   type MaintenanceRow,
@@ -18,6 +18,7 @@ import {
   COMPARE_RANGE_OPTIONS,
   type CompareRange,
 } from '../odorDashboard2TrendCompareMock'
+import { OdorDeviceSettingsModal } from './OdorDeviceSettingsModal'
 import { OdorMultiStationPickModal } from './OdorMultiStationPickModal'
 
 const OdorAlertPpmChart = dynamic(
@@ -314,6 +315,7 @@ export function OdorAlertDetailPanel({
   const [compareRange, setCompareRange] = useState<CompareRange>('24h')
   const [compareStationIds, setCompareStationIds] = useState<string[]>([])
   const [pickOpen, setPickOpen] = useState(false)
+  const [deviceSettingsOpen, setDeviceSettingsOpen] = useState(false)
   const [maintKeyword, setMaintKeyword] = useState('')
   const [maintPage, setMaintPage] = useState(1)
   const [maintSort, setMaintSort] = useState<{ key: MaintSortKey; dir: SortDir }>({
@@ -577,6 +579,26 @@ export function OdorAlertDetailPanel({
       </div>
     )
 
+  const deviceSettingsAction = (
+    <button
+      type="button"
+      title="측정 기기 설정"
+      onClick={() => setDeviceSettingsOpen(true)}
+      className="inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+    >
+      <Settings className="h-3.5 w-3.5" aria-hidden />
+    </button>
+  )
+
+  const deviceSettingsModal = (
+    <OdorDeviceSettingsModal
+      open={deviceSettingsOpen}
+      agency={detail.device.agency || alert.agency}
+      sensorLabel={detail.device.sensorKorNm}
+      onClose={() => setDeviceSettingsOpen(false)}
+    />
+  )
+
   const deviceBlock = (
     <div className="space-y-1">
       <InfoRow label="센서" value={detail.device.sensorKorNm} />
@@ -757,6 +779,7 @@ export function OdorAlertDetailPanel({
         <div className="flex min-h-0 min-w-[11rem] max-w-[15rem] flex-[0.85] flex-col gap-1.5 overflow-hidden">
           <Section
             title="측정 기기"
+            action={deviceSettingsAction}
             className="min-h-0 shrink-0"
             bodyClassName="flex flex-col gap-1.5"
           >
@@ -804,6 +827,7 @@ export function OdorAlertDetailPanel({
           onConfirm={setCompareStationIds}
           onClose={() => setPickOpen(false)}
         />
+        {deviceSettingsModal}
       </div>
     )
   }
@@ -811,7 +835,9 @@ export function OdorAlertDetailPanel({
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-hidden">
       <div className="grid shrink-0 grid-cols-[2fr_1.5fr] grid-rows-[auto_auto_auto] gap-1.5">
-        <Section title="측정 기기">{deviceBlock}</Section>
+        <Section title="측정 기기" action={deviceSettingsAction}>
+          {deviceBlock}
+        </Section>
         <Section title="통신 정보">{commBlock}</Section>
         <Section title="저감설비" className="col-span-2">
           {abatementBlock}
@@ -844,6 +870,7 @@ export function OdorAlertDetailPanel({
         onConfirm={setCompareStationIds}
         onClose={() => setPickOpen(false)}
       />
+      {deviceSettingsModal}
     </div>
   )
 }

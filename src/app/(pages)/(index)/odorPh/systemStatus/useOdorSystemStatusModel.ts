@@ -71,9 +71,36 @@ export function useOdorSystemStatusModel() {
     [allViews]
   )
 
+  /** 상단 카드 — 센서 기준 정상장비·통신이상·센서 수 */
+  const summary = useMemo(() => {
+    const sensors = allViews.filter((v) => v.kind === 'sensor')
+    let ok = 0
+    let abnormal = 0
+    for (const s of sensors) {
+      if (s.status === 'ok') ok += 1
+      else abnormal += 1
+    }
+    return {
+      sensorCount: sensors.length,
+      okCount: ok,
+      abnormalCount: abnormal,
+    }
+  }, [allViews])
+
   const selectNode = useCallback((id: string) => {
-    setSelectedId(id)
-    setSensorDetailId(null)
+    setSelectedId((prev) => {
+      if (prev === id) {
+        setSensorDetailId(null)
+        return null
+      }
+      setSensorDetailId(null)
+      return id
+    })
+  }, [])
+
+  /** 동일 센서 재선택 시 상세 닫기 */
+  const selectSensor = useCallback((id: string) => {
+    setSensorDetailId((prev) => (prev === id ? null : id))
   }, [])
 
   const closeExpand = useCallback(() => {
@@ -96,10 +123,12 @@ export function useOdorSystemStatusModel() {
     sensorDetail,
     agencySensors,
     selectNode,
+    selectSensor,
     setSensorDetailId,
     closeExpand,
     expandOpen: selectedId != null,
     disconnectSensors,
+    summary,
     bannerDismissed,
     setBannerDismissed,
     showBanner: !bannerDismissed && disconnectSensors.length > 0,

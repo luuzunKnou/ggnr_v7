@@ -1,7 +1,7 @@
 'use client'
 
-import { useMemo } from 'react'
-import { ChevronLeft, ChevronRight, MapPin, X } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { ChevronLeft, ChevronRight, MapPin, Search, X } from 'lucide-react'
 import { buildDashboardGradeMock } from '@/app/(pages)/(index)/odorPh/odorPhDashboardMock'
 import {
   buildOdorStationRows,
@@ -21,6 +21,8 @@ type Props = {
   sensorDetail: OdorCommNodeView | null
   /** 업체 선택 시 하위 센서 목록 */
   agencySensors: OdorCommNodeView[]
+  /** 기기 목록 선택 강조 */
+  selectedSensorId?: string | null
   onSelectSensor: (sensor: OdorCommNodeView) => void
   onBackToAgencyList?: () => void
   onGoToStation?: (node: OdorCommNodeView) => void
@@ -93,6 +95,7 @@ export function OdorSystemStatusExpandPanel({
   node,
   sensorDetail,
   agencySensors,
+  selectedSensorId = null,
   onSelectSensor,
   onBackToAgencyList,
   onGoToStation,
@@ -181,27 +184,41 @@ export function OdorSystemStatusExpandPanel({
         </button>
       </div>
 
-      <div className="standard-detail-scroll">
-        {showSensor ? (
-          <SensorDetailBody node={sensorDetail} onGoToStation={onGoToStation} />
-        ) : null}
-
-        {!showSensor && node.kind === 'agency' ? (
+      {!showSensor && node.kind === 'agency' ? (
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           <AgencyDeviceList
             agency={node.agency ?? node.label}
             agencySensors={agencySensors}
+            selectedSensorId={selectedSensorId}
             onSelectSensor={onSelectSensor}
           />
-        ) : null}
+        </div>
+      ) : (
+        <div className="standard-detail-scroll">
+          {showSensor ? (
+            <SensorDetailBody node={sensorDetail} onGoToStation={onGoToStation} />
+          ) : null}
 
-        {!showSensor && detailRows ? (
-          <section className="standard-detail-section-block-first">
-            <div className="standard-detail-section-body !px-0">
-              <AttrRows rows={detailRows} />
-            </div>
-          </section>
-        ) : null}
-      </div>
+          {!showSensor && detailRows ? (
+            <section className="standard-detail-section-block-first space-y-2">
+              <div className="standard-detail-section-body !px-0">
+                <AttrRows rows={detailRows} />
+              </div>
+              {onGoToStation && node.lon != null && node.lat != null ? (
+                <button
+                  type="button"
+                  title="지점으로 이동"
+                  onClick={() => onGoToStation(node)}
+                  className="standard-detail-hdr-btn-save mb-1 mr-1 inline-flex cursor-pointer items-center gap-1"
+                >
+                  <MapPin className="h-3 w-3" aria-hidden />
+                  지점으로 이동
+                </button>
+              ) : null}
+            </section>
+          ) : null}
+        </div>
+      )}
     </div>
   )
 }
@@ -238,7 +255,7 @@ function SensorDetailBody({
       <div className="standard-detail-section-body !px-0">
         <AttrRows rows={rows} />
       </div>
-      {onGoToStation && node.sensorKey != null ? (
+      {onGoToStation && node.lon != null && node.lat != null ? (
         <button
           type="button"
           title="지점으로 이동"
@@ -253,16 +270,23 @@ function SensorDetailBody({
   )
 }
 
-/** 대시보드2 «지점 목록 및 기기 상태»와 동일 열·더미 */
+/** 대시보드2 «지점 목록 및 기기 상태»와 동일 열·검색·더미 */
 function AgencyDeviceList({
   agency,
   agencySensors,
+  selectedSensorId = null,
   onSelectSensor,
 }: {
   agency: string
   agencySensors: OdorCommNodeView[]
+  selectedSensorId?: string | null
   onSelectSensor: (sensor: OdorCommNodeView) => void
 }) {
+  const [emdFilter, setEmdFilter] = useState('all')
+  const [keyword, setKeyword] = useState('')
+  const [suggestOpen, setSuggestOpen] = useState(false)
+  const searchWrapRef = useRef<HTMLDivElement | null>(null)
+
   const rows = useMemo(() => {
     const sensors = MOCK_ODOR_SENSORS_FROM_DB.filter((s) => s.agency === agency).map((s) => ({
       sensorKey: s.sensorKey,
@@ -285,18 +309,129 @@ function AgencyDeviceList({
     return m
   }, [agencySensors])
 
-  if (rows.length === 0) {
-    return <p className="standard-detail-attr-empty">등록된 기기가 없습니다.</p>
-  }
+  const emdOptions = useMemo(() => {
+    const set = new Set(rows.map((r) => r.emdNm).filter(Boolean))
+    return [...set].sort((a, b) => a.localeCompare(b, 'ko'))
+  }, [rows])
+
+  const suggestions = useMemo(() => {
+    const kw = keyword.trim().toLowerCase()
+    if (!kw) return []
+    return rows
+      .filter(
+        (r) =>
+          r.sensorKorNm.toLowerCase().includes(kw) ||
+          r.sensorNm.toLowerCase().includes(kw)
+      )
+      .slice(0, 8)
+  }, [rows, keyword])
+
+  const filtered = useMemo(() => {
+    return rows.filter((r) => {
+      if (emdFilter !== 'all' && r.emdNm !== emdFilter) return false
+      const kw = keyword.trim().toLowerCase()
+      if (!kw) return true
+      return (
+        r.sensorKorNm.toLowerCase().includes(kw) ||
+        r.sensorNm.toLowerCase().includes(kw) ||
+        r.agency.toLowerCase().includes(kw) ||
+        r.emdNm.toLowerCase().includes(kw)
+      )
+    })
+  }, [rows, emdFilter, keyword])
+
+  useEffect(() => {
+    setEmdFilter('all')
+    setKeyword('')
+    setSuggestOpen(false)
+  }, [agency])
+
+  useEffect(() => {
+    const onDoc = (e: MouseEvent) => {
+      if (!searchWrapRef.current?.contains(e.target as Node)) setSuggestOpen(false)
+    }
+    document.addEventListener('mousedown', onDoc)
+    return () => document.removeEventListener('mousedown', onDoc)
+  }, [])
 
   const pick = (row: OdorStationRow) => {
     const node = byKey.get(row.sensorKey)
     if (node) onSelectSensor(node)
+    setSuggestOpen(false)
+  }
+
+  if (rows.length === 0) {
+    return (
+      <p className="standard-detail-attr-empty flex flex-1 items-center justify-center px-2">
+        등록된 기기가 없습니다.
+      </p>
+    )
   }
 
   return (
-    <div className="overflow-hidden rounded border border-border">
-      <div className="standard-list-scroll max-h-[min(28rem,55vh)]">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div
+        ref={searchWrapRef}
+        className="relative flex shrink-0 items-center gap-1.5 border-b border-border px-1.5 py-1.5"
+      >
+        <label className="sr-only" htmlFor="odor-sys-agency-emd">
+          행정동
+        </label>
+        <select
+          id="odor-sys-agency-emd"
+          title="행정동"
+          value={emdFilter}
+          onChange={(e) => setEmdFilter(e.target.value)}
+          className="h-7 w-[6.5rem] shrink-0 cursor-pointer rounded border border-border bg-background px-1.5 text-[11px] text-foreground"
+        >
+          <option value="all">행정동 전체</option>
+          {emdOptions.map((emd) => (
+            <option key={emd} value={emd}>
+              {emd}
+            </option>
+          ))}
+        </select>
+        <div className="standard-search-wrap min-w-0 flex-1">
+          <Search className="standard-search-icon" aria-hidden />
+          <input
+            type="search"
+            value={keyword}
+            onChange={(e) => {
+              setKeyword(e.target.value)
+              setSuggestOpen(true)
+            }}
+            onFocus={() => setSuggestOpen(true)}
+            placeholder="지점 찾기 (한글명·영문명)"
+            title="지점 찾기"
+            className="standard-search-input focus:ring-0 focus:ring-offset-0"
+            autoComplete="off"
+          />
+        </div>
+        {suggestOpen && suggestions.length > 0 ? (
+          <ul className="absolute left-0 right-0 top-full z-20 mt-0.5 max-h-40 overflow-auto rounded border border-border bg-background shadow-md">
+            {suggestions.map((s) => (
+              <li key={s.id}>
+                <button
+                  type="button"
+                  title={`${s.sensorKorNm}(${s.sensorNm})`}
+                  className="flex w-full cursor-pointer flex-col gap-0.5 px-2 py-1.5 text-left text-[11px] hover:bg-muted/60"
+                  onClick={() => pick(s)}
+                >
+                  <span className="font-medium text-foreground">
+                    {s.sensorKorNm}
+                    <span className="text-muted-foreground">({s.sensorNm})</span>
+                  </span>
+                  <span className="text-[10px] text-muted-foreground">
+                    {s.agency} · {s.emdNm}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </div>
+
+      <div className="standard-list-scroll min-h-0 flex-1">
         <table className="standard-list-table">
           <thead className="standard-table-thead">
             <tr>
@@ -310,54 +445,69 @@ function AgencyDeviceList({
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
-              <tr
-                key={row.id}
-                role="button"
-                tabIndex={0}
-                title={`${row.sensorKorNm} 상세`}
-                onClick={() => pick(row)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault()
-                    pick(row)
-                  }
-                }}
-                className="standard-list-row cursor-pointer"
-              >
-                <td className="standard-table-td-text" title={row.sensorKorNm}>
-                  <span className="block truncate font-medium">{row.sensorKorNm}</span>
-                  <span className="block truncate text-[10px] text-muted-foreground">
-                    {row.sensorNm} · {row.emdNm}
-                  </span>
-                </td>
-                <td className="standard-table-td-compact">
-                  <span
-                    className={cn(
-                      'inline-flex rounded px-1 py-0.5 text-[10px] font-medium',
-                      row.status === 'normal' &&
-                        'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300',
-                      row.status === 'caution' &&
-                        'bg-orange-500/15 text-orange-700 dark:text-orange-300',
-                      row.status === 'warning' &&
-                        'bg-red-500/15 text-red-700 dark:text-red-300'
-                    )}
-                  >
-                    {odorStatusLabel(row.status)}
-                  </span>
-                </td>
-                <td className="standard-table-td-date tabular-nums">{row.ppm.toFixed(1)}</td>
-                <td className="standard-table-td-compact">
-                  {row.abatementRunning ? '가동' : '정지'}
-                </td>
-                <td className="standard-table-td-compact !w-6 px-0.5 text-center">
-                  <ChevronRight
-                    className="mx-auto h-3.5 w-3.5 text-muted-foreground"
-                    aria-hidden
-                  />
+            {filtered.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="standard-table-empty">
+                  조건에 맞는 기기가 없습니다.
                 </td>
               </tr>
-            ))}
+            ) : (
+              filtered.map((row) => {
+                const node = byKey.get(row.sensorKey)
+                const selected = node != null && selectedSensorId === node.id
+                return (
+                <tr
+                  key={row.id}
+                  role="button"
+                  tabIndex={0}
+                  title={`${row.sensorKorNm} 상세`}
+                  onClick={() => pick(row)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      pick(row)
+                    }
+                  }}
+                  className={cn(
+                    'standard-list-row cursor-pointer',
+                    selected && 'standard-list-row-selected'
+                  )}
+                >
+                  <td className="standard-table-td-text" title={row.sensorKorNm}>
+                    <span className="block truncate font-medium">{row.sensorKorNm}</span>
+                    <span className="block truncate text-[10px] text-muted-foreground">
+                      {row.sensorNm} · {row.emdNm}
+                    </span>
+                  </td>
+                  <td className="standard-table-td-compact">
+                    <span
+                      className={cn(
+                        'inline-flex rounded px-1 py-0.5 text-[10px] font-medium',
+                        row.status === 'normal' &&
+                          'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300',
+                        row.status === 'caution' &&
+                          'bg-orange-500/15 text-orange-700 dark:text-orange-300',
+                        row.status === 'warning' &&
+                          'bg-red-500/15 text-red-700 dark:text-red-300'
+                      )}
+                    >
+                      {odorStatusLabel(row.status)}
+                    </span>
+                  </td>
+                  <td className="standard-table-td-date tabular-nums">{row.ppm.toFixed(1)}</td>
+                  <td className="standard-table-td-compact">
+                    {row.abatementRunning ? '가동' : '정지'}
+                  </td>
+                  <td className="standard-table-td-compact !w-6 px-0.5 text-center">
+                    <ChevronRight
+                      className="mx-auto h-3.5 w-3.5 text-muted-foreground"
+                      aria-hidden
+                    />
+                  </td>
+                </tr>
+                )
+              })
+            )}
           </tbody>
         </table>
       </div>

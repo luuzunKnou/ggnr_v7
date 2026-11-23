@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { cn } from '@/lib/utils'
 import type { OdorCommLink, OdorCommNodeView, OdorCommStatus } from './odorSystemStatusTypes'
 import { ODOR_COMM_DIAGRAM_KINDS, ODOR_COMM_STATUS_LABEL } from './odorSystemStatusTypes'
@@ -32,8 +32,6 @@ function statusDot(status: OdorCommStatus): string {
 }
 
 export function OdorSystemStatusDiagram({ nodes, links, selectedId, onSelect }: Props) {
-  const [hoverId, setHoverId] = useState<string | null>(null)
-
   const diagramNodes = useMemo(
     () => nodes.filter((n) => ODOR_COMM_DIAGRAM_KINDS.has(n.kind)),
     [nodes]
@@ -55,27 +53,6 @@ export function OdorSystemStatusDiagram({ nodes, links, selectedId, onSelect }: 
     return links.filter((l) => ids.has(l.fromId) && ids.has(l.toId))
   }, [links, diagramNodes])
 
-  const highlightIds = useMemo(() => {
-    if (!hoverId) return new Set<string>()
-    const set = new Set<string>([hoverId])
-    for (const l of diagramLinks) {
-      if (l.fromId === hoverId || l.toId === hoverId) {
-        set.add(l.fromId)
-        set.add(l.toId)
-      }
-    }
-    return set
-  }, [hoverId, diagramLinks])
-
-  const highlightLinkIds = useMemo(() => {
-    if (!hoverId) return new Set<string>()
-    const set = new Set<string>()
-    for (const l of diagramLinks) {
-      if (l.fromId === hoverId || l.toId === hoverId) set.add(l.id)
-    }
-    return set
-  }, [hoverId, diagramLinks])
-
   const root = diagramNodes.find((n) => n.parentId == null)
   if (!root) {
     return (
@@ -95,18 +72,14 @@ export function OdorSystemStatusDiagram({ nodes, links, selectedId, onSelect }: 
   const branchParent = spine[spine.length - 1]
   const agencies = (byParent.get(branchParent.id) ?? []).filter((n) => n.kind === 'agency')
 
-  function Edge({ linkId, status }: { linkId: string; status: OdorCommStatus }) {
+  function Edge({ status }: { linkId: string; status: OdorCommStatus }) {
     return (
       <div className="flex justify-center py-1" aria-hidden>
         <div
           className={cn(
-            'h-5 w-0.5 rounded-full transition-all',
+            'h-5 w-0.5 rounded-full',
             STATUS_EDGE[status],
-            highlightLinkIds.has(linkId) || (!hoverId && status !== 'ok')
-              ? 'opacity-100 scale-x-150 w-1'
-              : 'opacity-40',
-            hoverId && highlightLinkIds.has(linkId) && 'opacity-100 brightness-125 w-1.5',
-            hoverId && !highlightLinkIds.has(linkId) && 'opacity-15'
+            status !== 'ok' ? 'w-1 opacity-100' : 'opacity-50'
           )}
         />
       </div>
@@ -115,23 +88,16 @@ export function OdorSystemStatusDiagram({ nodes, links, selectedId, onSelect }: 
 
   function NodeCard({ node, compact }: { node: OdorCommNodeView; compact?: boolean }) {
     const selected = selectedId === node.id
-    const dim = hoverId != null && !highlightIds.has(node.id)
     return (
       <button
         type="button"
         title={node.label}
-        onMouseEnter={() => setHoverId(node.id)}
-        onMouseLeave={() => setHoverId(null)}
-        onFocus={() => setHoverId(node.id)}
-        onBlur={() => setHoverId(null)}
         onClick={() => onSelect(node.id)}
         className={cn(
-          'cursor-pointer rounded border px-2 py-1.5 text-left transition-all',
+          'cursor-pointer rounded border px-2 py-1.5 text-left',
           compact ? 'min-w-[7.5rem] max-w-[10rem]' : 'min-w-[11rem] max-w-[16rem]',
           STATUS_NODE[node.status],
-          selected && 'ring-2 ring-primary ring-offset-1 ring-offset-background',
-          dim && 'opacity-30',
-          hoverId === node.id && 'brightness-110 shadow-sm'
+          selected && 'ring-2 ring-primary ring-offset-1 ring-offset-background'
         )}
       >
         <span className="flex items-center gap-1.5">

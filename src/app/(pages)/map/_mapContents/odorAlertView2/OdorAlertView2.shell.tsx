@@ -1,23 +1,37 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { fromLonLat } from 'ol/proj'
+import { History, X } from 'lucide-react'
 import type { OdorAlertItem } from '@/app/(pages)/(index)/odorPh/odorPhDashboardMock'
+import { cn } from '@/lib/utils'
 import { MapSideListPanel } from '../../_mapComponents/MapSideListPanel'
 import { scheduleAnimateMapToCenter3857 } from '../../_mapComponents/config/mapAutoNavigation'
 import { useMapContext } from '../../_mapComponents/MapContext'
+import { MAP_LAYER_PANEL_SURFACE_CLASS } from '../../_mapComponents/mapControlPanel/mapLayerPanelLayout'
 import { OdorAlertDetailBottomSheet } from '../odorDashboard2/OdorAlertDetailBottomSheet'
 import { ODOR_DASHBOARD2_FLOAT_RIGHT_INSET } from '../odorDashboard2/odorDashboard2Config'
-import type { OdorAlertRow } from '../odorAlert/odorAlertMock'
+import type { OdorAckHistoryRow, OdorAlertRow } from '../odorAlert/odorAlertMock'
+import { useOdorAlertStore } from '../odorAlert/odorAlertStore'
 import { OdorAlertView2HistoryModal } from './OdorAlertView2HistoryModal'
+import { OdorAlertView2HistoryPanel } from './OdorAlertView2HistoryPanel'
 import { OdorAlertView2ListPanel } from './OdorAlertView2ListPanel'
+import { odorAlertRowToViewItem } from './odorAlertView2Map'
 import {
   ODOR_ALERT_VIEW2_DETAIL_BOTTOM,
   ODOR_ALERT_VIEW2_DETAIL_GAP,
+  ODOR_ALERT_VIEW2_FLOAT_HISTORY_GAP,
+  ODOR_ALERT_VIEW2_FLOAT_HISTORY_WIDTH,
+  ODOR_ALERT_VIEW2_FLOAT_LEFT_INSET,
+  ODOR_ALERT_VIEW2_FLOAT_WIDTH,
   ODOR_ALERT_VIEW2_LIST_DEFAULT_WIDTH,
   ODOR_ALERT_VIEW2_LIST_MAX_WIDTH,
   ODOR_ALERT_VIEW2_LIST_MIN_WIDTH,
   ODOR_ALERT_VIEW2_SER_ENG,
+  ODOR_ALERT_VIEW2_UI_MODE_OPTIONS,
+  ODOR_ALERT_VIEW2_UI_MODE_STORAGE_KEY,
+  type OdorAlertView2UiMode,
 } from './odorAlertView2Config'
 
 type Props = {
@@ -26,8 +40,56 @@ type Props = {
   onClose: () => void
 }
 
+function readStoredUiMode(): OdorAlertView2UiMode {
+  if (typeof window === 'undefined') return 'floating'
+  try {
+    const raw = window.localStorage.getItem(ODOR_ALERT_VIEW2_UI_MODE_STORAGE_KEY)
+    if (raw === 'legacy' || raw === 'floating') return raw
+  } catch {
+    /* ignore */
+  }
+  return 'floating'
+}
+
+function UiModeSelect({
+  id,
+  value,
+  onChange,
+  className,
+}: {
+  id: string
+  value: OdorAlertView2UiMode
+  onChange: (v: OdorAlertView2UiMode) => void
+  className?: string
+}) {
+  return (
+    <>
+      <label className="sr-only" htmlFor={id}>
+        경보목록2 UI
+      </label>
+      <select
+        id={id}
+        title="경보목록2 UI"
+        value={value}
+        onChange={(e) => onChange(e.target.value as OdorAlertView2UiMode)}
+        className={cn(
+          'h-7 max-w-[9.5rem] cursor-pointer rounded border px-1.5 text-[11px]',
+          className
+        )}
+      >
+        {ODOR_ALERT_VIEW2_UI_MODE_OPTIONS.map((opt) => (
+          <option key={opt.value} value={opt.value}>
+            {opt.label}
+          </option>
+        ))}
+      </select>
+    </>
+  )
+}
+
 /**
- * 경보목록2 — 기존 standard 표·플로팅 상세/이력 UI + P21(odorAlertStore)
+ * 경보목록2 — 풀패널 / 플로팅 UI select 전환 + P21(odorAlertStore)
+ * 해제 이력: 풀패널=플로팅 모달, 플로팅UI=목록 옆 사이드 패널
  */
 export function OdorAlertView2Shell({
   leftOffsetPx,
@@ -35,23 +97,38 @@ export function OdorAlertView2Shell({
   onClose,
 }: Props) {
   const mapContext = useMapContext()
+  const { alerts } = useOdorAlertStore()
+  const [uiMode, setUiMode] = useState<OdorAlertView2UiMode>('floating')
   const [listWidth, setListWidth] = useState(ODOR_ALERT_VIEW2_LIST_DEFAULT_WIDTH)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [detailAlert, setDetailAlert] = useState<OdorAlertItem | null>(null)
+  const [focusAlertId, setFocusAlertId] = useState<string | null>(null)
 
-  /** 상수 변경·HMR 시에도 기본 너비가 반영되도록 동기화 */
+  const isFloating = uiMode === 'floating'
+
+  useEffect(() => {
+    setUiMode(readStoredUiMode())
+  }, [])
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(ODOR_ALERT_VIEW2_UI_MODE_STORAGE_KEY, uiMode)
+    } catch {
+      /* ignore */
+    }
+  }, [uiMode])
+
   useEffect(() => {
     setListWidth(ODOR_ALERT_VIEW2_LIST_DEFAULT_WIDTH)
   }, [ODOR_ALERT_VIEW2_LIST_DEFAULT_WIDTH])
 
   useEffect(() => {
-    onTotalWidthChange(listWidth)
-  }, [listWidth, onTotalWidthChange])
+    onTotalWidthChange(isFloating ? 0 : listWidth)
+  }, [isFloating, listWidth, onTotalWidthChange])
 
   useEffect(() => () => onTotalWidthChange(0), [onTotalWidthChange])
 
-  const handleSelectAlert = (alert: OdorAlertItem, source: OdorAlertRow) => {
-    setDetailAlert(alert)
+  const flyToRow = (source: OdorAlertRow) => {
     const lon = source.lon
     const lat = source.lat
     const map = mapContext?.mapInstanceRef?.current
@@ -63,6 +140,178 @@ export function OdorAlertView2Shell({
     scheduleAnimateMapToCenter3857(map, center, zoom, {
       applyMapViewPadding: () => mapContext?.applyMapViewPaddingRef?.current?.(),
     })
+  }
+
+  const handleSelectAlert = (alert: OdorAlertItem, source: OdorAlertRow) => {
+    if (detailAlert?.id === alert.id) {
+      setDetailAlert(null)
+      setFocusAlertId(null)
+      return
+    }
+    setDetailAlert(alert)
+    setFocusAlertId(alert.id)
+    flyToRow(source)
+  }
+
+  const handleSelectHistory = (hist: OdorAckHistoryRow) => {
+    if (detailAlert?.id === hist.alertId) {
+      setDetailAlert(null)
+      setFocusAlertId(null)
+      return
+    }
+    const source = alerts.find((a) => a.id === hist.alertId)
+    if (!source) return
+    const alert = odorAlertRowToViewItem(source)
+    setDetailAlert(alert)
+    setFocusAlertId(source.id)
+    flyToRow(source)
+  }
+
+  const floatLeft = leftOffsetPx + ODOR_ALERT_VIEW2_FLOAT_LEFT_INSET
+  const panelLeft = isFloating ? floatLeft : leftOffsetPx
+  const panelWidth = isFloating ? ODOR_ALERT_VIEW2_FLOAT_WIDTH : listWidth
+  const historyBesideWidth =
+    isFloating && historyOpen
+      ? ODOR_ALERT_VIEW2_FLOAT_HISTORY_GAP + ODOR_ALERT_VIEW2_FLOAT_HISTORY_WIDTH
+      : 0
+
+  const selectedAlertId = detailAlert?.id ?? null
+
+  const listPanel = (
+    <OdorAlertView2ListPanel
+      onClose={onClose}
+      historyOpen={historyOpen}
+      onToggleHistory={() => setHistoryOpen((v) => !v)}
+      selectedAlertId={selectedAlertId}
+      focusAlertId={focusAlertId}
+      onSelectAlert={handleSelectAlert}
+      hideClose={isFloating}
+      headerExtra={
+        <UiModeSelect
+          id={isFloating ? 'odor-alert-view2-ui-float' : 'odor-alert-view2-ui-legacy'}
+          value={uiMode}
+          onChange={setUiMode}
+          className={
+            isFloating
+              ? 'border-slate-200 bg-white text-slate-800 dark:border-white/20 dark:bg-black/40 dark:text-white/90'
+              : 'border-border bg-background text-foreground'
+          }
+        />
+      }
+    />
+  )
+
+  const detailSheet = (
+    <OdorAlertDetailBottomSheet
+      alert={detailAlert}
+      leftPx={panelLeft + panelWidth + historyBesideWidth + ODOR_ALERT_VIEW2_DETAIL_GAP}
+      rightPx={ODOR_DASHBOARD2_FLOAT_RIGHT_INSET}
+      bottomPx={ODOR_ALERT_VIEW2_DETAIL_BOTTOM}
+      onClose={() => {
+        setDetailAlert(null)
+        setFocusAlertId(null)
+      }}
+    />
+  )
+
+  if (isFloating) {
+    if (typeof document === 'undefined') return null
+    return (
+      <>
+        {createPortal(
+          <div
+            className="pointer-events-none fixed inset-0 map-ui-z-viewport"
+            data-ser-eng={ODOR_ALERT_VIEW2_SER_ENG}
+          >
+            <div
+              className="pointer-events-none absolute flex items-stretch gap-2"
+              style={{
+                left: floatLeft,
+                top: 60,
+                maxHeight: 'calc(100vh - 70px)',
+                height: 'calc(100vh - 70px)',
+              }}
+            >
+              <div
+                className={cn(
+                  'pointer-events-auto flex min-h-0 flex-col overflow-hidden',
+                  MAP_LAYER_PANEL_SURFACE_CLASS
+                )}
+                style={{ width: ODOR_ALERT_VIEW2_FLOAT_WIDTH }}
+              >
+                <div className="standard-map-float-header shrink-0 border-b border-slate-200 dark:border-white/10">
+                  <span className="standard-map-float-header-title">경보목록2</span>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <UiModeSelect
+                      id="odor-alert-view2-ui-float-hdr"
+                      value={uiMode}
+                      onChange={setUiMode}
+                      className="border-slate-200 bg-white text-slate-800 dark:border-white/20 dark:bg-black/40 dark:text-white/90"
+                    />
+                    <button
+                      type="button"
+                      title={historyOpen ? '해제 이력 접기' : '해제(인지) 이력'}
+                      onClick={() => setHistoryOpen((v) => !v)}
+                      className={cn(
+                        'standard-detail-hdr-btn cursor-pointer',
+                        historyOpen && 'border-primary bg-primary/10 text-foreground'
+                      )}
+                    >
+                      <History className="h-3.5 w-3.5" aria-hidden />
+                      해제 이력
+                    </button>
+                    <button
+                      type="button"
+                      className="standard-map-float-header-close inline-flex h-7 w-7 items-center justify-center"
+                      onClick={onClose}
+                      title="닫기"
+                      aria-label="닫기"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+                <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                  <OdorAlertView2ListPanel
+                    onClose={onClose}
+                    historyOpen={historyOpen}
+                    onToggleHistory={() => setHistoryOpen((v) => !v)}
+                    selectedAlertId={selectedAlertId}
+                    focusAlertId={focusAlertId}
+                    onSelectAlert={handleSelectAlert}
+                    hideClose
+                    hideHeader
+                  />
+                </div>
+              </div>
+
+              {historyOpen ? (
+                <div
+                  className={cn(
+                    'pointer-events-auto flex min-h-0 flex-col overflow-hidden',
+                    MAP_LAYER_PANEL_SURFACE_CLASS
+                  )}
+                  style={{
+                    width: ODOR_ALERT_VIEW2_FLOAT_HISTORY_WIDTH,
+                    marginLeft: ODOR_ALERT_VIEW2_FLOAT_HISTORY_GAP - 8,
+                  }}
+                >
+                  <OdorAlertView2HistoryPanel
+                    onClose={() => setHistoryOpen(false)}
+                    variant="float"
+                    className="h-full"
+                    selectedAlertId={selectedAlertId}
+                    onSelectHistory={handleSelectHistory}
+                  />
+                </div>
+              ) : null}
+            </div>
+          </div>,
+          document.body
+        )}
+        {detailSheet}
+      </>
+    )
   }
 
   return (
@@ -77,28 +326,16 @@ export function OdorAlertView2Shell({
           contentClassName="overflow-hidden"
           serEng={ODOR_ALERT_VIEW2_SER_ENG}
         >
-          <OdorAlertView2ListPanel
-            onClose={onClose}
-            historyOpen={historyOpen}
-            onToggleHistory={() => setHistoryOpen((v) => !v)}
-            selectedAlertId={detailAlert?.id ?? null}
-            onSelectAlert={handleSelectAlert}
-          />
+          {listPanel}
         </MapSideListPanel>
       </div>
-
-      <OdorAlertDetailBottomSheet
-        alert={detailAlert}
-        leftPx={leftOffsetPx + listWidth + ODOR_ALERT_VIEW2_DETAIL_GAP}
-        rightPx={ODOR_DASHBOARD2_FLOAT_RIGHT_INSET}
-        bottomPx={ODOR_ALERT_VIEW2_DETAIL_BOTTOM}
-        onClose={() => setDetailAlert(null)}
-      />
-
+      {detailSheet}
       <OdorAlertView2HistoryModal
         open={historyOpen}
-        leftPx={leftOffsetPx + listWidth}
+        leftPx={panelLeft + panelWidth}
         onClose={() => setHistoryOpen(false)}
+        selectedAlertId={selectedAlertId}
+        onSelectHistory={handleSelectHistory}
       />
     </>
   )

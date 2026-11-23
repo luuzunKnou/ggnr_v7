@@ -2290,11 +2290,6 @@ function MapLayoutContent({
     setOpened(openedWindows.filter((w) => w !== ODOR_SYSTEM_STATUS_OPENED_KEY))
   }
 
-  const handleOpenOdorDashboardFromSystemStatus = (_sensorKey: number) => {
-    setOdorSystemStatusTotalWidth(0)
-    setOpened([ODOR_DASHBOARD2_OPENED_KEY])
-  }
-
   const handleOpenOdorAlertFromDashboard2 = () => {
     setOdorDashboard2TotalWidth(0)
     setOpened([ODOR_ALERT_OPENED_KEY])
@@ -4723,7 +4718,6 @@ function MapLayoutContent({
               leftOffsetPx={odorSystemStatusPanelLeftPx}
               onTotalWidthChange={setOdorSystemStatusTotalWidth}
               onClose={handleCloseOdorSystemStatus}
-              onOpenDashboardWithStation={handleOpenOdorDashboardFromSystemStatus}
             />
           )}
           <OdorAlertPopupHost enabled={systemKeyFromUrl === "odorAdmin"} />

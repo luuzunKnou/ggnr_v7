@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { ArrowDown, ArrowUp, ArrowUpDown, History, Search, X } from 'lucide-react'
 import type { OdorAlertItem } from '@/app/(pages)/(index)/odorPh/odorPhDashboardMock'
 import { useSerWriteAccess } from '@/hooks/useSerWriteAccess'
@@ -24,6 +24,14 @@ type Props = {
   onToggleHistory: () => void
   selectedAlertId: string | null
   onSelectAlert: (alert: OdorAlertItem, source: OdorAlertRow) => void
+  /** 이력 등에서 지정 — 필터 초기화 후 해당 행 페이지로 이동 */
+  focusAlertId?: string | null
+  /** 헤더 우측(닫기 앞) — UI select 등 */
+  headerExtra?: ReactNode
+  /** true면 패널 내 닫기 숨김(플로팅 셸 헤더에서 닫을 때) */
+  hideClose?: boolean
+  /** true면 standard 패널 헤더 숨김(플로팅 셸 헤더 사용) */
+  hideHeader?: boolean
 }
 
 type SortDir = 'asc' | 'desc'
@@ -89,6 +97,10 @@ export function OdorAlertView2ListPanel({
   onToggleHistory,
   selectedAlertId,
   onSelectAlert,
+  focusAlertId = null,
+  headerExtra,
+  hideClose = false,
+  hideHeader = false,
 }: Props) {
   const { alerts } = useOdorAlertStore()
   const canWrite = useSerWriteAccess(ODOR_ALERT_VIEW2_SER_ENG)
@@ -101,6 +113,18 @@ export function OdorAlertView2ListPanel({
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [page, setPage] = useState(1)
+
+  /** 이력 선택 시 목록에서 보이도록 필터 초기화 */
+  useEffect(() => {
+    if (!focusAlertId) return
+    setTab('all')
+    setGradeFilter('all')
+    setKindFilter('all')
+    setAgencyFilter('all')
+    setKeyword('')
+    setDateFrom('')
+    setDateTo('')
+  }, [focusAlertId])
   const [sort, setSort] = useState<{ key: AlertSortKey; dir: SortDir }>({
     key: 'occurredAt',
     dir: 'desc',
@@ -204,6 +228,13 @@ export function OdorAlertView2ListPanel({
     if (page > pageCount) setPage(pageCount)
   }, [page, pageCount])
 
+  useEffect(() => {
+    if (!focusAlertId) return
+    const idx = filtered.findIndex((r) => r.id === focusAlertId)
+    if (idx < 0) return
+    setPage(Math.floor(idx / PAGE_SIZE) + 1)
+  }, [focusAlertId, filtered])
+
   const paged = useMemo(() => {
     const start = (page - 1) * PAGE_SIZE
     return filtered.slice(start, start + PAGE_SIZE)
@@ -227,32 +258,37 @@ export function OdorAlertView2ListPanel({
 
   return (
     <div className="standard-panel-root">
-      <div className="standard-panel-header">
-        <span className="standard-panel-title">경보목록2</span>
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            title={historyOpen ? '해제 이력 접기' : '해제(인지) 이력'}
-            onClick={onToggleHistory}
-            className={cn(
-              'standard-detail-hdr-btn cursor-pointer',
-              historyOpen && 'border-primary bg-primary/10 text-foreground'
-            )}
-          >
-            <History className="h-3.5 w-3.5" aria-hidden />
-            해제 이력
-          </button>
-          <button
-            type="button"
-            onClick={onClose}
-            className="standard-panel-close cursor-pointer"
-            title="닫기"
-            aria-label="닫기"
-          >
-            <X className="h-4 w-4" />
-          </button>
+      {!hideHeader ? (
+        <div className="standard-panel-header">
+          <span className="standard-panel-title">경보목록2</span>
+          <div className="flex items-center gap-1">
+            {headerExtra}
+            <button
+              type="button"
+              title={historyOpen ? '해제 이력 접기' : '해제(인지) 이력'}
+              onClick={onToggleHistory}
+              className={cn(
+                'standard-detail-hdr-btn cursor-pointer',
+                historyOpen && 'border-primary bg-primary/10 text-foreground'
+              )}
+            >
+              <History className="h-3.5 w-3.5" aria-hidden />
+              해제 이력
+            </button>
+            {!hideClose ? (
+              <button
+                type="button"
+                onClick={onClose}
+                className="standard-panel-close cursor-pointer"
+                title="닫기"
+                aria-label="닫기"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            ) : null}
+          </div>
         </div>
-      </div>
+      ) : null}
 
       <div className="standard-filter-section space-y-2">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
