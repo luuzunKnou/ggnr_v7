@@ -11,8 +11,38 @@ import {
 import { MOCK_ODOR_SENSORS_FROM_DB } from '@/service/odorSensorMock'
 import { cn } from '@/lib/utils'
 import { formatCommTime } from './odorSystemStatusJudge'
-import type { OdorCommNodeView } from './odorSystemStatusTypes'
+import type { OdorCommNodeKind, OdorCommNodeView } from './odorSystemStatusTypes'
 import { ODOR_COMM_STATUS_LABEL } from './odorSystemStatusTypes'
+
+const KIND_LABEL: Record<OdorCommNodeKind, string> = {
+  ipsec: 'IPsec',
+  db: 'DB',
+  utm: 'UTM',
+  iot: 'IoT',
+  master: 'Master',
+  agency: '업체',
+  gateway: 'GW',
+  sensor: '센서',
+}
+
+function formatCollectRate(node: OdorCommNodeView): string {
+  if (node.detail?.collectRateText) return node.detail.collectRateText
+  if (node.collectRate == null) return '—'
+  return Number.isInteger(node.collectRate)
+    ? `${node.collectRate}%`
+    : `${node.collectRate.toFixed(1)}%`
+}
+
+/** 목록 컬럼과 동일한 기본 항목 */
+function columnAttrRows(node: OdorCommNodeView): Array<{ label: string; value: string }> {
+  return [
+    { label: '구분', value: KIND_LABEL[node.kind] },
+    { label: '명칭', value: node.label },
+    { label: '상태', value: ODOR_COMM_STATUS_LABEL[node.status] },
+    { label: '최종수신', value: formatCommTime(node.lastRecvAt) },
+    { label: '수집율', value: formatCollectRate(node) },
+  ]
+}
 
 type Props = {
   /** 계통도에서 선택한 노드 (업체·인프라) */
@@ -114,40 +144,39 @@ export function OdorSystemStatusExpandPanel({
 
   const detailRows = ((): Array<{ label: string; value: string }> | null => {
     if (showSensor) return null
+    const base = columnAttrRows(node)
     if (node.kind === 'ipsec') {
       return [
+        ...base,
         { label: '구간', value: d?.peerLine ?? 'Ap 서버 ↔ 행정망' },
-        { label: '상태', value: d?.runStatus ?? ODOR_COMM_STATUS_LABEL[node.status] },
+        { label: '가동', value: d?.runStatus ?? '정상' },
       ]
     }
     if (node.kind === 'db' || node.kind === 'iot' || node.kind === 'master') {
       return [
-        { label: '상태', value: d?.runStatus ?? '정상 가동' },
+        ...base,
+        { label: '가동', value: d?.runStatus ?? '정상 가동' },
         { label: '구성', value: d?.redundancy ?? '이중화(Active-Standby)' },
         {
           label: '수집 TAG',
           value: d?.collectTag ?? 'Full TAG · 10분 주기(1~30분 설정)',
         },
-        {
-          label: '수집율',
-          value:
-            d?.collectRateText ??
-            (node.collectRate == null
-              ? '—'
-              : `${Number.isInteger(node.collectRate) ? node.collectRate : node.collectRate.toFixed(1)}%`),
-        },
       ]
     }
     if (node.kind === 'utm') {
       const rows = [
-        { label: '상태', value: d?.runStatus ?? '정상' },
+        ...base,
+        { label: '가동', value: d?.runStatus ?? '정상' },
         { label: '터널', value: d?.tunnel ?? 'F/W+IPS+VPN' },
         { label: '연계', value: d?.linkSystem ?? '하수관망관리시스템' },
       ]
       if (d?.peerLine) rows.push({ label: '구간', value: d.peerLine })
       return rows
     }
-    return null
+    if (node.kind === 'agency') {
+      return base
+    }
+    return base
   })()
 
   return (
@@ -186,6 +215,11 @@ export function OdorSystemStatusExpandPanel({
 
       {!showSensor && node.kind === 'agency' ? (
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          {detailRows ? (
+            <div className="shrink-0 border-b border-border px-2 py-2">
+              <AttrRows rows={detailRows} />
+            </div>
+          ) : null}
           <AgencyDeviceList
             agency={node.agency ?? node.label}
             agencySensors={agencySensors}
@@ -232,12 +266,11 @@ function SensorDetailBody({
 }) {
   const d = node.detail
   const rows = [
-    { label: '지점명', value: node.label },
+    ...columnAttrRows(node),
     { label: '지점ID', value: node.stationId ?? '—' },
     { label: '센서명', value: node.sensorNm ?? '—' },
-    { label: '통신', value: d?.runStatus ?? ODOR_COMM_STATUS_LABEL[node.status] },
+    { label: '가동', value: d?.runStatus ?? ODOR_COMM_STATUS_LABEL[node.status] },
     { label: 'H2S', value: d?.h2s ?? '—' },
-    { label: '최종 수신', value: formatCommTime(node.lastRecvAt) },
     {
       label: '미수신',
       value: node.minutesSinceRecv == null ? '—' : `${node.minutesSinceRecv}분`,

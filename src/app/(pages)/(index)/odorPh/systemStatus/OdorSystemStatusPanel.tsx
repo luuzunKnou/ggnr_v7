@@ -34,6 +34,98 @@ const FILTER_OPTIONS: Array<{ key: OdorCommStatusFilter; label: string }> = [
   { key: 'abnormal', label: '이상' },
 ]
 
+/** 상단 카드 위 — 통신 정상율 원형 게이지 */
+function CommOkRateCircle({
+  okCount,
+  abnormalCount,
+  sensorCount,
+}: {
+  okCount: number
+  abnormalCount: number
+  sensorCount: number
+}) {
+  const rate =
+    sensorCount > 0 ? Math.round((okCount / sensorCount) * 1000) / 10 : 0
+  const size = 88
+  const stroke = 8
+  const r = (size - stroke) / 2
+  const c = 2 * Math.PI * r
+  const clamped = Math.max(0, Math.min(100, rate))
+  const offset = c - (clamped / 100) * c
+  const accent =
+    clamped >= 95 ? '#22c55e' : clamped >= 80 ? '#f59e0b' : '#ef4444'
+  const rateText = Number.isInteger(clamped)
+    ? `${clamped}`
+    : clamped.toFixed(1)
+
+  return (
+    <div className="flex items-center justify-center gap-4 rounded-[5px] border border-border bg-card px-3 py-2">
+      <div
+        className="relative shrink-0"
+        style={{ width: size, height: size }}
+        title={`통신 정상율 ${rateText}%`}
+      >
+        <svg
+          width={size}
+          height={size}
+          viewBox={`0 0 ${size} ${size}`}
+          className="-rotate-90"
+          aria-hidden
+        >
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={r}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={stroke}
+            className="text-muted/40"
+          />
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={r}
+            fill="none"
+            stroke={accent}
+            strokeWidth={stroke}
+            strokeLinecap="round"
+            strokeDasharray={c}
+            strokeDashoffset={offset}
+          />
+        </svg>
+        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+          <span className="text-lg font-bold leading-none tabular-nums text-foreground">
+            {rateText}
+            <span className="text-[10px] font-semibold">%</span>
+          </span>
+          <span className="mt-0.5 text-[9px] text-muted-foreground">정상율</span>
+        </div>
+      </div>
+      <div className="min-w-0 flex-1 space-y-1.5">
+        <p className="text-[11px] font-medium text-foreground">통신 정상율</p>
+        <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-muted-foreground">
+          <span className="inline-flex items-center gap-1">
+            <span
+              className="inline-block h-2 w-2 rounded-full"
+              style={{ backgroundColor: '#22c55e' }}
+              aria-hidden
+            />
+            정상 {okCount}
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <span
+              className="inline-block h-2 w-2 rounded-full"
+              style={{ backgroundColor: '#ef4444' }}
+              aria-hidden
+            />
+            이상 {abnormalCount}
+          </span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function OdorSystemStatusPanelView({
   variant,
   model,
@@ -144,6 +236,11 @@ export function OdorSystemStatusPanelView({
       </div>
 
       <div className="flex shrink-0 flex-col gap-1.5 border-b border-border px-2 py-1.5">
+        <CommOkRateCircle
+          okCount={summary.okCount}
+          abnormalCount={summary.abnormalCount}
+          sensorCount={summary.sensorCount}
+        />
         <div className="grid grid-cols-3 gap-1.5">
           {summaryCards.map((c) => {
             const active = filter === c.key

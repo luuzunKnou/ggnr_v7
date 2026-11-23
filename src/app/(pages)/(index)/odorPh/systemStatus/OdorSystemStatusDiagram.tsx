@@ -31,28 +31,24 @@ const STATUS_BADGE: Record<OdorCommStatus, string> = {
     'bg-destructive/15 text-destructive animate-[odor-comm-blink_1.2s_ease-in-out_infinite]',
 }
 
+/** 깊이별 하위 행 배경 (선택 아닐 때) */
+const DEPTH_BG: Record<number, string> = {
+  1: 'bg-muted/15 hover:bg-muted/30',
+  2: 'bg-muted/20 hover:bg-muted/35',
+  3: 'bg-muted/25 hover:bg-muted/40',
+  4: 'bg-muted/30 hover:bg-muted/45',
+  5: 'bg-muted/35 hover:bg-muted/50',
+}
+
+const DEPTH_INDENT_PX = 12
+const TOGGLE_COL_PX = 28
+
 function formatCollectRate(node: OdorCommNodeView): string {
   if (node.detail?.collectRateText) return node.detail.collectRateText
   if (node.collectRate == null) return '—'
   return Number.isInteger(node.collectRate)
     ? `${node.collectRate}%`
     : `${node.collectRate.toFixed(1)}%`
-}
-
-/** 계층별 detail을 한 줄 비고로 정규화 */
-function formatRemark(node: OdorCommNodeView): string {
-  const d = node.detail
-  if (node.kind === 'agency') return '기기 목록'
-  if (!d) return '—'
-  const parts: string[] = []
-  if (d.peerLine) parts.push(d.peerLine)
-  if (d.runStatus && node.kind === 'ipsec') parts.push(d.runStatus)
-  if (d.redundancy) parts.push(d.redundancy)
-  if (d.tunnel) parts.push(d.tunnel)
-  if (d.linkSystem) parts.push(d.linkSystem)
-  if (d.collectTag && !d.redundancy) parts.push(d.collectTag)
-  if (parts.length === 0 && d.runStatus) parts.push(d.runStatus)
-  return parts.length > 0 ? parts.join(' · ') : '—'
 }
 
 function StatusBadge({ status }: { status: OdorCommStatus }) {
@@ -66,6 +62,11 @@ function StatusBadge({ status }: { status: OdorCommStatus }) {
       {ODOR_COMM_STATUS_LABEL[status]}
     </span>
   )
+}
+
+function depthBgClass(depth: number): string | undefined {
+  if (depth <= 0) return undefined
+  return DEPTH_BG[Math.min(depth, 5)]
 }
 
 export function OdorSystemStatusDiagram({ nodes, selectedId, onSelect }: Props) {
@@ -85,123 +86,56 @@ export function OdorSystemStatusDiagram({ nodes, selectedId, onSelect }: Props) 
     return m
   }, [listNodes])
 
-  /** 루트→Master 직전 단일 체인 + Master */
-  const { spine, master, agencies } = useMemo(() => {
-    const root = listNodes.find((n) => n.parentId == null)
-    if (!root) {
-      return {
-        spine: [] as OdorCommNodeView[],
-        master: null as OdorCommNodeView | null,
-        agencies: [] as OdorCommNodeView[],
-      }
+  const roots = useMemo(
+    () => listNodes.filter((n) => n.parentId == null),
+    [listNodes]
+  )
+
+  const parentIdsKey = useMemo(() => {
+    const ids: string[] = []
+    for (const n of listNodes) {
+      if ((byParent.get(n.id) ?? []).length > 0) ids.push(n.id)
     }
-    const chain: OdorCommNodeView[] = [root]
-    let cur = root
-    while (true) {
-      const kids = (byParent.get(cur.id) ?? []).filter(
-        (k) => k.kind !== 'agency' && k.kind !== 'master'
-      )
-      if (kids.length !== 1) break
-      chain.push(kids[0])
-      cur = kids[0]
-    }
-    const masterNode =
-      (byParent.get(cur.id) ?? []).find((k) => k.kind === 'master') ??
-      listNodes.find((n) => n.kind === 'master') ??
-      null
-    const agencyList = masterNode
-      ? (byParent.get(masterNode.id) ?? []).filter((n) => n.kind === 'agency')
-      : []
-    return { spine: chain, master: masterNode, agencies: agencyList }
+    return ids.sort().join(',')
   }, [listNodes, byParent])
 
-  const [masterOpen, setMasterOpen] = useState(true)
+  /** 자식이 있는 노드는 기본 펼침 */
+  const [openIds, setOpenIds] = useState<Set<string>>(() => new Set())
+  const [syncedKey, setSyncedKey] = useState('')
+  if (parentIdsKey !== syncedKey) {
+    setSyncedKey(parentIdsKey)
+    setOpenIds(new Set(parentIdsKey ? parentIdsKey.split(',') : []))
+  }
+
+  const toggleOpen = (id: string) => {
+    setOpenIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const visibleRows = useMemo(() => {
+    const rows: { node: OdorCommNodeView; depth: number; hasChildren: boolean }[] =
+      []
+    const walk = (node: OdorCommNodeView, depth: number) => {
+      const children = byParent.get(node.id) ?? []
+      const hasChildren = children.length > 0
+      rows.push({ node, depth, hasChildren })
+      if (hasChildren && openIds.has(node.id)) {
+        for (const child of children) walk(child, depth + 1)
+      }
+    }
+    for (const root of roots) walk(root, 0)
+    return rows
+  }, [roots, byParent, openIds])
 
   if (listNodes.length === 0) {
     return (
       <p className="px-3 py-6 text-center text-xs text-muted-foreground">
         표시할 계통 노드가 없습니다.
       </p>
-    )
-  }
-
-  const renderRow = (
-    node: OdorCommNodeView,
-    opts?: { indent?: boolean; accordion?: boolean }
-  ) => {
-    const selected = selectedId === node.id
-    const indent = opts?.indent ?? false
-    const accordion = opts?.accordion ?? false
-
-    return (
-      <tr
-        key={node.id}
-        role="button"
-        tabIndex={0}
-        title={node.label}
-        onClick={() => onSelect(node.id)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault()
-            onSelect(node.id)
-          }
-        }}
-        className={cn(
-          'standard-list-row cursor-pointer',
-          selected && 'standard-list-row-selected'
-        )}
-      >
-        <td className="standard-table-td-compact">
-          <span className="truncate">{KIND_LABEL[node.kind]}</span>
-        </td>
-        <td className="standard-table-td-text" title={node.label}>
-          <span
-            className={cn(
-              'flex min-w-0 items-center gap-0.5',
-              indent && 'pl-3'
-            )}
-          >
-            {accordion ? (
-              <button
-                type="button"
-                title={masterOpen ? '업체 접기' : '업체 펼치기'}
-                aria-expanded={masterOpen}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setMasterOpen((v) => !v)
-                }}
-                className="inline-flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
-              >
-                {masterOpen ? (
-                  <ChevronDown className="h-3.5 w-3.5" aria-hidden />
-                ) : (
-                  <ChevronRight className="h-3.5 w-3.5" aria-hidden />
-                )}
-              </button>
-            ) : indent ? (
-              <span className="inline-block w-5 shrink-0" aria-hidden />
-            ) : null}
-            <span className="truncate font-medium">{node.label}</span>
-          </span>
-        </td>
-        <td className="standard-table-td-compact">
-          <StatusBadge status={node.status} />
-        </td>
-        <td
-          className="standard-table-td-date tabular-nums"
-          title={formatCommTime(node.lastRecvAt)}
-        >
-          {formatCommTime(node.lastRecvAt)}
-        </td>
-        <td className="standard-table-td-compact tabular-nums">
-          {formatCollectRate(node)}
-        </td>
-        <td className="standard-table-td-text" title={formatRemark(node)}>
-          <span className="block truncate text-muted-foreground">
-            {formatRemark(node)}
-          </span>
-        </td>
-      </tr>
     )
   }
 
@@ -214,22 +148,104 @@ export function OdorSystemStatusDiagram({ nodes, selectedId, onSelect }: Props) 
         }
       `}</style>
       <table className="standard-list-table">
+        <colgroup>
+          <col style={{ width: TOGGLE_COL_PX }} />
+          <col style={{ width: '12%' }} />
+          <col style={{ width: '32%' }} />
+          <col style={{ width: '12%' }} />
+          <col style={{ width: '28%' }} />
+          <col style={{ width: '12%' }} />
+        </colgroup>
         <thead className="standard-table-thead">
           <tr>
-            <th className="standard-table-th standard-table-th-left w-[12%]">구분</th>
-            <th className="standard-table-th standard-table-th-left w-[22%]">명칭</th>
-            <th className="standard-table-th standard-table-th-left w-[10%]">상태</th>
-            <th className="standard-table-th standard-table-th-left w-[22%]">최종수신</th>
-            <th className="standard-table-th standard-table-th-left w-[10%]">수집율</th>
-            <th className="standard-table-th standard-table-th-left">비고</th>
+            <th className="p-0" aria-label="펼침" />
+            <th className="standard-table-th standard-table-th-left">구분</th>
+            <th className="standard-table-th standard-table-th-left">명칭</th>
+            <th className="standard-table-th standard-table-th-left">상태</th>
+            <th className="standard-table-th standard-table-th-left">최종수신</th>
+            <th className="standard-table-th standard-table-th-left">수집율</th>
           </tr>
         </thead>
         <tbody>
-          {spine.map((node) => renderRow(node))}
-          {master ? renderRow(master, { accordion: agencies.length > 0 }) : null}
-          {master && masterOpen
-            ? agencies.map((ag) => renderRow(ag, { indent: true }))
-            : null}
+          {visibleRows.map(({ node, depth, hasChildren }) => {
+            const selected = selectedId === node.id
+            const open = openIds.has(node.id)
+            return (
+              <tr
+                key={node.id}
+                role="button"
+                tabIndex={0}
+                title={node.label}
+                onClick={() => onSelect(node.id)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    onSelect(node.id)
+                  }
+                }}
+                className={cn(
+                  'standard-list-row cursor-pointer',
+                  !selected && depthBgClass(depth),
+                  selected && 'standard-list-row-selected'
+                )}
+              >
+                <td className="p-0 align-middle">
+                  <div
+                    className="flex items-center justify-start"
+                    style={{
+                      width: TOGGLE_COL_PX,
+                      minWidth: TOGGLE_COL_PX,
+                      paddingLeft: 2,
+                    }}
+                  >
+                    {hasChildren ? (
+                      <button
+                        type="button"
+                        title={open ? '접기' : '펼치기'}
+                        aria-expanded={open}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          toggleOpen(node.id)
+                        }}
+                        className="relative z-[1] inline-flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center rounded text-foreground/80 hover:bg-muted hover:text-foreground"
+                      >
+                        {open ? (
+                          <ChevronDown className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                        ) : (
+                          <ChevronRight className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                        )}
+                      </button>
+                    ) : (
+                      <span className="inline-block h-5 w-5 shrink-0" aria-hidden />
+                    )}
+                  </div>
+                </td>
+                <td className="standard-table-td-compact">
+                  <span className="truncate">{KIND_LABEL[node.kind]}</span>
+                </td>
+                <td className="px-1.5 py-1.5 align-middle text-foreground" style={{ maxWidth: 0 }}>
+                  <span
+                    className="block min-w-0 truncate font-medium"
+                    style={{ paddingLeft: depth * DEPTH_INDENT_PX }}
+                  >
+                    {node.label}
+                  </span>
+                </td>
+                <td className="standard-table-td-compact">
+                  <StatusBadge status={node.status} />
+                </td>
+                <td
+                  className="standard-table-td-date tabular-nums"
+                  title={formatCommTime(node.lastRecvAt)}
+                >
+                  {formatCommTime(node.lastRecvAt)}
+                </td>
+                <td className="standard-table-td-compact tabular-nums">
+                  {formatCollectRate(node)}
+                </td>
+              </tr>
+            )
+          })}
         </tbody>
       </table>
     </div>
