@@ -371,10 +371,14 @@ export function WtlConsRelatedTabs({
     const refresh = () => setViewExtent(extentOfVisibleMap(map))
     refresh()
     map.on('moveend', refresh)
-    map.getView().on('change:padding', refresh)
+    const view = map.getView()
+    const onProp = (e: { key?: string }) => {
+      if (e.key === 'padding') refresh()
+    }
+    view.on('propertychange', onProp)
     return () => {
       map.un('moveend', refresh)
-      map.getView().un('change:padding', refresh)
+      view.un('propertychange', onProp)
     }
   }, [mapContext?.mapInstanceRef, mapContext?.mapReady])
 
