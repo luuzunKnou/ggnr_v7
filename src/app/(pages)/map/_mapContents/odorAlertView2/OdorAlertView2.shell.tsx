@@ -21,9 +21,12 @@ import { odorAlertRowToViewItem } from './odorAlertView2Map'
 import {
   ODOR_ALERT_VIEW2_DETAIL_BOTTOM,
   ODOR_ALERT_VIEW2_DETAIL_GAP,
+  ODOR_ALERT_VIEW2_DETAIL_HEIGHT_VH,
+  ODOR_ALERT_VIEW2_FLOAT_HISTORY_DETAIL_GAP,
   ODOR_ALERT_VIEW2_FLOAT_HISTORY_GAP,
   ODOR_ALERT_VIEW2_FLOAT_HISTORY_WIDTH,
   ODOR_ALERT_VIEW2_FLOAT_LEFT_INSET,
+  ODOR_ALERT_VIEW2_FLOAT_TOP,
   ODOR_ALERT_VIEW2_FLOAT_WIDTH,
   ODOR_ALERT_VIEW2_LIST_DEFAULT_WIDTH,
   ODOR_ALERT_VIEW2_LIST_MAX_WIDTH,
@@ -170,10 +173,11 @@ export function OdorAlertView2Shell({
   const floatLeft = leftOffsetPx + ODOR_ALERT_VIEW2_FLOAT_LEFT_INSET
   const panelLeft = isFloating ? floatLeft : leftOffsetPx
   const panelWidth = isFloating ? ODOR_ALERT_VIEW2_FLOAT_WIDTH : listWidth
-  const historyBesideWidth =
-    isFloating && historyOpen
-      ? ODOR_ALERT_VIEW2_FLOAT_HISTORY_GAP + ODOR_ALERT_VIEW2_FLOAT_HISTORY_WIDTH
-      : 0
+  const detailOpen = detailAlert != null
+  /** 상세 열림 시 이력은 상세(48vh) 위까지만 — 하단 침범 방지 */
+  const floatHistoryMaxHeight = detailOpen
+    ? `calc(100vh - ${ODOR_ALERT_VIEW2_FLOAT_TOP}px - ${ODOR_ALERT_VIEW2_DETAIL_HEIGHT_VH}vh - ${ODOR_ALERT_VIEW2_DETAIL_BOTTOM}px - ${ODOR_ALERT_VIEW2_FLOAT_HISTORY_DETAIL_GAP}px)`
+    : `calc(100vh - ${ODOR_ALERT_VIEW2_FLOAT_TOP + 10}px)`
 
   const selectedAlertId = detailAlert?.id ?? null
 
@@ -204,7 +208,7 @@ export function OdorAlertView2Shell({
   const detailSheet = (
     <OdorAlertDetailBottomSheet
       alert={detailAlert}
-      leftPx={panelLeft + panelWidth + historyBesideWidth + ODOR_ALERT_VIEW2_DETAIL_GAP}
+      leftPx={panelLeft + panelWidth + ODOR_ALERT_VIEW2_DETAIL_GAP}
       rightPx={ODOR_DASHBOARD2_FLOAT_RIGHT_INSET}
       bottomPx={ODOR_ALERT_VIEW2_DETAIL_BOTTOM}
       onClose={() => {
@@ -224,17 +228,17 @@ export function OdorAlertView2Shell({
             data-ser-eng={ODOR_ALERT_VIEW2_SER_ENG}
           >
             <div
-              className="pointer-events-none absolute flex items-stretch gap-2"
+              className="pointer-events-none absolute flex items-start gap-2"
               style={{
                 left: floatLeft,
-                top: 60,
-                maxHeight: 'calc(100vh - 70px)',
-                height: 'calc(100vh - 70px)',
+                top: ODOR_ALERT_VIEW2_FLOAT_TOP,
+                maxHeight: `calc(100vh - ${ODOR_ALERT_VIEW2_FLOAT_TOP + 10}px)`,
+                height: `calc(100vh - ${ODOR_ALERT_VIEW2_FLOAT_TOP + 10}px)`,
               }}
             >
               <div
                 className={cn(
-                  'pointer-events-auto flex min-h-0 flex-col overflow-hidden',
+                  'pointer-events-auto flex h-full min-h-0 flex-col overflow-hidden',
                   MAP_LAYER_PANEL_SURFACE_CLASS
                 )}
                 style={{ width: ODOR_ALERT_VIEW2_FLOAT_WIDTH }}
@@ -294,6 +298,8 @@ export function OdorAlertView2Shell({
                   style={{
                     width: ODOR_ALERT_VIEW2_FLOAT_HISTORY_WIDTH,
                     marginLeft: ODOR_ALERT_VIEW2_FLOAT_HISTORY_GAP - 8,
+                    maxHeight: floatHistoryMaxHeight,
+                    height: floatHistoryMaxHeight,
                   }}
                 >
                   <OdorAlertView2HistoryPanel

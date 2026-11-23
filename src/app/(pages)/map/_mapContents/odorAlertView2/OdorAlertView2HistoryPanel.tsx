@@ -132,6 +132,13 @@ export function OdorAlertView2HistoryPanel({
               ) : (
                 paged.map((row: OdorAckHistoryRow) => {
                   const selected = selectedAlertId === row.alertId
+                  const gradeLabel =
+                    row.grade != null
+                      ? ODOR_ALERT_GRADE_LABEL[row.grade as OdorAlertGrade]
+                      : ''
+                  const sensorTitle = [row.sensorLabel, row.actor, gradeLabel]
+                    .filter(Boolean)
+                    .join(' · ')
                   return (
                     <tr
                       key={row.id}
@@ -150,14 +157,8 @@ export function OdorAlertView2HistoryPanel({
                         selected && 'standard-list-row-selected'
                       )}
                     >
-                      <td className="standard-table-td-text" title={row.sensorLabel}>
-                        <span className="block truncate font-medium">{row.sensorLabel}</span>
-                        <span className="block truncate text-[10px] text-muted-foreground">
-                          {row.actor}
-                          {row.grade != null
-                            ? ` · ${ODOR_ALERT_GRADE_LABEL[row.grade as OdorAlertGrade]}`
-                            : ''}
-                        </span>
+                      <td className="standard-table-td-text" title={sensorTitle}>
+                        {row.sensorLabel}
                       </td>
                       <td className="standard-table-td-compact">
                         {ODOR_ALERT_KIND_LABEL[row.kind]}
@@ -175,13 +176,13 @@ export function OdorAlertView2HistoryPanel({
                         </span>
                       </td>
                       <td
-                        className="standard-table-td-date tabular-nums"
+                        className="standard-table-td-date"
                         title={formatOdorAlertTime(row.at)}
                       >
                         {formatOdorAlertTime(row.at)}
                       </td>
                       <td className="standard-table-td-text" title={row.reason}>
-                        <span className="block truncate">{row.reason}</span>
+                        {row.reason}
                       </td>
                     </tr>
                   )

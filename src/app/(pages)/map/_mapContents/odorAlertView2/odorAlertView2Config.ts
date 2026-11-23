@@ -33,3 +33,9 @@ export const ODOR_ALERT_VIEW2_FLOAT_LEFT_INSET = 20
 /** 상세 모달 — 리스트 패널~우측 맵 메뉴 사이 */
 export const ODOR_ALERT_VIEW2_DETAIL_GAP = 8
 export const ODOR_ALERT_VIEW2_DETAIL_BOTTOM = 12
+/** 상세 모달 펼침 높이 (OdorAlertDetailBottomSheet h-[48vh] 과 동일) */
+export const ODOR_ALERT_VIEW2_DETAIL_HEIGHT_VH = 48
+/** 플로팅 해제 이력 — 상세 모달 위 간격 */
+export const ODOR_ALERT_VIEW2_FLOAT_HISTORY_DETAIL_GAP = 8
+/** 플로팅 목록·이력 — top offset */
+export const ODOR_ALERT_VIEW2_FLOAT_TOP = 60
