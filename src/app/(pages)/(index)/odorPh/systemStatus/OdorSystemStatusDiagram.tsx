@@ -142,7 +142,7 @@ export function OdorSystemStatusDiagram({ nodes, links, selectedId, onSelect }: 
         </span>
         <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">
           {ODOR_COMM_STATUS_LABEL[node.status]}
-          {node.kind === 'agency' ? ' · 센서 목록' : ''}
+          {node.kind === 'agency' ? ' · 기기 목록' : ''}
         </span>
       </button>
     )
@@ -193,24 +193,15 @@ export function OdorSystemStatusDiagram({ nodes, links, selectedId, onSelect }: 
 
       {agencies.length > 0 ? (
         <div className="mt-1 flex w-full justify-center gap-6">
-          {agencies.map((ag) => {
-            const gateways = (byParent.get(ag.id) ?? []).filter((n) => n.kind === 'gateway')
-            return (
-              <div key={ag.id} className="flex min-w-0 flex-1 flex-col items-center">
-                <Edge
-                  linkId={linkId(branchParent.id, ag.id)}
-                  status={linkStatus(branchParent.id, ag.id)}
-                />
-                <NodeCard node={ag} />
-                {gateways.map((gw) => (
-                  <div key={gw.id} className="flex flex-col items-center">
-                    <Edge linkId={linkId(ag.id, gw.id)} status={linkStatus(ag.id, gw.id)} />
-                    <NodeCard node={gw} compact />
-                  </div>
-                ))}
-              </div>
-            )
-          })}
+          {agencies.map((ag) => (
+            <div key={ag.id} className="flex min-w-0 flex-1 flex-col items-center">
+              <Edge
+                linkId={linkId(branchParent.id, ag.id)}
+                status={linkStatus(branchParent.id, ag.id)}
+              />
+              <NodeCard node={ag} />
+            </div>
+          ))}
         </div>
       ) : null}
     </div>

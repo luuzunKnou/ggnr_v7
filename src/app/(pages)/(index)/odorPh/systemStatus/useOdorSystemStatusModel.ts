@@ -15,20 +15,7 @@ function sensorsUnderAgency(
   all: OdorCommNodeView[],
   agencyId: string
 ): OdorCommNodeView[] {
-  const byParent = new Map<string, OdorCommNodeView[]>()
-  for (const n of all) {
-    if (!n.parentId) continue
-    const list = byParent.get(n.parentId) ?? []
-    list.push(n)
-    byParent.set(n.parentId, list)
-  }
-  const out: OdorCommNodeView[] = []
-  const gateways = (byParent.get(agencyId) ?? []).filter((n) => n.kind === 'gateway')
-  for (const gw of gateways) {
-    out.push(...(byParent.get(gw.id) ?? []).filter((n) => n.kind === 'sensor'))
-  }
-  out.push(...(byParent.get(agencyId) ?? []).filter((n) => n.kind === 'sensor'))
-  return out
+  return all.filter((n) => n.kind === 'sensor' && n.parentId === agencyId)
 }
 
 export function useOdorSystemStatusModel() {

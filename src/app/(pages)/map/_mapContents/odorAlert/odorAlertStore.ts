@@ -100,8 +100,12 @@ export function pushMockNewOdorAlert(): string {
     kind: 'odor',
     grade,
     sensorLabel: `신규-${alertSeq}`,
+    sensorNm: `NEW-${alertSeq}`,
+    sensorKey: null,
     agency: '가람환경기술',
     emdNm: '장량동',
+    lon: null,
+    lat: null,
     occurredAt: new Date().toISOString(),
     acked: false,
     recovered: false,
@@ -131,6 +135,10 @@ type CommDisconnectNode = {
   id: string
   label: string
   agency?: string
+  sensorNm?: string
+  sensorKey?: number | null
+  lon?: number | null
+  lat?: number | null
   lastRecvAt: string | null
   status: 'ok' | 'delayed' | 'disconnect'
   kind: string
@@ -174,8 +182,12 @@ export function syncOdorCommDisconnectFaults(nodes: CommDisconnectNode[]): void 
       kind: 'fault',
       grade: null,
       sensorLabel: n.label,
+      sensorNm: n.sensorNm ?? n.label,
+      sensorKey: n.sensorKey ?? null,
       agency: n.agency ?? '통신계통',
       emdNm: '—',
+      lon: n.lon ?? null,
+      lat: n.lat ?? null,
       occurredAt: new Date().toISOString(),
       acked: false,
       recovered: false,

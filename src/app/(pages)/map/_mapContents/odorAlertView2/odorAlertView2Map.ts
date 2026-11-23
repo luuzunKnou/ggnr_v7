@@ -6,6 +6,9 @@ export function odorAlertRowToViewItem(row: OdorAlertRow): OdorAlertItem & {
   kind: OdorAlertRow['kind']
   recovered: boolean
   lastRecvAt: string | null
+  sensorKey: number | null
+  lon: number | null
+  lat: number | null
 } {
   const grade = (row.grade ?? 3) as OdorGrade
   const seed = row.id.split('').reduce((a, c) => a + c.charCodeAt(0), 0)
@@ -14,7 +17,7 @@ export function odorAlertRowToViewItem(row: OdorAlertRow): OdorAlertItem & {
   return {
     id: row.id,
     sensorKorNm: row.sensorLabel,
-    sensorNm: row.sensorLabel,
+    sensorNm: row.sensorNm || row.sensorLabel,
     agency: row.agency,
     grade,
     occurredAt: row.occurredAt,
@@ -25,5 +28,8 @@ export function odorAlertRowToViewItem(row: OdorAlertRow): OdorAlertItem & {
     kind: row.kind,
     recovered: row.recovered,
     lastRecvAt: row.lastRecvAt,
+    sensorKey: row.sensorKey,
+    lon: row.lon,
+    lat: row.lat,
   }
 }

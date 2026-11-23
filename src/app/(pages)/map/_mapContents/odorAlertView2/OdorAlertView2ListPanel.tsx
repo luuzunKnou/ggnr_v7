@@ -586,7 +586,7 @@ export function OdorAlertView2ListPanel({
                         <button
                           type="button"
                           title="단건 해제(인지)"
-                          className="standard-detail-hdr-btn-save cursor-pointer"
+                          className="standard-status-badge standard-status-badge-primary cursor-pointer border-0 leading-none"
                           onClick={() => setAckTarget({ mode: 'single', ids: [row.id] })}
                         >
                           해제

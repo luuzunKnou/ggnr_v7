@@ -80,7 +80,7 @@ function downloadTrendCsv(opts: {
   URL.revokeObjectURL(url)
 }
 
-const MAINT_PAGE_SIZE = 5
+const MAINT_PAGE_SIZE = 7
 
 const SEARCH_INPUT_CLASS =
   'standard-search-input focus:border-primary focus:ring-0 focus:ring-offset-0'
@@ -235,20 +235,10 @@ export function OdorAlertDetailPanel({ alert }: Props) {
     key: 'date',
     dir: 'desc',
   })
-  const [categoryEdits, setCategoryEdits] = useState<Record<string, string>>({})
-
-  useEffect(() => {
-    const next: Record<string, string> = {}
-    for (const row of detail.maintenance) next[row.id] = row.category
-    setCategoryEdits(next)
-  }, [detail.maintenance])
 
   const filteredMaint = useMemo(() => {
     const kw = maintKeyword.trim().toLowerCase()
-    let list = detail.maintenance.map((row) => ({
-      ...row,
-      category: categoryEdits[row.id] ?? row.category,
-    }))
+    let list = detail.maintenance
     if (kw) {
       list = list.filter(
         (row) =>
@@ -260,7 +250,7 @@ export function OdorAlertDetailPanel({ alert }: Props) {
     }
     const sign = maintSort.dir === 'asc' ? 1 : -1
     return [...list].sort((a, b) => sign * compareMaint(a, b, maintSort.key))
-  }, [detail.maintenance, categoryEdits, maintKeyword, maintSort])
+  }, [detail.maintenance, maintKeyword, maintSort])
 
   const maintPageCount = pageMeta(filteredMaint.length, maintPage, MAINT_PAGE_SIZE).pageCount
 
@@ -457,20 +447,11 @@ export function OdorAlertDetailPanel({ alert }: Props) {
                       >
                         {row.date}
                       </td>
-                      <td className="standard-table-td-compact border-r border-border/60 p-0.5">
-                        <input
-                          type="text"
-                          title="구분"
-                          value={categoryEdits[row.id] ?? row.category}
-                          onChange={(e) =>
-                            setCategoryEdits((prev) => ({
-                              ...prev,
-                              [row.id]: e.target.value,
-                            }))
-                          }
-                          className="h-7 w-full min-w-0 rounded border border-border bg-background px-1.5 text-[11px] text-foreground focus:border-primary focus:outline-none focus:ring-0"
-                          placeholder="구분"
-                        />
+                      <td
+                        className="standard-table-td-compact border-r border-border/60"
+                        title={row.category}
+                      >
+                        {row.category}
                       </td>
                       <td
                         className="standard-table-td-compact border-r border-border/60"

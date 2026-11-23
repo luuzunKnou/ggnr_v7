@@ -1,10 +1,14 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { fromLonLat } from 'ol/proj'
 import type { OdorAlertItem } from '@/app/(pages)/(index)/odorPh/odorPhDashboardMock'
 import { MapSideListPanel } from '../../_mapComponents/MapSideListPanel'
+import { scheduleAnimateMapToCenter3857 } from '../../_mapComponents/config/mapAutoNavigation'
+import { useMapContext } from '../../_mapComponents/MapContext'
 import { OdorAlertDetailBottomSheet } from '../odorDashboard2/OdorAlertDetailBottomSheet'
 import { ODOR_DASHBOARD2_FLOAT_RIGHT_INSET } from '../odorDashboard2/odorDashboard2Config'
+import type { OdorAlertRow } from '../odorAlert/odorAlertMock'
 import { OdorAlertView2HistoryModal } from './OdorAlertView2HistoryModal'
 import { OdorAlertView2ListPanel } from './OdorAlertView2ListPanel'
 import {
@@ -30,6 +34,7 @@ export function OdorAlertView2Shell({
   onTotalWidthChange,
   onClose,
 }: Props) {
+  const mapContext = useMapContext()
   const [listWidth, setListWidth] = useState(ODOR_ALERT_VIEW2_LIST_DEFAULT_WIDTH)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [detailAlert, setDetailAlert] = useState<OdorAlertItem | null>(null)
@@ -44,6 +49,21 @@ export function OdorAlertView2Shell({
   }, [listWidth, onTotalWidthChange])
 
   useEffect(() => () => onTotalWidthChange(0), [onTotalWidthChange])
+
+  const handleSelectAlert = (alert: OdorAlertItem, source: OdorAlertRow) => {
+    setDetailAlert(alert)
+    const lon = source.lon
+    const lat = source.lat
+    const map = mapContext?.mapInstanceRef?.current
+    if (!map || lon == null || lat == null || !Number.isFinite(lon) || !Number.isFinite(lat)) {
+      return
+    }
+    const center = fromLonLat([lon, lat]) as [number, number]
+    const zoom = Math.max(map.getView().getZoom() ?? 14, 15)
+    scheduleAnimateMapToCenter3857(map, center, zoom, {
+      applyMapViewPadding: () => mapContext?.applyMapViewPaddingRef?.current?.(),
+    })
+  }
 
   return (
     <>
@@ -62,7 +82,7 @@ export function OdorAlertView2Shell({
             historyOpen={historyOpen}
             onToggleHistory={() => setHistoryOpen((v) => !v)}
             selectedAlertId={detailAlert?.id ?? null}
-            onSelectAlert={(alert) => setDetailAlert(alert)}
+            onSelectAlert={handleSelectAlert}
           />
         </MapSideListPanel>
       </div>

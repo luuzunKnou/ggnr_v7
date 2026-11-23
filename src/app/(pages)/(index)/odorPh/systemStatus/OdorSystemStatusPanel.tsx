@@ -172,7 +172,7 @@ export function OdorSystemStatusPanelView({
           />
           {!selectedId ? (
             <p className="px-3 pb-3 text-center text-[10px] text-muted-foreground">
-              계층·업체를 선택하면 오른쪽에 상세·센서 목록이 열립니다.
+              계층·업체를 선택하면 오른쪽에 상세·기기 목록이 열립니다.
             </p>
           ) : null}
         </div>
