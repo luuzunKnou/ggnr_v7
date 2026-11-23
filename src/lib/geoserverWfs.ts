@@ -1,5 +1,7 @@
-import { WORKSPACE } from '@/app/(pages)/map/_mapComponents/layerFactory/serviceLayerFactory';
 import { getGeoServerBase } from '@/lib/geoserverUrl';
+
+/** GeoServer 워크스페이스 — 서버·클라이언트 공용 (클라이언트 팩토리 import 금지) */
+const WORKSPACE = 'ggnr';
 
 export function buildCqlEquals(keyField: string, keyValue: string): string {
   const field = String(keyField ?? '').trim();

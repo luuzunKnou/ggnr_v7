@@ -742,6 +742,8 @@ function SmallPublicInlinePdfPreview({
 }) {
   const rootRef = useRef<HTMLButtonElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const renderTaskRef = useRef<{ cancel: () => void } | null>(null)
+  const paintSeqRef = useRef(0)
   const [phase, setPhase] = useState<'loading' | 'ready' | 'error'>('loading')
   const [page, setPage] = useState(1)
   const [numPages, setNumPages] = useState(0)
@@ -754,6 +756,9 @@ function SmallPublicInlinePdfPreview({
     let cancelled = false
     let removeWheel: (() => void) | null = null
     let releaseDoc: (() => void) | null = null
+    paintSeqRef.current += 1
+    renderTaskRef.current?.cancel()
+    renderTaskRef.current = null
     setPhase('loading')
     setPage(1)
     setNumPages(0)
@@ -775,19 +780,43 @@ function SmallPublicInlinePdfPreview({
         const paint = async (pn: number) => {
           const canvas = canvasRef.current
           if (!canvas || cancelled) return
+          const seq = ++paintSeqRef.current
+          // 같은 캔버스에 겹쳐 render 하지 않도록 이전 작업 취소
+          renderTaskRef.current?.cancel()
+          renderTaskRef.current = null
           setPhase('loading')
-          const pg = await pdf.getPage(Math.min(Math.max(1, pn), pdf.numPages))
-          if (cancelled) return
-          const base = pg.getViewport({ scale: 1 })
-          const maxW = Math.max(120, rootRef.current?.clientWidth ?? 280)
-          const scale = Math.min(1.25, maxW / base.width)
-          const viewport = pg.getViewport({ scale })
-          const ctx = canvas.getContext('2d')
-          if (!ctx) return
-          canvas.width = Math.ceil(viewport.width)
-          canvas.height = Math.ceil(viewport.height)
-          await pg.render({ canvasContext: ctx, viewport }).promise
-          if (!cancelled) setPhase('ready')
+          try {
+            const pg = await pdf.getPage(Math.min(Math.max(1, pn), pdf.numPages))
+            if (cancelled || seq !== paintSeqRef.current) return
+            const base = pg.getViewport({ scale: 1 })
+            const maxW = Math.max(120, rootRef.current?.clientWidth ?? 280)
+            const scale = Math.min(1.25, maxW / base.width)
+            const viewport = pg.getViewport({ scale })
+            const ctx = canvas.getContext('2d')
+            if (!ctx) return
+            canvas.width = Math.ceil(viewport.width)
+            canvas.height = Math.ceil(viewport.height)
+            const task = pg.render({ canvasContext: ctx, viewport })
+            renderTaskRef.current = task
+            await task.promise
+            if (renderTaskRef.current === task) renderTaskRef.current = null
+            if (!cancelled && seq === paintSeqRef.current) setPhase('ready')
+          } catch (err) {
+            if (renderTaskRef.current) renderTaskRef.current = null
+            // cancel 시 pdf.js 가 throw — 무시
+            const errName =
+              err && typeof err === 'object' && 'name' in err
+                ? String((err as { name?: string }).name)
+                : ''
+            if (
+              errName === 'RenderingCancelledException' ||
+              cancelled ||
+              seq !== paintSeqRef.current
+            ) {
+              return
+            }
+            setPhase('error')
+          }
         }
 
         setNumPages(pdf.numPages)
@@ -816,6 +845,9 @@ function SmallPublicInlinePdfPreview({
 
     return () => {
       cancelled = true
+      paintSeqRef.current += 1
+      renderTaskRef.current?.cancel()
+      renderTaskRef.current = null
       removeWheel?.()
       releaseDoc?.()
     }
@@ -841,10 +873,15 @@ function SmallPublicInlinePdfPreview({
           </div>
         ) : null}
         {phase === 'error' ? (
-          <span className="px-3 text-center text-[11px] text-white/70">미리보기를 불러오지 못했습니다.</span>
-        ) : (
-          <canvas ref={canvasRef} className="mx-auto max-h-full max-w-full" />
-        )}
+          <span className="absolute inset-0 z-[1] flex items-center justify-center px-3 text-center text-[11px] text-white/70">
+            미리보기를 불러오지 못했습니다.
+          </span>
+        ) : null}
+        {/* 캔버스는 항상 유지 — 로딩/에러 시 unmount 하면 render 중첩·ref 유실 */}
+        <canvas
+          ref={canvasRef}
+          className={cn('mx-auto max-h-full max-w-full', phase === 'error' && 'invisible')}
+        />
       </button>
       {numPages > 0 ? (
         <div className="pointer-events-none absolute bottom-1.5 right-2 rounded bg-black/60 px-1.5 py-0.5 text-[10px] tabular-nums text-white/80">
