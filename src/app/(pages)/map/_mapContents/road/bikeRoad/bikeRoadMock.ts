@@ -370,6 +370,7 @@ const BIKE_ROAD_MOCK_ROUTES_RAW: BikeRoadRoute[] = [
     startLabel: "모레아장례식장",
     endLabel: "압량농협네거리",
     pathStyle: "sharedSep",
+    locationMapUrl: "/mock/bikeRoad/bike-route-1_location.png",
     /** 도심 도로처럼 꺾이는 대략 경로 (스크린 위치도 느낌) */
     lineCoords: [
       [128.702, 35.838],
@@ -548,6 +549,7 @@ const BIKE_ROAD_MOCK_ROUTES_RAW: BikeRoadRoute[] = [
     startLabel: "대정동",
     endLabel: "와촌면 계당리",
     pathStyle: "dedicated",
+    locationMapUrl: "/mock/bikeRoad/bike-route-2_location.png",
     /** 하천 따라 구불구불한 대략 경로 (스크린 위치도 느낌) */
     lineCoords: [
       [128.736, 35.846],
@@ -706,6 +708,6 @@ const BIKE_ROAD_MOCK_ROUTES_RAW: BikeRoadRoute[] = [
   },
 ];
 
-/** 샘플 2건 — 구간 좌표 채워 위치도(지도 캡처)가 바로 찍힘 */
+/** 샘플 2건 — 구간 좌표·위치도(mock 폴더 *_location.png). 저장 시 같은 파일 갱신 */
 export const BIKE_ROAD_MOCK_ROUTES: BikeRoadRoute[] =
   BIKE_ROAD_MOCK_ROUTES_RAW.map(assignMockSegmentCoords);

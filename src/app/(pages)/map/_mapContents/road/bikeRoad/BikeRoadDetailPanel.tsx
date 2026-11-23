@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import {
   ChevronDown,
   ChevronRight,
@@ -17,6 +17,7 @@ import {
 } from "../../../_mapComponents/standard/ServiceFileImagePreview";
 import { BikeRoadAttrTable, type BikeRoadAttrDraft } from "./BikeRoadAttrTable";
 import { BikeRoadLocationMap } from "./BikeRoadLocationMap";
+import { captureBikeRoadLocationMap } from "./bikeRoadLocationCapture";
 import { BikeRoadSegmentDrawModal } from "./BikeRoadSegmentDrawModal";
 import { BikeRoadSegmentListSection } from "./BikeRoadSegmentListSection";
 import { titleFromDirection } from "./bikeRoadDirection";
@@ -24,6 +25,7 @@ import { fromLonLat } from "ol/proj";
 import { call } from "@/lib/api";
 import { getAddressFromCoord } from "../../../_mapComponents/addressSearch/vworldAddressSearch";
 import { useMapContext } from "../../../_mapComponents/MapContext";
+import { FALLBACK_BACKGROUND_MAP_ID } from "../../../_mapComponents/mapControlPanel/backgroundMapSelector";
 import {
   bikeRoadPointAddressLabel,
   bikeRoadShortAddress,
@@ -38,7 +40,6 @@ import {
   isNewBikeRoadRouteId,
   normalizeBikeRoadKind,
   pathStyleFromKind,
-  pathStyleFromPathType,
   renumberBikeRoadSegments,
   type BikeRoadAttachment,
   type BikeRoadRoute,
@@ -254,6 +255,7 @@ export function BikeRoadDetailPanel({ route, onClose, onSave, onDelete }: Props)
     items: ServiceFilePreviewItem[];
     index: number;
   } | null>(null);
+  const [locationCapturing, setLocationCapturing] = useState(false);
   const attachInputRef = useRef<HTMLInputElement>(null);
 
   const displaySegments = attrEditing ? draftSegments : route.segments;
@@ -262,24 +264,14 @@ export function BikeRoadDetailPanel({ route, onClose, onSave, onDelete }: Props)
   const drawNextIndex = draftSegments.length + 1;
   draftSegmentsRef.current = draftSegments;
 
-  /** 위치도·캡처용 — 편집 중 구간 종류(색)도 반영. 종류가 저장본과 다르면 옛 이미지 숨김 */
-  const locationRoute = useMemo(() => {
-    const segments =
-      draftSegments.length > 0 ? draftSegments : route.segments;
-    const keyOf = (list: BikeRoadSegment[]) =>
-      list
-        .map((s) => {
-          const pt = s.pathType ?? "";
-          return `${s.id}:${pt}:${pathStyleFromPathType(pt)}`;
-        })
-        .join("|");
-    const typesInSync = keyOf(segments) === keyOf(route.segments);
-    return {
+  /** 위치도 표시용 — 저장된 이미지만 보여 줌(저장·등록 시에만 갱신) */
+  const locationRoute = useMemo(
+    () => ({
       ...route,
-      segments,
-      locationMapUrl: typesInSync ? route.locationMapUrl : undefined,
-    };
-  }, [route, draftSegments]);
+      segments: draftSegments.length > 0 ? draftSegments : route.segments,
+    }),
+    [route, draftSegments]
+  );
 
   const snapAnchors = useMemo((): DrawSnapAnchor[] => {
     const out: DrawSnapAnchor[] = [];
@@ -339,7 +331,6 @@ export function BikeRoadDetailPanel({ route, onClose, onSave, onDelete }: Props)
         direction: nextDirection,
         title: nextTitle,
         totalLength: sum || route.totalLength,
-        locationMapUrl: undefined,
       };
       queueMicrotask(() => {
         onSave(payload);
@@ -480,7 +471,8 @@ export function BikeRoadDetailPanel({ route, onClose, onSave, onDelete }: Props)
     setDrawModalOpen(false);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    if (locationCapturing) return;
     const title =
       titleFromDirection(draft.direction) ||
       draft.title.trim() ||
@@ -516,7 +508,49 @@ export function BikeRoadDetailPanel({ route, onClose, onSave, onDelete }: Props)
       lineCoords: mergedLine.length >= 2 ? mergedLine : route.lineCoords,
       id: isNew ? `bike-route-${Date.now()}` : route.id,
     };
-    onSave(next);
+
+    const hasGeom =
+      next.lineCoords.length >= 2 ||
+      next.segments.some(
+        (s) =>
+          (s.centerLineCoords?.length ?? 0) >= 2 ||
+          (s.lineCoords?.length ?? 0) >= 2
+      );
+
+    let locationMapUrl = route.locationMapUrl;
+    if (hasGeom) {
+      setLocationCapturing(true);
+      try {
+        const backgroundId =
+          mapContext?.mapBackgroundMapIdRef?.current?.trim() ||
+          FALLBACK_BACKGROUND_MAP_ID;
+        const dataUrl = await captureBikeRoadLocationMap(next, backgroundId);
+        if (dataUrl) {
+          // 캡처본을 public/mock/bikeRoad 에 파일로 저장 (data URL 유지 X)
+          const res = await call("", "POST", {
+            service: "bikeRoadNetService",
+            action: "saveLocationMap",
+            params: {
+              routeId: next.id,
+              imageBase64: dataUrl,
+            },
+          });
+          const data = (res as { data?: { url?: string }; url?: string })?.data ?? res;
+          const fileUrl = String(
+            (data as { url?: string })?.url ?? ""
+          ).trim();
+          locationMapUrl = fileUrl || dataUrl;
+        }
+      } catch {
+        /* 캡처·파일 저장 실패해도 속성 저장은 진행 */
+      } finally {
+        setLocationCapturing(false);
+      }
+    } else {
+      locationMapUrl = undefined;
+    }
+
+    onSave({ ...next, locationMapUrl });
     setDraftSegments(segments.map((s) => ({ ...s })));
     setAttrEditing(false);
     setDrawModalOpen(false);
@@ -545,8 +579,7 @@ export function BikeRoadDetailPanel({ route, onClose, onSave, onDelete }: Props)
           title: ends.direction
             ? titleFromDirection(ends.direction) || route.title
             : route.title,
-          locationMapUrl: undefined,
-        });
+          });
       });
       return next;
     });
@@ -579,7 +612,6 @@ export function BikeRoadDetailPanel({ route, onClose, onSave, onDelete }: Props)
             title: ends.direction
               ? titleFromDirection(ends.direction) || base.title
               : base.title,
-            locationMapUrl: undefined,
           });
         });
       }
@@ -621,6 +653,25 @@ export function BikeRoadDetailPanel({ route, onClose, onSave, onDelete }: Props)
     }
     persistAttachments(route.attachments.filter((a) => a.id !== id));
   };
+
+  const handlePreviewLocationMap = useCallback(
+    (dataUrl: string) => {
+      const safe = (route.title || "자전거도로")
+        .replace(/[\/:*?"<>|]/g, "_")
+        .slice(0, 40);
+      setFilePreview({
+        items: [
+          {
+            url: dataUrl,
+            fileName: `${safe}_위치도.png`,
+            kind: "image",
+          },
+        ],
+        index: 0,
+      });
+    },
+    [route.title]
+  );
 
   const handlePreviewAttachment = (att: BikeRoadAttachment) => {
     if (!isBikeRoadImageAttachment(att) || imagePreviewItems.length === 0) return;
@@ -739,23 +790,8 @@ export function BikeRoadDetailPanel({ route, onClose, onSave, onDelete }: Props)
               <div className="min-h-0 flex-1 p-2">
                 <BikeRoadLocationMap
                   route={locationRoute}
-                  onSaveImage={
-                    isNew
-                      ? undefined
-                      : (dataUrl) => {
-                          const cur = routeRef.current;
-                          const segs =
-                            draftSegmentsRef.current.length > 0
-                              ? draftSegmentsRef.current
-                              : cur.segments;
-                          // 캡처 시점 구간(종류·좌표)을 그대로 저장 — 옛 URL만 덮지 않음
-                          onSave({
-                            ...cur,
-                            segments: segs.map((s) => ({ ...s })),
-                            locationMapUrl: dataUrl,
-                          });
-                        }
-                  }
+                  capturing={locationCapturing}
+                  onPreview={handlePreviewLocationMap}
                 />
               </div>
             </div>
@@ -902,8 +938,13 @@ export function BikeRoadDetailPanel({ route, onClose, onSave, onDelete }: Props)
           </>
         ) : (
           <>
-            <button type="button" className={actionBtnPrimary} onClick={handleSave}>
-              {isNew ? "등록" : "저장"}
+            <button
+              type="button"
+              className={actionBtnPrimary}
+              disabled={locationCapturing}
+              onClick={() => void handleSave()}
+            >
+              {locationCapturing ? "위치도 저장 중…" : isNew ? "등록" : "저장"}
             </button>
             <button type="button" className={actionBtn} onClick={cancelEdit}>
               취소

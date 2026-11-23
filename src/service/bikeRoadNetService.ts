@@ -7,6 +7,8 @@
  * - 조회: 화면 bbox 타일 (기존 방식)
  */
 
+import { promises as fs } from "fs";
+import path from "path";
 import { pool } from "@/database/db";
 import {
   buildBikeRoadNetFromGeoJson,
@@ -277,4 +279,33 @@ export async function getNetByBbox(params?: {
   const tile = snapTileBbox(padded);
 
   return getOrBuildTile(tile);
+}
+
+/**
+ * 프로토타입 위치도 PNG — public/mock/bikeRoad 에 저장 후 URL 반환.
+ */
+export async function saveLocationMap(params?: {
+  routeId?: string;
+  imageBase64?: string;
+}): Promise<{ url: string; fileName: string } | { error: string }> {
+  const routeId = String(params?.routeId ?? "").trim() || "route";
+  const raw = String(params?.imageBase64 ?? "")
+    .trim()
+    .replace(/^data:image\/\w+;base64,/, "");
+  if (!raw) return { error: "이미지가 없습니다." };
+
+  let buf: Buffer;
+  try {
+    buf = Buffer.from(raw, "base64");
+  } catch {
+    return { error: "이미지 형식이 올바르지 않습니다." };
+  }
+  if (buf.length < 64) return { error: "이미지 형식이 올바르지 않습니다." };
+
+  const safeId = routeId.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 60) || "route";
+  const fileName = `${safeId}_location.png`;
+  const dir = path.join(process.cwd(), "public", "mock", "bikeRoad");
+  await fs.mkdir(dir, { recursive: true });
+  await fs.writeFile(path.join(dir, fileName), buf);
+  return { url: `/mock/bikeRoad/${fileName}`, fileName };
 }
