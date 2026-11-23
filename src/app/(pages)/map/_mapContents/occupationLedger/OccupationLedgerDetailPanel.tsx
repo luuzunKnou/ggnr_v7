@@ -14,6 +14,7 @@ import {
   useLayerRowEdit,
   useLayerParcelNavigation,
   type LayerRowDetailAttr,
+  type LayerRowEditPreset,
   type LayerRowEditPresetKey,
   type LayerRowParcelItem,
 } from '../../_mapComponents/layerRowEdit';
@@ -148,7 +149,8 @@ export function OccupationLedgerDetailPanel({
   const hitOptions = mapContext?.occupationLedgerMapHitOptions ?? [];
   const binding = getOccupationLedgerBinding({ serEng });
   const presetKey = (binding?.editPresetKey ?? 'waterOccupationLedger') as LayerRowEditPresetKey;
-  const preset = LAYER_ROW_EDIT_PRESETS[presetKey] ?? LAYER_ROW_EDIT_PRESETS.waterOccupationLedger;
+  const preset: LayerRowEditPreset =
+    LAYER_ROW_EDIT_PRESETS[presetKey] ?? LAYER_ROW_EDIT_PRESETS.waterOccupationLedger;
   /** 서버가 DB 칸·필지 표 이름에 맞춰 준 값 (옛 cons_code / usage_data_as_solo 등) */
   const [runtimeTables, setRuntimeTables] = useState<{
     mainTable: string;
@@ -165,7 +167,7 @@ export function OccupationLedgerDetailPanel({
     runtimeTables?.jijukTable || binding?.jijukTable || preset.childTableName || '';
   const mgjTable = runtimeTables?.mgjTable || binding?.mgjTable || '';
   const keyField =
-    runtimeTables?.keyField || binding?.fields.keyField || preset.keyField;
+    runtimeTables?.keyField || binding?.fields.keyField || preset.keyField || 'id';
   /** 저장·도형편집은 정적 프리셋(ftr_idn)이 아니라 서버가 맞춘 키를 써야 한다 */
   const editPreset = useMemo(() => {
     if (!runtimeTables?.keyField) return preset;
