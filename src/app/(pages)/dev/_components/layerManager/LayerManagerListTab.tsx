@@ -14,7 +14,11 @@ import { call } from "@/lib/api"
 import { Check, X, Download, FileSpreadsheet, History, Loader2 } from "lucide-react"
 import type { LayerManagerRow } from "./types"
 import { SchemaBadge, SourceBadge } from "./defineBadges"
-import { downloadLayerCsvFromDb, downloadLayerExcel, downloadLayerShp } from "./layerListDownload"
+import { downloadLayerCsvFromDb, downloadLayerExcel } from "./layerListDownload"
+import {
+  SecurityPledgeModal,
+  postDataRequestJson,
+} from "@/app/(pages)/_components/securityPledge/SecurityPledgeModal"
 import { LayerManagerCadDownloadModal } from "./LayerManagerCadDownloadModal"
 import { LayerManagerRowHistoryDialog } from "./LayerManagerRowHistoryDialog"
 import { registerLayerManagerListRefresh, requestLayerManagerDefineRefresh } from "./layerManagerUploadBridge"
@@ -549,18 +553,21 @@ export function LayerManagerListTab() {
     }
   }, [dropTarget, historyTarget, loadData, loadRowMeta])
 
-  const handleShpDownload = useCallback(async (row: LayerManagerRow) => {
+  const [pledgeTarget, setPledgeTarget] = useState<{
+    tableName: string
+    schema: "layer" | "public_layer"
+    tableKorName: string
+  } | null>(null)
+
+  const handleShpDownload = useCallback((row: LayerManagerRow) => {
     const tableName = row.define_table_name
     if (!tableName) return
     const schema = row.define_table_schema === "public_layer" ? "public_layer" : "layer"
-    setDownloadingShp(tableName)
-    try {
-      await downloadLayerShp(tableName, schema)
-    } catch (e) {
-      alert(e instanceof Error ? e.message : "SHP 다운로드 실패")
-    } finally {
-      setDownloadingShp(null)
-    }
+    setPledgeTarget({
+      tableName,
+      schema,
+      tableKorName: String(row.define_table_kor_name ?? "").trim() || tableName,
+    })
   }, [])
 
   useEffect(() => {
@@ -1016,6 +1023,29 @@ export function LayerManagerListTab() {
         open={cadModalOpen}
         onClose={() => setCadModalOpen(false)}
         rows={rows}
+      />
+
+      <SecurityPledgeModal
+        open={pledgeTarget != null}
+        onOpenChange={(open) => {
+          if (!open) setPledgeTarget(null)
+        }}
+        tableKorName={pledgeTarget?.tableKorName ?? ""}
+        onSubmit={async (pledgeName) => {
+          if (!pledgeTarget) return { success: false, error: "대상 없음" }
+          setDownloadingShp(pledgeTarget.tableName)
+          try {
+            return await postDataRequestJson("/api/data-request/submit-layer-shp", {
+              pledgeName,
+              tableName: pledgeTarget.tableName,
+              schema: pledgeTarget.schema,
+              tableKorName: pledgeTarget.tableKorName,
+              fileType: "레이어(SHP)",
+            })
+          } finally {
+            setDownloadingShp(null)
+          }
+        }}
       />
 
       <LayerManagerRowHistoryDialog

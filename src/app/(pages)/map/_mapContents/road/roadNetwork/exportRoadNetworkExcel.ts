@@ -1,4 +1,5 @@
 import * as XLSX from "xlsx";
+import { writeExcelWorkbookWithPledge } from "@/app/(pages)/_components/securityPledge/excelPledgeGate";
 import { type RoadNetworkRow } from "./roadNetworkMock";
 
 /** 현재 목록(필터·검색 반영)을 엑셀 파일로 내려받기 */
@@ -18,5 +19,6 @@ export function exportRoadNetworkExcel(rows: RoadNetworkRow[], fileName?: string
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "도로망도");
   const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-  XLSX.writeFile(wb, fileName ?? `도로망도_${stamp}.xlsx`);
+  const name = fileName ?? `도로망도_${stamp}.xlsx`;
+  writeExcelWorkbookWithPledge(XLSX, wb, name, "도로망도");
 }

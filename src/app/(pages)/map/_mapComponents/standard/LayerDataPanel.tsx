@@ -3026,18 +3026,25 @@ export function LayerDataPanel({
                   rowKeyForAttachments != null &&
                   activeLayer != null &&
                   attachmentQuery.files.length > 0 ? (
-                    <a
-                      href={serviceFileDataZipDownloadUrl(
-                        SER_FILE_ENG.dataQuery,
-                        activeLayer.physicalTableName,
-                        rowKeyForAttachments,
-                        { layerDisplayName: activeLayer.name }
-                      )}
-                      download
-                      className="rounded border border-border bg-background px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted/50"
+                    <button
+                      type="button"
+                      title="전체 다운로드"
+                      onClick={() => {
+                        const zipUrl = serviceFileDataZipDownloadUrl(
+                          SER_FILE_ENG.dataQuery,
+                          activeLayer.physicalTableName,
+                          rowKeyForAttachments,
+                          { layerDisplayName: activeLayer.name }
+                        );
+                        triggerServiceFileDownload(
+                          zipUrl,
+                          `${activeLayer.name || '첨부'}_첨부파일.zip`
+                        );
+                      }}
+                      className="cursor-pointer rounded border border-border bg-background px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted/50"
                     >
                       전체 다운로드
-                    </a>
+                    </button>
                   ) : (
                     <span className="rounded border border-border bg-muted/30 px-2.5 py-1 text-[11px] text-muted-foreground cursor-not-allowed">
                       전체 다운로드

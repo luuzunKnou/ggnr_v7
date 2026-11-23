@@ -634,6 +634,7 @@ td.standard-detail-attr-value.standard-detail-attr-value-title,
   --map-ui-z-file-preview: 11000;
   --map-ui-z-system-select: 20100;
   --map-ui-z-access-request: 21000;
+  --map-ui-z-security-pledge: 22000;
 }
 
 .map-ui-z-viewport {
@@ -698,4 +699,11 @@ td.standard-detail-attr-value.standard-detail-attr-value-title,
 }
 .map-ui-z-access-request.map-ui-z-selected {
   z-index: calc(var(--map-ui-z-access-request) + 1);
+}
+
+.map-ui-z-security-pledge {
+  z-index: var(--map-ui-z-security-pledge);
+}
+.map-ui-z-security-pledge.map-ui-z-selected {
+  z-index: calc(var(--map-ui-z-security-pledge) + 1);
 }

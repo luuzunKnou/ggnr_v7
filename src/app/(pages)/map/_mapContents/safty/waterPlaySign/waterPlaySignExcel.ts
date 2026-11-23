@@ -1,5 +1,6 @@
 import * as XLSX from 'xlsx-js-style';
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
+import { downloadExcelWithPledge } from '@/app/(pages)/_components/securityPledge/excelPledgeGate';
 import type { WaterPlaySignListItem } from '@/service/waterPlaySignService';
 import type { PublicLayerAddressPrefixes } from '@/lib/publicLayerSgg';
 import { formatWaterPlaySignAddressDisplay } from './waterPlaySignAddressDisplay';
@@ -417,20 +418,11 @@ function injectFrozenHeaderRows(xlsxBytes: Uint8Array, ySplit: number, topLeftCe
 }
 
 function downloadXlsxBytes(data: Uint8Array, filename: string): void {
-  const copy = new Uint8Array(data.byteLength);
-  copy.set(data);
-  const blob = new Blob([copy], {
-    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  downloadExcelWithPledge({
+    data,
+    fileName: filename,
+    tableKorName: filename.replace(/\.xlsx?$/i, ''),
   });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.rel = 'noopener';
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
 }
 
 /** 전체 목록을 참고 서식으로 엑셀 저장 (화면 필터와 무관) */

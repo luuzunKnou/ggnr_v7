@@ -11,6 +11,7 @@ export * from './data_detail_log';
 export * from './data_history';
 export * from './data_log';
 export * from './data_query_history';
+export * from './data_request_file';
 export * from './drawing_display';
 export * from './excel_sync_log';
 export * from './excel_sync_log_geom';

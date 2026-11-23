@@ -1,5 +1,6 @@
 'use client';
 
+import { downloadExcelWithPledge } from '@/app/(pages)/_components/securityPledge/excelPledgeGate';
 import { appFetch } from '@/lib/basePath';
 import {
   WIMS_PAGE_SIZE,
@@ -135,15 +136,12 @@ export async function downloadWimsExcel(query: WimsListQuery): Promise<void> {
   });
   if (!res.ok) throw await readError(res);
   const blob = await res.blob();
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
   const now = new Date();
   const pad = (n: number) => String(n).padStart(2, '0');
   const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
-  a.href = url;
-  a.download = `${stamp}_WIMS_검침이력.xlsx`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
+  downloadExcelWithPledge({
+    data: blob,
+    fileName: `${stamp}_WIMS_검침이력.xlsx`,
+    tableKorName: 'WIMS 검침이력',
+  });
 }

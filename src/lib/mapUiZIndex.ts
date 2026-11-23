@@ -14,6 +14,8 @@ export const MAP_UI_Z = {
   filePreview: 11000,
   systemSelect: 20100,
   accessRequest: 21000,
+  /** 보안서약서 — 최상위 */
+  securityPledge: 22000,
 } as const;
 
 export type MapUiZLayer = keyof typeof MAP_UI_Z_CLASS;
@@ -29,6 +31,7 @@ export const MAP_UI_Z_CLASS = {
   filePreview: 'map-ui-z-file-preview',
   systemSelect: 'map-ui-z-system-select',
   accessRequest: 'map-ui-z-access-request',
+  securityPledge: 'map-ui-z-security-pledge',
 } as const;
 
 /** 클릭한 패널만 같은 티어에서 +1 */

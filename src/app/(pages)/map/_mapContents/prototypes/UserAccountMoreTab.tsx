@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Check, ChevronLeft, ChevronRight, Plus, RotateCcw, Settings2, X } from 'lucide-react'
+import { ArchiveArrowDown } from '@/app/(pages)/_components/icons/ArchiveArrowDown'
 import { call } from '@/lib/api'
 import { getBasePath, withBasePath, withBasePathNav } from '@/lib/basePath'
 import { getOpenedKeyForSerEng } from '@/lib/mapServiceOpened'
@@ -33,7 +34,7 @@ type SystemItem = {
 }
 
 const FAVORITES_STORAGE_KEY = 'ggnr.proto.moreFavorites'
-const ALWAYS_SHOW_ENGS = ['notice', 'board'] as const
+const ALWAYS_SHOW_ENGS = ['notice', 'board', 'dataRequest'] as const
 const ALWAYS_SHOW_ENG_SET = new Set<string>(ALWAYS_SHOW_ENGS)
 
 type FavItem = ServiceItem & { token: string }
@@ -74,6 +75,7 @@ const SERVICE_ICON_ALIASES: Record<string, string> = {
 const PORTAL_LINKS: Record<string, string> = {
   notice: '/notice',
   board: '/library',
+  dataRequest: '/data-request',
 }
 
 /** BASE_PATH(/uav_us)로 프로젝트 추정 — API 응답 전에 공통 메뉴가 비지 않게 */
@@ -227,6 +229,9 @@ function FavoriteStrip({
 }
 
 function ServiceGlyph({ item }: { item: ServiceItem }) {
+  if (item.ser_eng === 'dataRequest') {
+    return <ArchiveArrowDown className="h-5 w-5 shrink-0" strokeWidth={2} aria-hidden />
+  }
   const svgRaw = item.ser_svg?.trim() ?? ''
   if (svgRaw.startsWith('<')) {
     return (
@@ -340,6 +345,9 @@ export function UserAccountMoreTab({
     if (!map.has('board')) {
       map.set('board', { ser_eng: 'board', ser_kor: '자료실', ser_svg: null })
     }
+    if (!map.has('dataRequest')) {
+      map.set('dataRequest', { ser_eng: 'dataRequest', ser_kor: '데이터 요청', ser_svg: null })
+    }
     return map
   }, [services, bootProject])
 
@@ -422,7 +430,15 @@ export function UserAccountMoreTab({
     const portal = PORTAL_LINKS[eng]
     if (portal) {
       onClosePanel()
-      window.location.assign(withBasePathNav(portal))
+      const fromPath =
+        typeof window !== 'undefined'
+          ? `${window.location.pathname}${window.location.search}`
+          : ''
+      const href =
+        eng === 'dataRequest' && fromPath
+          ? `${portal}?from=${encodeURIComponent(fromPath)}`
+          : portal
+      window.location.assign(withBasePathNav(href))
       return
     }
     if (eng === 'shapeEditor') {

@@ -1,5 +1,6 @@
 import * as XLSX from 'xlsx-js-style'
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate'
+import { downloadExcelWithPledge } from '@/app/(pages)/_components/securityPledge/excelPledgeGate'
 import type { WtlNetworkDipMatrix } from './wtlNetworkTypes'
 
 /** 화면 교차표와 동일(틀고정: 관재질·계 열 + 헤더·총계 행) */
@@ -88,20 +89,11 @@ function injectFrozenPanes(
 }
 
 function downloadXlsxBytes(data: Uint8Array, filename: string): void {
-  const copy = new Uint8Array(data.byteLength)
-  copy.set(data)
-  const blob = new Blob([copy], {
-    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  downloadExcelWithPledge({
+    data,
+    fileName: filename,
+    tableKorName: filename.replace(/\.xlsx?$/i, ''),
   })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = filename
-  a.rel = 'noopener'
-  document.body.appendChild(a)
-  a.click()
-  a.remove()
-  URL.revokeObjectURL(url)
 }
 
 function buildSheet(matrix: WtlNetworkDipMatrix): XLSX.WorkSheet {

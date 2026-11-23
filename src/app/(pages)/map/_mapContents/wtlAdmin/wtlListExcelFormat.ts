@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx'
+import { downloadExcelWithPledge } from '@/app/(pages)/_components/securityPledge/excelPledgeGate'
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate'
 
 /** yyyy-MM-dd HH:mm:ss (로컬) */
@@ -90,20 +91,11 @@ function injectFrozenHeaderRows(
 }
 
 function downloadXlsxBytes(data: Uint8Array, filename: string): void {
-  const copy = new Uint8Array(data.byteLength)
-  copy.set(data)
-  const blob = new Blob([copy], {
-    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  downloadExcelWithPledge({
+    data,
+    fileName: filename,
+    tableKorName: filename.replace(/\.xlsx?$/i, ''),
   })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = filename
-  a.rel = 'noopener'
-  document.body.appendChild(a)
-  a.click()
-  a.remove()
-  URL.revokeObjectURL(url)
 }
 
 function sanitizeSheetName(raw: string, used: Set<string>): string {

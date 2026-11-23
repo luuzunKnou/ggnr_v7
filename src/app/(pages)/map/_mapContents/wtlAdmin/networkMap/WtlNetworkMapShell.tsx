@@ -17,6 +17,10 @@ import {
   X,
 } from 'lucide-react'
 import { call } from '@/lib/api'
+import {
+  SecurityPledgeModal,
+  postDataRequestJson,
+} from '@/app/(pages)/_components/securityPledge/SecurityPledgeModal'
 import { useConsoleMenuAccess } from '@/hooks/useConsoleMenuAccess'
 import { hasAnyDevConsoleAccess } from '@/lib/consoleMenuAccess/client'
 import { isSuperUser } from '@/lib/auth/superUser'
@@ -903,6 +907,11 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
   const [collapsedBoxKeys, setCollapsedBoxKeys] = useState<Set<string>>(() => new Set())
   const [excelExporting, setExcelExporting] = useState(false)
   const [shpExporting, setShpExporting] = useState(false)
+  const [shpPledgeOpen, setShpPledgeOpen] = useState(false)
+  const [shpPledgeBody, setShpPledgeBody] = useState<Record<string, unknown> | null>(
+    null
+  )
+  const [shpPledgeKor, setShpPledgeKor] = useState('관망조회')
   const [boxData, setBoxData] = useState<Record<string, LayerBoxData>>({})
   /** 시설목록이 열릴 때 scheduleListFetch가 true로 올림 */
   const [listLoading, setListLoading] = useState(false)
@@ -1704,72 +1713,19 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
           return
         }
       }
-      type ShpExtras = NonNullable<typeof extras>
-      const downloadOnce = async (exportExtras?: ShpExtras) => {
-        const res = await fetch('/api/download/wtl-network-shp', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(
-            buildExportFilterBody(scope, exportSlots, targetSrs, exportExtras)
-          ),
-        })
-        if (!res.ok) {
-          const data = (await res.json().catch(() => ({}))) as {
-            error?: string
-            code?: string
-          }
-          const errMsg =
-            typeof data?.error === 'string' ? data.error : 'SHP 다운로드 실패'
-          const isDmEmpty =
-            data?.code === 'DIGITAL_MAP_EMPTY' ||
-            errMsg.includes('겹치는 수치지형도가 없습니다')
-          const askedDm =
-            Boolean(exportExtras?.includeDigitalMap) ||
-            (exportExtras?.digitalMapFolders?.length ?? 0) > 0
-          const hasOther =
-            exportSlots.length > 0 ||
-            Boolean(exportExtras?.includeBackgroundImage) ||
-            (exportExtras?.backgroundAerialIds?.length ?? 0) > 0
-          if (isDmEmpty && askedDm && hasOther) {
-            const ok = window.confirm(
-              `${errMsg}\n\n수치지형도를 제외하고 다운로드할까요?`
-            )
-            if (!ok) return
-            await downloadOnce({
-              ...exportExtras,
-              includeDigitalMap: false,
-              digitalMapFolders: [],
-            })
-            return
-          }
-          throw new Error(errMsg)
-        }
-        const blob = await res.blob()
-        const cd = res.headers.get('Content-Disposition') ?? ''
-        const m = /filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i.exec(cd)
-        const rawName = m?.[1] ? decodeURIComponent(m[1]) : m?.[2]
-        const fileName = rawName?.trim() || '관망조회_SHP.zip'
-        const a = document.createElement('a')
-        a.href = URL.createObjectURL(blob)
-        a.download = fileName
-        a.rel = 'noopener'
-        document.body.appendChild(a)
-        a.click()
-        document.body.removeChild(a)
-        URL.revokeObjectURL(a.href)
-        const warn = res.headers.get('X-Wtl-Export-Warning')
-        if (warn) {
-          window.alert(decodeURIComponent(warn))
-        }
-      }
-      setShpExporting(true)
-      try {
-        await downloadOnce(extras)
-      } catch (e) {
-        window.alert(e instanceof Error ? e.message : 'SHP 다운로드 실패')
-      } finally {
-        setShpExporting(false)
-      }
+      const body = buildExportFilterBody(scope, exportSlots, targetSrs, extras) as Record<
+        string,
+        unknown
+      >
+      const kor =
+        exportSlots.length === 1
+          ? String(exportSlots[0]?.label ?? exportSlots[0]?.key ?? '관망조회')
+          : exportSlots.length > 1
+            ? `관망조회 ${exportSlots.length}개 레이어`
+            : '관망조회'
+      setShpPledgeKor(kor)
+      setShpPledgeBody(body)
+      setShpPledgeOpen(true)
     },
     [shpExporting, buildSlotsForKeys, buildExportFilterBody, effectiveAreaWkts5181]
   )
@@ -3749,6 +3705,69 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
           </>
         )
       })()}
+
+      <SecurityPledgeModal
+        open={shpPledgeOpen}
+        onOpenChange={(open) => {
+          setShpPledgeOpen(open)
+          if (!open) setShpPledgeBody(null)
+        }}
+        tableKorName={shpPledgeKor}
+        onSubmit={async (pledgeName) => {
+          if (!shpPledgeBody) return { success: false, error: '대상 없음' }
+          setShpExporting(true)
+          try {
+            const submitOnce = async (
+              body: Record<string, unknown>
+            ): Promise<{
+              success: boolean
+              error?: string
+              code?: string
+              warning?: string | null
+              fileGroupKey?: number
+            }> => {
+              const result = await postDataRequestJson(
+                '/api/data-request/submit-wtl-network-shp',
+                {
+                  ...body,
+                  pledgeName,
+                  tableKorName: shpPledgeKor,
+                }
+              )
+              if (
+                !result.success &&
+                (result.code === 'DIGITAL_MAP_EMPTY' ||
+                  String(result.error ?? '').includes('겹치는 수치지형도가 없습니다'))
+              ) {
+                const askedDm =
+                  Boolean(body.includeDigitalMap) ||
+                  (Array.isArray(body.digitalMapFolders) &&
+                    body.digitalMapFolders.length > 0)
+                const hasOther =
+                  (Array.isArray(body.layerKeys) && body.layerKeys.length > 0) ||
+                  Boolean(body.includeBackgroundImage) ||
+                  (Array.isArray(body.backgroundAerialIds) &&
+                    body.backgroundAerialIds.length > 0)
+                if (askedDm && hasOther) {
+                  const ok = window.confirm(
+                    `${result.error}\n\n수치지형도를 제외하고 요청할까요?`
+                  )
+                  if (!ok) return result
+                  return submitOnce({
+                    ...body,
+                    includeDigitalMap: false,
+                    digitalMapFolders: [],
+                  })
+                }
+              }
+              return result
+            }
+            return await submitOnce(shpPledgeBody)
+          } finally {
+            setShpExporting(false)
+          }
+        }}
+      />
     </>
   )
 }

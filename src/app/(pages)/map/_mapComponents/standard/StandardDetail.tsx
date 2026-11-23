@@ -593,18 +593,25 @@ export default function StandardDetail() {
               rowKeyForAttachments != null &&
               layerSegmentForFiles != null &&
               attachmentQuery.files.length > 0 ? (
-                <a
-                  href={serviceFileDataZipDownloadUrl(
-                    SER_FILE_ENG.dataQuery,
-                    layerSegmentForFiles,
-                    rowKeyForAttachments,
-                    { layerDisplayName: layerName }
-                  )}
-                  download
-                  className="rounded border border-border bg-background px-3 py-1.5 text-xs text-foreground transition-colors hover:bg-muted/50"
+                <button
+                  type="button"
+                  title="전체 다운로드"
+                  onClick={() => {
+                    const zipUrl = serviceFileDataZipDownloadUrl(
+                      SER_FILE_ENG.dataQuery,
+                      layerSegmentForFiles,
+                      rowKeyForAttachments,
+                      { layerDisplayName: layerName }
+                    );
+                    triggerServiceFileDownload(
+                      zipUrl,
+                      `${layerName || '첨부'}_첨부파일.zip`
+                    );
+                  }}
+                  className="cursor-pointer rounded border border-border bg-background px-3 py-1.5 text-xs text-foreground transition-colors hover:bg-muted/50"
                 >
                   전체 다운로드
-                </a>
+                </button>
               ) : (
                 <span className="rounded border border-border bg-muted/30 px-3 py-1.5 text-xs text-muted-foreground cursor-not-allowed">
                   전체 다운로드

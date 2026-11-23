@@ -92,6 +92,35 @@ async function collectFilesRecursive(
   return out;
 }
 
+async function archiveEntriesToBuffer(
+  files: ZipFileEntry[]
+): Promise<Buffer> {
+  const pass = new PassThrough();
+  const chunks: Buffer[] = [];
+  pass.on('data', (c: Buffer | string) => {
+    chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c));
+  });
+  const archive = archiver('zip', { zlib: { level: 6 } });
+  const done = new Promise<Buffer>((resolve, reject) => {
+    pass.on('end', () => resolve(Buffer.concat(chunks)));
+    pass.on('error', reject);
+    archive.on('error', reject);
+  });
+  archive.pipe(pass);
+  for (const f of files) {
+    try {
+      const st = await fs.stat(f.absPath);
+      if (st.isFile()) {
+        archive.file(f.absPath, { name: f.entryName });
+      }
+    } catch {
+      // 목록과 불일치 시 건너뜀
+    }
+  }
+  await archive.finalize();
+  return done;
+}
+
 export async function createServiceFileDataZipStream(params: {
   layerName: string;
   keyValue: string;
@@ -128,3 +157,74 @@ export async function createServiceFileDataZipStream(params: {
   });
   return { stream: pass, downloadFileName };
 }
+
+/** 폴더 전체 ZIP 버퍼 (데이터요청 접수용) */
+export async function createServiceFileDataZipBuffer(params: {
+  layerName: string;
+  keyValue: string;
+  displayLabel?: string | null;
+}): Promise<{ zipBuffer: Buffer; downloadFileName: string }> {
+  const rel = fileDataRelativeDir(params.layerName, params.keyValue);
+  if (!rel) throw new Error('Invalid path');
+  const dir = path.join(getZipDataDir(), ...rel.split('/'));
+  const files = await collectFilesRecursive(dir);
+  if (files.length === 0) {
+    throw new Error('다운로드할 첨부파일이 없습니다.');
+  }
+  const zipBuffer = await archiveEntriesToBuffer(files);
+  const downloadFileName = buildServiceFileDataZipDownloadFileName({
+    layerName: params.layerName,
+    keyValue: params.keyValue,
+    displayLabel: params.displayLabel,
+  });
+  return { zipBuffer, downloadFileName };
+}
+
+/** 지정 파일들 ZIP 버퍼 (선택·미리보기 묶음 등) */
+export async function createServiceFileEntriesZipBuffer(
+  entries: ZipFileEntry[],
+  downloadFileName: string
+): Promise<{ zipBuffer: Buffer; downloadFileName: string }> {
+  if (entries.length === 0) {
+    throw new Error('다운로드할 첨부파일이 없습니다.');
+  }
+  const zipBuffer = await archiveEntriesToBuffer(entries);
+  const name = downloadFileName.toLowerCase().endsWith('.zip')
+    ? downloadFileName
+    : `${downloadFileName}.zip`;
+  return { zipBuffer, downloadFileName: name };
+}
+
+/** 메모리 바이트를 ZIP으로 (엑셀 등 클라이언트 생성 파일 접수용) */
+export async function createZipBufferFromMemoryEntries(
+  entries: { entryName: string; data: Buffer | Uint8Array }[],
+  downloadFileName: string
+): Promise<{ zipBuffer: Buffer; downloadFileName: string }> {
+  if (entries.length === 0) {
+    throw new Error('다운로드할 파일이 없습니다.');
+  }
+  const pass = new PassThrough();
+  const chunks: Buffer[] = [];
+  pass.on('data', (c: Buffer | string) => {
+    chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c));
+  });
+  const archive = archiver('zip', { zlib: { level: 6 } });
+  const done = new Promise<Buffer>((resolve, reject) => {
+    pass.on('end', () => resolve(Buffer.concat(chunks)));
+    pass.on('error', reject);
+    archive.on('error', reject);
+  });
+  archive.pipe(pass);
+  for (const e of entries) {
+    const name = String(e.entryName ?? '').trim() || 'file.bin';
+    archive.append(Buffer.from(e.data), { name });
+  }
+  await archive.finalize();
+  const zipBuffer = await done;
+  const name = downloadFileName.toLowerCase().endsWith('.zip')
+    ? downloadFileName
+    : `${downloadFileName}.zip`;
+  return { zipBuffer, downloadFileName: name };
+}
+
+export type { ZipFileEntry };

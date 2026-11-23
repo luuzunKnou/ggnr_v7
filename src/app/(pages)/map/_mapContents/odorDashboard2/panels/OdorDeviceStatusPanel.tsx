@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { FileDown, FileText, Search } from 'lucide-react'
 import * as XLSX from 'xlsx'
+import { writeExcelWorkbookWithPledge } from '@/app/(pages)/_components/securityPledge/excelPledgeGate'
 import type { OdorGradePointMock, OdorGradeStatus } from '@/app/(pages)/(index)/odorPh/odorPhDashboardMock'
 import type { OdorSensorListItem } from '@/service/odorSensorService'
 import { cn } from '@/lib/utils'
@@ -48,7 +49,8 @@ export function downloadStationExcel(rows: OdorStationRow[]) {
   const ws = XLSX.utils.json_to_sheet(data)
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, ws, '지점목록')
-  XLSX.writeFile(wb, `악취_지점목록_${new Date().toISOString().slice(0, 10)}.xlsx`)
+  const fileName = `악취_지점목록_${new Date().toISOString().slice(0, 10)}.xlsx`
+  writeExcelWorkbookWithPledge(XLSX, wb, fileName, '악취 지점목록')
 }
 
 export function printStationPdf(rows: OdorStationRow[]) {

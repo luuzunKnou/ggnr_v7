@@ -1,3 +1,4 @@
+import { writeExcelWorkbookWithPledge } from '@/app/(pages)/_components/securityPledge/excelPledgeGate'
 import type { SmallPublicCandidate, SmallPublicFacType } from '../smallPublicConfig'
 import { applyThinBorders } from '../smallPublicExcelStyle'
 import { downloadHwpx, type HwpxBlock } from '../smallPublicHwpx'
@@ -266,7 +267,8 @@ export async function exportSmallPublicReportExcel(
     ]
     add(rows.length ? rows : [{ 변동: '변동 없음' }], '전년대비변동')
   }
-  XLSX.writeFile(wb, `안전점검대상_${snap.year}_${snap.baseDate.replace(/-/g, '')}.xlsx`)
+  const fileName = `안전점검대상_${snap.year}_${snap.baseDate.replace(/-/g, '')}.xlsx`
+  writeExcelWorkbookWithPledge(XLSX, wb, fileName, '안전점검대상')
 }
 
 /** 보고서 한글 문서 본문 — 미리보기 HTML과 같은 구성 */

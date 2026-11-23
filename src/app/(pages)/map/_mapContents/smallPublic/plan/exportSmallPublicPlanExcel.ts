@@ -1,3 +1,4 @@
+import { writeExcelWorkbookWithPledge } from '@/app/(pages)/_components/securityPledge/excelPledgeGate'
 import { applyThinBorders } from '../smallPublicExcelStyle'
 import { SYSTEM_PARAMS } from './smallPublicPlanMaster'
 import {
@@ -105,5 +106,6 @@ export async function exportSmallPublicPlanExcel(ranked: PlanRanked[], startYear
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, ws, '중기계획 명세서')
   XLSX.utils.book_append_sheet(wb, wsSummary, '읍면별 종합표')
-  XLSX.writeFile(wb, `소규모공공시설_정비계획_${todayYmd().replace(/-/g, '')}.xlsx`)
+  const fileName = `소규모공공시설_정비계획_${todayYmd().replace(/-/g, '')}.xlsx`
+  writeExcelWorkbookWithPledge(XLSX, wb, fileName, '소규모공공시설 정비계획')
 }

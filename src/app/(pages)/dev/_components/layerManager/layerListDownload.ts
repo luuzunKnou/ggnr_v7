@@ -1,3 +1,5 @@
+import { downloadExcelWithPledge } from "@/app/(pages)/_components/securityPledge/excelPledgeGate"
+
 export function triggerBlobDownload(blob: Blob, filename: string) {
   const a = document.createElement("a")
   a.href = URL.createObjectURL(blob)
@@ -138,7 +140,11 @@ export async function downloadLayerExcel(pathRel: string | null, tableName: stri
   }
   const blob = await res.blob()
   const name = path.split(/[/\\]/).pop() ?? "download.xlsx"
-  triggerBlobDownload(blob, name)
+  downloadExcelWithPledge({
+    data: blob,
+    fileName: name,
+    tableKorName: name.replace(/\.(xlsx|xls|csv)$/i, "") || tableName,
+  })
 }
 
 /** DB 테이블 → CSV 내보내기 (교차 다운로드) */

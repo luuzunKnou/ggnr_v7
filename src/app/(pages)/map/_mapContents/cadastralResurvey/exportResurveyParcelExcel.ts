@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx'
+import { writeExcelWorkbookWithPledge } from '@/app/(pages)/_components/securityPledge/excelPledgeGate'
 import {
   fetchLandInfoConfig,
   fetchParcelTabData,
@@ -158,6 +159,11 @@ export async function exportResurveyParcelExcel(args: {
   for (const [name, rows, header] of sheets) {
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows, { header }), name)
   }
-  XLSX.writeFile(wb, `${district.name}_필지목록.xlsx`)
+  writeExcelWorkbookWithPledge(
+    XLSX,
+    wb,
+    `${district.name}_필지목록.xlsx`,
+    `${district.name} 필지목록`
+  )
   return true
 }

@@ -36,6 +36,10 @@ import { useEnsureMapCenterInSggOnMount } from '../useEnsureMapCenterInSggOnMoun
 import { WtlLayerMark } from '../networkMap/WtlLayerMark'
 import { exportWtlFacilityExcel } from './exportWtlFacilityExcel'
 import {
+  SecurityPledgeModal,
+  postDataRequestJson,
+} from '@/app/(pages)/_components/securityPledge/SecurityPledgeModal'
+import {
   loadWtlDefineDisplayBundle,
 } from '../networkMap/wtlNetworkDefineDisplayCache'
 import { claimMapLayerClickDetailHighlight } from '@/lib/mapLayerClickDetailHighlight'
@@ -170,6 +174,7 @@ export function WtlFacilityShell({
   const [rows, setRows] = useState<WtlFacilityListRow[]>([])
   const [total, setTotal] = useState(0)
   const [shpExporting, setShpExporting] = useState(false)
+  const [shpPledgeOpen, setShpPledgeOpen] = useState(false)
   const [excelExporting, setExcelExporting] = useState(false)
   /** 점용허가 목록과 동일 — thead 다중 정렬 */
   const [sorts, setSorts] = useState<WtlFacilityListSortSpec[]>([])
@@ -1196,54 +1201,16 @@ export function WtlFacilityShell({
     title,
   ])
 
-  const handleShpExport = useCallback(async () => {
+  const handleShpExport = useCallback(() => {
     if (!selectedSource || shpExporting) return
-    setShpExporting(true)
-    try {
-      const res = await fetch('/api/download/wtl-facility-shp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          table: selectedSource.tableName,
-          schema: selectedSource.schema,
-          keyword,
-          areaWkts5181:
-            showLocationFilter && effectiveAreaWkts5181.length > 0
-              ? effectiveAreaWkts5181
-              : null,
-        }),
-      })
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        throw new Error(
-          typeof data?.error === 'string' ? data.error : 'SHP 다운로드 실패'
-        )
-      }
-      const blob = await res.blob()
-      const cd = res.headers.get('Content-Disposition') ?? ''
-      const m = /filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i.exec(cd)
-      const rawName = m?.[1] ? decodeURIComponent(m[1]) : m?.[2]
-      const fileName = rawName?.trim() || '시설목록_SHP.zip'
-      const a = document.createElement('a')
-      a.href = URL.createObjectURL(blob)
-      a.download = fileName
-      a.rel = 'noopener'
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(a.href)
-    } catch (e) {
-      window.alert(e instanceof Error ? e.message : 'SHP 다운로드 실패')
-    } finally {
-      setShpExporting(false)
-    }
-  }, [
-    shpExporting,
-    selectedSource,
-    keyword,
-    showLocationFilter,
-    effectiveAreaWkts5181,
-  ])
+    setShpPledgeOpen(true)
+  }, [shpExporting, selectedSource])
+
+  const facilityKorName = useMemo(() => {
+    const g = String(selectedSource?.group ?? '').trim()
+    const t = String(selectedSource?.tableName ?? '').trim()
+    return g || t || title || '시설목록'
+  }, [selectedSource?.group, selectedSource?.tableName, title])
 
   /**
    * 그룹·탭이 맞춰진 뒤에만 목록 조회.
@@ -1646,6 +1613,31 @@ export function WtlFacilityShell({
           onClose={clearFacilityInfoPreview}
         />
       ) : null}
+
+      <SecurityPledgeModal
+        open={shpPledgeOpen}
+        onOpenChange={setShpPledgeOpen}
+        tableKorName={facilityKorName}
+        onSubmit={async (pledgeName) => {
+          if (!selectedSource) return { success: false, error: '대상 없음' }
+          setShpExporting(true)
+          try {
+            return await postDataRequestJson('/api/data-request/submit-wtl-facility-shp', {
+              pledgeName,
+              table: selectedSource.tableName,
+              schema: selectedSource.schema,
+              tableKorName: facilityKorName,
+              keyword,
+              areaWkts5181:
+                showLocationFilter && effectiveAreaWkts5181.length > 0
+                  ? effectiveAreaWkts5181
+                  : null,
+            })
+          } finally {
+            setShpExporting(false)
+          }
+        }}
+      />
     </>
   )
 }

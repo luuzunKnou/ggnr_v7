@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx-js-style'
+import { writeExcelWorkbookWithPledge } from '@/app/(pages)/_components/securityPledge/excelPledgeGate'
 import {
   TEAMS,
   type VillagePatrolRow,
@@ -232,7 +233,12 @@ export function exportVillagePatrolExcel(
   const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, '')
 
   XLSX.utils.book_append_sheet(wb, exportRosterSheet(assignmentRows, opts), '편성명단')
-  XLSX.writeFile(wb, `마을순찰대_편성_${stamp}.xlsx`)
+  writeExcelWorkbookWithPledge(
+    XLSX,
+    wb,
+    `마을순찰대_편성_${stamp}.xlsx`,
+    '마을순찰대 편성'
+  )
 }
 
 /** 가져오기용 양식(단순 목록) — 헤더 + 예시 1행 */
@@ -268,7 +274,12 @@ export function downloadVillagePatrolImportTemplate() {
   ]
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, ws, '편성명단')
-  XLSX.writeFile(wb, '마을순찰대_가져오기양식.xlsx')
+  writeExcelWorkbookWithPledge(
+    XLSX,
+    wb,
+    '마을순찰대_가져오기양식.xlsx',
+    '마을순찰대 가져오기양식'
+  )
 }
 
 /**

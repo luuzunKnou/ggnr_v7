@@ -21,6 +21,7 @@ import { isSplitLayerParent } from "@/lib/splitLayerTargets"
 import { call } from "@/lib/api"
 import { normalizeGeoServerSymbolUrl } from "@/lib/geoserverSymbolPath"
 import { parseSimpleStyleFromCss, parseSldEnvStyle, parseSymbolFolderFromUrl, resolveSymbolPreviewUrl, symbolFileNameFromUrl, type GeometryType, type StyleProps } from "@/lib/geoserverStyleUtils"
+import { downloadExcelWithPledge } from "@/app/(pages)/_components/securityPledge/excelPledgeGate"
 import { withBasePath } from "@/lib/basePath"
 import { getGeoServerBase, getGeoServerPublicBase } from "@/lib/geoserverUrl"
 import {
@@ -1788,8 +1789,25 @@ export function LayerInfoManager({
               variant="outline"
               size="sm"
               className="rounded-md"
+              title="엑셀 다운로드"
               onClick={() => {
-                window.open("/api/config/defineLayer/export", "_blank")
+                void (async () => {
+                  try {
+                    const res = await fetch(withBasePath("/api/config/defineLayer/export"), {
+                      cache: "no-store",
+                      credentials: "include",
+                    })
+                    if (!res.ok) throw new Error("엑셀 다운로드 실패")
+                    const blob = await res.blob()
+                    downloadExcelWithPledge({
+                      data: blob,
+                      fileName: "layer-list.xlsx",
+                      tableKorName: "레이어 목록",
+                    })
+                  } catch (e) {
+                    window.alert(e instanceof Error ? e.message : "엑셀 다운로드 실패")
+                  }
+                })()
               }}
             >
               <Download className="w-4 h-4 mr-1.5 opacity-70" />

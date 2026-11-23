@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronDown, ChevronRight, FileSpreadsheet } from 'lucide-react';
+import { downloadExcelWithPledge } from '@/app/(pages)/_components/securityPledge/excelPledgeGate';
 import { Button } from '@/app/shadcnComponents/ui/button';
 import { DevFloatingPanel } from './DevFloatingPanel';
 import { registerDevVersionHistoryRefresh } from './devVersionHistoryBridge';
@@ -207,15 +208,11 @@ export function VersionHistoryDialog({
       const pad = (n: number) => String(n).padStart(2, '0');
       const fallback = `${exportFilePrefix}_${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}.xlsx`;
       const name = fromHeader && fromHeader.endsWith('.xlsx') ? fromHeader : fallback;
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = name;
-      a.title = '엑셀 다운로드';
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
+      downloadExcelWithPledge({
+        data: blob,
+        fileName: name,
+        tableKorName: exportFilePrefix || '버전이력',
+      });
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {

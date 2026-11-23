@@ -1,6 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  parseServiceFileDownloadToPledge,
+  requestAttachmentPledge,
+} from '@/app/(pages)/_components/securityPledge/attachmentPledgeGate';
 import { appFetch, withBasePath } from '@/lib/basePath';
 import { encodeServiceFileDataPathB64 } from '@/lib/serviceFileData';
 
@@ -68,8 +72,10 @@ export function serviceFileDataZipDownloadUrl(
   return withBasePath(`/api/service-files/download-zip?${qs.toString()}`);
 }
 
-/** 동일 출처 인증 쿠키가 포함된 GET으로 파일 다운로드 트리거 */
+/** 동일 출처 인증 쿠키가 포함된 GET으로 파일 다운로드 트리거 (첨부 API는 보안서약 경유) */
 export function triggerServiceFileDownload(url: string, fileName: string): void {
+  const pledge = parseServiceFileDownloadToPledge(url, fileName);
+  if (pledge && requestAttachmentPledge(pledge)) return;
   const a = document.createElement('a');
   a.href = url;
   a.download = fileName;

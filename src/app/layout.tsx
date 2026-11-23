@@ -5,6 +5,8 @@ import { AuthSessionProvider } from "@/app/providers";
 import { LoginModalProvider } from "@/app/login-modal-context";
 import { ActiveNoticeModal } from "@/app/(pages)/_components/notice/ActiveNoticeModal";
 import { ForcedPasswordChangeModal } from "@/app/(pages)/_components/ForcedPasswordChangeModal";
+import { SecurityPledgeAttachmentHost } from "@/app/(pages)/_components/securityPledge/SecurityPledgeAttachmentHost";
+import { SecurityPledgeExcelHost } from "@/app/(pages)/_components/securityPledge/SecurityPledgeExcelHost";
 import { BasePathClientPatch } from "@/app/BasePathClientPatch";
 import { withBasePath } from "@/lib/basePath";
 import { getIndexLogoSrc, getSystemKorName } from "@/service/configService";
@@ -40,6 +42,8 @@ export default function RootLayout({
               {children}
               <ActiveNoticeModal />
               <ForcedPasswordChangeModal />
+              <SecurityPledgeAttachmentHost />
+              <SecurityPledgeExcelHost />
             </LoginModalProvider>
           </ThemeProvider>
         </AuthSessionProvider>
