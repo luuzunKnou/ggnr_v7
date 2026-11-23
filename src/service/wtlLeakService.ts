@@ -813,11 +813,13 @@ export async function analyzeWtlLeak(params: {
   };
 
   /**
-   * hard/tight로 잠근 제수변 주변 교차점: JOIN 안 관 끝 입구를 막아
-   * 짧은 연결관으로 옆 갈래·반대쪽 본선이 새지 않게 한다.
+   * hard/tight 잠금 후 짧은 연결관 우회만 봉인.
+   * 긴 관(다른 축·다른 접근)까지 막으면 맞은편 제수변을 못 찾으므로 제외.
+   * 탄 관의 제수변 너머는 sealFarSide가 담당.
    */
   const sealJunctionNearValve = (valve: ValveOnPipe) => {
     for (const p of pipes) {
+      if (p.length > JUNCTION_CLUSTER_TOL_M) continue;
       if (dist(p.sx, p.sy, valve.x, valve.y) <= JOIN_TOL_M) {
         sealedPipeEntries.add(`${p.id}@${p.startNode}`);
       }
@@ -1239,6 +1241,32 @@ export async function analyzeWtlLeak(params: {
     }
   }
 
+  /**
+   * hard/tight로 진행 축을 잠근 뒤, 제수변 너머 나란한 연장은 건너뛰고
+   * 교차의 다른 축만 이어 탐색(맞은편 제수변 잠금).
+   */
+  function hopOtherArms(
+    fromPipe: PipeEdge,
+    exitX: number,
+    exitY: number,
+    exitIndex: number,
+    nextAccum: number,
+    hop: number
+  ) {
+    for (const next of pipes) {
+      if (next.id === fromPipe.id) continue;
+      const o = orientAt(next, exitX, exitY);
+      if (!o || sealedPipeEntries.has(`${next.id}@${o.enterNode}`)) continue;
+      // 진행 회랑과 나란하면 제수변 너머 연장으로 보고 제외
+      if (nearlyParallel(fromPipe, exitIndex, next, o.fromIndex)) continue;
+      if (gateBeforeEntry(o, exitX, exitY, next)) continue;
+      const key = `${fromPipe.id}>arm>${next.id}@${o.towardStart ? 'E' : 'S'}`;
+      if (visitedDirected.has(key)) continue;
+      visitedDirected.add(key);
+      searchAlong(next, o.fromIndex, o.towardStart, nextAccum, hop + 1, null);
+    }
+  }
+
   function searchAlong(
     pipe: PipeEdge,
     fromIndex: number,
@@ -1278,6 +1306,7 @@ export async function analyzeWtlLeak(params: {
           hopAway(pipe, exitX, exitY, distAlong, hop, first);
         } else if (ep.kind === 'tight' || ep.kind === 'hard') {
           sealJunctionNearValve(first);
+          hopOtherArms(pipe, exitX, exitY, exitIndex, distAlong, hop);
         }
       }
       hopInterior(pipe, baseIndex, first.index, accumDist, hop, true, softGate);
@@ -1349,6 +1378,7 @@ export async function analyzeWtlLeak(params: {
       }
       if (ep.kind === 'tight' || ep.kind === 'hard') {
         sealJunctionNearValve(nodeValve);
+        hopOtherArms(pipe, exitX, exitY, exitIndex, nextAccum, hop);
         return;
       }
       onlyPeer = true;

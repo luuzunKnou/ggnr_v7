@@ -837,12 +837,12 @@
                   </sld:CssParameter>
                 </sld:Stroke>
               </sld:Mark>
-              <sld:Size><ogc:Function name="if_then_else"><ogc:Function name="greaterThan"><ogc:Function name="env"><ogc:Literal>ignore_scale</ogc:Literal><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>18</ogc:Literal>
+              <sld:Size>
                 <ogc:Function name="env">
                   <ogc:Literal>swl_pipe_lm_bak_size</ogc:Literal>
                   <ogc:Literal>20</ogc:Literal>
                 </ogc:Function>
-              </ogc:Function></sld:Size>
+              </sld:Size>
               <sld:Rotation>
                 <ogc:Function name="endAngle">
                   <ogc:PropertyName>geom</ogc:PropertyName>

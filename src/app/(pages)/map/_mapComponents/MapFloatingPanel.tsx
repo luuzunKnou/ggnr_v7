@@ -371,6 +371,8 @@ export function MapFloatingPanel({
           isMapFloat
             ? cn(
                 'standard-map-float-header',
+                // 레이어 선택 등: 헤더 클릭·우클릭 기능 없음 → hover 배경 유지하지 않음
+                'hover:bg-slate-100 dark:hover:bg-white/10 dark:hover:text-white/90',
                 pinPosition
                   ? 'cursor-pointer'
                   : 'cursor-grab active:cursor-grabbing'

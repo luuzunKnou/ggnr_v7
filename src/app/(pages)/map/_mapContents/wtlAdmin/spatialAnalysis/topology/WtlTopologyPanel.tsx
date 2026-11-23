@@ -236,8 +236,8 @@ export function WtlTopologyPanel({
   /** 지도 클릭으로 대상 고르기 — 수정 대상이 없을 때, 또는 방향 반전 모드 */
   const onMapPick = (t: WtlTopoEditTarget | null) => {
     if (editTool === 'flip') {
+      // 미스(빈 곳)는 속성조회와 공존 — 안내만 내지 않음
       if (!t || t.geomKind !== 'line' || !t.line || t.line.length < 2) {
-        setNotice('클릭한 위치에 관로가 없습니다. 관로 위를 클릭하세요.')
         return
       }
       const key = wtlTopoPipeKey(t.table, t.ogcFid)
@@ -262,10 +262,8 @@ export function WtlTopologyPanel({
       return
     }
     if (editTool === 'modify' && !modifyTarget) {
-      if (!t) {
-        setNotice('클릭한 위치에 관로·시설이 없습니다.')
-        return
-      }
+      // 미스(빈 곳)는 속성조회와 공존 — 안내만 내지 않음
+      if (!t) return
       setModifyTarget(t)
       setNotice(`${t.label} · 꼭짓점(시설은 위치)을 끌어 수정한 뒤 저장하세요.`)
     }
@@ -433,6 +431,9 @@ export function WtlTopologyPanel({
     status: WtlTopoChangeRequest['status'],
     message?: string
   ) => {
+    const requestUser = String(session?.user?.id ?? '').trim()
+    const requestUserName =
+      String(session?.user?.name ?? '').trim() || requestUser
     const row: WtlTopoChangeRequest = {
       id: `req-${Date.now()}`,
       at: nowStamp(),
@@ -444,6 +445,8 @@ export function WtlTopologyPanel({
       files,
       applyMode: applyMode,
       status,
+      requestUser,
+      requestUserName,
       message,
     }
     setRequests((prev) => [row, ...prev])

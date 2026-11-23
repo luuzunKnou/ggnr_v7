@@ -389,8 +389,28 @@ export function WtlNetworkMapAttachmentSection({ item, fields, canEdit = true }:
         ) : null}
         <div className="scrollbar-thin flex min-h-0 flex-1 flex-col overflow-y-auto">
           {query.loading ? (
-            <div className="flex flex-1 items-center justify-center px-3 text-center text-xs text-muted-foreground/80">
-              불러오는 중…
+            <div
+              className="flex flex-col gap-1 p-1"
+              aria-busy
+              aria-label="첨부파일 불러오는 중"
+              title="첨부파일 불러오는 중"
+            >
+              {Array.from({ length: 4 }, (_, i) => (
+                <div
+                  key={`sk-file-${i}`}
+                  className="flex items-center gap-2 rounded-lg border border-border/80 bg-card p-1"
+                  aria-hidden
+                >
+                  <div className="h-10 w-10 shrink-0 animate-pulse rounded-lg bg-muted" />
+                  <div className="min-w-0 flex-1 space-y-1.5 py-0.5">
+                    <div
+                      className="h-3 animate-pulse rounded bg-muted"
+                      style={{ width: `${58 + ((i * 13) % 28)}%` }}
+                    />
+                    <div className="h-2.5 w-[40%] animate-pulse rounded bg-muted/80" />
+                  </div>
+                </div>
+              ))}
             </div>
           ) : query.error ? (
             <div className="flex flex-1 items-center justify-center px-3 text-center text-xs text-red-600">

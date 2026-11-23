@@ -276,10 +276,16 @@ async function listPhysicalColumns(schema: string, table: string): Promise<strin
     .filter(Boolean);
 }
 
+function isDefineFlagTrue(v: unknown): boolean {
+  if (v === true) return true;
+  const s = String(v ?? '')
+    .trim()
+    .toLowerCase();
+  return s === 'true' || s === '1';
+}
+
 function pickTitleField(fields: Record<string, unknown>[]): string | null {
-  const title = fields.find(
-    (f) => String(f.define_field_show_title ?? '').toLowerCase() === 'true'
-  );
+  const title = fields.find((f) => isDefineFlagTrue(f.define_field_show_title));
   const name = asStr(title?.define_field_name);
   return name || null;
 }

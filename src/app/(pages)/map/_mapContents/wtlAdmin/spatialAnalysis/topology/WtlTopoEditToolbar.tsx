@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useMapContext } from '../../../../_mapComponents/MapContext'
+import { mapToolbarTopPx } from '../../../../_mapComponents/mapTopHintLayout'
 import { useMapToolbarDrag } from '../useMapToolbarDrag'
 import {
   WTL_TOPO_ADD_FACILITY_KINDS,
@@ -133,14 +134,15 @@ export function WtlTopoEditToolbar({
   }, [visible])
 
   const dragMinX = host ? Math.max(0, mapLeftPx - host.getBoundingClientRect().left) : 0
-  const { handleRef: dragHandleRef, barStyle } = useMapToolbarDrag(host, barRef, visible, dragMinX)
+  const { handleRef: dragHandleRef, barStyle, moved } = useMapToolbarDrag(host, barRef, visible, dragMinX)
   if (!visible || !host) return null
   const menuRight = Math.max(0, mapLeftPx - host.getBoundingClientRect().left)
   const center = menuRight + Math.max(0, host.clientWidth - menuRight) / 2
+  const toolbarTopPx = mapToolbarTopPx(Boolean(mapContext?.cadastralZoomHintVisible))
 
   // 누수분석·단수구역 도구모음과 같은 알약(pill) 톤 — 한 줄, 같은 버튼·구분선·완료 버튼
   const pillShell =
-    'pointer-events-auto absolute top-20 z-30 flex -translate-x-1/2 flex-col rounded-full border border-border bg-background/95 text-foreground shadow-lg backdrop-blur'
+    'pointer-events-auto absolute z-30 flex -translate-x-1/2 flex-col rounded-full border border-border bg-background/95 text-foreground shadow-lg backdrop-blur'
 
   const modeBtn = (id: Exclude<WtlTopoMapTool, 'idle'>, label: string, Icon: LucideIcon, title: string) => (
     <button
@@ -273,7 +275,10 @@ export function WtlTopoEditToolbar({
     <div
       ref={barRef}
       className={pillShell}
-      style={barStyle(center)}
+      style={{
+        ...barStyle(center),
+        ...(moved ? {} : { top: toolbarTopPx }),
+      }}
       role="toolbar"
       aria-label="위상검증 편집 도구"
     >

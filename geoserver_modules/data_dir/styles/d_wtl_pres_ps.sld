@@ -1,4 +1,5 @@
-<?xml version="1.0" encoding="UTF-8"?><sld:StyledLayerDescriptor xmlns="http://www.opengis.net/sld" xmlns:sld="http://www.opengis.net/sld" xmlns:gml="http://www.opengis.net/gml" xmlns:ogc="http://www.opengis.net/ogc" version="1.0.0">
+<?xml version='1.0' encoding='UTF-8'?>
+<sld:StyledLayerDescriptor xmlns="http://www.opengis.net/sld" xmlns:sld="http://www.opengis.net/sld" xmlns:gml="http://www.opengis.net/gml" xmlns:ogc="http://www.opengis.net/ogc" version="1.0.0">
   <sld:NamedLayer>
     <sld:Name>Default Styler</sld:Name>
     <sld:UserStyle>
@@ -11,14 +12,51 @@
           <sld:Name>Name</sld:Name>
           <sld:Title>d_wtl_pres_ps</sld:Title>
           <sld:Abstract>Abstract</sld:Abstract>
-          <sld:MaxScaleDenominator>256000.0</sld:MaxScaleDenominator>
           <sld:PointSymbolizer>
             <sld:Graphic>
-              <sld:ExternalGraphic>
-                <sld:OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="/www/symbol/water/wtl_pres_ps.svg"/>
-                <sld:Format>image/svg+xml</sld:Format>
-              </sld:ExternalGraphic>
-              <sld:Size><ogc:Function name="if_then_else"><ogc:Function name="greaterThan"><ogc:Function name="env"><ogc:Literal>ignore_scale</ogc:Literal><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>18</ogc:Literal>
+              <sld:Mark>
+                <sld:WellKnownName>
+                  <ogc:Function name="env">
+                    <ogc:Literal>d_wtl_pres_ps_well_known_name</ogc:Literal>
+                    <ogc:Literal>circle</ogc:Literal>
+                  </ogc:Function>
+                </sld:WellKnownName>
+                <sld:Fill>
+                  <sld:CssParameter name="fill">
+                    <ogc:Function name="strConcat">
+                      <ogc:Literal>#</ogc:Literal>
+                      <ogc:Function name="env">
+                        <ogc:Literal>d_wtl_pres_ps_fill</ogc:Literal>
+                        <ogc:Literal>1e90ff</ogc:Literal>
+                      </ogc:Function>
+                    </ogc:Function>
+                  </sld:CssParameter>
+                  <sld:CssParameter name="fill-opacity">
+                    <ogc:Function name="env">
+                      <ogc:Literal>d_wtl_pres_ps_fill_opacity</ogc:Literal>
+                      <ogc:Literal>0.5</ogc:Literal>
+                    </ogc:Function>
+                  </sld:CssParameter>
+                </sld:Fill>
+                <sld:Stroke>
+                  <sld:CssParameter name="stroke">
+                    <ogc:Function name="strConcat">
+                      <ogc:Literal>#</ogc:Literal>
+                      <ogc:Function name="env">
+                        <ogc:Literal>d_wtl_pres_ps_stroke</ogc:Literal>
+                        <ogc:Literal>FFFFFF</ogc:Literal>
+                      </ogc:Function>
+                    </ogc:Function>
+                  </sld:CssParameter>
+                  <sld:CssParameter name="stroke-width">
+                    <ogc:Function name="env">
+                      <ogc:Literal>d_wtl_pres_ps_stroke_width</ogc:Literal>
+                      <ogc:Literal>1</ogc:Literal>
+                    </ogc:Function>
+                  </sld:CssParameter>
+                </sld:Stroke>
+              </sld:Mark>
+              <sld:Size>
                 <ogc:Function name="if_then_else">
                   <ogc:Function name="greaterThan">
                     <ogc:Function name="env">
@@ -35,113 +73,60 @@
                     <ogc:Function name="env">
                       <ogc:Literal>wms_scale_denominator</ogc:Literal>
                     </ogc:Function>
-                    <ogc:Literal>18</ogc:Literal>
-                    <ogc:Literal>8000</ogc:Literal>
-                    <ogc:Literal>16</ogc:Literal>
-                    <ogc:Literal>256000</ogc:Literal>
-                    <ogc:Literal>0</ogc:Literal>
+                    <ogc:Literal>12</ogc:Literal>
+                    <ogc:Literal>1500</ogc:Literal>
+                    <ogc:Literal>10</ogc:Literal>
+                    <ogc:Literal>3000</ogc:Literal>
+                    <ogc:Literal>7</ogc:Literal>
+                    <ogc:Literal>5000</ogc:Literal>
+                    <ogc:Literal>6</ogc:Literal>
+                    <ogc:Literal>10000</ogc:Literal>
+                    <ogc:Literal>5</ogc:Literal>
+                    <ogc:Literal>30000</ogc:Literal>
+                    <ogc:Literal>4</ogc:Literal>
                   </ogc:Function>
                 </ogc:Function>
-              </ogc:Function></sld:Size>
-            </sld:Graphic>
-          </sld:PointSymbolizer>
-        </sld:Rule><sld:Rule>
-          <sld:Name>Name</sld:Name>
-          <sld:Title>d_wtl_pres_ps</sld:Title>
-          <sld:Abstract>Abstract</sld:Abstract>
-          <sld:MinScaleDenominator>256000.0</sld:MinScaleDenominator>
-          <ogc:Filter><ogc:PropertyIsEqualTo><ogc:Function name="env"><ogc:Literal>ignore_scale</ogc:Literal><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>1</ogc:Literal></ogc:PropertyIsEqualTo></ogc:Filter><sld:PointSymbolizer>
-            <sld:Graphic>
-              <sld:ExternalGraphic>
-                <sld:OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="/www/symbol/water/wtl_pres_ps.svg"/>
-                <sld:Format>image/svg+xml</sld:Format>
-              </sld:ExternalGraphic>
-              <sld:Size><ogc:Function name="if_then_else"><ogc:Function name="greaterThan"><ogc:Function name="env"><ogc:Literal>ignore_scale</ogc:Literal><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>18</ogc:Literal>
-                <ogc:Function name="if_then_else">
-                  <ogc:Function name="greaterThan">
-                    <ogc:Function name="env">
-                      <ogc:Literal>d_wtl_pres_ps_size</ogc:Literal>
-                      <ogc:Literal>0</ogc:Literal>
-                    </ogc:Function>
-                    <ogc:Literal>0</ogc:Literal>
-                  </ogc:Function>
-                  <ogc:Function name="env">
-                    <ogc:Literal>d_wtl_pres_ps_size</ogc:Literal>
-                    <ogc:Literal>16</ogc:Literal>
-                  </ogc:Function>
-                  <ogc:Function name="Categorize">
-                    <ogc:Function name="env">
-                      <ogc:Literal>wms_scale_denominator</ogc:Literal>
-                    </ogc:Function>
-                    <ogc:Literal>18</ogc:Literal>
-                    <ogc:Literal>8000</ogc:Literal>
-                    <ogc:Literal>16</ogc:Literal>
-                    <ogc:Literal>256000</ogc:Literal>
-                    <ogc:Literal>0</ogc:Literal>
-                  </ogc:Function>
-                </ogc:Function>
-              </ogc:Function></sld:Size>
+              </sld:Size>
             </sld:Graphic>
           </sld:PointSymbolizer>
         </sld:Rule>
         <sld:Rule>
-          <sld:Name>label</sld:Name>
-          <sld:Title>wtl_pres_ps_label</sld:Title>
+          <sld:Name>Name</sld:Name>
+          <sld:Title>d_wtl_pres_ps_label</sld:Title>
+          <sld:Abstract>Abstract</sld:Abstract>
           <ogc:Filter>
             <ogc:PropertyIsGreaterThan>
               <ogc:Function name="strLength">
                 <ogc:Function name="env">
                   <ogc:Literal>d_wtl_pres_ps_label_property_name</ogc:Literal>
-                  <ogc:Literal>prs_nam</ogc:Literal>
+                  <ogc:Literal></ogc:Literal>
                 </ogc:Function>
               </ogc:Function>
               <ogc:Literal>0</ogc:Literal>
             </ogc:PropertyIsGreaterThan>
           </ogc:Filter>
-          <sld:MaxScaleDenominator>64000.0</sld:MaxScaleDenominator>
           <sld:TextSymbolizer>
             <sld:Label>
               <ogc:Function name="property">
                 <ogc:Function name="env">
                   <ogc:Literal>d_wtl_pres_ps_label_property_name</ogc:Literal>
-                  <ogc:Literal>prs_nam</ogc:Literal>
+                  <ogc:Literal/>
                 </ogc:Function>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
               <sld:CssParameter name="font-family">Gulim</sld:CssParameter>
               <sld:CssParameter name="font-size">
-                <ogc:Function name="if_then_else">
-                  <ogc:Function name="greaterThan">
-                    <ogc:Function name="env">
-                      <ogc:Literal>d_wtl_pres_ps_label_size</ogc:Literal>
-                      <ogc:Literal>0</ogc:Literal>
-                    </ogc:Function>
-                    <ogc:Literal>0</ogc:Literal>
-                  </ogc:Function>
-                  <ogc:Function name="env">
-                    <ogc:Literal>d_wtl_pres_ps_label_size</ogc:Literal>
-                    <ogc:Literal>15</ogc:Literal>
-                  </ogc:Function>
-                  <ogc:Function name="Categorize">
-                    <ogc:Function name="env">
-                      <ogc:Literal>wms_scale_denominator</ogc:Literal>
-                    </ogc:Function>
-                    <ogc:Literal>15</ogc:Literal>
-                    <ogc:Literal>16000</ogc:Literal>
-                    <ogc:Literal>14</ogc:Literal>
-                    <ogc:Literal>34088</ogc:Literal>
-                    <ogc:Literal>13</ogc:Literal>
-                    <ogc:Literal>64000</ogc:Literal>
-                    <ogc:Literal>0</ogc:Literal>
-                  </ogc:Function>
+                <ogc:Function name="env">
+                  <ogc:Literal>d_wtl_pres_ps_label_size</ogc:Literal>
+                  <ogc:Literal>0</ogc:Literal>
                 </ogc:Function>
               </sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">
                 <ogc:Function name="env">
                   <ogc:Literal>d_wtl_pres_ps_label_font_weight</ogc:Literal>
-                  <ogc:Literal>bold</ogc:Literal>
+                  <ogc:Literal>normal</ogc:Literal>
                 </ogc:Function>
               </sld:CssParameter>
             </sld:Font>
@@ -153,7 +138,7 @@
                 </sld:AnchorPoint>
                 <sld:Displacement>
                   <sld:DisplacementX>0</sld:DisplacementX>
-                  <sld:DisplacementY>-14</sld:DisplacementY>
+                  <sld:DisplacementY>-10</sld:DisplacementY>
                 </sld:Displacement>
               </sld:PointPlacement>
             </sld:LabelPlacement>
@@ -161,7 +146,7 @@
               <sld:Radius>
                 <ogc:Function name="env">
                   <ogc:Literal>d_wtl_pres_ps_label_halo_radius</ogc:Literal>
-                  <ogc:Literal>2</ogc:Literal>
+                  <ogc:Literal>1</ogc:Literal>
                 </ogc:Function>
               </sld:Radius>
               <sld:Fill>
@@ -170,7 +155,7 @@
                     <ogc:Literal>#</ogc:Literal>
                     <ogc:Function name="env">
                       <ogc:Literal>d_wtl_pres_ps_label_halo_color</ogc:Literal>
-                      <ogc:Literal>B83A3A</ogc:Literal>
+                      <ogc:Literal>FFFFFF</ogc:Literal>
                     </ogc:Function>
                   </ogc:Function>
                 </sld:CssParameter>
@@ -182,14 +167,11 @@
                   <ogc:Literal>#</ogc:Literal>
                   <ogc:Function name="env">
                     <ogc:Literal>d_wtl_pres_ps_label_color</ogc:Literal>
-                    <ogc:Literal>FFFFFF</ogc:Literal>
+                    <ogc:Literal>1e90ff</ogc:Literal>
                   </ogc:Function>
                 </ogc:Function>
               </sld:CssParameter>
             </sld:Fill>
-            <sld:VendorOption name="priority">1500</sld:VendorOption>
-            <sld:VendorOption name="conflictResolution">false</sld:VendorOption>
-            <sld:VendorOption name="goodnessOfFit">0</sld:VendorOption>
           </sld:TextSymbolizer>
         </sld:Rule>
       </sld:FeatureTypeStyle>

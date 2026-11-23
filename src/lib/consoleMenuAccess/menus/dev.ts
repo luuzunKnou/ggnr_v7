@@ -16,7 +16,6 @@ export const DEV_CONSOLE_MENUS = [
   { id: 'sourceCodeUploader', label: '소스코드 관리' },
   { id: 'versionManager', label: '최신 소스 적용' },
   { id: 'layerManager', label: '레이어 관리' },
-  { id: 'layerCompare', label: '레이어·파일 비교' },
   { id: 'dataHistoryManager', label: '데이터 이력관리' },
   { id: 'systemVar', label: '시스템 변수' },
   { id: 'systemControl', label: '시스템 통합제어', suOnly: true },

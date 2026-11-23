@@ -280,13 +280,25 @@ export function useOutageDrawEdit({
       paintCursor()
     }
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Alt' || e.altKey === altDown) return
-      altDown = e.type === 'keydown'
+      if (e.key !== 'Alt') return
+      // 브라우저 메뉴 포커스 탈취 방지 — 미리보기·커서와 안내문구 동기 유지
+      e.preventDefault()
+      const next = e.type === 'keydown'
+      if (next === altDown) return
+      altDown = next
+      layer.changed()
+      paintCursor()
+    }
+    const clearAlt = () => {
+      if (!altDown) return
+      altDown = false
       layer.changed()
       paintCursor()
     }
     window.addEventListener('keydown', onKey)
     window.addEventListener('keyup', onKey)
+    window.addEventListener('blur', clearAlt)
+    document.addEventListener('visibilitychange', clearAlt)
     const hoverKey = map.on('pointermove', onHover as never)
 
     const onClick = async (evt: MapBrowserEvent<PointerEvent>) => {
@@ -357,6 +369,8 @@ export function useOutageDrawEdit({
       unByKey(clickKey)
       window.removeEventListener('keydown', onKey)
       window.removeEventListener('keyup', onKey)
+      window.removeEventListener('blur', clearAlt)
+      document.removeEventListener('visibilitychange', clearAlt)
       map.removeLayer(layer)
       if (el) el.style.cursor = ''
     }

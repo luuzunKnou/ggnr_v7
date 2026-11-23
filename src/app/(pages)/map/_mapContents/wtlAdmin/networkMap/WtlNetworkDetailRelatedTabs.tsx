@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
   type ReactNode,
+  type RefObject,
 } from 'react'
 import { Gauge, History, Map as MapIcon, Paperclip } from 'lucide-react'
 import GeoJSON from 'ol/format/GeoJSON'
@@ -35,12 +36,17 @@ import {
   peekWtlDefineDisplayBundle,
   type WtlDefineDisplayBundle,
 } from './wtlNetworkDefineDisplayCache'
-import { flyToWtlNetworkGeom } from './wtlNetworkMapFly'
+import { MAP_AUTO_NAV_MAX_ZOOM } from '../../../_mapComponents/config/mapDefaults'
+import {
+  extent3857FromGeoJson4326,
+  scheduleFitMapToExtent3857,
+} from '../../../_mapComponents/config/mapAutoNavigation'
 import {
   isWtlMetaPsLayer,
   WtlNetworkWimsHistoryTab,
 } from './WtlNetworkWimsHistoryTab'
 import { isRelatedChildParentKey } from '../../layerClickDetail/layerClickDetailRelatedConfig'
+import { computeRelatedChildModalBesideParent } from '../../layerClickDetail/relatedChildModalPlacement'
 import type { WtlNetworkRow } from './wtlNetworkTypes'
 
 export type WtlNetworkDetailRelatedOverlay = {
@@ -75,9 +81,69 @@ type Props = {
    * 해당 행 상세를 창 안 모달로 연다 (지도 기본·새 창 상세).
    */
   relatedChildAsModal?: boolean
+  /**
+   * 지도 기본 모달 루트 — 있으면 자식 상세를 그 좌측(공간 없으면 위)에 배치.
+   */
+  relatedModalAnchorHostRef?: RefObject<HTMLElement | null>
 }
 
 type ActiveTab = 'map' | 'attach' | 'dataHistory' | 'wimsHistory' | string
+
+const LIST_SKELETON_COLS = 4
+const LIST_SKELETON_ROWS = 5
+const LIST_SKELETON_WIDTHS = ['w-[72%]', 'w-[88%]', 'w-[60%]', 'w-[80%]'] as const
+
+/** 현황 목록 로딩 — thead+행 플레이스홀더 */
+function RelatedListSkeleton({
+  colCount = LIST_SKELETON_COLS,
+  rowCount = LIST_SKELETON_ROWS,
+}: {
+  colCount?: number
+  rowCount?: number
+}) {
+  const cols = Math.max(1, colCount)
+  const rows = Math.max(1, rowCount)
+  return (
+    <table
+      className="w-full min-w-0 table-fixed border-separate border-spacing-0 text-left text-[11px]"
+      aria-busy
+      aria-label="목록 불러오는 중"
+      title="목록 불러오는 중"
+    >
+      <thead className="sticky top-0 z-[3]">
+        <tr>
+          {Array.from({ length: cols }, (_, i) => (
+            <th
+              key={`sk-h-${i}`}
+              className="relative h-8 border-b border-t border-border bg-muted px-2 py-0 align-middle"
+            >
+              <div className="h-3 w-[70%] animate-pulse rounded bg-muted-foreground/20" />
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {Array.from({ length: rows }, (_, ri) => (
+          <tr key={`sk-r-${ri}`} className="pointer-events-none" aria-hidden>
+            {Array.from({ length: cols }, (_, ci) => (
+              <td
+                key={`sk-c-${ri}-${ci}`}
+                className="border-b border-border px-2 py-1.5 align-middle"
+              >
+                <div
+                  className={cn(
+                    'h-3 animate-pulse rounded bg-muted',
+                    LIST_SKELETON_WIDTHS[ci % LIST_SKELETON_WIDTHS.length]
+                  )}
+                />
+              </td>
+            ))}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )
+}
 
 function resolveOgcFid(item: WtlNetworkRow): number | null {
   const record = item.record
@@ -133,11 +199,16 @@ export function WtlNetworkDetailRelatedTabs({
   bodyHeightPx = 250,
   mapTabContent,
   relatedChildAsModal = false,
+  relatedModalAnchorHostRef,
 }: Props) {
   const hasMapTab = mapTabContent != null
   const mapContext = useMapContext()
   const [relatedDetail, setRelatedDetail] = useState<RelatedRow | null>(null)
   const [relatedDetailCollapsed, setRelatedDetailCollapsed] = useState(false)
+  const [relatedDetailAnchor, setRelatedDetailAnchor] = useState<{
+    top: number
+    left: number
+  } | null>(null)
   const parentKey = useMemo(() => {
     const fromLayer = String(item.layerKey ?? '')
       .trim()
@@ -182,6 +253,7 @@ export function WtlNetworkDetailRelatedTabs({
   onRelatedMapLayerRef.current = onRelatedMapLayer
 
   const [relatedTabs, setRelatedTabs] = useState<RelatedTabDef[]>([])
+  const [relatedTabsLoading, setRelatedTabsLoading] = useState(false)
   const [active, setActive] = useState<ActiveTab>('')
   const [tabSelectEpoch, setTabSelectEpoch] = useState(0)
   const [listLoading, setListLoading] = useState(false)
@@ -225,11 +297,14 @@ export function WtlNetworkDetailRelatedTabs({
 
   const focusParentOnMap = useCallback(() => {
     const map = mapContext?.mapInstanceRef?.current
-    flyToWtlNetworkGeom(
-      map,
-      item.geom,
-      () => mapContext?.applyMapViewPaddingRef?.current?.()
-    )
+    if (!map) return
+    const extent = extent3857FromGeoJson4326(item.geom)
+    if (!extent) return
+    scheduleFitMapToExtent3857(map, extent, {
+      maxZoom: MAP_AUTO_NAV_MAX_ZOOM,
+      applyMapViewPadding: () =>
+        mapContext?.applyMapViewPaddingRef?.current?.(),
+    })
   }, [item.geom, mapContext?.applyMapViewPaddingRef, mapContext?.mapInstanceRef])
 
   const handleRowClick = useCallback(
@@ -237,6 +312,17 @@ export function WtlNetworkDetailRelatedTabs({
       if (relatedChildAsModal) {
         setSelectedIdx(idx)
         setRelatedDetail(row)
+        const host = relatedModalAnchorHostRef?.current
+        if (host) {
+          const rect = host.getBoundingClientRect()
+          if (rect.width > 0 && rect.height > 0) {
+            setRelatedDetailAnchor(computeRelatedChildModalBesideParent(rect))
+          } else {
+            setRelatedDetailAnchor(null)
+          }
+        } else {
+          setRelatedDetailAnchor(null)
+        }
         return
       }
       if (selectedIdx === idx) {
@@ -262,11 +348,14 @@ export function WtlNetworkDetailRelatedTabs({
         } catch {
           /* ignore */
         }
-        flyToWtlNetworkGeom(
-          map,
-          row.geom,
-          () => mapContext?.applyMapViewPaddingRef?.current?.()
-        )
+        const extent = extent3857FromGeoJson4326(row.geom)
+        if (extent) {
+          scheduleFitMapToExtent3857(map, extent, {
+            maxZoom: MAP_AUTO_NAV_MAX_ZOOM,
+            applyMapViewPadding: () =>
+              mapContext?.applyMapViewPaddingRef?.current?.(),
+          })
+        }
       }
     },
     [
@@ -275,6 +364,7 @@ export function WtlNetworkDetailRelatedTabs({
       mapContext?.applyMapViewPaddingRef,
       mapContext?.mapInstanceRef,
       relatedChildAsModal,
+      relatedModalAnchorHostRef,
       selectedIdx,
     ]
   )
@@ -293,11 +383,13 @@ export function WtlNetworkDetailRelatedTabs({
     onRelatedMapLayerRef.current(null)
 
     if (!parentKey || !isRelatedChildParentKey(parentKey)) {
+      setRelatedTabsLoading(false)
       return () => {
         cancelled = true
       }
     }
 
+    setRelatedTabsLoading(true)
     void call('', 'POST', {
       service: 'wtlNetworkService',
       action: 'listWtlNetworkRelatedChildTables',
@@ -331,6 +423,9 @@ export function WtlNetworkDetailRelatedTabs({
           setRelatedTabs([])
           setTabSelectEpoch((n) => n + 1)
         }
+      })
+      .finally(() => {
+        if (!cancelled) setRelatedTabsLoading(false)
       })
 
     return () => {
@@ -585,7 +680,10 @@ export function WtlNetworkDetailRelatedTabs({
           </div>
         ) : active === 'wimsHistory' ? (
           <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-card">
-            <WtlNetworkWimsHistoryTab item={item} />
+            <WtlNetworkWimsHistoryTab
+              item={item}
+              relatedModalAnchorHostRef={relatedModalAnchorHostRef}
+            />
           </div>
         ) : active === 'dataHistory' ? (
           <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-card">
@@ -600,12 +698,18 @@ export function WtlNetworkDetailRelatedTabs({
           <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-card">
             <div className="flex shrink-0 items-center justify-end px-2 py-1">
               <span className="text-[11px] text-muted-foreground">
-                {listLoading ? '조회 중…' : `${listTotal}건`}
+                {listLoading || relatedTabsLoading
+                  ? '조회 중…'
+                  : `${listTotal}건`}
               </span>
             </div>
             <div className="min-h-0 flex-1 overflow-auto">
-              {listLoading ? (
-                <p className="standard-detail-loading px-2 py-3">목록 불러오는 중…</p>
+              {listLoading || relatedTabsLoading ? (
+                <RelatedListSkeleton
+                  colCount={
+                    listFields.length > 0 ? listFields.length : LIST_SKELETON_COLS
+                  }
+                />
               ) : listError ? (
                 <p className="px-2 py-3 text-xs text-destructive">{listError}</p>
               ) : !ftrIdn ? (
@@ -617,15 +721,16 @@ export function WtlNetworkDetailRelatedTabs({
               ) : listFields.length === 0 ? (
                 <p className="standard-table-empty">표시할 필드가 없습니다.</p>
               ) : (
-                <table className="standard-list-table">
-                  <thead className="standard-table-thead border-t border-border">
+                /* border-collapse+sticky 는 th 보더·배경이 깨져 tbody가 비침 → separate 고정 */
+                <table className="w-full min-w-0 table-fixed border-separate border-spacing-0 text-left text-[11px]">
+                  <thead className="sticky top-0 z-[3]">
                     <tr>
                       {listFields.map((f, i) => {
                         const key = String(f.define_field_name ?? '').trim()
                         return (
                           <th
                             key={key || `h-${i}`}
-                            className="standard-table-th standard-table-th-left"
+                            className="standard-table-th-left relative h-8 max-w-0 truncate border-b border-t border-border bg-muted px-2 py-0 align-middle text-[11px] font-semibold leading-none text-foreground/90"
                             title={getDefineFieldDisplayLabel(
                               key,
                               f.define_field_kor_name
@@ -671,7 +776,7 @@ export function WtlNetworkDetailRelatedTabs({
                             return (
                               <td
                                 key={`${row.ogcFid ?? ri}-${key || fi}`}
-                                className="standard-table-td-compact"
+                                className="standard-detail-tab-td border-b border-border"
                                 title={value}
                               >
                                 {value}
@@ -690,13 +795,16 @@ export function WtlNetworkDetailRelatedTabs({
       </div>
       {relatedChildAsModal && relatedDetail ? (
         <WtlFacilityRelatedDetailFloating
+          key={`related-${relatedDetail.ogcFid ?? selectedIdx ?? 0}-${relatedDetailAnchor?.left ?? 'd'}-${relatedDetailAnchor?.top ?? 'd'}`}
           title={activeRelatedLabel}
           row={relatedDetail}
           bundle={listBundle}
           table={activeTable}
           schema="layer"
+          anchorPosition={relatedDetailAnchor}
           onClose={() => {
             setRelatedDetail(null)
+            setRelatedDetailAnchor(null)
             setSelectedIdx(null)
           }}
           collapsed={relatedDetailCollapsed}

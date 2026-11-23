@@ -250,7 +250,10 @@ export function getEditableFieldDefinitions(params: {
         required,
         showDetail,
         showList: isTrueFlag(raw.define_field_show_list),
-        idx: parseInt(String(raw.define_field_idx ?? '999999'), 10) || 999999,
+        idx: (() => {
+          const n = parseInt(String(raw.define_field_idx ?? '999999'), 10)
+          return Number.isFinite(n) ? n : 999999
+        })(),
       };
       return meta;
     })

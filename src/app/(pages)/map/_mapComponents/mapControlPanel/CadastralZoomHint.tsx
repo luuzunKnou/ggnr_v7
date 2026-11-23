@@ -14,6 +14,7 @@ import {
   GEOM_EDIT_HINT_BELOW_SEARCH_GAP,
   useSearchBarOffset,
 } from '../../searchBarOffsetContext';
+import { useMapContext } from '../MapContext';
 
 /** GeoServer SLD 0.28mm 픽셀 기준 → OL resolution */
 const SLD_PIXEL_SIZE_M = 0.00028;
@@ -60,12 +61,18 @@ export function CadastralZoomHint({
   officialLandPriceUnavailableMessage = null,
 }: Props) {
   const { leftPx, inputBottomPx } = useSearchBarOffset();
+  const setCadastralZoomHintVisible = useMapContext()?.setCadastralZoomHintVisible;
   const [hiddenLabels, setHiddenLabels] = useState<string[]>([]);
   const unavailableText =
     officialLandPriceEnabled && officialLandPriceUnavailableMessage
       ? String(officialLandPriceUnavailableMessage).trim()
       : '';
   const show = Boolean(unavailableText) || hiddenLabels.length > 0;
+
+  useEffect(() => {
+    setCadastralZoomHintVisible?.(show);
+    return () => setCadastralZoomHintVisible?.(false);
+  }, [show, setCadastralZoomHintVisible]);
   const [placement, setPlacement] = useState<HintPlacement>({
     top: SEARCH_ROW_TOP_PX,
     left: 0,

@@ -22,7 +22,7 @@ type Props = {
 
 /**
  * 위상검증 도구모음 — 지도에서 수정·방향 반전할 관로·시설 고르기.
- * 고르는 동안 지도 식별(시설 정보창)이 같이 열리지 않게 막고, 커서를 십자로 바꾼다.
+ * 식별(속성조회)은 막지 않는다. 피처 선택과 속성 상세가 같이 열려도 된다.
  */
 export function useWtlTopoMapPick({ active, pipesOnly = false, onPick }: Props) {
   const mapContext = useMapContext()
@@ -36,14 +36,7 @@ export function useWtlTopoMapPick({ active, pipesOnly = false, onPick }: Props) 
   useEffect(() => {
     const map = mapContext?.mapInstanceRef?.current
     if (!map || !mapContext?.mapReady || !active) return
-    const suppress = mapContext?.suppressMapIdentifyUntilRef
     let seq = 0
-
-    const onViewportClick = () => {
-      if (suppress) suppress.current = Date.now() + 800
-    }
-    const viewport = map.getViewport()
-    viewport.addEventListener('click', onViewportClick, true)
 
     const target = map.getTargetElement()
     const prevCursor = target?.style.cursor ?? ''
@@ -74,8 +67,7 @@ export function useWtlTopoMapPick({ active, pipesOnly = false, onPick }: Props) 
     return () => {
       seq++
       unByKey(key)
-      viewport.removeEventListener('click', onViewportClick, true)
       if (target) target.style.cursor = prevCursor
     }
-  }, [active, mapContext?.mapReady, mapContext?.mapInstanceRef, mapContext?.suppressMapIdentifyUntilRef])
+  }, [active, mapContext?.mapReady, mapContext?.mapInstanceRef])
 }

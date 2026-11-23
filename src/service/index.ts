@@ -58,7 +58,6 @@ import * as fileConverterService from './fileConverterService';
 import * as pdfToJpgService from './pdfToJpgService';
 import * as shpToDxfService from './shpToDxfService';
 import * as layerCadExportService from './layerCadExportService';
-import * as layerCompareService from './layerCompareService';
 import * as ocrMigrationService from './ocrMigrationService';
 import * as layerRowService from './layerRowService';
 import * as layerExtraService from './layerExtraService';
@@ -165,7 +164,6 @@ export {
   pdfToJpgService,
   shpToDxfService,
   layerCadExportService,
-  layerCompareService,
   ocrMigrationService,
   layerRowService,
   layerExtraService,

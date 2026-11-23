@@ -12,6 +12,7 @@ import type {
   IdentifyPopupState,
 } from '../../_mapComponents/hooks/useFeatureIdentify'
 import { extractDefineRowKeyValue } from '../../_mapComponents/standard/defineLayerRowUtils'
+import { MAP_CENTER_ANIMATE_EVENT } from '../../_mapComponents/config/mapAutoNavigation'
 import {
   LAYER_CLICK_DETAIL_MATCH_CLOSE_EVENT,
   type LayerClickDetailMatchClosePayload,
@@ -148,7 +149,7 @@ export function useLayerClickDetail(opts?: {
       setHits(nextHits)
       // 1건 → 바로 상세, 2건 이상 → 목록(선택 null)
       setSelectedKey(nextHits.length === 1 ? nextHits[0]!.key : null)
-      // 다중 선택 목록이면 최소화 해제(목록이 바로 보이게)
+      // 다중이면 펼침 — 최소화 중이어도 새 FeatureIdentify 목록이 바로 보이게
       if (nextHits.length > 1) setMinimized(false)
       if (
         screenAnchor &&
@@ -192,6 +193,21 @@ export function useLayerClickDetail(opts?: {
     )
   }, [])
 
+  /** 고정창(kept) hit 속성 — 재조회 결과 반영 */
+  const patchKeepHit = useCallback((modalKey: string, hit: LayerClickHit) => {
+    setKeptModals((prev) =>
+      prev.map((m) => {
+        if (m.key !== modalKey) return m
+        return {
+          ...m,
+          hits: m.hits.map((h) =>
+            h.key === hit.key ? { ...h, ...hit, data: hit.data } : h
+          ),
+        }
+      })
+    )
+  }, [])
+
   /** origin = 기존(기본) 모달 좌상단 — 새 창은 그보다 약간 오른쪽 */
   const detachKeep = useCallback(
     (
@@ -206,9 +222,8 @@ export function useLayerClickDetail(opts?: {
       if (!cur) return
       const facilityKey = cur.key
       setKeptModals((prev) => {
-        const existing = prev.find((m) =>
-          m.hits.some((h) => h.key === facilityKey)
-        )
+        // 같은 시설 고정창이 있으면 앞으로 (형제 행은 새 창)
+        const existing = prev.find((m) => m.selectedKey === facilityKey)
         if (existing) {
           return prev.map((m) =>
             m.key === existing.key
@@ -229,10 +244,8 @@ export function useLayerClickDetail(opts?: {
           ...prev,
           {
             key: nextKeepModalKey(),
-            hits:
-              curHits.length > 0
-                ? curHits.map((h) => ({ ...h, data: { ...h.data } }))
-                : [cur],
+            // 고정창은 해당 시설 1건만 — 다중 목록 전체를 넣으면 다른 행 핀이 덮어쓰기 됨
+            hits: [{ ...cur, data: { ...cur.data } }],
             selectedKey: cur.key,
             anchor: base
               ? { left: base.left + offsetX, top: base.top + offsetY }
@@ -345,6 +358,18 @@ export function useLayerClickDetail(opts?: {
       window.removeEventListener(LAYER_CLICK_DETAIL_MATCH_CLOSE_EVENT, onMatchClose)
   }, [closeMatchingHits])
 
+  /** 지도 중심 이동 시 다중 레이어 선택 목록만 닫음 (상세·고정창 유지) */
+  useEffect(() => {
+    const onCenterAnimate = () => {
+      if (hitsRef.current.length > 1 && selectedKeyRef.current == null) {
+        close()
+      }
+    }
+    window.addEventListener(MAP_CENTER_ANIMATE_EVENT, onCenterAnimate)
+    return () =>
+      window.removeEventListener(MAP_CENTER_ANIMATE_EVENT, onCenterAnimate)
+  }, [close])
+
   const open = hits.length > 0 && !forceClosed
 
   return {
@@ -361,6 +386,7 @@ export function useLayerClickDetail(opts?: {
     selectHit,
     backToList,
     patchSelectedHit,
+    patchKeepHit,
     detachKeep,
     closeKeep,
     setKeepMinimized,

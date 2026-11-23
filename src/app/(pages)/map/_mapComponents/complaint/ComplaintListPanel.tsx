@@ -315,7 +315,13 @@ export default function ComplaintListPanel({
         queryTablesRef.current = [];
       }
     } catch (e) {
-      console.error('민원 목록 조회 실패:', e);
+      const msg =
+        e instanceof Error
+          ? e.message
+          : e && typeof e === 'object'
+            ? JSON.stringify(e)
+            : String(e);
+      console.error(`민원 목록 조회 실패: ${msg}`);
       setComplaints([]);
       setWaterRows([]);
       setTotal(0);

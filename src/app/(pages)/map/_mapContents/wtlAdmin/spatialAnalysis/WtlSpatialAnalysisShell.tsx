@@ -4,11 +4,13 @@ import { useEffect, useState } from 'react'
 import { X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { MapSideListPanel } from '../../../_mapComponents/MapSideListPanel'
+import { useMapContext } from '../../../_mapComponents/MapContext'
 import { WtlLeakPanel } from './leak/WtlLeakPanel'
 import { WtlOutagePanel } from './outage/WtlOutagePanel'
 import { WtlSupplyPathPanel } from './supplyPath/WtlSupplyPathPanel'
 import { WtlTopologyPanel } from './topology/WtlTopologyPanel'
 import type { WtlOutageHandoffSeed } from './wtlSpatialHandoff'
+import { spatialIdentifyTablesForTab } from './wtlSpatialIdentifyTables'
 import { WTL_SPATIAL_TABS, type WtlSpatialTab } from './wtlSpatialSample'
 
 const LIST_DEFAULT = 480
@@ -26,6 +28,7 @@ type Props = {
 }
 
 export function WtlSpatialAnalysisShell({ leftOffsetPx, onTotalWidthChange, onClose }: Props) {
+  const mapContext = useMapContext()
   const [listWidth, setListWidth] = useState(LIST_DEFAULT)
   const [tab, setTab] = useState<WtlSpatialTab>('단수구역')
   const [outageSeed, setOutageSeed] = useState<WtlOutageHandoffSeed | null>(null)
@@ -44,6 +47,14 @@ export function WtlSpatialAnalysisShell({ leftOffsetPx, onTotalWidthChange, onCl
   useEffect(() => {
     return () => onTotalWidthChange(0)
   }, [onTotalWidthChange])
+
+  /** 탭이 켠 레이어를 속성조회 tables에 합침 — 지하시설물 범례 없이도 검색 */
+  useEffect(() => {
+    const setTables = mapContext?.setSpatialIdentifyTableNames
+    if (!setTables) return
+    setTables(new Set(spatialIdentifyTablesForTab(tab)))
+    return () => setTables(new Set())
+  }, [tab, mapContext?.setSpatialIdentifyTableNames])
 
   return (
     <div className="pointer-events-auto flex shrink-0">

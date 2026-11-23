@@ -12,6 +12,7 @@ import ImageWMS from 'ol/source/ImageWMS'
 import VectorSource from 'ol/source/Vector'
 import { Circle, Fill, Icon, Stroke, Style, Text } from 'ol/style'
 import { call } from '@/lib/api'
+import { geoserverWmsImageLoadFunction } from '@/lib/geoserverWmsImageLoad'
 import { getGeoServerBase, getGeoServerPublicBase } from '@/lib/geoserverUrl'
 import { resolveSymbolPreviewUrl } from '@/lib/geoserverStyleUtils'
 import {
@@ -51,7 +52,8 @@ const SA200_LAYER_Z = 935
 
 /** 누수지점 선택 전 배경 관로 선 굵기(px) — SLD env 값. 기본 SLD는 상수관로 1px라 얇다 */
 const BASE_PIPE_WIDTH = 3
-const BASE_SPLY_WIDTH = 2.5
+/** 벡터 폴백용 급수관 굵기 */
+const BASE_SPLY_WIDTH = 2
 /** 결과 구간 클릭용 투명 선(표시는 pipe-all 한 피처가 담당) */
 const PIPE_HIT_STYLE = new Style({ stroke: new Stroke({ color: 'rgba(0, 0, 0, 0.01)', width: 12 }) })
 /** 스냅된 관로 강조 선 굵기(px) */
@@ -143,8 +145,8 @@ export function useWtlLeakMapLayer({
     // 분할 없으면 부모+급수, 있으면 분할+급수(부모 제외). 조회 전엔 부모로 두고 갱신
     const initialPipeWms = {
       LAYERS: 'wtl_pipe_lm,wtl_sply_ls',
-      STYLES: 'wtl_pipe_lm_nolabel,wtl_sply_ls_nolabel',
-      ENV: `wtl_pipe_lm_stroke_width:${BASE_PIPE_WIDTH};wtl_sply_ls_stroke_width:${BASE_SPLY_WIDTH}`,
+      STYLES: 'wtl_pipe_lm,wtl_sply_ls',
+      ENV: `wtl_pipe_lm_stroke_width:${BASE_PIPE_WIDTH};wtl_pipe_lm_label_property_name:;wtl_sply_ls_label_property_name:`,
     }
     const wms = new ImageLayer({
       source: new ImageWMS({
@@ -157,6 +159,8 @@ export function useWtlLeakMapLayer({
         },
         serverType: 'geoserver',
         ratio: 1.5,
+        // 분할 관로 라벨 제거 SLD_BODY는 POST
+        imageLoadFunction: geoserverWmsImageLoadFunction,
       }),
       zIndex: 880,
     })
@@ -167,19 +171,25 @@ export function useWtlLeakMapLayer({
     let pipeWmsCancelled = false
     void fetchWtlAnalysisPipeWmsParams({
       pipeWidth: BASE_PIPE_WIDTH,
-      splyWidth: BASE_SPLY_WIDTH,
     }).then((pipeParams) => {
       if (pipeWmsCancelled) return
       const source = wms.getSource()
       if (!source) return
-      source.updateParams({ ...source.getParams(), ...pipeParams })
+      const next = { ...source.getParams(), ...pipeParams }
+      if (pipeParams.SLD_BODY) {
+        next.STYLES = ''
+      } else {
+        delete next.SLD_BODY
+      }
+      source.updateParams(next)
     })
 
-    // vector fallback — WMS 미가용 시 DB에서 직접 관로 표시
+    // vector fallback — WMS와 겹치면 고정 굵기로 번지므로 기본 숨김
     const pipeSource = new VectorSource()
     const pipeLayer = new VectorLayer({
       source: pipeSource,
       zIndex: 879,
+      visible: false,
       style: (feature) => {
         const table = String(feature.get('pipeTable') ?? '')
         if (table === 'wtl_sply_ls') {
@@ -364,6 +374,10 @@ export function useWtlLeakMapLayer({
 
     const onClick = async (evt: MapBrowserEvent<PointerEvent>) => {
       if (!pickRef.current || busyRef.current) return
+      // Ctrl/Meta+클릭은 속성조회 우선 — 누수 선택·분석을 가로채지 않음
+      const oe = evt.originalEvent as MouseEvent | PointerEvent | undefined
+      if (oe?.ctrlKey || oe?.metaKey) return
+
       // 제수변 피처 클릭이면 선택만
       const hit = map.forEachFeatureAtPixel(evt.pixel, (f) => (f.get('role') === 'pipe-all' ? undefined : f), {
         layerFilter: (l) => l === layer,
@@ -373,7 +387,7 @@ export function useWtlLeakMapLayer({
         const gate = (hit.get('gate') as WtlLeakGate | undefined) ?? null
         if (gate) onSelectRef.current(gate)
         else if (gateId) onSelectRef.current({ id: gateId, name: gateId, diameter: '—', address: '—', point: [0, 0] })
-        evt.stopPropagation()
+        // stopPropagation 하지 않음 — 제수변 선택과 속성조회가 같이 동작
         return
       }
 
@@ -386,16 +400,18 @@ export function useWtlLeakMapLayer({
       }
 
       if (!analyzeRef.current) return
+      // 관로 스냅이 있을 때만 분석 — 빈 곳·다른 레이어 클릭은 속성조회로 넘김
+      if (!snapPoint) return
+      evt.stopPropagation()
       busyRef.current = true
       onBusyRef.current?.(true)
       // 서버는 3857 클릭 좌표를 받는다
-      const [clickX, clickY] = viewToMercator(snapPoint ?? evt.coordinate, viewProj)
+      const [clickX, clickY] = viewToMercator(snapPoint, viewProj)
       try {
         const res = await call('', 'POST', {
           service: 'wtlLeakService',
           action: 'analyzeWtlLeak',
           params: {
-            // 스냅 표시 중이면 그 점(관로 위), 아니면 클릭 지점
             x: clickX,
             y: clickY,
             tolerance: 30,
@@ -410,7 +426,6 @@ export function useWtlLeakMapLayer({
           return
         }
         onSnapRef.current(body.result.snap, body.result)
-        evt.stopPropagation()
       } catch {
         onErrRef.current('누수 분석 요청에 실패했습니다.')
       } finally {
@@ -438,6 +453,7 @@ export function useWtlLeakMapLayer({
       valveLayer.setVisible(showValves)
       if (!showValves) valveSourceRef.current?.clear()
       try {
+        // 관로 벡터는 스냅용으로만 채우고 레이어는 숨김(WMS와 고정 굵기 중복 번짐 방지)
         const [pipeRes, valveRes] = await Promise.all([
           call('', 'POST', {
             service: 'wtlOutageService',

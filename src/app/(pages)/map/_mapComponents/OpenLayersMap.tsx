@@ -1774,11 +1774,24 @@ export default function OpenLayersMap({
     roadNetworkPointPickActive ||
     roadFrontageMarkerPointPickActive ||
     (mapContext?.mapDrawInputSuspended ?? false) ||
+    (mapContext?.mapFeatureIdentifyDisabled ?? false) ||
     activeControls.some((id) => MEASUREMENT_IDS.includes(id));
+  /** 범례 visible + 공간분석 탭이 켠 레이어(범례 미체크여도 속성조회) */
+  const identifyLayerNames = useMemo(() => {
+    const extra = mapContext?.spatialIdentifyTableNames;
+    if (!extra || extra.size === 0) return visibleLayerNames;
+    const next = new Set(visibleLayerNames);
+    for (const name of extra) {
+      const t = String(name ?? '').trim();
+      if (t) next.add(t);
+    }
+    return next;
+  }, [visibleLayerNames, mapContext?.spatialIdentifyTableNames]);
+
   const { popupState, popupElRef, closePopup } = useFeatureIdentify(
     mapInstanceRef.current,
     mapReady,
-    visibleLayerNames,
+    identifyLayerNames,
     identifyDisabled,
     serviceWmsCqlByLayer,
     mapContext?.suppressMapIdentifyUntilRef ?? null,
@@ -1811,6 +1824,9 @@ export default function OpenLayersMap({
   const layerClickDetail = useLayerClickDetail();
   const openLayerClickDetailRef = useRef(layerClickDetail.openFromIdentify);
   openLayerClickDetailRef.current = layerClickDetail.openFromIdentify;
+  /** 그리기 시작 시 기본 모달만 닫기(고정창 kept 유지) */
+  const closeLayerClickPrimaryRef = useRef(layerClickDetail.close);
+  closeLayerClickPrimaryRef.current = layerClickDetail.close;
   /** 시설·설비 다건 → 기본 모달 선택 시 getFacilityAtPoint용 클릭 좌표 */
   const layerClickIdentifyCoordRef = useRef<[number, number] | null>(null);
   const [viewportSize, setViewportSize] = useState({ w: 1280, h: 720 });
@@ -1866,127 +1882,120 @@ export default function OpenLayersMap({
     [router]
   );
 
-  // 지도 우클릭 → 주소정보 패널. 같은 필지(하이라이트 도형) 안을 다시 우클릭하면 패널만 닫기.
+  // 지도 우클릭 → 주소 조회 완료(성공·실패) 후 플로팅 메뉴. «상세보기»에서만 주소정보 패널을 연다.
+  const rightClickFetchSeqRef = useRef(0);
   const handleContextMenu = useCallback(
-    (coordinate: [number, number], viewProjection: string) => {
-      const setAddressInfoDetail = mapContext?.setAddressInfoDetail;
-      if (!setAddressInfoDetail) return;
+    (payload: {
+      coordinate: [number, number];
+      viewProjection: string;
+      screenX: number;
+      screenY: number;
+    }) => {
+      const setMapRightClickMenu = mapContext?.setMapRightClickMenu;
+      if (!setMapRightClickMenu) return;
 
-      if (addressInfoDetail !== null) {
-        const coord3857 = transformCoordinate(coordinate, viewProjection, 'EPSG:3857');
-        const geomRef = mapContext?.addressParcelGeometryRef?.current as
-          | { intersectsCoordinate?(coord: number[]): boolean; containsXY?(x: number, y: number): boolean }
-          | null;
-        const inside =
-          coord3857 &&
-          geomRef &&
-          (typeof geomRef.intersectsCoordinate === 'function'
-            ? geomRef.intersectsCoordinate(coord3857)
-            : typeof geomRef.containsXY === 'function'
-              ? geomRef.containsXY(coord3857[0], coord3857[1])
-              : false);
-        if (inside) {
-          setAddressInfoDetail(null);
-          return;
-        }
-      }
-
+      const { coordinate, viewProjection, screenX, screenY } = payload;
       const wgs84 = transformCoordinate(coordinate, viewProjection, 'EPSG:4326');
       if (!wgs84) return;
       if (mapContext?.addressParcelSeedGeom4326Ref) {
         mapContext.addressParcelSeedGeom4326Ref.current = null;
       }
 
-      // 지적(jijuk) PNU를 먼저 조회한 뒤 주소정보 패널을 연다.
+      const fetchSeq = ++rightClickFetchSeqRef.current;
+      setMapRightClickMenu(null);
+      const prevCursor = document.body.style.cursor;
+      document.body.style.cursor = 'wait';
+
       void (async () => {
         let pnu: string | null = null;
         let jibun: string | null = null;
+        let road: string | null = null;
+        let buildingName: string | null = null;
         let geomSeedAt: number | undefined;
-        const coord3857 = transformCoordinate(coordinate, viewProjection, 'EPSG:3857');
-        if (coord3857) {
-          const [x, y] = coord3857;
-          try {
-            const res = await call('', 'POST', {
-              service: 'standardService',
-              action: 'getJijukParcelAtPoint',
-              params: { x, y },
-            });
-            const payload = (res?.data ?? res) as {
-              results?: { tableName?: string; features?: { data?: Record<string, unknown> }[] }[];
-            };
-            const results = Array.isArray(payload?.results) ? payload.results : [];
-            const jijukResult = results.find((r) => String(r?.tableName ?? '').trim() === 'jijuk');
-            const row = jijukResult?.features?.[0]?.data;
-            const rowPnu = row?.pnu != null ? String(row.pnu).trim() : '';
-            if (rowPnu) pnu = rowPnu;
-            const seedGeom = parseParcelGeomField(row?.geom);
-            if (seedGeom && mapContext?.addressParcelSeedGeom4326Ref) {
-              mapContext.addressParcelSeedGeom4326Ref.current = seedGeom;
-              geomSeedAt = Date.now();
+        let addressError = false;
+
+        try {
+          const coord3857 = transformCoordinate(coordinate, viewProjection, 'EPSG:3857');
+          if (coord3857) {
+            const [x, y] = coord3857;
+            try {
+              const res = await call('', 'POST', {
+                service: 'standardService',
+                action: 'getJijukParcelAtPoint',
+                params: { x, y },
+              });
+              const payloadRes = (res?.data ?? res) as {
+                results?: { tableName?: string; features?: { data?: Record<string, unknown> }[] }[];
+              };
+              const results = Array.isArray(payloadRes?.results) ? payloadRes.results : [];
+              const jijukResult = results.find((r) => String(r?.tableName ?? '').trim() === 'jijuk');
+              const row = jijukResult?.features?.[0]?.data;
+              const rowPnu = row?.pnu != null ? String(row.pnu).trim() : '';
+              if (rowPnu) pnu = rowPnu;
+              const seedGeom = parseParcelGeomField(row?.geom);
+              if (seedGeom && mapContext?.addressParcelSeedGeom4326Ref) {
+                mapContext.addressParcelSeedGeom4326Ref.current = seedGeom;
+                geomSeedAt = Date.now();
+              }
+              const parcelJibun = row?.jibun != null ? String(row.jibun).trim() : '';
+              const parcelJibunLooksFull =
+                parcelJibun.length >= 8 &&
+                /(도|특별|광역|자치)/u.test(parcelJibun) &&
+                /(읍|면|동|리)/u.test(parcelJibun);
+              if (parcelJibunLooksFull) jibun = parcelJibun;
+            } catch {
+              // 지적 조회 실패 시 브이월드 주소 조회로 이어감
             }
-            const parcelJibun = row?.jibun != null ? String(row.jibun).trim() : '';
-            // 짧은 지번(예: 1-3잡)은 쓰지 않고, 행정구역이 포함된 경우만 채운다.
-            const parcelJibunLooksFull =
-              parcelJibun.length >= 8 &&
-              /(도|특별|광역|자치)/u.test(parcelJibun) &&
-              /(읍|면|동|리)/u.test(parcelJibun);
-            if (parcelJibunLooksFull) jibun = parcelJibun;
-          } catch {
-            // 지적 조회 실패 시 브이월드 주소 조회로 이어감
           }
+
+          const [lon, lat] = wgs84;
+          const apiKey = mapContext?.vworldApiKey?.trim();
+          if (!apiKey) {
+            addressError = true;
+          } else {
+            try {
+              const result = await getAddressFromCoord(lon, lat, { apiKey });
+              let roadText = result?.road?.trim() || '';
+              if (!roadText) {
+                const roadOnly = await getAddressFromCoord(lon, lat, { apiKey, type: 'ROAD' });
+                roadText = roadOnly?.road?.trim() || '';
+              }
+              if (!roadText) {
+                const jibunHint = result?.jibun?.trim() || jibun || '';
+                if (jibunHint) {
+                  roadText =
+                    (await findRoadAddressByJibun(jibunHint, { apiKey, lon, lat }))?.trim() || '';
+                }
+              }
+              pnu = pnu ?? (result?.pnu?.trim() || null);
+              jibun = result?.jibun?.trim() || jibun || null;
+              road = roadText || null;
+              buildingName = result?.buildingName?.trim() || null;
+            } catch {
+              addressError = true;
+            }
+          }
+        } finally {
+          document.body.style.cursor = prevCursor;
         }
 
-        setAddressInfoDetail({
+        if (fetchSeq !== rightClickFetchSeqRef.current) return;
+
+        setMapRightClickMenu({
           coordinate,
           viewProjection,
-          loading: true,
+          screenX,
+          screenY,
+          addressError,
           pnu,
           jibun,
-          road: null,
+          road,
+          buildingName,
           ...(geomSeedAt != null ? { geomSeedAt } : {}),
         });
-
-        const [lon, lat] = wgs84;
-        const apiKey = mapContext?.vworldApiKey?.trim();
-        if (!apiKey) {
-          setAddressInfoDetail((prev) =>
-            prev ? { ...prev, loading: false, jibun: prev.jibun ?? null, road: null } : null
-          );
-          return;
-        }
-        try {
-          const result = await getAddressFromCoord(lon, lat, { apiKey });
-          let roadText = result?.road?.trim() || '';
-          if (!roadText) {
-            const roadOnly = await getAddressFromCoord(lon, lat, { apiKey, type: 'ROAD' });
-            roadText = roadOnly?.road?.trim() || '';
-          }
-          if (!roadText) {
-            const jibunHint = result?.jibun?.trim() || '';
-            if (jibunHint) {
-              roadText =
-                (await findRoadAddressByJibun(jibunHint, { apiKey, lon, lat }))?.trim() || '';
-            }
-          }
-          setAddressInfoDetail((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  loading: false,
-                  // 지적 PNU 우선, 없을 때만 브이월드 값 사용
-                  pnu: prev.pnu ?? (result?.pnu?.trim() || null),
-                  jibun: result?.jibun?.trim() || prev.jibun || null,
-                  road: roadText || prev.road || null,
-                  buildingName: result?.buildingName?.trim() || prev.buildingName || null,
-                }
-              : null
-          );
-        } catch {
-          setAddressInfoDetail((prev) => (prev ? { ...prev, loading: false } : null));
-        }
       })();
     },
-    [mapContext?.setAddressInfoDetail, mapContext?.vworldApiKey, addressInfoDetail]
+    [mapContext?.setMapRightClickMenu, mapContext?.vworldApiKey, mapContext?.addressParcelSeedGeom4326Ref]
   );
   useMapContextMenu(mapInstanceRef.current, mapReady, handleContextMenu);
 
@@ -3185,6 +3194,22 @@ export default function OpenLayersMap({
     closeResetMeasurementsPanel,
   ]);
 
+  // 지도 그리기 시작 시 — 고정창(kept) 제외하고 기본·다중선택 모달 닫기
+  useEffect(() => {
+    const drawingActive =
+      !!spatialDrawRequest ||
+      !!layerRowGeomEdit ||
+      (mapContext?.mapDrawInputSuspended ?? false) ||
+      activeControls.some((id) => MEASUREMENT_IDS.includes(id));
+    if (!drawingActive) return;
+    closeLayerClickPrimaryRef.current();
+  }, [
+    spatialDrawRequest,
+    layerRowGeomEdit,
+    mapContext?.mapDrawInputSuspended,
+    activeControls,
+  ]);
+
   // 인터랙션 관리 (draw, snap 등)
   useMapInteractions(mapInstanceRef.current, activeInteractions);
 
@@ -4209,7 +4234,9 @@ export default function OpenLayersMap({
                 }}
                 onBackToList={layerClickDetail.backToList}
                 onClose={layerClickDetail.close}
-                onDetach={(origin) => layerClickDetail.detachKeep(origin)}
+                onDetach={(origin, hitKey) =>
+                  layerClickDetail.detachKeep(origin, hitKey)
+                }
                 onSelectedUpdated={(hit) => {
                   layerClickDetail.patchSelectedHit(hit)
                 }}
@@ -4249,6 +4276,9 @@ export default function OpenLayersMap({
                     layerClickDetail.backKeepToList(kept.key)
                   }
                   onClose={() => layerClickDetail.closeKeep(kept.key)}
+                  onSelectedUpdated={(hit) => {
+                    layerClickDetail.patchKeepHit(kept.key, hit)
+                  }}
                 />
               )
             })}

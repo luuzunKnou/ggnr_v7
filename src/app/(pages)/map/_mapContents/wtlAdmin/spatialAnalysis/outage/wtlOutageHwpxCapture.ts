@@ -118,7 +118,7 @@ function composite(map: Map): string | null {
  */
 export async function captureOutageZoneImage(
   polygons: [number, number][][][],
-  backgroundId = 'aerial-vworld'
+  backgroundId = 'general-vworld'
 ): Promise<string | null> {
   const polys = polygons
     .filter((p) => (p[0]?.length ?? 0) >= 3)

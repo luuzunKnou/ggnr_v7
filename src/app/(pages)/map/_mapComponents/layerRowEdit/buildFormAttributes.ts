@@ -63,7 +63,10 @@ export function buildFormAttributesFromDefineFields(
         type: String(raw.define_field_type ?? "text").trim().toLowerCase() || "text",
         readOnly: isTrueFlag(raw.define_field_read_only),
         required: isTrueFlag(raw.define_field_is_required),
-        idx: parseInt(String(raw.define_field_idx ?? "999999"), 10) || 999999,
+        idx: (() => {
+          const n = parseInt(String(raw.define_field_idx ?? "999999"), 10)
+          return Number.isFinite(n) ? n : 999999
+        })(),
       };
     })
     .filter(
