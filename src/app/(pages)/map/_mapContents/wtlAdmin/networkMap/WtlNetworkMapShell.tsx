@@ -1900,6 +1900,7 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
         supplyBlock,
         effectiveAreaWkts5181.join('|'),
         listSlots.map((slot) => slot.key).join('|'),
+        String(listPageSize),
       ].join('\u0001')
       if (listRequestKeyRef.current === requestKey) return 'skip'
       listRequestKeyRef.current = requestKey
@@ -1914,37 +1915,79 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
       listAbortRef.current = ac
       setListLoading(true)
       setListError('')
-      // 조회 중 기존 rows 유지 — 빈 테이블로 깜빡이지 않음. 완료 시 일괄 교체
-      const nextBoxData: Record<string, LayerBoxData> = {}
-      let failed = 0
-      await Promise.all(
-        listSlots.map(async (slot) => {
-          try {
-            const data = await fetchBoxPage(slot, 1, viewBbox, ac.signal)
-            if (ac.signal.aborted || listAbortRef.current !== ac) return
-            if (data.total <= 0 && data.rows.length === 0) return
-            nextBoxData[slot.key] = data
-          } catch (e) {
-            if (ac.signal.aborted || listAbortRef.current !== ac) return
-            if (e instanceof DOMException && e.name === 'AbortError') return
-            failed += 1
-            if (failed === 1) {
-              setListError(e instanceof Error ? e.message : '목록 조회 실패')
-            }
+      // 슬롯 N회 → 1회 배치. 조회 중 기존 rows 유지, 완료 시 일괄 교체
+      try {
+        const res = await call(
+          '',
+          'POST',
+          {
+            service: 'wtlNetworkService',
+            action: 'getWtlNetworkListBatch',
+            params: {
+              slots: listSlots.map((slot) => ({
+                key: slot.key,
+                layerKey: slot.layerKey,
+                mapSources: slot.mapSources,
+              })),
+              bbox: viewBbox ?? null,
+              keyword,
+              yearFrom: year.from,
+              yearTo: year.to,
+              diameterFrom: diameter.from,
+              diameterTo: diameter.to,
+              materials: [...materials],
+              emdCode: emdSelected || null,
+              riCode: riSelected || null,
+              supplyBlock: supplyBlock || null,
+              areaWkts5181:
+                effectiveAreaWkts5181.length === 0 ? null : effectiveAreaWkts5181,
+              page: 1,
+              pageSize: listPageSize,
+            },
+          },
+          { signal: ac.signal }
+        )
+        if (ac.signal.aborted || listAbortRef.current !== ac) {
+          if (listRequestKeyRef.current === requestKey) listRequestKeyRef.current = ''
+          return 'aborted'
+        }
+        const data = res?.data ?? res
+        const rawBoxes =
+          data?.boxes && typeof data.boxes === 'object'
+            ? (data.boxes as Record<string, LayerBoxData>)
+            : {}
+        const nextBoxData: Record<string, LayerBoxData> = {}
+        for (const slot of listSlots) {
+          const box = rawBoxes[slot.key]
+          if (!box) continue
+          const rows = Array.isArray(box.rows) ? (box.rows as WtlNetworkRow[]) : []
+          const total = Number(box.total ?? rows.length) || 0
+          if (total <= 0 && rows.length === 0) continue
+          nextBoxData[slot.key] = {
+            rows,
+            total,
+            page: Number(box.page ?? 1) || 1,
           }
-        })
-      )
-      if (ac.signal.aborted || listAbortRef.current !== ac) {
-        if (listRequestKeyRef.current === requestKey) listRequestKeyRef.current = ''
-        return 'aborted'
+        }
+        setBoxData(nextBoxData)
+        setListLoading(false)
+        return 'done'
+      } catch (e) {
+        if (ac.signal.aborted || listAbortRef.current !== ac) {
+          if (listRequestKeyRef.current === requestKey) listRequestKeyRef.current = ''
+          return 'aborted'
+        }
+        if (e instanceof DOMException && e.name === 'AbortError') {
+          if (listRequestKeyRef.current === requestKey) listRequestKeyRef.current = ''
+          return 'aborted'
+        }
+        setListError(e instanceof Error ? e.message : '목록 조회 실패')
+        setListLoading(false)
+        return 'done'
       }
-      setBoxData(nextBoxData)
-      setListLoading(false)
-      return 'done'
     },
     [
       listSlots,
-      fetchBoxPage,
       cancelListFetch,
       keyword,
       yearFrom,
@@ -1960,8 +2003,13 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
       riSelected,
       supplyBlock,
       effectiveAreaWkts5181,
+      listPageSize,
     ]
   )
+
+  /** fetchList 최신본 — schedule 콜백 identity 고정(마운트 시 effect 중복 방지) */
+  const fetchListRef = useRef(fetchList)
+  fetchListRef.current = fetchList
 
   const scheduleListFetch = useCallback(() => {
     if (moveFetchTimerRef.current != null) {
@@ -1974,15 +2022,16 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
       if (availableLayerKeysRef.current == null) return
       const inView = onlyInViewRef.current
       const bbox = bboxRef.current
+      // 화면 내: 지도 범위 확정 전엔 조회하지 않음 (extent 도착 시 다시 예약)
       if (inView && !bbox) return
       // 시설목록·통계를 직렬로 두지 않음 — bbox 확정 즉시 통계도 함께 시작
       if (inView && bbox) setStatsBbox(bbox)
       void (async () => {
-        const result = await fetchList(inView ? bbox : null)
+        const result = await fetchListRef.current(inView ? bbox : null)
         if (result === 'skip') setListLoading(false)
       })()
     }, 450)
-  }, [fetchList])
+  }, [])
 
   const goBoxPage = useCallback(
     async (slot: LayerBoxSlot, page: number) => {
@@ -2010,9 +2059,58 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
     [boxData, fetchBoxPage, cancelListFetch, listPageSize]
   )
 
+  /** 필터·켜진 레이어 슬롯 — 이 값이 바뀔 때만 재조회(콜백 identity와 분리) */
+  const listQuerySig = useMemo(() => {
+    const year = narrowedRange(yearFrom, yearTo, meta.yearMin, meta.yearMax)
+    const diameter = narrowedRange(
+      diameterFrom,
+      diameterTo,
+      meta.diameterMin,
+      meta.diameterMax
+    )
+    return [
+      keyword,
+      year.from ?? '',
+      year.to ?? '',
+      diameter.from ?? '',
+      diameter.to ?? '',
+      [...materials].sort().join(','),
+      emdSelected,
+      riSelected,
+      supplyBlock,
+      effectiveAreaWkts5181.join('|'),
+      listSlots.map((slot) => slot.key).join('|'),
+      String(listPageSize),
+    ].join('\u0001')
+  }, [
+    keyword,
+    yearFrom,
+    yearTo,
+    diameterFrom,
+    diameterTo,
+    meta.yearMin,
+    meta.yearMax,
+    meta.diameterMin,
+    meta.diameterMax,
+    materials,
+    emdSelected,
+    riSelected,
+    supplyBlock,
+    effectiveAreaWkts5181,
+    listSlots,
+    listPageSize,
+  ])
+
+  /**
+   * 가용 레이어·화면내·검색조건 준비 시 예약.
+   * scheduleListFetch identity는 고정 → 마운트 중 메타/콜백 재생성으로 이중 조회하지 않음.
+   * 화면 내는 bbox 있을 때만(없으면 onExtentChange가 이어서 예약).
+   */
   useEffect(() => {
+    if (availableLayerKeys == null) return
+    if (onlyInView && !bboxRef.current) return
     scheduleListFetch()
-  }, [scheduleListFetch, availableLayerKeys, onlyInView])
+  }, [availableLayerKeys, onlyInView, listQuerySig, scheduleListFetch])
 
   useEffect(() => () => cancelListFetch(), [cancelListFetch])
 

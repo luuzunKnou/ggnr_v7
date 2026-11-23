@@ -144,6 +144,9 @@ function parseMapSourceIds(raw: unknown): WtlNetMapSourceId[] {
  * DB에 geom 데이터가 있는 테이블 우선, 없으면 테이블만 있는 것.
  * (저수조: wtl_tank_ps / wtl_rsrv_ps)
  */
+/** 출처×논리테이블 → 물리 테이블 (프로세스 수명 캐시) */
+const physicalTableBySourceCache = new Map<string, string | null>();
+
 async function resolvePhysicalTableInSource(
   source: WtlNetMapSourceDef,
   baseTable: string
@@ -152,6 +155,10 @@ async function resolvePhysicalTableInSource(
     .trim()
     .toLowerCase();
   if (!base) return null;
+  const cacheKey = `${source.id}\0${base}`;
+  if (physicalTableBySourceCache.has(cacheKey)) {
+    return physicalTableBySourceCache.get(cacheKey)!;
+  }
   const remapped = String(source.remapTable(base) ?? '')
     .trim()
     .toLowerCase();
@@ -164,16 +171,29 @@ async function resolvePhysicalTableInSource(
         .filter(Boolean)
     ),
   ];
-  if (ordered.length === 0) return null;
+  if (ordered.length === 0) {
+    physicalTableBySourceCache.set(cacheKey, null);
+    return null;
+  }
   const existing = await existingLayerTables(ordered);
-  if (existing.size === 0) return null;
+  if (existing.size === 0) {
+    physicalTableBySourceCache.set(cacheKey, null);
+    return null;
+  }
   const withData = await layerTablesWithGeomRows([...existing]);
   for (const name of ordered) {
-    if (withData.has(name)) return name;
+    if (withData.has(name)) {
+      physicalTableBySourceCache.set(cacheKey, name);
+      return name;
+    }
   }
   for (const name of ordered) {
-    if (existing.has(name)) return name;
+    if (existing.has(name)) {
+      physicalTableBySourceCache.set(cacheKey, name);
+      return name;
+    }
   }
+  physicalTableBySourceCache.set(cacheKey, null);
   return null;
 }
 
@@ -534,6 +554,31 @@ function parseGeom(raw: unknown): GeoJSON.Geometry | null {
 
 const tableExistsCache = new Map<string, boolean>();
 const columnExistsCache = new Map<string, boolean>();
+/** layer 테이블 geom SRID (프로세스 수명 캐시) */
+const tableSridCache = new Map<string, number | null>();
+
+async function resolveTableSrid(physicalTable: string): Promise<number | null> {
+  const key = String(physicalTable ?? '')
+    .trim()
+    .toLowerCase();
+  if (!key) return null;
+  if (tableSridCache.has(key)) return tableSridCache.get(key)!;
+  const tbl = key.replace(/"/g, '""');
+  try {
+    const res = await db.execute(
+      sql.raw(
+        `SELECT ST_SRID(geom) AS srid FROM layer."${tbl}" WHERE geom IS NOT NULL LIMIT 1`
+      )
+    );
+    const srid = Number((res.rows?.[0] as { srid?: number } | undefined)?.srid);
+    const val = Number.isFinite(srid) && srid > 0 ? srid : null;
+    tableSridCache.set(key, val);
+    return val;
+  } catch {
+    tableSridCache.set(key, null);
+    return null;
+  }
+}
 
 async function tableExists(table: string): Promise<boolean> {
   const key = table.toLowerCase();
@@ -629,10 +674,14 @@ async function collectListWheres(
   if (opts.bbox && opts.bbox.length === 4) {
     const [minX, minY, maxX, maxY] = opts.bbox;
     const tbl = String(physicalTable ?? def.table ?? '').replace(/"/g, '""');
-    // ST_SRID(t.geom) 은 행마다 계산되어 공간 색인을 못 탄다. 테이블 SRID 를 한 번만 읽어 상수 범위로 비교.
-    const env = tbl
-      ? `ST_Transform(ST_MakeEnvelope(${minX},${minY},${maxX},${maxY},3857), (SELECT ST_SRID(geom) FROM layer."${tbl}" WHERE geom IS NOT NULL LIMIT 1))`
-      : `ST_Transform(ST_MakeEnvelope(${minX},${minY},${maxX},${maxY},3857), 5181)`;
+    // ST_SRID(t.geom) 행마다 계산 금지 → 테이블 SRID 캐시(없으면 서브쿼리 폴백)
+    const cachedSrid = tbl ? await resolveTableSrid(tbl) : null;
+    const env =
+      cachedSrid != null
+        ? `ST_Transform(ST_MakeEnvelope(${minX},${minY},${maxX},${maxY},3857), ${cachedSrid})`
+        : tbl
+          ? `ST_Transform(ST_MakeEnvelope(${minX},${minY},${maxX},${maxY},3857), (SELECT ST_SRID(geom) FROM layer."${tbl}" WHERE geom IS NOT NULL LIMIT 1))`
+          : `ST_Transform(ST_MakeEnvelope(${minX},${minY},${maxX},${maxY},3857), 5181)`;
     wheres.push(`(t.geom && ${env} AND ST_Intersects(t.geom, ${env}))`);
   }
 
@@ -1130,6 +1179,85 @@ export async function getWtlNetworkList(params: ListParams = {}): Promise<{
     return (order.get(ka) ?? 0) - (order.get(kb) ?? 0);
   });
   return { rows, total, page, pageSize };
+}
+
+export type WtlNetworkListBatchSlot = {
+  /** 클라이언트 슬롯 키 (출처:레이어 등) */
+  key: string;
+  layerKey: string;
+  mapSources?: string[];
+};
+
+export type WtlNetworkListBatchBox = {
+  rows: WtlNetworkRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+};
+
+/**
+ * 시설목록 배치 — 슬롯(레이어×출처) N개를 한 요청으로 조회.
+ * 슬롯마다 getWtlNetworkList(page)와 동일 결과. 빈 슬롯은 boxes에 넣지 않음.
+ */
+export async function getWtlNetworkListBatch(
+  params: Omit<ListParams, 'layerKeys' | 'mapSources' | 'limit'> & {
+    slots?: WtlNetworkListBatchSlot[];
+  } = {}
+): Promise<{ boxes: Record<string, WtlNetworkListBatchBox> }> {
+  const slots = (params.slots ?? [])
+    .map((s) => ({
+      key: String(s?.key ?? '').trim(),
+      layerKey: String(s?.layerKey ?? '').trim(),
+      mapSources: Array.isArray(s?.mapSources)
+        ? s.mapSources.map((id) => String(id).trim()).filter(Boolean)
+        : [],
+    }))
+    .filter((s) => s.key && s.layerKey);
+  const boxes: Record<string, WtlNetworkListBatchBox> = {};
+  if (slots.length === 0) return { boxes };
+
+  // 재질 번들·물리테이블 캐시를 한 워커에서 공유
+  await ensureMaterialTopBundle();
+
+  const shared: Omit<ListParams, 'layerKeys' | 'mapSources'> = {
+    bbox: params.bbox,
+    keyword: params.keyword,
+    yearFrom: params.yearFrom,
+    yearTo: params.yearTo,
+    diameterFrom: params.diameterFrom,
+    diameterTo: params.diameterTo,
+    materials: params.materials,
+    emdCode: params.emdCode,
+    riCode: params.riCode,
+    supplyBlock: params.supplyBlock,
+    areaWkts5181: params.areaWkts5181,
+    withGeom: params.withGeom === true,
+    page: params.page,
+    pageSize: params.pageSize,
+  };
+
+  await Promise.all(
+    slots.map(async (slot) => {
+      try {
+        const result = await getWtlNetworkList({
+          ...shared,
+          layerKeys: [slot.layerKey],
+          mapSources: slot.mapSources.length > 0 ? slot.mapSources : undefined,
+        });
+        if (result.total <= 0 && result.rows.length === 0) return;
+        boxes[slot.key] = {
+          rows: result.rows,
+          total: result.total,
+          page: result.page,
+          pageSize: result.pageSize,
+        };
+      } catch (e) {
+        console.error('[getWtlNetworkListBatch]', slot.key, e);
+      }
+    })
+  );
+
+  return { boxes };
 }
 
 function materialChoicesFromBundle(bundle: MaterialTopBundle): string[] {
