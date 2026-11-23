@@ -56,9 +56,9 @@ export function getOdorIndexMenuDescription(menuId: string): string {
     case 'actionHistory':
       return '민원·경보에 대한 조치 내역을 봅니다 (목업)'
     case 'reportView':
-      return '운영 보고서를 조회합니다 (목업)'
+      return '저감장치·경보·민원·조치 일·월보를 조회합니다 (목업)'
     case 'systemStatus':
-      return '통신계통도에서 서버·업체·센서 상태와 두절 경보를 확인합니다 (목업)'
+      return '통신 목록에서 서버·업체·센서 상태와 두절 경보를 확인합니다 (목업)'
     default:
       return ''
   }

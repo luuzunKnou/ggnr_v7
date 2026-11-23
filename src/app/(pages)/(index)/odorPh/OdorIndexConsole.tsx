@@ -13,6 +13,7 @@ import {
 import { OdorIndexAlertView2Content } from '@/app/(pages)/(index)/odorPh/OdorIndexAlertView2Content'
 import { OdorIndexControlMapContent } from '@/app/(pages)/(index)/odorPh/OdorIndexControlMapContent'
 import { OdorIndexPlaceholderPanel } from '@/app/(pages)/(index)/odorPh/OdorIndexPlaceholderPanel'
+import { OdorReportViewPanel } from '@/app/(pages)/(index)/odorPh/reportView/OdorReportViewPanel'
 import {
   ODOR_INDEX_MENUS,
   ODOR_INDEX_MENU_GROUPS,
@@ -170,12 +171,7 @@ export function OdorIndexConsole({ title, sensors, footerAddr, footerRss, querie
                 )
                 break
               case 'reportView':
-                body = (
-                  <OdorIndexPlaceholderPanel
-                    title="보고서 조회"
-                    description="운영·점검 보고서를 조회하고 내려받습니다."
-                  />
-                )
+                body = <OdorReportViewPanel />
                 break
               case 'systemStatus':
                 body = (
@@ -197,7 +193,10 @@ export function OdorIndexConsole({ title, sensors, footerAddr, footerRss, querie
                 body = null
             }
             const showQueryTime =
-              id !== 'alertList' && id !== 'alertView2' && id !== 'systemStatus'
+              id !== 'alertList' &&
+              id !== 'alertView2' &&
+              id !== 'systemStatus' &&
+              id !== 'reportView'
             return (
               <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
                 {showQueryTime ? (

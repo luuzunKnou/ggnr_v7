@@ -239,6 +239,10 @@ import {
 } from "./_mapContents/odorAlertView2/odorAlertView2Config"
 import { OdorAlertView2Shell } from "./_mapContents/odorAlertView2/OdorAlertView2.shell"
 import {
+  ODOR_REPORT_VIEW_OPENED_KEY,
+} from "./_mapContents/odorReportView/odorReportViewMapConfig"
+import { OdorReportViewShell } from "./_mapContents/odorReportView/OdorReportView.shell"
+import {
   ODOR_SYSTEM_STATUS_OPENED_KEY,
 } from "./_mapContents/odorSystemStatus/odorSystemStatusConfig"
 import { OdorSystemStatusShell } from "./_mapContents/odorSystemStatus/OdorSystemStatus.shell"
@@ -891,6 +895,7 @@ function MapLayoutContent({
   const odorDashboard2Open = openedWindows.includes(ODOR_DASHBOARD2_OPENED_KEY)
   const odorAlertOpen = openedWindows.includes(ODOR_ALERT_OPENED_KEY)
   const odorAlertView2Open = openedWindows.includes(ODOR_ALERT_VIEW2_OPENED_KEY)
+  const odorReportViewOpen = openedWindows.includes(ODOR_REPORT_VIEW_OPENED_KEY)
   const odorSystemStatusOpen = openedWindows.includes(ODOR_SYSTEM_STATUS_OPENED_KEY)
   const worksRegisterOpen = openedWindows.includes(WORKS_REGISTER_OPENED_KEY)
   const wtlAdminEmptySerEng = findOpenedWtlAdminEmptySerEng(openedWindows)
@@ -1034,6 +1039,7 @@ function MapLayoutContent({
   const [odorDashboard2TotalWidth, setOdorDashboard2TotalWidth] = useState(0)
   const [odorAlertTotalWidth, setOdorAlertTotalWidth] = useState(0)
   const [odorAlertView2TotalWidth, setOdorAlertView2TotalWidth] = useState(0)
+  const [odorReportViewTotalWidth, setOdorReportViewTotalWidth] = useState(0)
   const [odorSystemStatusTotalWidth, setOdorSystemStatusTotalWidth] = useState(0)
   const [worksRegisterTotalWidth, setWorksRegisterTotalWidth] = useState(0)
   const [wtlAdminEmptyTotalWidth, setWtlAdminEmptyTotalWidth] = useState(0)
@@ -1359,6 +1365,7 @@ function MapLayoutContent({
     (odorDashboard2Open ? odorDashboard2TotalWidth : 0) +
     (odorAlertOpen ? odorAlertTotalWidth : 0) +
     (odorAlertView2Open ? odorAlertView2TotalWidth : 0) +
+    (odorReportViewOpen ? odorReportViewTotalWidth : 0) +
     (odorSystemStatusOpen ? odorSystemStatusTotalWidth : 0)
   const searchBarOffset = {
     leftPx: SIDEBAR_WIDTH + totalListPanelWidth + SEARCH_BAR_MARGIN,
@@ -1581,8 +1588,10 @@ function MapLayoutContent({
     odorDashboard2PanelLeftPx + (odorDashboard2Open ? odorDashboard2TotalWidth : 0)
   const odorAlertView2PanelLeftPx =
     odorAlertPanelLeftPx + (odorAlertOpen ? odorAlertTotalWidth : 0)
-  const odorSystemStatusPanelLeftPx =
+  const odorReportViewPanelLeftPx =
     odorAlertView2PanelLeftPx + (odorAlertView2Open ? odorAlertView2TotalWidth : 0)
+  const odorSystemStatusPanelLeftPx =
+    odorReportViewPanelLeftPx + (odorReportViewOpen ? odorReportViewTotalWidth : 0)
   const mapPaddingLeft = SIDEBAR_WIDTH + totalListPanelWidth
   /** 패딩은 useLayoutEffect — 자식 useEffect(도로대장 fit 등)보다 먼저 적용되어야 함.
    * 거리뷰 ON일 때만 맵 중심(A)을 새 센터마크 위치에 맞춤.
@@ -2285,6 +2294,11 @@ function MapLayoutContent({
     setOpened(openedWindows.filter((w) => w !== ODOR_ALERT_VIEW2_OPENED_KEY))
   }
 
+  const handleCloseOdorReportView = () => {
+    setOdorReportViewTotalWidth(0)
+    setOpened(openedWindows.filter((w) => w !== ODOR_REPORT_VIEW_OPENED_KEY))
+  }
+
   const handleCloseOdorSystemStatus = () => {
     setOdorSystemStatusTotalWidth(0)
     setOpened(openedWindows.filter((w) => w !== ODOR_SYSTEM_STATUS_OPENED_KEY))
@@ -2526,6 +2540,10 @@ function MapLayoutContent({
   useEffect(() => {
     if (!odorAlertView2Open) setOdorAlertView2TotalWidth(0)
   }, [odorAlertView2Open])
+
+  useEffect(() => {
+    if (!odorReportViewOpen) setOdorReportViewTotalWidth(0)
+  }, [odorReportViewOpen])
 
   useEffect(() => {
     if (!odorSystemStatusOpen) setOdorSystemStatusTotalWidth(0)
@@ -4711,6 +4729,13 @@ function MapLayoutContent({
               leftOffsetPx={odorAlertView2PanelLeftPx}
               onTotalWidthChange={setOdorAlertView2TotalWidth}
               onClose={handleCloseOdorAlertView2}
+            />
+          )}
+          {odorReportViewOpen && (
+            <OdorReportViewShell
+              leftOffsetPx={odorReportViewPanelLeftPx}
+              onTotalWidthChange={setOdorReportViewTotalWidth}
+              onClose={handleCloseOdorReportView}
             />
           )}
           {odorSystemStatusOpen && (
