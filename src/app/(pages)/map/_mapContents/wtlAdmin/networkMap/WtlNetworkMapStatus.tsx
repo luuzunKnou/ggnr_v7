@@ -1440,6 +1440,7 @@ export function WtlNetworkMapStatus({
       listFilter={listFilterParam}
       filterMeta={filterMeta}
       solidHeader={solidSectionHeader}
+      seriesMode={viewMode === 'graph' ? 'total' : 'material'}
       className={showBoth ? 'min-w-0 flex-1 self-start' : undefined}
       onExpand={(chartKind) =>
         setExpandKind(
