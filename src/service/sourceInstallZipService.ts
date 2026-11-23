@@ -337,7 +337,7 @@ export async function buildInstallZip(params: {
     }
     const stamp = new Date().toISOString().replace(/[-:TZ.]/g, '').slice(0, 14);
     const bundleRoot = `${date}_${stamp}`;
-    const zipName = `source_install_${date}_${stamp}.zip`;
+    const zipName = `${date}_${stamp}.zip`;
     const tmpDir = `${installZipDownloadRoot()}${path.sep}${stamp}`;
     const zipPath = `${tmpDir}${path.sep}${zipName}`;
     await buildInstallZipFile({
