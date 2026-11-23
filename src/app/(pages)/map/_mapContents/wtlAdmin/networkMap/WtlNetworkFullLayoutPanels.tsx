@@ -7,7 +7,7 @@ import { MAP_LAYER_PANEL_SURFACE_CLASS } from '../../../_mapComponents/mapContro
 import type { WtlNetworkToolBtnVariant } from './WtlNetworkExportMenu'
 
 const FULL_STATS_WIDTH = 340
-const FULL_RIGHT_WIDTH = 480
+const FULL_RIGHT_WIDTH = 420
 /** 시설목록 표 최대 높이 — 레이어 미선택·빈 목록에도 동일 유지 */
 export const FULL_LAYOUT_LIST_MAX_HEIGHT_PX = 240
 /** 1·2단 underline(h-7×2) + 3단 chip(py-1+h-6) — 선택/미선택 높이 고정용 */
