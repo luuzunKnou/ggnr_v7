@@ -1,4 +1,4 @@
-﻿// src/app/(pages)/map/map-layout-client.tsx
+// src/app/(pages)/map/map-layout-client.tsx
 "use client"
 
 import React, { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo, Suspense } from "react"
@@ -218,13 +218,17 @@ import {
 import { OdorAlertShell } from "./_mapContents/odorAlert/OdorAlert.shell"
 import { OdorAlertPopupHost } from "./_mapContents/odorAlert/OdorAlertPopupHost"
 import {
-  ODOR_DASHBOARD_OPENED_KEY,
-} from "./_mapContents/odorDashboard/odorDashboardConfig"
-import { OdorDashboardShell } from "./_mapContents/odorDashboard/OdorDashboard.shell"
+  ODOR_DASHBOARD2_OPENED_KEY,
+} from "./_mapContents/odorDashboard2/odorDashboard2Config"
+import { OdorDashboard2Shell } from "./_mapContents/odorDashboard2/OdorDashboard2.shell"
 import {
   ODOR_ALERT_VIEW2_OPENED_KEY,
 } from "./_mapContents/odorAlertView2/odorAlertView2Config"
 import { OdorAlertView2Shell } from "./_mapContents/odorAlertView2/OdorAlertView2.shell"
+import {
+  ODOR_SYSTEM_STATUS_OPENED_KEY,
+} from "./_mapContents/odorSystemStatus/odorSystemStatusConfig"
+import { OdorSystemStatusShell } from "./_mapContents/odorSystemStatus/OdorSystemStatus.shell"
 import { FmsLinkageListPanel } from "./_mapContents/fmsLinkage/FmsLinkageListPanel"
 import { FmsLinkageDetailPanel } from "./_mapContents/fmsLinkage/FmsLinkageDetailPanel"
 import { isFmsOpenedToken } from "@/lib/fmsLinkage/fmsBinding"
@@ -863,9 +867,10 @@ function MapLayoutContent({
   const smallPublicInspectionOpen = openedWindows.includes(SMALL_PUBLIC_INSPECTION_OPENED_KEY)
   const smallPublicPlanOpen = openedWindows.includes(SMALL_PUBLIC_PLAN_OPENED_KEY)
   const smallPublicBudgetOpen = openedWindows.includes(SMALL_PUBLIC_BUDGET_OPENED_KEY)
-  const odorDashboardOpen = openedWindows.includes(ODOR_DASHBOARD_OPENED_KEY)
+  const odorDashboard2Open = openedWindows.includes(ODOR_DASHBOARD2_OPENED_KEY)
   const odorAlertOpen = openedWindows.includes(ODOR_ALERT_OPENED_KEY)
   const odorAlertView2Open = openedWindows.includes(ODOR_ALERT_VIEW2_OPENED_KEY)
+  const odorSystemStatusOpen = openedWindows.includes(ODOR_SYSTEM_STATUS_OPENED_KEY)
   const worksRegisterOpen = openedWindows.includes(WORKS_REGISTER_OPENED_KEY)
   const wtlAdminEmptySerEng = findOpenedWtlAdminEmptySerEng(openedWindows)
   const wtlAdminEmptyOpen = Boolean(wtlAdminEmptySerEng)
@@ -1005,9 +1010,10 @@ function MapLayoutContent({
   const [smallPublicInspectionTotalWidth, setSmallPublicInspectionTotalWidth] = useState(0)
   const [smallPublicPlanTotalWidth, setSmallPublicPlanTotalWidth] = useState(0)
   const [smallPublicBudgetTotalWidth, setSmallPublicBudgetTotalWidth] = useState(0)
-  const [odorDashboardTotalWidth, setOdorDashboardTotalWidth] = useState(0)
+  const [odorDashboard2TotalWidth, setOdorDashboard2TotalWidth] = useState(0)
   const [odorAlertTotalWidth, setOdorAlertTotalWidth] = useState(0)
   const [odorAlertView2TotalWidth, setOdorAlertView2TotalWidth] = useState(0)
+  const [odorSystemStatusTotalWidth, setOdorSystemStatusTotalWidth] = useState(0)
   const [worksRegisterTotalWidth, setWorksRegisterTotalWidth] = useState(0)
   const [wtlAdminEmptyTotalWidth, setWtlAdminEmptyTotalWidth] = useState(0)
   const [protoUserAccountOpen, setProtoUserAccountOpen] = useState(false)
@@ -1318,9 +1324,10 @@ function MapLayoutContent({
     (cadastralControlPointDetailOpen ? cadastralControlPointDetailWidth : 0) +
     (riverIllegalOccupationOpen ? riverIllegalOccupationPanelWidth : 0) +
     (riverIllegalOccupationDetailOpen ? riverIllegalOccupationDetailWidth : 0) +
-    (odorDashboardOpen ? odorDashboardTotalWidth : 0) +
+    (odorDashboard2Open ? odorDashboard2TotalWidth : 0) +
     (odorAlertOpen ? odorAlertTotalWidth : 0) +
-    (odorAlertView2Open ? odorAlertView2TotalWidth : 0)
+    (odorAlertView2Open ? odorAlertView2TotalWidth : 0) +
+    (odorSystemStatusOpen ? odorSystemStatusTotalWidth : 0)
   const searchBarOffset = {
     leftPx: SIDEBAR_WIDTH + totalListPanelWidth + SEARCH_BAR_MARGIN,
     topPx: 16,
@@ -1531,13 +1538,15 @@ function MapLayoutContent({
   const riverIllegalOccupationDetailLeftPx =
     riverIllegalOccupationPanelLeftPx +
     (riverIllegalOccupationOpen ? riverIllegalOccupationPanelWidth : 0)
-  const odorDashboardPanelLeftPx =
+  const odorDashboard2PanelLeftPx =
     riverIllegalOccupationDetailLeftPx +
     (riverIllegalOccupationDetailOpen ? riverIllegalOccupationDetailWidth : 0)
   const odorAlertPanelLeftPx =
-    odorDashboardPanelLeftPx + (odorDashboardOpen ? odorDashboardTotalWidth : 0)
+    odorDashboard2PanelLeftPx + (odorDashboard2Open ? odorDashboard2TotalWidth : 0)
   const odorAlertView2PanelLeftPx =
     odorAlertPanelLeftPx + (odorAlertOpen ? odorAlertTotalWidth : 0)
+  const odorSystemStatusPanelLeftPx =
+    odorAlertView2PanelLeftPx + (odorAlertView2Open ? odorAlertView2TotalWidth : 0)
   const mapPaddingLeft = SIDEBAR_WIDTH + totalListPanelWidth
   /** 패딩은 useLayoutEffect — 자식 useEffect(도로대장 fit 등)보다 먼저 적용되어야 함.
    * 거리뷰 ON일 때만 맵 중심(A)을 새 센터마크 위치에 맞춤.
@@ -2174,9 +2183,9 @@ function MapLayoutContent({
     setOpened(next)
   }
 
-  const handleCloseOdorDashboard = () => {
-    setOdorDashboardTotalWidth(0)
-    setOpened(openedWindows.filter((w) => w !== ODOR_DASHBOARD_OPENED_KEY))
+  const handleCloseOdorDashboard2 = () => {
+    setOdorDashboard2TotalWidth(0)
+    setOpened(openedWindows.filter((w) => w !== ODOR_DASHBOARD2_OPENED_KEY))
   }
 
   const handleCloseOdorAlert = () => {
@@ -2189,8 +2198,18 @@ function MapLayoutContent({
     setOpened(openedWindows.filter((w) => w !== ODOR_ALERT_VIEW2_OPENED_KEY))
   }
 
-  const handleOpenOdorAlertFromDashboard = () => {
-    setOdorDashboardTotalWidth(0)
+  const handleCloseOdorSystemStatus = () => {
+    setOdorSystemStatusTotalWidth(0)
+    setOpened(openedWindows.filter((w) => w !== ODOR_SYSTEM_STATUS_OPENED_KEY))
+  }
+
+  const handleOpenOdorDashboardFromSystemStatus = (_sensorKey: number) => {
+    setOdorSystemStatusTotalWidth(0)
+    setOpened([ODOR_DASHBOARD2_OPENED_KEY])
+  }
+
+  const handleOpenOdorAlertFromDashboard2 = () => {
+    setOdorDashboard2TotalWidth(0)
     setOpened([ODOR_ALERT_OPENED_KEY])
   }
 
@@ -2415,8 +2434,8 @@ function MapLayoutContent({
   }, [worksRegisterOpen])
 
   useEffect(() => {
-    if (!odorDashboardOpen) setOdorDashboardTotalWidth(0)
-  }, [odorDashboardOpen])
+    if (!odorDashboard2Open) setOdorDashboard2TotalWidth(0)
+  }, [odorDashboard2Open])
 
   useEffect(() => {
     if (!odorAlertOpen) setOdorAlertTotalWidth(0)
@@ -2425,6 +2444,10 @@ function MapLayoutContent({
   useEffect(() => {
     if (!odorAlertView2Open) setOdorAlertView2TotalWidth(0)
   }, [odorAlertView2Open])
+
+  useEffect(() => {
+    if (!odorSystemStatusOpen) setOdorSystemStatusTotalWidth(0)
+  }, [odorSystemStatusOpen])
 
   useEffect(() => {
     if (!cadastralResurveyOpen) setCadastralResurveyDistrictId(null)
@@ -4535,12 +4558,12 @@ function MapLayoutContent({
               </MapSideListPanel>
             </div>
           )}
-          {odorDashboardOpen && (
-            <OdorDashboardShell
-              leftOffsetPx={odorDashboardPanelLeftPx}
-              onTotalWidthChange={setOdorDashboardTotalWidth}
-              onClose={handleCloseOdorDashboard}
-              onOpenAlertList={handleOpenOdorAlertFromDashboard}
+          {odorDashboard2Open && (
+            <OdorDashboard2Shell
+              leftOffsetPx={odorDashboard2PanelLeftPx}
+              onTotalWidthChange={setOdorDashboard2TotalWidth}
+              onClose={handleCloseOdorDashboard2}
+              onOpenAlertList={handleOpenOdorAlertFromDashboard2}
             />
           )}
           {odorAlertOpen && (
@@ -4555,6 +4578,14 @@ function MapLayoutContent({
               leftOffsetPx={odorAlertView2PanelLeftPx}
               onTotalWidthChange={setOdorAlertView2TotalWidth}
               onClose={handleCloseOdorAlertView2}
+            />
+          )}
+          {odorSystemStatusOpen && (
+            <OdorSystemStatusShell
+              leftOffsetPx={odorSystemStatusPanelLeftPx}
+              onTotalWidthChange={setOdorSystemStatusTotalWidth}
+              onClose={handleCloseOdorSystemStatus}
+              onOpenDashboardWithStation={handleOpenOdorDashboardFromSystemStatus}
             />
           )}
           <OdorAlertPopupHost enabled={systemKeyFromUrl === "odorAdmin"} />

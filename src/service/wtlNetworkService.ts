@@ -2316,41 +2316,47 @@ export async function getWtlNetworkStatusStats(params: {
     listOpts.layerKeys,
     null
   );
-  const dipMap = new Map<string, number>();
-  const mopMap = new Map<string, { label: string; meters: number }>();
-  const yearMap = new Map<string, number>();
-  const saaMap = new Map<string, { label: string; meters: number }>();
+  const enabledKeySet =
+    listOpts.layerKeys == null ? null : new Set(listOpts.layerKeys.map((k) => k.toLowerCase()));
 
-  await Promise.all(
-    pipeSources.map(async ({ physicalTable: base, def }) => {
-      const lenCol = String(def.lengthCol ?? (await resolvePipeLengthCol(base))).replace(
-        /"/g,
-        '""'
-      );
-      const dipCol = String(
-        def.diameterCol ?? (await resolvePipeDiameterCol(base))
-      ).replace(/"/g, '""');
-      const tbl = base.replace(/"/g, '""');
-      const whereParts = await collectListWheres(def, listOpts, base);
-      const whereSql = whereParts.length > 0 ? whereParts.join(' AND ') : 'TRUE';
-      const [hasDip, hasMop, hasYear, hasSaa] = await Promise.all([
-        dipCol ? tableHasColumn(base, dipCol) : Promise.resolve(false),
-        tableHasColumn(base, 'mop_cde'),
-        tableHasColumn(base, 'ist_ymd'),
-        tableHasColumn(base, 'saa_cde'),
-      ]);
-      const dipExpr = hasDip ? `t."${dipCol}"::text` : `NULL::text`;
-      const mopExpr = hasMop ? `t.mop_cde::text` : `NULL::text`;
-      const yearExpr = hasYear
-        ? `NULLIF(SUBSTRING(TRIM(t.ist_ymd::text), 1, 4), '')`
-        : `NULL::text`;
-      const saaExpr = hasSaa
-        ? `CASE WHEN t.saa_cde IS NULL OR TRIM(t.saa_cde::text) = '' THEN '미분류' ELSE TRIM(t.saa_cde::text) END`
-        : `NULL::text`;
-      try {
-        const res = await db.execute(
-          sql.raw(
-            `SELECT
+  /** 관로 통계(구경·재질·연도·관경)와 시설 개수를 병렬로 — 서로 직렬 대기하지 않음 */
+  const [pipeAgg, facilityCounts] = await Promise.all([
+    (async () => {
+      const dipMap = new Map<string, number>();
+      const mopMap = new Map<string, { label: string; meters: number }>();
+      const yearMap = new Map<string, number>();
+      const saaMap = new Map<string, { label: string; meters: number }>();
+
+      await Promise.all(
+        pipeSources.map(async ({ physicalTable: base, def }) => {
+          const lenCol = String(def.lengthCol ?? (await resolvePipeLengthCol(base))).replace(
+            /"/g,
+            '""'
+          );
+          const dipCol = String(
+            def.diameterCol ?? (await resolvePipeDiameterCol(base))
+          ).replace(/"/g, '""');
+          const tbl = base.replace(/"/g, '""');
+          const whereParts = await collectListWheres(def, listOpts, base);
+          const whereSql = whereParts.length > 0 ? whereParts.join(' AND ') : 'TRUE';
+          const [hasDip, hasMop, hasYear, hasSaa] = await Promise.all([
+            dipCol ? tableHasColumn(base, dipCol) : Promise.resolve(false),
+            tableHasColumn(base, 'mop_cde'),
+            tableHasColumn(base, 'ist_ymd'),
+            tableHasColumn(base, 'saa_cde'),
+          ]);
+          const dipExpr = hasDip ? `t."${dipCol}"::text` : `NULL::text`;
+          const mopExpr = hasMop ? `t.mop_cde::text` : `NULL::text`;
+          const yearExpr = hasYear
+            ? `NULLIF(SUBSTRING(TRIM(t.ist_ymd::text), 1, 4), '')`
+            : `NULL::text`;
+          const saaExpr = hasSaa
+            ? `CASE WHEN t.saa_cde IS NULL OR TRIM(t.saa_cde::text) = '' THEN '미분류' ELSE TRIM(t.saa_cde::text) END`
+            : `NULL::text`;
+          try {
+            const res = await db.execute(
+              sql.raw(
+                `SELECT
                CASE
                  WHEN GROUPING(dip_code) = 0 AND GROUPING(mop_code) = 1 AND GROUPING(yr) = 1 AND GROUPING(saa) = 1 THEN 'dip'
                  WHEN GROUPING(mop_code) = 0 AND GROUPING(dip_code) = 1 AND GROUPING(yr) = 1 AND GROUPING(saa) = 1 THEN 'mop'
@@ -2370,102 +2376,107 @@ export async function getWtlNetworkStatusStats(params: {
                WHERE ${whereSql}
              ) s
              GROUP BY GROUPING SETS ((dip_code), (mop_code), (yr), (saa))`
-          )
-        );
-        for (const row of res.rows ?? []) {
-          const r = row as { kind?: unknown; code?: unknown; byc_len?: number };
-          const kind = asStr(r.kind);
-          const meters = Number(r.byc_len) || 0;
-          const code = asStr(r.code);
-          if (!kind || !code) continue;
-          if (kind === 'dip') {
-            const label = diameterStatLabel(code);
-            dipMap.set(label, (dipMap.get(label) ?? 0) + meters);
-          } else if (kind === 'mop') {
-            const label = mopLabel(code);
-            const display = label === '—' ? code : label;
-            const prev = mopMap.get(code);
-            mopMap.set(code, { label: display, meters: (prev?.meters ?? 0) + meters });
-          } else if (kind === 'year') {
-            if (!/^\d{4}$/.test(code)) continue;
-            yearMap.set(code, (yearMap.get(code) ?? 0) + meters);
-          } else if (kind === 'saa') {
-            const kor = code === '미분류' ? '미분류' : saaLabel(code);
-            const display = kor === '—' ? code : kor;
-            const prev = saaMap.get(code);
-            saaMap.set(code, { label: display, meters: (prev?.meters ?? 0) + meters });
-          }
-        }
-      } catch (e) {
-        console.error('[getWtlNetworkStatusStats]', def.key, base, e);
-      }
-    })
-  );
-
-  const byDiameter = [...dipMap.entries()].map(([label, meters]) => {
-    const n = Number(String(label).replace(/[^\d.]/g, ''));
-    return {
-      label,
-      meters,
-      sort: Number.isFinite(n) ? n : MATERIAL_SORT_LAST,
-    };
-  });
-  const byMaterial = [...mopMap.entries()].map(([code, row]) => ({
-    label: row.label,
-    meters: row.meters,
-    sort: mopCdeSortKey(code, row.label),
-  }));
-  const byYear = [...yearMap.entries()].map(([label, meters]) => ({
-    label,
-    meters,
-    sort: Number(label) || 0,
-  }));
-  const bySaa = [...saaMap.entries()].map(([code, row]) => ({
-    label: row.label,
-    meters: row.meters,
-    code,
-  }));
-
-  const enabledKeySet =
-    listOpts.layerKeys == null ? null : new Set(listOpts.layerKeys.map((k) => k.toLowerCase()));
-  const facilityCounts = await Promise.all(
-    STATUS_FACILITY_LAYERS.filter(
-      (fac) => !enabledKeySet || enabledKeySet.has(fac.key.toLowerCase())
-    ).map(async (fac) => {
-      const def = getWtlNetLayerDef(fac.key);
-      let count = 0;
-      if (def?.table) {
-        const seen = new Set<string>();
-        const jobs: Promise<number>[] = [];
-        for (const source of selectedSources) {
-          const physicalTable = await resolvePhysicalTableInSource(source, def.table);
-          if (!physicalTable || seen.has(physicalTable)) continue;
-          seen.add(physicalTable);
-          jobs.push(
-            (async () => {
-              const tbl = physicalTable.replace(/"/g, '""');
-              const whereParts = await collectListWheres(def, listOpts, physicalTable);
-              const whereSql = whereParts.length > 0 ? whereParts.join(' AND ') : 'TRUE';
-              try {
-                const res = await db.execute(
-                  sql.raw(
-                    `SELECT COUNT(*)::int AS n FROM layer."${tbl}" t WHERE ${whereSql}`
-                  )
-                );
-                return Number((res.rows?.[0] as { n?: number } | undefined)?.n) || 0;
-              } catch {
-                return 0;
+              )
+            );
+            for (const row of res.rows ?? []) {
+              const r = row as { kind?: unknown; code?: unknown; byc_len?: number };
+              const kind = asStr(r.kind);
+              const meters = Number(r.byc_len) || 0;
+              const code = asStr(r.code);
+              if (!kind || !code) continue;
+              if (kind === 'dip') {
+                const label = diameterStatLabel(code);
+                dipMap.set(label, (dipMap.get(label) ?? 0) + meters);
+              } else if (kind === 'mop') {
+                const label = mopLabel(code);
+                const display = label === '—' ? code : label;
+                const prev = mopMap.get(code);
+                mopMap.set(code, { label: display, meters: (prev?.meters ?? 0) + meters });
+              } else if (kind === 'year') {
+                if (!/^\d{4}$/.test(code)) continue;
+                yearMap.set(code, (yearMap.get(code) ?? 0) + meters);
+              } else if (kind === 'saa') {
+                const kor = code === '미분류' ? '미분류' : saaLabel(code);
+                const display = kor === '—' ? code : kor;
+                const prev = saaMap.get(code);
+                saaMap.set(code, { label: display, meters: (prev?.meters ?? 0) + meters });
               }
-            })()
-          );
-        }
-        const parts = await Promise.all(jobs);
-        count = parts.reduce((sum, n) => sum + n, 0);
-      }
-      return { label: fac.label, count };
-    })
-  );
+            }
+          } catch (e) {
+            console.error('[getWtlNetworkStatusStats]', def.key, base, e);
+          }
+        })
+      );
 
+      return {
+        byDiameter: [...dipMap.entries()].map(([label, meters]) => {
+          const n = Number(String(label).replace(/[^\d.]/g, ''));
+          return {
+            label,
+            meters,
+            sort: Number.isFinite(n) ? n : MATERIAL_SORT_LAST,
+          };
+        }),
+        byMaterial: [...mopMap.entries()].map(([code, row]) => ({
+          label: row.label,
+          meters: row.meters,
+          sort: mopCdeSortKey(code, row.label),
+        })),
+        byYear: [...yearMap.entries()].map(([label, meters]) => ({
+          label,
+          meters,
+          sort: Number(label) || 0,
+        })),
+        bySaa: [...saaMap.entries()].map(([code, row]) => ({
+          label: row.label,
+          meters: row.meters,
+          code,
+        })),
+      };
+    })(),
+    Promise.all(
+      STATUS_FACILITY_LAYERS.filter(
+        (fac) => !enabledKeySet || enabledKeySet.has(fac.key.toLowerCase())
+      ).map(async (fac) => {
+        const def = getWtlNetLayerDef(fac.key);
+        let count = 0;
+        const logicalTable = def?.table ? String(def.table).trim() : ''
+        if (def && logicalTable) {
+          const resolved = await Promise.all(
+            selectedSources.map((source) => resolvePhysicalTableInSource(source, logicalTable))
+          );
+          const seen = new Set<string>();
+          const jobs: Promise<number>[] = [];
+          for (const physicalTable of resolved) {
+            if (!physicalTable || seen.has(physicalTable)) continue;
+            seen.add(physicalTable);
+            jobs.push(
+              (async () => {
+                const tbl = physicalTable.replace(/"/g, '""');
+                const whereParts = await collectListWheres(def, listOpts, physicalTable);
+                const whereSql = whereParts.length > 0 ? whereParts.join(' AND ') : 'TRUE';
+                try {
+                  const res = await db.execute(
+                    sql.raw(
+                      `SELECT COUNT(*)::int AS n FROM layer."${tbl}" t WHERE ${whereSql}`
+                    )
+                  );
+                  return Number((res.rows?.[0] as { n?: number } | undefined)?.n) || 0;
+                } catch {
+                  return 0;
+                }
+              })()
+            );
+          }
+          const parts = await Promise.all(jobs);
+          count = parts.reduce((sum, n) => sum + n, 0);
+        }
+        return { label: fac.label, count };
+      })
+    ),
+  ]);
+
+  const { byDiameter, byMaterial, byYear, bySaa } = pipeAgg;
   const roundMeters = (m: number) => Math.round(m * 1000) / 1000;
 
   return {

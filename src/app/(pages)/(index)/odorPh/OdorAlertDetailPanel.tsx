@@ -85,12 +85,14 @@ const MAINT_PAGE_SIZE = 5
 const SEARCH_INPUT_CLASS =
   'standard-search-input focus:border-primary focus:ring-0 focus:ring-offset-0'
 
-type MaintSortKey = 'at' | 'summary'
+type MaintSortKey = 'date' | 'category' | 'inspector' | 'content'
 type SortDir = 'asc' | 'desc'
 
 const MAINT_COLUMNS: Array<{ key: MaintSortKey; label: string; className: string }> = [
-  { key: 'at', label: '일시', className: 'w-[36%]' },
-  { key: 'summary', label: '내용', className: '' },
+  { key: 'date', label: '일자', className: 'w-[18%]' },
+  { key: 'category', label: '구분', className: 'w-[20%]' },
+  { key: 'inspector', label: '점검자', className: 'w-[16%]' },
+  { key: 'content', label: '내용', className: '' },
 ]
 
 type Props = {
@@ -98,8 +100,7 @@ type Props = {
 }
 
 function compareMaint(a: MaintenanceRow, b: MaintenanceRow, key: MaintSortKey): number {
-  if (key === 'at') return a.at.localeCompare(b.at, 'ko')
-  return a.summary.localeCompare(b.summary, 'ko')
+  return a[key].localeCompare(b[key], 'ko')
 }
 
 function Section({
@@ -231,21 +232,35 @@ export function OdorAlertDetailPanel({ alert }: Props) {
   const [maintKeyword, setMaintKeyword] = useState('')
   const [maintPage, setMaintPage] = useState(1)
   const [maintSort, setMaintSort] = useState<{ key: MaintSortKey; dir: SortDir }>({
-    key: 'at',
+    key: 'date',
     dir: 'desc',
   })
+  const [categoryEdits, setCategoryEdits] = useState<Record<string, string>>({})
+
+  useEffect(() => {
+    const next: Record<string, string> = {}
+    for (const row of detail.maintenance) next[row.id] = row.category
+    setCategoryEdits(next)
+  }, [detail.maintenance])
 
   const filteredMaint = useMemo(() => {
     const kw = maintKeyword.trim().toLowerCase()
-    let list = detail.maintenance
+    let list = detail.maintenance.map((row) => ({
+      ...row,
+      category: categoryEdits[row.id] ?? row.category,
+    }))
     if (kw) {
       list = list.filter(
-        (row) => row.at.toLowerCase().includes(kw) || row.summary.toLowerCase().includes(kw)
+        (row) =>
+          row.date.toLowerCase().includes(kw) ||
+          row.category.toLowerCase().includes(kw) ||
+          row.inspector.toLowerCase().includes(kw) ||
+          row.content.toLowerCase().includes(kw)
       )
     }
     const sign = maintSort.dir === 'asc' ? 1 : -1
     return [...list].sort((a, b) => sign * compareMaint(a, b, maintSort.key))
-  }, [detail.maintenance, maintKeyword, maintSort])
+  }, [detail.maintenance, categoryEdits, maintKeyword, maintSort])
 
   const maintPageCount = pageMeta(filteredMaint.length, maintPage, MAINT_PAGE_SIZE).pageCount
 
@@ -429,7 +444,7 @@ export function OdorAlertDetailPanel({ alert }: Props) {
               <tbody>
                 {pagedMaint.length === 0 ? (
                   <tr>
-                    <td colSpan={2} className="standard-table-empty">
+                    <td colSpan={4} className="standard-table-empty">
                       이력이 없습니다.
                     </td>
                   </tr>
@@ -438,12 +453,33 @@ export function OdorAlertDetailPanel({ alert }: Props) {
                     <tr key={row.id} className="standard-list-row">
                       <td
                         className="standard-table-td-compact border-r border-border/60 tabular-nums"
-                        title={row.at}
+                        title={row.date}
                       >
-                        {row.at}
+                        {row.date}
                       </td>
-                      <td className="standard-table-td-compact" title={row.summary}>
-                        {row.summary}
+                      <td className="standard-table-td-compact border-r border-border/60 p-0.5">
+                        <input
+                          type="text"
+                          title="구분"
+                          value={categoryEdits[row.id] ?? row.category}
+                          onChange={(e) =>
+                            setCategoryEdits((prev) => ({
+                              ...prev,
+                              [row.id]: e.target.value,
+                            }))
+                          }
+                          className="h-7 w-full min-w-0 rounded border border-border bg-background px-1.5 text-[11px] text-foreground focus:border-primary focus:outline-none focus:ring-0"
+                          placeholder="구분"
+                        />
+                      </td>
+                      <td
+                        className="standard-table-td-compact border-r border-border/60"
+                        title={row.inspector}
+                      >
+                        {row.inspector}
+                      </td>
+                      <td className="standard-table-td-compact" title={row.content}>
+                        {row.content}
                       </td>
                     </tr>
                   ))

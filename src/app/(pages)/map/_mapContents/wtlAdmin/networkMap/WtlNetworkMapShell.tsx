@@ -1975,11 +1975,11 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
       const inView = onlyInViewRef.current
       const bbox = bboxRef.current
       if (inView && !bbox) return
+      // 시설목록·통계를 직렬로 두지 않음 — bbox 확정 즉시 통계도 함께 시작
+      if (inView && bbox) setStatsBbox(bbox)
       void (async () => {
         const result = await fetchList(inView ? bbox : null)
         if (result === 'skip') setListLoading(false)
-        if (result !== 'done' || !onlyInViewRef.current) return
-        setStatsBbox(bboxRef.current)
       })()
     }, 450)
   }, [fetchList])

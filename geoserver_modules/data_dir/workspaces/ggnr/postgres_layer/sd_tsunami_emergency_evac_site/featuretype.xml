@@ -1,5 +1,5 @@
 <featureType>
-  <id>FeatureTypeInfoImpl-7cb062c7:1a18ba0f32a:-7f7a</id>
+  <id>FeatureTypeInfoImpl--210e710e:1a1f780e02f:-7f8a</id>
   <name>sd_tsunami_emergency_evac_site</name>
   <nativeName>sd_tsunami_emergency_evac_site</nativeName>
   <namespace>
@@ -10,6 +10,25 @@
     <string>features</string>
     <string>sd_tsunami_emergency_evac_site</string>
   </keywords>
+  <nativeCRS class="projected">PROJCS[&quot;Korea 2000 / Central Belt&quot;, &#xd;
+  GEOGCS[&quot;Korea 2000&quot;, &#xd;
+    DATUM[&quot;Geocentric_datum_of_Korea&quot;, &#xd;
+      SPHEROID[&quot;GRS 1980&quot;, 6378137.0, 298.257222101], &#xd;
+      TOWGS84[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]], &#xd;
+    PRIMEM[&quot;Greenwich&quot;, 0.0], &#xd;
+    UNIT[&quot;degree&quot;, 0.017453292519943295], &#xd;
+    AXIS[&quot;Longitude&quot;, EAST], &#xd;
+    AXIS[&quot;Latitude&quot;, NORTH]], &#xd;
+  PROJECTION[&quot;Transverse_Mercator&quot;], &#xd;
+  PARAMETER[&quot;central_meridian&quot;, 127.0], &#xd;
+  PARAMETER[&quot;latitude_of_origin&quot;, 38.0], &#xd;
+  PARAMETER[&quot;scale_factor&quot;, 1.0], &#xd;
+  PARAMETER[&quot;false_easting&quot;, 200000.0], &#xd;
+  PARAMETER[&quot;false_northing&quot;, 500000.0], &#xd;
+  UNIT[&quot;m&quot;, 1.0], &#xd;
+  AXIS[&quot;x&quot;, EAST], &#xd;
+  AXIS[&quot;y&quot;, NORTH], &#xd;
+  AUTHORITY[&quot;EPSG&quot;,&quot;5181&quot;]]</nativeCRS>
   <srs>EPSG:5181</srs>
   <nativeBoundingBox>
     <minx>0.0</minx>

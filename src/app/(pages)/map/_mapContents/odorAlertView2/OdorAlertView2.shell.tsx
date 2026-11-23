@@ -1,12 +1,20 @@
 'use client'
 
-import { useEffect, useSyncExternalStore } from 'react'
-import { createPortal } from 'react-dom'
-import { X } from 'lucide-react'
-import { OdorIndexAlertContent } from '@/app/(pages)/(index)/odorPh/OdorIndexAlertContent'
-import { ODOR_ALERT_VIEW2_SER_ENG } from './odorAlertView2Config'
-
-const MIN_WIDTH = 720
+import { useEffect, useState } from 'react'
+import type { OdorAlertItem } from '@/app/(pages)/(index)/odorPh/odorPhDashboardMock'
+import { MapSideListPanel } from '../../_mapComponents/MapSideListPanel'
+import { OdorAlertDetailBottomSheet } from '../odorDashboard2/OdorAlertDetailBottomSheet'
+import { ODOR_DASHBOARD2_FLOAT_RIGHT_INSET } from '../odorDashboard2/odorDashboard2Config'
+import { OdorAlertView2HistoryModal } from './OdorAlertView2HistoryModal'
+import { OdorAlertView2ListPanel } from './OdorAlertView2ListPanel'
+import {
+  ODOR_ALERT_VIEW2_DETAIL_BOTTOM,
+  ODOR_ALERT_VIEW2_DETAIL_GAP,
+  ODOR_ALERT_VIEW2_LIST_DEFAULT_WIDTH,
+  ODOR_ALERT_VIEW2_LIST_MAX_WIDTH,
+  ODOR_ALERT_VIEW2_LIST_MIN_WIDTH,
+  ODOR_ALERT_VIEW2_SER_ENG,
+} from './odorAlertView2Config'
 
 type Props = {
   leftOffsetPx: number
@@ -14,62 +22,64 @@ type Props = {
   onClose: () => void
 }
 
-function subscribeResize(cb: () => void) {
-  window.addEventListener('resize', cb)
-  return () => window.removeEventListener('resize', cb)
-}
-
-function useViewportWidth(): number {
-  return useSyncExternalStore(subscribeResize, () => window.innerWidth, () => 1600)
-}
-
-const noopSubscribe = () => () => undefined
-
-function useIsClient(): boolean {
-  return useSyncExternalStore(noopSubscribe, () => true, () => false)
-}
-
 /**
- * 경보보기2 — 지도 영역 풀패널. Index «경보 목록» 목업 UI.
+ * 경보목록2 — 기존 standard 표·플로팅 상세/이력 UI + P21(odorAlertStore)
  */
-export function OdorAlertView2Shell({ leftOffsetPx, onTotalWidthChange, onClose }: Props) {
-  const viewport = useViewportWidth()
-  const isClient = useIsClient()
-  const width = Math.max(MIN_WIDTH, viewport - leftOffsetPx)
+export function OdorAlertView2Shell({
+  leftOffsetPx,
+  onTotalWidthChange,
+  onClose,
+}: Props) {
+  const [listWidth, setListWidth] = useState(ODOR_ALERT_VIEW2_LIST_DEFAULT_WIDTH)
+  const [historyOpen, setHistoryOpen] = useState(false)
+  const [detailAlert, setDetailAlert] = useState<OdorAlertItem | null>(null)
+
+  /** 상수 변경·HMR 시에도 기본 너비가 반영되도록 동기화 */
+  useEffect(() => {
+    setListWidth(ODOR_ALERT_VIEW2_LIST_DEFAULT_WIDTH)
+  }, [ODOR_ALERT_VIEW2_LIST_DEFAULT_WIDTH])
 
   useEffect(() => {
-    onTotalWidthChange(width)
-  }, [width, onTotalWidthChange])
+    onTotalWidthChange(listWidth)
+  }, [listWidth, onTotalWidthChange])
 
   useEffect(() => () => onTotalWidthChange(0), [onTotalWidthChange])
 
-  if (!isClient) return null
-
-  return createPortal(
-    <div
-      className="pointer-events-auto fixed inset-y-0 right-0 z-[55] flex min-h-0 flex-col border-l border-border bg-background shadow-lg"
-      style={{ left: leftOffsetPx }}
-      data-ser-eng={ODOR_ALERT_VIEW2_SER_ENG}
-    >
-      <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2">
-        <span className="text-[12px] font-semibold">경보보기2</span>
-        <div className="ml-auto flex items-center gap-1.5">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            title="닫기"
-            aria-label="닫기"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
+  return (
+    <>
+      <div className="pointer-events-auto shrink-0">
+        <MapSideListPanel
+          width={listWidth}
+          minWidth={ODOR_ALERT_VIEW2_LIST_MIN_WIDTH}
+          maxWidth={ODOR_ALERT_VIEW2_LIST_MAX_WIDTH}
+          leftOffsetPx={leftOffsetPx}
+          onWidthChange={setListWidth}
+          contentClassName="overflow-hidden"
+          serEng={ODOR_ALERT_VIEW2_SER_ENG}
+        >
+          <OdorAlertView2ListPanel
+            onClose={onClose}
+            historyOpen={historyOpen}
+            onToggleHistory={() => setHistoryOpen((v) => !v)}
+            selectedAlertId={detailAlert?.id ?? null}
+            onSelectAlert={(alert) => setDetailAlert(alert)}
+          />
+        </MapSideListPanel>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-2">
-        <OdorIndexAlertContent />
-      </div>
-    </div>,
-    document.body
+      <OdorAlertDetailBottomSheet
+        alert={detailAlert}
+        leftPx={leftOffsetPx + listWidth + ODOR_ALERT_VIEW2_DETAIL_GAP}
+        rightPx={ODOR_DASHBOARD2_FLOAT_RIGHT_INSET}
+        bottomPx={ODOR_ALERT_VIEW2_DETAIL_BOTTOM}
+        onClose={() => setDetailAlert(null)}
+      />
+
+      <OdorAlertView2HistoryModal
+        open={historyOpen}
+        leftPx={leftOffsetPx + listWidth}
+        onClose={() => setHistoryOpen(false)}
+      />
+    </>
   )
 }

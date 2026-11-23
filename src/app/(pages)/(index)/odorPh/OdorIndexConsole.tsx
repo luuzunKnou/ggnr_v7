@@ -27,6 +27,11 @@ import {
 } from '@/app/(pages)/(index)/odorPh/OdorIndexAlertModal'
 import { OdorSidebarUserAccount } from '@/app/(pages)/(index)/odorPh/OdorSidebarUserAccount'
 import { seedOdorIndexAlertNotifs } from '@/app/(pages)/(index)/odorPh/odorIndexAlertNotifSeed'
+import { OdorSystemStatusPanel } from '@/app/(pages)/(index)/odorPh/systemStatus/OdorSystemStatusPanel'
+import { setPendingOdorStationFocus } from '@/app/(pages)/(index)/odorPh/systemStatus/odorSystemStatusFocus'
+import { OdorAlertPopupHost } from '@/app/(pages)/map/_mapContents/odorAlert/OdorAlertPopupHost'
+import { ODOR_DASHBOARD2_OPENED_KEY } from '@/app/(pages)/map/_mapContents/odorDashboard2/odorDashboard2Config'
+import { withBasePathNav } from '@/lib/basePath'
 import { cn } from '@/lib/utils'
 
 type Props = {
@@ -101,11 +106,15 @@ export function OdorIndexConsole({ title, sensors, footerAddr, footerRss, querie
           getDescription={getOdorIndexMenuDescription}
           selectMenuSignal={selectMenuSignal}
           renderBodyOverlay={
-            <OdorIndexAlertModal
-              open={alertModalOpen}
-              onClose={() => setAlertModalOpen(false)}
-              onGoAlertList={goAlertListWithDetail}
-            />
+            <>
+              <OdorIndexAlertModal
+                open={alertModalOpen}
+                onClose={() => setAlertModalOpen(false)}
+                onGoAlertList={goAlertListWithDetail}
+              />
+              {/* P21-06 — 로그인·신규 경보 자동 팝업 */}
+              <OdorAlertPopupHost enabled />
+            </>
           }
           renderSidebarBottom={({ collapsed }) => (
             <div className="flex w-full flex-col">
@@ -170,16 +179,25 @@ export function OdorIndexConsole({ title, sensors, footerAddr, footerRss, querie
                 break
               case 'systemStatus':
                 body = (
-                  <OdorIndexPlaceholderPanel
-                    title="시스템 상태•통신"
-                    description="서버·센서 통신 상태와 시스템 가동 현황을 확인합니다."
+                  <OdorSystemStatusPanel
+                    variant="index"
+                    onGoToStation={(node) => {
+                      if (node.sensorKey == null) return
+                      setPendingOdorStationFocus(node.sensorKey)
+                      window.location.assign(
+                        withBasePathNav(
+                          `/map?system=odorAdmin&opened=${ODOR_DASHBOARD2_OPENED_KEY}`
+                        )
+                      )
+                    }}
                   />
                 )
                 break
               default:
                 body = null
             }
-            const showQueryTime = id !== 'alertList' && id !== 'alertView2'
+            const showQueryTime =
+              id !== 'alertList' && id !== 'alertView2' && id !== 'systemStatus'
             return (
               <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
                 {showQueryTime ? (

@@ -10667,20 +10667,6 @@
     "define_table_parents_layer": "swl_manh_ps"
   },
   {
-    "define_table_name": "swl_manh_ps_rain",
-    "define_table_kor_name": "우수맨홀",
-    "define_table_shp_type": "POINT",
-    "define_table_read_share": "P",
-    "define_table_write_share": "P",
-    "define_table_group": "하수",
-    "define_table_idx": "420",
-    "define_table_etc": "",
-    "define_table_schema": "layer",
-    "define_table_source": "shp",
-    "define_table_div_query": "smu_cde = 'SMU001'",
-    "define_table_parents_layer": "swl_manh_ps"
-  },
-  {
     "define_table_name": "swl_manh_ps_smu001",
     "define_table_kor_name": "우수맨홀",
     "define_table_shp_type": "POINT",
@@ -10692,20 +10678,6 @@
     "define_table_schema": "layer",
     "define_table_source": "shp",
     "define_table_div_query": "smu_cde = 'SMU001'",
-    "define_table_parents_layer": "swl_manh_ps"
-  },
-  {
-    "define_table_name": "swl_manh_ps_sewage",
-    "define_table_kor_name": "오수맨홀",
-    "define_table_shp_type": "POINT",
-    "define_table_read_share": "P",
-    "define_table_write_share": "P",
-    "define_table_group": "하수",
-    "define_table_idx": "430",
-    "define_table_etc": "",
-    "define_table_schema": "layer",
-    "define_table_source": "shp",
-    "define_table_div_query": "smu_cde = 'SMU002'",
     "define_table_parents_layer": "swl_manh_ps"
   },
   {

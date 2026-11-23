@@ -100,7 +100,7 @@ export function pushMockNewOdorAlert(): string {
     kind: 'odor',
     grade,
     sensorLabel: `신규-${alertSeq}`,
-    agency: '포항맑은물',
+    agency: '가람환경기술',
     emdNm: '장량동',
     occurredAt: new Date().toISOString(),
     acked: false,
@@ -125,4 +125,83 @@ export function clearOdorAlertPopup(): void {
 export function resetOdorAlertMockStore(): void {
   state = initialState()
   listeners.forEach((l) => l())
+}
+
+type CommDisconnectNode = {
+  id: string
+  label: string
+  agency?: string
+  lastRecvAt: string | null
+  status: 'ok' | 'delayed' | 'disconnect'
+  kind: string
+}
+
+/**
+ * 통신계통도 두절 센서 → 장애(fault) 경보 upsert.
+ * 복구(정상·지연)된 계통 경보는 recovered=true 처리.
+ */
+export function syncOdorCommDisconnectFaults(nodes: CommDisconnectNode[]): void {
+  const cur = getState()
+  const disconnect = nodes.filter((n) => n.kind === 'sensor' && n.status === 'disconnect')
+  const activeIds = new Set(disconnect.map((n) => `oa-comm-${n.id}`))
+  const byId = new Map(cur.alerts.map((a) => [a.id, a]))
+  let changed = false
+  let latestPopup: string | null = cur.latestPopupAlertId
+  const next = [...cur.alerts]
+
+  for (const n of disconnect) {
+    const id = `oa-comm-${n.id}`
+    const existing = byId.get(id)
+    if (existing) {
+      if (existing.recovered || existing.lastRecvAt !== n.lastRecvAt) {
+        const idx = next.findIndex((a) => a.id === id)
+        if (idx >= 0) {
+          next[idx] = {
+            ...existing,
+            recovered: false,
+            lastRecvAt: n.lastRecvAt,
+            occurredAt: existing.recovered ? new Date().toISOString() : existing.occurredAt,
+          }
+          changed = true
+          if (existing.recovered) latestPopup = id
+        }
+      }
+      continue
+    }
+    alertSeq += 1
+    const row: OdorAlertRow = {
+      id,
+      kind: 'fault',
+      grade: null,
+      sensorLabel: n.label,
+      agency: n.agency ?? '통신계통',
+      emdNm: '—',
+      occurredAt: new Date().toISOString(),
+      acked: false,
+      recovered: false,
+      scrubberAutoOn: null,
+      lastRecvAt: n.lastRecvAt,
+    }
+    next.unshift(row)
+    byId.set(id, row)
+    latestPopup = id
+    changed = true
+  }
+
+  for (let i = 0; i < next.length; i++) {
+    const a = next[i]
+    if (!a.id.startsWith('oa-comm-')) continue
+    if (activeIds.has(a.id)) continue
+    if (!a.recovered) {
+      next[i] = { ...a, recovered: true }
+      changed = true
+    }
+  }
+
+  if (!changed) return
+  setState({
+    ...cur,
+    alerts: next,
+    latestPopupAlertId: latestPopup,
+  })
 }

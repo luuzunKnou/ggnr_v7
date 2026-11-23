@@ -1,6 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
+import { MAP_UI_Z_CLASS } from '@/lib/mapUiZIndex'
+import { cn } from '@/lib/utils'
 import { odorAlertBtnGhost, odorAlertBtnPrimary, odorAlertFieldClass } from './odorAlertConfig'
 
 type Props = {
@@ -18,10 +21,15 @@ export function OdorAlertAckDialog({ open, title, description, onClose, onConfir
     if (open) setReason('')
   }, [open])
 
-  if (!open) return null
+  if (!open || typeof document === 'undefined') return null
 
-  return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/40 p-4">
+  return createPortal(
+    <div
+      className={cn(
+        'fixed inset-0 flex items-center justify-center bg-black/40 p-4',
+        MAP_UI_Z_CLASS.nestedDialog
+      )}
+    >
       <div
         role="dialog"
         aria-modal="true"
@@ -57,6 +65,7 @@ export function OdorAlertAckDialog({ open, title, description, onClose, onConfir
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }

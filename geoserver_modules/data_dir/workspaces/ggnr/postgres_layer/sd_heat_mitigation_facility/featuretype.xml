@@ -1,5 +1,5 @@
 <featureType>
-  <id>FeatureTypeInfoImpl--55857d9c:1a19abc0bff:-77e6</id>
+  <id>FeatureTypeInfoImpl--210e710e:1a1f780e02f:-7f88</id>
   <name>sd_heat_mitigation_facility</name>
   <nativeName>sd_heat_mitigation_facility</nativeName>
   <namespace>
@@ -10,19 +10,38 @@
     <string>features</string>
     <string>sd_heat_mitigation_facility</string>
   </keywords>
+  <nativeCRS class="projected">PROJCS[&quot;Korea 2000 / Central Belt&quot;, &#xd;
+  GEOGCS[&quot;Korea 2000&quot;, &#xd;
+    DATUM[&quot;Geocentric_datum_of_Korea&quot;, &#xd;
+      SPHEROID[&quot;GRS 1980&quot;, 6378137.0, 298.257222101], &#xd;
+      TOWGS84[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]], &#xd;
+    PRIMEM[&quot;Greenwich&quot;, 0.0], &#xd;
+    UNIT[&quot;degree&quot;, 0.017453292519943295], &#xd;
+    AXIS[&quot;Longitude&quot;, EAST], &#xd;
+    AXIS[&quot;Latitude&quot;, NORTH]], &#xd;
+  PROJECTION[&quot;Transverse_Mercator&quot;], &#xd;
+  PARAMETER[&quot;central_meridian&quot;, 127.0], &#xd;
+  PARAMETER[&quot;latitude_of_origin&quot;, 38.0], &#xd;
+  PARAMETER[&quot;scale_factor&quot;, 1.0], &#xd;
+  PARAMETER[&quot;false_easting&quot;, 200000.0], &#xd;
+  PARAMETER[&quot;false_northing&quot;, 500000.0], &#xd;
+  UNIT[&quot;m&quot;, 1.0], &#xd;
+  AXIS[&quot;x&quot;, EAST], &#xd;
+  AXIS[&quot;y&quot;, NORTH], &#xd;
+  AUTHORITY[&quot;EPSG&quot;,&quot;5181&quot;]]</nativeCRS>
   <srs>EPSG:5181</srs>
   <nativeBoundingBox>
-    <minx>333640.41474134824</minx>
-    <maxx>368465.69263099355</maxx>
-    <miny>339621.0342867526</miny>
-    <maxy>353082.93408882833</maxy>
+    <minx>319405.02796422684</minx>
+    <maxx>360582.37585455226</maxx>
+    <miny>313492.27702674025</miny>
+    <maxy>326212.2777865193</maxy>
     <crs class="projected">EPSG:5181</crs>
   </nativeBoundingBox>
   <latLonBoundingBox>
-    <minx>128.4924963502581</minx>
-    <maxx>128.8842022000003</maxx>
-    <miny>36.54007943414051</miny>
-    <maxy>36.66684966240214</maxy>
+    <minx>128.3303656</minx>
+    <maxx>128.78785660000003</maxx>
+    <miny>36.3060863</miny>
+    <maxy>36.422339599999994</maxy>
     <crs>EPSG:4326</crs>
   </latLonBoundingBox>
   <projectionPolicy>FORCE_DECLARED</projectionPolicy>
