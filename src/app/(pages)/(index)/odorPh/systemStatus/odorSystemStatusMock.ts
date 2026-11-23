@@ -20,8 +20,8 @@ function minutesAgoIso(nowMs: number, minutes: number): string {
 }
 
 /**
- * 목업 계통도.
- * 게이트웨이 없음 — 센서는 업체 직속(계통도에는 그리지 않음, 업체 클릭 시 우측 확장).
+ * 목업 통신 목록 그래프.
+ * 게이트웨이 없음 — 센서는 업체 직속(목록에는 미표시, 업체 클릭 시 우측 확장).
  * 전부 연결 정상 전제.
  */
 export function createOdorSystemStatusGraph(nowMs: number = Date.now()): OdorCommGraph {

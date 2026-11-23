@@ -46,7 +46,6 @@ export function OdorSystemStatusPanelView({
   const {
     graph,
     visibleViews,
-    visibleLinks,
     filter,
     setFilter,
     autoRefresh,
@@ -118,7 +117,7 @@ export function OdorSystemStatusPanelView({
           <p className="truncate text-xs font-semibold text-foreground">시스템 상태•통신</p>
           <p className="truncate text-[10px] text-muted-foreground">
             조회 기준: {formatCommTime(graph.judgedAt)}
-            {variant === 'map' ? ' · 통신계통도' : ''}
+            {variant === 'map' ? ' · 통신 목록' : ''}
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-1">
@@ -234,16 +233,15 @@ export function OdorSystemStatusPanelView({
       ) : null}
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
-        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           <OdorSystemStatusDiagram
             nodes={visibleViews}
-            links={visibleLinks}
             selectedId={selectedId}
             onSelect={selectNode}
           />
           {!selectedId ? (
-            <p className="px-3 pb-3 text-center text-[10px] text-muted-foreground">
-              계층·업체를 선택하면 오른쪽에 상세·기기 목록이 열립니다.
+            <p className="shrink-0 px-3 py-2 text-center text-[10px] text-muted-foreground">
+              행을 선택하면 오른쪽에 상세·기기 목록이 열립니다.
             </p>
           ) : null}
         </div>

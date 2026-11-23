@@ -14,7 +14,7 @@ export type OdorCommNodeKind =
 
 export type OdorCommStatusFilter = 'all' | 'ok' | 'abnormal'
 
-/** 계통도에 그리는 계층 (센서는 우측 확장만, 게이트웨이 제외) */
+/** 목록 테이블에 표시하는 계층 (센서는 우측 확장만, 게이트웨이 제외) */
 export const ODOR_COMM_DIAGRAM_KINDS: ReadonlySet<OdorCommNodeKind> = new Set([
   'ipsec',
   'db',
