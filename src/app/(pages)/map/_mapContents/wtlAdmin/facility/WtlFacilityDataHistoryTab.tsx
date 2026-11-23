@@ -100,10 +100,15 @@ function collectKeyValues(
   return [...out]
 }
 
-/** 목록에서 되돌리기 후보 — 상세 가능한 추가·수정(되돌리기 이력 자체는 제외) */
+/** 목록에 되돌리기 버튼 표시 — 상세 가능한 추가·수정(되돌리기 이력 자체는 제외) */
 function canShowRevert(row: HistoryRow): boolean {
   if (!row.canDetail) return false
   return row.workType === '추가' || row.workType === '수정'
+}
+
+/** 실행 가능 — 수정만 (추가·지도 공통 모달과 동일하게 비활성) */
+function canExecuteRevert(row: HistoryRow): boolean {
+  return canShowRevert(row) && row.workType === '수정'
 }
 
 export function WtlFacilityDataHistoryTab({
@@ -206,12 +211,10 @@ export function WtlFacilityDataHistoryTab({
 
   const handleRevertRow = async (item: HistoryRow, e?: MouseEvent) => {
     e?.stopPropagation()
-    if (!canWrite || !canShowRevert(item)) return
+    if (!canWrite || !canExecuteRevert(item)) return
     if (
       !window.confirm(
-        item.workType === '추가'
-          ? '되돌리기를 실행합니다.\n이 이력으로 추가된 행을 삭제합니다. 계속할까요?'
-          : '되돌리기를 실행합니다.\n이 이력의 속성을 변경 전 값으로 되돌립니다. 계속할까요?'
+        '되돌리기를 실행합니다.\n이 이력의 속성을 변경 전 값으로 되돌립니다. 계속할까요?'
       )
     ) {
       return
@@ -231,11 +234,7 @@ export function WtlFacilityDataHistoryTab({
       }
       const n = Number(data.revertedCount ?? 0)
       window.alert(
-        item.workType === '추가'
-          ? '추가된 행을 삭제했습니다.'
-          : n > 0
-            ? `되돌리기 완료 (${n}개 속성)`
-            : '되돌리기를 완료했습니다.'
+        n > 0 ? `되돌리기 완료 (${n}개 속성)` : '되돌리기를 완료했습니다.'
       )
       setDetailRow(null)
       void loadList()
@@ -339,6 +338,7 @@ export function WtlFacilityDataHistoryTab({
                   [r.userName, r.userId].filter((s) => String(s ?? '').trim()).join(' / ') ||
                   '—'
                 const showRevert = canWrite && canShowRevert(r)
+                const revertEnabled = showRevert && canExecuteRevert(r)
                 return (
                   <tr
                     key={r.id}
@@ -368,12 +368,20 @@ export function WtlFacilityDataHistoryTab({
                         {showRevert ? (
                           <button
                             type="button"
-                            className="inline-flex cursor-pointer text-muted-foreground hover:text-foreground disabled:opacity-50"
-                            title="되돌리기"
-                            disabled={actionLoading}
+                            className={cn(
+                              'inline-flex text-muted-foreground disabled:cursor-not-allowed disabled:opacity-40',
+                              revertEnabled &&
+                                'cursor-pointer hover:text-foreground'
+                            )}
+                            title={
+                              revertEnabled
+                                ? '되돌리기'
+                                : '추가 이력은 되돌릴 수 없습니다'
+                            }
+                            disabled={actionLoading || !revertEnabled}
                             onClick={(e) => void handleRevertRow(r, e)}
                           >
-                            {actionLoading ? (
+                            {actionLoading && revertEnabled ? (
                               <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
                             ) : (
                               <Undo2 className="h-3.5 w-3.5" aria-hidden />
@@ -408,6 +416,7 @@ export function WtlFacilityDataHistoryTab({
             ) : null}
             {canWrite &&
             detailRow &&
+            canExecuteRevert(detailRow) &&
             (detailRow.canRevertAll ||
               (detailRow.details ?? []).some((d) => d.canRevert && d.ddKey)) ? (
               <div className="flex justify-end pt-1">

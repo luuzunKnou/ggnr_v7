@@ -6,6 +6,7 @@ import { useResolvedThemeSafe } from '@/app/(pages)/(index)/theme-provider'
 import { WTL_LAYER_SHAPE_DEFS } from '@/lib/wtlLayerShapeDefs'
 import { SECTION_DEFAULT_HALF_WIDTH_M } from '@/app/(pages)/dev/_components/threeJs/groundSection'
 import { ViewportCompass } from '@/app/(pages)/dev/_components/threeJs/ViewportCompass'
+import { WtlNetworkSectionMouseHint } from './WtlNetworkSectionMouseHint'
 import { DATA_QUERY_SELECTION_PULSE_STEP } from '@/lib/mapDataQueryMapHighlight'
 import { cn } from '@/lib/utils'
 import {
@@ -1195,7 +1196,10 @@ export function WtlNetworkSectionThreeJsTab({
             style={{ display: 'none' }}
           />
           {viewReady && !error ? (
-            <ViewportCompass getCamera={getCamera} onClick={faceNorth} />
+            <>
+              <WtlNetworkSectionMouseHint />
+              <ViewportCompass getCamera={getCamera} onClick={faceNorth} />
+            </>
           ) : null}
           {busy || !viewReady ? (
             <p
