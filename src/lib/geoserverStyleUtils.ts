@@ -713,6 +713,24 @@ function sldLineStrokeLiteral(rule: string): string | null {
   return colors[colors.length - 1] ?? null;
 }
 
+/**
+ * Size 안 Categorize — 가장 확대(첫 value) 픽셀.
+ * ignore_scale WMS·관련시설 벡터가 env(size)=0일 때 Categorize 경로와 맞춤.
+ */
+function sldCategorizeFirstSize(sizeBlock: string): number | undefined {
+  const cat = sizeBlock.match(
+    /<(?:[\w]+:)?Function\s+name=["']Categorize["']>([\s\S]*?)<\/(?:[\w]+:)?Function>/i
+  )?.[1];
+  if (!cat) return undefined;
+  const literals = [...cat.matchAll(/<(?:[\w]+:)?Literal>\s*([^<]*?)\s*<\/(?:[\w]+:)?Literal>/gi)]
+    .map((x) => x[1].trim())
+    .filter((v) => /^[0-9.]+$/.test(v))
+    .map(Number)
+    .filter((n) => Number.isFinite(n) && n > 0 && n <= 200);
+  // Categorize: value0, threshold0, value1, … — 첫 value = 최대 확대 크기
+  return literals[0];
+}
+
 function sldGraphicSize(rule: string): number | undefined {
   const sizeBlock = rule.match(/<(?:[\w]+:)?Size>([\s\S]*?)<\/(?:[\w]+:)?Size>/i)?.[1];
   if (!sizeBlock) return undefined;
@@ -721,6 +739,8 @@ function sldGraphicSize(rule: string): number | undefined {
     const n = Number(plain);
     if (Number.isFinite(n) && n > 0) return n;
   }
+  const catSize = sldCategorizeFirstSize(sizeBlock);
+  if (catSize != null) return catSize;
   const literals = [...sizeBlock.matchAll(/<(?:[\w]+:)?Literal>\s*([^<]*?)\s*<\/(?:[\w]+:)?Literal>/gi)]
     .map((x) => x[1].trim())
     .filter((v) => /^[0-9.]+$/.test(v))
@@ -816,7 +836,11 @@ function sldMimeForSymbolUrl(url: string): string {
   return url.toLowerCase().endsWith('.svg') ? 'image/svg+xml' : 'image/png';
 }
 
-/** 점 크기: 제목_size → 규칙 내 기타 *_size(라벨 제외) → 숫자 Size */
+/**
+ * 점 크기: 실제 WMS 기본 경로와 맞춤.
+ * env(title_size, 0) 첫 기본값 0은 «미설정» — Categorize/Size 숫자 우선.
+ * env size > 0 일 때만 env 오버라이드.
+ */
 function sldPointMarkSize(
   rule: string,
   env: Map<string, string>,
@@ -825,17 +849,21 @@ function sldPointMarkSize(
   const titled = env.get(`${title}_size`);
   if (titled != null && titled !== '') {
     const n = Number(titled);
-    if (Number.isFinite(n)) return n;
+    // 0 = SLD if_then_else 분기용 기본값 → WMS는 Categorize로 그림
+    if (Number.isFinite(n) && n > 0) return n;
   }
+  const graphic = sldGraphicSize(rule);
+  if (graphic != null && graphic > 0) return graphic;
   for (const [key, value] of env) {
     if (/_label_size$/i.test(key) || !/_size$/i.test(key) || value === '') continue;
+    if (key === `${title}_size`) continue;
     const n = Number(value);
-    if (Number.isFinite(n)) return n;
+    if (Number.isFinite(n) && n > 0) return n;
   }
   const plain = rule.match(/<(?:[\w]+:)?Size>\s*([0-9.]+)\s*<\/(?:[\w]+:)?Size>/i);
   if (plain) {
     const n = Number(plain[1]);
-    if (Number.isFinite(n)) return n;
+    if (Number.isFinite(n) && n > 0) return n;
   }
   return undefined;
 }

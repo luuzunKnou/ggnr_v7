@@ -13,6 +13,30 @@ import {
 
 export type RiverBasicPlanListAxis = "byPlan" | "byRiver";
 
+/** 마지막에 고른 목록 기준 — 없으면 하천 기준 */
+export const RIVER_BASIC_PLAN_LIST_AXIS_LS_KEY =
+  "ggnr:riverBasicPlan:listAxis";
+
+export function readRiverBasicPlanListAxis(): RiverBasicPlanListAxis {
+  if (typeof window === "undefined") return "byRiver";
+  try {
+    const v = window.localStorage.getItem(RIVER_BASIC_PLAN_LIST_AXIS_LS_KEY);
+    if (v === "byPlan" || v === "byRiver") return v;
+  } catch {
+    /* ignore */
+  }
+  return "byRiver";
+}
+
+export function writeRiverBasicPlanListAxis(axis: RiverBasicPlanListAxis) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(RIVER_BASIC_PLAN_LIST_AXIS_LS_KEY, axis);
+  } catch {
+    /* ignore */
+  }
+}
+
 const SCOPES: {
   axis: RiverBasicPlanListAxis;
   label: string;
@@ -21,16 +45,6 @@ const SCOPES: {
   tone: { card: string; icon: string };
 }[] = [
   {
-    axis: "byPlan",
-    label: "보고서별",
-    hint: "보고서를 기준으로 소속 하천을 봅니다",
-    Icon: FolderTree,
-    tone: {
-      card: "hover:border-primary/40 hover:bg-primary/5",
-      icon: "bg-primary/15 text-primary group-hover:bg-primary/25",
-    },
-  },
-  {
     axis: "byRiver",
     label: "하천별",
     hint: "하천을 기준으로 기본계획을 봅니다",
@@ -38,6 +52,16 @@ const SCOPES: {
     tone: {
       card: "hover:border-emerald-500/40 hover:bg-emerald-500/5",
       icon: "bg-emerald-500/15 text-emerald-600 group-hover:bg-emerald-500/25 dark:text-emerald-400",
+    },
+  },
+  {
+    axis: "byPlan",
+    label: "보고서별",
+    hint: "보고서를 기준으로 소속 하천을 봅니다",
+    Icon: FolderTree,
+    tone: {
+      card: "hover:border-primary/40 hover:bg-primary/5",
+      icon: "bg-primary/15 text-primary group-hover:bg-primary/25",
     },
   },
 ];
@@ -49,7 +73,7 @@ type Props = {
   onClose: () => void;
 };
 
-/** 기본계획 시작 — 보고서별 / 하천별 보기 선택 */
+/** 기본계획 시작 — 하천별 / 보고서별 보기 선택 */
 export function RiverBasicPlanScopeModal({ open, selectedAxis, onSelect, onClose }: Props) {
   return (
     <Dialog open={open} onOpenChange={(next) => (next ? undefined : onClose())}>
@@ -62,7 +86,7 @@ export function RiverBasicPlanScopeModal({ open, selectedAxis, onSelect, onClose
             목록 보기 선택
           </DialogTitle>
           <DialogDescription className="sr-only">
-            보고서별 또는 하천별로 목록을 봅니다.
+            하천별 또는 보고서별로 목록을 봅니다.
           </DialogDescription>
           <button
             type="button"

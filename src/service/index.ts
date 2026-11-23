@@ -31,6 +31,7 @@ import * as privateLandAnalysisService from './privateLandAnalysisService';
 import * as roadLedgerService from './roadLedgerService';
 import * as roadVideoTrackService from './roadVideoTrackService';
 import * as roadNetworkService from './roadNetworkService';
+import * as bikeRoadNetService from './bikeRoadNetService';
 import * as wtlNetworkService from './wtlNetworkService';
 import * as wtlFacilityService from './wtlFacilityService';
 import * as wtlRequestService from './wtlRequestService';
@@ -136,6 +137,7 @@ export {
   roadLedgerService,
   roadVideoTrackService,
   roadNetworkService,
+  bikeRoadNetService,
   wtlNetworkService,
   wtlFacilityService,
   wtlRequestService,

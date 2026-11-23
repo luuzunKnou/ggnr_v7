@@ -1,0 +1,16 @@
+<layer>
+  <name>tl_sprd_manage_tongpan</name>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl-7fe1d2d6:19cb369c421:-2415</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <name>tl_sprd_manage_tongpan</name>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+</layer>

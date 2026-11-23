@@ -1,5 +1,5 @@
 <featureType>
-  <id>FeatureTypeInfoImpl--210e710e:1a1f780e02f:-7f8a</id>
+  <id>FeatureTypeInfoImpl-b3cf9b6:1a1e371a7b9:-7be2</id>
   <name>sd_tsunami_emergency_evac_site</name>
   <nativeName>sd_tsunami_emergency_evac_site</nativeName>
   <namespace>
@@ -31,17 +31,17 @@
   AUTHORITY[&quot;EPSG&quot;,&quot;5181&quot;]]</nativeCRS>
   <srs>EPSG:5181</srs>
   <nativeBoundingBox>
-    <minx>0.0</minx>
-    <maxx>-1.0</maxx>
-    <miny>0.0</miny>
-    <maxy>-1.0</maxy>
+    <minx>412733.50840158353</minx>
+    <maxx>419579.4158365278</maxx>
+    <miny>310872.5540999421</miny>
+    <maxy>352180.03860823135</maxy>
     <crs class="projected">EPSG:5181</crs>
   </nativeBoundingBox>
   <latLonBoundingBox>
-    <minx>124.84847767680762</minx>
-    <maxx>124.84848865053446</maxx>
-    <miny>33.47495973610326</miny>
-    <maxy>33.474968932506</maxy>
+    <minx>129.3678419</minx>
+    <maxx>129.4509249</maxx>
+    <miny>36.2722141</miny>
+    <maxy>36.64346239999999</maxy>
     <crs>EPSG:4326</crs>
   </latLonBoundingBox>
   <projectionPolicy>FORCE_DECLARED</projectionPolicy>

@@ -17,6 +17,15 @@ export const OCCUPATION_LEDGER_FIELD_LABELS: Record<string, string> = {
   prmt_addr: '점용자주소',
   state: '상태',
   descript: '비고',
+  // 울진·영덕 옛 하천점용 칸 (ftr_idn 이전)
+  cons_code: '점용코드',
+  usage_name: '점용명',
+  usage_loc: '점용장소',
+  usage_purp: '점용목적',
+  usage_pd: '점용기간',
+  perm_num: '허가번호',
+  river_name: '하천명',
+  river_type: '하천유형',
   // 국공유지(기존 공통 점용 테이블)
   id: '키',
   work_name: '점용명',

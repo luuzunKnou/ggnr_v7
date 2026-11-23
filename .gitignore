@@ -75,6 +75,11 @@ next-env.d.ts
 # Node 런타임 번들 (소스 저장소에 포함하지 않음)
 /runtime/node/
 
+# PDF용 Chromium 바이너리 (폐쇄망 수동 배치 — README만 커밋)
+/tools/chromium/**
+!/tools/chromium/README.md
+/chromium/
+
 # 3D 샘플·타일 데이터 (대용량)
 /3d_data_dir/
 

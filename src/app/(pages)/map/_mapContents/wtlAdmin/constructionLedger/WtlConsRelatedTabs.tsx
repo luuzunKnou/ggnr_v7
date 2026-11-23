@@ -384,31 +384,32 @@ export function WtlConsRelatedTabs({
 
   const visibleZones = useMemo(() => {
     if (!onlyInView) return zones
-    if (!viewExtent) return []
+    if (!viewExtent) return zones
     return zones.filter((z) => wkt5181IntersectsView(z.geomWkt5181, viewExtent))
   }, [onlyInView, viewExtent, zones])
 
   const visibleFacilities = useMemo(() => {
     if (!onlyInView) return facilities
-    if (!viewExtent) return []
+    // 지도 extent 준비 전에는 전체 유지(탭 배지·목록이 0으로 고정되지 않게)
+    if (!viewExtent) return facilities
     return facilities.filter((row) => geomIntersectsView(row.geom, 'EPSG:4326', viewExtent))
   }, [facilities, onlyInView, viewExtent])
 
   const visibleParcels = useMemo(() => {
     if (!onlyInView) return parcels
-    if (!viewExtent) return []
+    if (!viewExtent) return parcels
     return parcels.filter((row) => geomIntersectsView(row.geometry3857, 'EPSG:3857', viewExtent))
   }, [onlyInView, parcels, viewExtent])
 
   const visibleBuildings = useMemo(() => {
     if (!onlyInView) return buildings
-    if (!viewExtent) return []
+    if (!viewExtent) return buildings
     return buildings.filter((row) => geomIntersectsView(row.geometry3857, 'EPSG:3857', viewExtent))
   }, [buildings, onlyInView, viewExtent])
 
   const visibleCustomers = useMemo(() => {
     if (!onlyInView) return customers
-    if (!viewExtent) return []
+    if (!viewExtent) return customers
     return customers.filter((row) => {
       if (!row.point) return false
       return geomIntersectsView(
@@ -421,7 +422,7 @@ export function WtlConsRelatedTabs({
 
   const visibleConsRows = useMemo(() => {
     if (!onlyInView) return consRows
-    if (!viewExtent) return []
+    if (!viewExtent) return consRows
     return consRows.filter((row) => geomIntersectsView(row.geom, 'EPSG:4326', viewExtent))
   }, [consRows, onlyInView, viewExtent])
 
@@ -455,12 +456,6 @@ export function WtlConsRelatedTabs({
   useEffect(() => {
     return () => onRelatedFacilities?.([])
   }, [onRelatedFacilities])
-
-  /** 공사·범위가 바뀌면 관련시설 캐시·지도 표시 초기화 */
-  useEffect(() => {
-    setFacilities([])
-    onRelatedFacilities?.([])
-  }, [parcelWkt, onRelatedFacilities])
 
   useEffect(() => {
     if (!parcelWkt) {
@@ -513,13 +508,11 @@ export function WtlConsRelatedTabs({
     }
   }, [parcelWkt])
 
-  /** 관련시설 탭을 연 뒤에만 조회·표시 */
+  /** 관련시설: 공사·범위가 있으면 탭 열기 전에 조회(카운트용). 지도 표시는 탭 ON일 때만 */
   useEffect(() => {
-    if (tab !== 'facility') return
-    if (!parcelWkt) {
-      setFacilities([])
-      return
-    }
+    setFacilities([])
+    onRelatedFacilities?.([])
+    if (!parcelWkt) return
     let cancelled = false
     void (async () => {
       try {
@@ -543,7 +536,9 @@ export function WtlConsRelatedTabs({
     return () => {
       cancelled = true
     }
-  }, [tab, parcelWkt])
+    // onRelatedFacilities는 setState라 안정. deps에 넣으면 콜백 교체 시 목록이 비워질 수 있음
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- parcelWkt만
+  }, [parcelWkt])
 
   useEffect(() => {
     if (!parcelWkt) {
@@ -658,22 +653,26 @@ export function WtlConsRelatedTabs({
     }
   }, [parcelWkt])
 
+  /**
+   * 탭 배지 = 공사 범위 조회 전체 건수(화면만 필터와 무관).
+   * 목록·지도만 «화면에 보이는 것만»으로 걸러서, 탭을 안 눌러도 건수가 보이게 한다.
+   */
   const counts = useMemo(
     () => ({
-      zone: visibleZones.length,
-      facility: visibleFacilities.length,
-      parcel: visibleParcels.length,
-      building: visibleBuildings.length,
-      customer: visibleCustomers.length,
-      cons: visibleConsRows.length,
+      zone: zones.length,
+      facility: facilities.length,
+      parcel: parcels.length,
+      building: buildings.length,
+      customer: customers.length,
+      cons: consRows.length,
     }),
     [
-      visibleZones.length,
-      visibleFacilities.length,
-      visibleParcels.length,
-      visibleBuildings.length,
-      visibleCustomers.length,
-      visibleConsRows.length,
+      zones.length,
+      facilities.length,
+      parcels.length,
+      buildings.length,
+      customers.length,
+      consRows.length,
     ]
   )
 
