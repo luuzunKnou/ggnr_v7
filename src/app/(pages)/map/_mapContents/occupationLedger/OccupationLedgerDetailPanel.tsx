@@ -149,17 +149,55 @@ export function OccupationLedgerDetailPanel({
   const binding = getOccupationLedgerBinding({ serEng });
   const presetKey = (binding?.editPresetKey ?? 'waterOccupationLedger') as LayerRowEditPresetKey;
   const preset = LAYER_ROW_EDIT_PRESETS[presetKey] ?? LAYER_ROW_EDIT_PRESETS.waterOccupationLedger;
-  const mainTable = binding?.mainTable ?? preset.tableName;
-  const jijukTable = binding?.jijukTable ?? preset.childTableName ?? '';
-  const mgjTable = binding?.mgjTable ?? '';
-  const keyField = binding?.fields.keyField ?? preset.keyField;
+  /** 서버가 DB 칸·필지 표 이름에 맞춰 준 값 (옛 cons_code / usage_data_as_solo 등) */
+  const [runtimeTables, setRuntimeTables] = useState<{
+    mainTable: string;
+    jijukTable: string;
+    mgjTable: string;
+    keyField: string;
+    childParentField: string;
+    childAddressField: string;
+    placeField: string;
+    permitField: string;
+  } | null>(null);
+  const mainTable = runtimeTables?.mainTable || binding?.mainTable || preset.tableName;
+  const jijukTable =
+    runtimeTables?.jijukTable || binding?.jijukTable || preset.childTableName || '';
+  const mgjTable = runtimeTables?.mgjTable || binding?.mgjTable || '';
+  const keyField =
+    runtimeTables?.keyField || binding?.fields.keyField || preset.keyField;
+  /** 저장·도형편집은 정적 프리셋(ftr_idn)이 아니라 서버가 맞춘 키를 써야 한다 */
+  const editPreset = useMemo(() => {
+    if (!runtimeTables?.keyField) return preset;
+    const key = runtimeTables.keyField;
+    return {
+      ...preset,
+      tableName: runtimeTables.mainTable || preset.tableName,
+      keyField: key,
+      childTableName: runtimeTables.jijukTable || preset.childTableName,
+      additionalChildTableNames: runtimeTables.mgjTable
+        ? [runtimeTables.mgjTable]
+        : preset.additionalChildTableNames,
+      childParentField: runtimeTables.childParentField || preset.childParentField,
+      childAddressField: runtimeTables.childAddressField || preset.childAddressField,
+      permitField: runtimeTables.permitField || preset.permitField,
+      autoGenerateKeyOnCreate:
+        key.toLowerCase() === 'cons_code' ? true : preset.autoGenerateKeyOnCreate,
+    };
+  }, [preset, runtimeTables]);
   const ledgerFields = binding?.fields;
-  const permitFieldLower = String(ledgerFields?.permitField ?? 'permit_no').toLowerCase();
+  const permitFieldLower = String(
+    runtimeTables?.permitField || ledgerFields?.permitField || 'permit_no'
+  ).toLowerCase();
   const startFieldLower = String(ledgerFields?.startField ?? '').toLowerCase();
   const endFieldLower = String(ledgerFields?.endField ?? '').toLowerCase();
   const stateFieldLower = String(ledgerFields?.stateField ?? 'state').toLowerCase();
-  const placeFieldLower = String(ledgerFields?.placeField ?? '').toLowerCase();
-  const autoCodeFieldLower = String(binding?.autoCodeField ?? '').toLowerCase();
+  const placeFieldLower = String(
+    runtimeTables?.placeField || ledgerFields?.placeField || ''
+  ).toLowerCase();
+  const autoCodeFieldLower = String(
+    runtimeTables?.keyField || binding?.autoCodeField || ''
+  ).toLowerCase();
   const isCreateMode = detailId === LAYER_ROW_NEW_ID;
 
   const [loading, setLoading] = useState(!isCreateMode);
@@ -204,6 +242,37 @@ export function OccupationLedgerDetailPanel({
   const [extraDefs, setExtraDefs] = useState<LayerExtraDefOption[]>([]);
   const [formAttributes, setFormAttributes] = useState<LayerRowDetailAttr[]>([]);
   const [formFieldsLoading, setFormFieldsLoading] = useState(false);
+
+  /** DB에 맞춰 키·필지 표 이름 확정 — 필지 선택 시 점용∩필지 교집합에 필요 */
+  useEffect(() => {
+    let cancelled = false;
+    void call('', 'POST', {
+      service: 'occupationLedgerService',
+      action: 'getOccupationLedgerBindingInfo',
+      params: { serEng },
+    })
+      .then((res) => {
+        if (cancelled) return;
+        const data = res?.data ?? res;
+        if (!data?.success) return;
+        setRuntimeTables({
+          mainTable: String(data.mainTable ?? '').trim(),
+          jijukTable: String(data.jijukTable ?? '').trim(),
+          mgjTable: String(data.mgjTable ?? '').trim(),
+          keyField: String(data.keyField ?? '').trim(),
+          childParentField: String(data.childParentField ?? '').trim(),
+          childAddressField: String(data.childAddressField ?? '').trim(),
+          placeField: String(data.placeField ?? '').trim(),
+          permitField: String(data.permitField ?? '').trim(),
+        });
+      })
+      .catch(() => {
+        if (!cancelled) setRuntimeTables(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [serEng]);
 
   useEffect(() => {
     extraItemsRef.current = extraItems;
@@ -673,7 +742,7 @@ export function OccupationLedgerDetailPanel({
     updateDraftParcel,
     removeDraftParcel,
   } = useLayerRowEdit({
-    preset,
+    preset: editPreset,
     rowKey: isCreateMode ? '' : detailId,
     attributes: formAttributesForEdit,
     initialParcels: parcels,

@@ -16,6 +16,8 @@ export type OccupationLedgerFieldMap = {
   purposeField?: string;
   startField?: string;
   endField?: string;
+  /** 시작·종료가 한 칸인 경우(울진 옛 usage_pd) */
+  periodField?: string;
   areaField?: string;
   ownerNameField?: string;
   ownerAddrField?: string;
@@ -89,6 +91,73 @@ const COMMON_FIELDS: Omit<OccupationLedgerFieldMap, 'childAddressField' | 'child
   remarkField: 'descript',
   childParentField: 'ftr_idn',
 };
+
+/**
+ * 울진·영덕 등 — DB가 아직 옛 칸(cons_code·usage_*)일 때.
+ * ftr_idn 이 없으면 목록·상세가 이 맵으로 동작한다.
+ */
+const WATER_ULJIN_LEGACY_FIELDS: OccupationLedgerFieldMap = {
+  keyField: 'cons_code',
+  mgmtField: 'cons_code',
+  permitField: 'perm_num',
+  nameField: 'usage_name',
+  placeField: 'usage_loc',
+  purposeField: 'usage_purp',
+  periodField: 'usage_pd',
+  areaField: 'perm_area',
+  stateField: 'state',
+  remarkField: 'descript',
+  childParentField: 'cons_code',
+  childAddressField: 'usage_loc',
+};
+
+function hasColumn(columns: string[], name: string): boolean {
+  const lower = name.toLowerCase();
+  return columns.some((c) => c.toLowerCase() === lower);
+}
+
+/**
+ * 본표 실제 칸에 맞춰 바인딩 조정.
+ * 공통 키(ftr_idn)가 없고 옛 키(cons_code)만 있으면 울진 맵으로 전환.
+ * 필지 표도 옛 이름(usage_data_as_solo)이 있으면 그쪽으로 맞춘다.
+ */
+export function adaptOccupationLedgerBindingToColumns(
+  binding: OccupationLedgerBinding,
+  columns: string[],
+  opts?: { jijukTableExists?: (table: string) => boolean }
+): OccupationLedgerBinding {
+  if (binding.serEng !== 'waterOccupationLedger') return binding;
+
+  const legacy =
+    !hasColumn(columns, binding.fields.keyField) &&
+    hasColumn(columns, WATER_ULJIN_LEGACY_FIELDS.keyField);
+
+  let next: OccupationLedgerBinding = binding;
+  if (legacy) {
+    next = {
+      ...binding,
+      fields: { ...WATER_ULJIN_LEGACY_FIELDS },
+      autoCodeField: WATER_ULJIN_LEGACY_FIELDS.keyField,
+      autoCodeDefault: binding.autoCodeDefault ?? 'JY_000001',
+    };
+  }
+
+  // 필지: 옛 DB=usage_data_as_solo, 통합 후=usage_data_solo_as
+  const jijukCandidates = legacy
+    ? ['usage_data_as_solo', 'usage_data_solo_as']
+    : ['usage_data_solo_as', 'usage_data_as_solo'];
+  const exists = opts?.jijukTableExists;
+  if (exists) {
+    for (const name of jijukCandidates) {
+      if (exists(name)) {
+        if (next.jijukTable !== name) next = { ...next, jijukTable: name };
+        break;
+      }
+    }
+  }
+
+  return next;
+}
 
 /** 국공유지 — 기존 공통 점용 테이블 칸 이름 그대로 */
 const LEGACY_FIELDS: OccupationLedgerFieldMap = {

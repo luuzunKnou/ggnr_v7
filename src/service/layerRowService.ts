@@ -195,6 +195,29 @@ function resolveKeyField(tableName: string, override?: string): string | null {
   return getDefineTableKeyFieldName(tableName) ?? 'id';
 }
 
+/**
+ * 실제 테이블에 존재하는 키 칸.
+ * 공통 점용은 ftr_idn을 넘기지만 옛 DB는 cons_code만 있는 경우가 있어 후보를 순회한다.
+ */
+function resolveExistingKeyColumn(
+  tableName: string,
+  columns: string[],
+  override?: string
+): string | null {
+  const preferred = resolveKeyField(tableName, override);
+  if (preferred) {
+    const hit = findColumnName(columns, preferred);
+    if (hit) return hit;
+  }
+  for (const candidate of [override, 'cons_code', 'ftr_idn', 'ogc_fid', 'id']) {
+    const name = String(candidate ?? '').trim();
+    if (!name) continue;
+    const hit = findColumnName(columns, name);
+    if (hit) return hit;
+  }
+  return null;
+}
+
 /** defineLayer 필드 메타 (상세·수정 UI용) */
 export function getEditableFieldDefinitions(params: {
   table: string;
@@ -429,12 +452,8 @@ export async function getTableRowForEdit(params: {
   const columns = await getTableColumns(schema, table);
   if (!columns.length) return { row: null, keyField: null, error: '컬럼 정보를 찾을 수 없습니다.' };
 
-  let keyField = resolveKeyField(tableGuess, params?.keyField);
-  if (!keyField || !findColumnName(columns, keyField)) {
-    const idCol = findColumnName(columns, 'id');
-    keyField = idCol ?? keyField;
-  }
-  if (!keyField || !findColumnName(columns, keyField)) {
+  const keyField = resolveExistingKeyColumn(tableGuess, columns, params?.keyField);
+  if (!keyField) {
     return { row: null, keyField: null, error: '키 컬럼을 찾을 수 없습니다.' };
   }
 
@@ -715,11 +734,8 @@ export async function getTableRowGeomGeoJson3857(params: {
   const columns = await getTableColumns(schema, table);
   if (!columns.length) return { geometry: null, error: '컬럼 정보를 찾을 수 없습니다.' };
 
-  let keyField = resolveKeyField(tableGuess, params?.keyField);
-  if (!keyField || !findColumnName(columns, keyField)) {
-    keyField = findColumnName(columns, 'id') ?? keyField;
-  }
-  if (!keyField || !findColumnName(columns, keyField)) {
+  const keyField = resolveExistingKeyColumn(tableGuess, columns, params?.keyField);
+  if (!keyField) {
     return { geometry: null, error: '키 컬럼을 찾을 수 없습니다.' };
   }
 
@@ -805,10 +821,11 @@ export async function getIntersectedRowGeomGeoJson3857(params: {
     return { geometry: null, error: '컬럼 정보를 찾을 수 없습니다.' };
   }
 
-  let parentKeyField = resolveKeyField(parentGuess, params?.parentKeyField);
-  if (!parentKeyField || !findColumnName(parentCols, parentKeyField)) {
-    parentKeyField = findColumnName(parentCols, 'id') ?? parentKeyField;
-  }
+  const parentKeyField = resolveExistingKeyColumn(
+    parentGuess,
+    parentCols,
+    params?.parentKeyField
+  );
   let childKeyField = resolveKeyField(childGuess, params?.childKeyField);
   if (!childKeyField || !findColumnName(childCols, childKeyField)) {
     childKeyField =
@@ -1139,11 +1156,8 @@ export async function updateTableRowByKey(params: {
   if (!columns.length) return { success: false, error: '컬럼 정보를 찾을 수 없습니다.' };
   const columnTypes = await getTableColumnTypeMap(schema, table);
 
-  let keyField = resolveKeyField(tableGuess, params?.keyField);
-  if (!keyField || !findColumnName(columns, keyField)) {
-    keyField = findColumnName(columns, 'id') ?? keyField;
-  }
-  if (!keyField || !findColumnName(columns, keyField)) {
+  const keyField = resolveExistingKeyColumn(tableGuess, columns, params?.keyField);
+  if (!keyField) {
     return { success: false, error: '키 컬럼을 찾을 수 없습니다.' };
   }
 
@@ -1343,11 +1357,9 @@ export async function insertTableRow(params: {
   if (!columnMeta.length) return { success: false, error: '컬럼 정보를 찾을 수 없습니다.' };
   const columnTypes = await getTableColumnTypeMap(schema, table);
 
-  let keyField = resolveKeyField(tableGuess, params?.keyField);
-  if (!keyField || !findColumnName(columnMeta.map((c) => c.name), keyField)) {
-    keyField = findColumnName(columnMeta.map((c) => c.name), 'id') ?? keyField;
-  }
-  if (!keyField || !findColumnName(columnMeta.map((c) => c.name), keyField)) {
+  const columnNames = columnMeta.map((c) => c.name);
+  const keyField = resolveExistingKeyColumn(tableGuess, columnNames, params?.keyField);
+  if (!keyField) {
     return { success: false, error: '키 컬럼을 찾을 수 없습니다.' };
   }
 
@@ -3027,11 +3039,8 @@ export async function deleteTableRowByKey(params: {
   const columns = await getTableColumns(schema, table);
   if (!columns.length) return { success: false, error: '컬럼 정보를 찾을 수 없습니다.' };
 
-  let keyField = resolveKeyField(tableGuess, params?.keyField);
-  if (!keyField || !findColumnName(columns, keyField)) {
-    keyField = findColumnName(columns, 'id') ?? keyField;
-  }
-  if (!keyField || !findColumnName(columns, keyField)) {
+  const keyField = resolveExistingKeyColumn(tableGuess, columns, params?.keyField);
+  if (!keyField) {
     return { success: false, error: '키 컬럼을 찾을 수 없습니다.' };
   }
   const keyCol = findColumnName(columns, keyField)!;
