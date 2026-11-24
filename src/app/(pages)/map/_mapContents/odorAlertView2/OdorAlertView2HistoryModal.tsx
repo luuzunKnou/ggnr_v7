@@ -10,7 +10,7 @@ type Props = {
   open: boolean
   leftPx: number
   onClose: () => void
-  selectedAlertId?: string | null
+  selectedHistoryId?: string | null
   onSelectHistory?: (row: OdorAckHistoryRow) => void
 }
 
@@ -25,7 +25,7 @@ export function OdorAlertView2HistoryModal({
   open,
   leftPx,
   onClose,
-  selectedAlertId = null,
+  selectedHistoryId = null,
   onSelectHistory,
 }: Props) {
   const { topPx: addressTopPx } = useSearchBarOffset()
@@ -52,7 +52,7 @@ export function OdorAlertView2HistoryModal({
       <OdorAlertView2HistoryPanel
         onClose={onClose}
         variant="panel"
-        selectedAlertId={selectedAlertId}
+        selectedHistoryId={selectedHistoryId}
         onSelectHistory={onSelectHistory}
       />
     </MapDetailFloatingPanel>

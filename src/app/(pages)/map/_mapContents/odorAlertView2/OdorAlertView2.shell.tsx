@@ -6,6 +6,7 @@ import { fromLonLat } from 'ol/proj'
 import { History, X } from 'lucide-react'
 import type { OdorAlertItem } from '@/app/(pages)/(index)/odorPh/odorPhDashboardMock'
 import { cn } from '@/lib/utils'
+import { MapFloatResizableFrame } from '../../_mapComponents/MapFloatResizableFrame'
 import { MapSideListPanel } from '../../_mapComponents/MapSideListPanel'
 import { scheduleAnimateMapToCenter3857 } from '../../_mapComponents/config/mapAutoNavigation'
 import { useMapContext } from '../../_mapComponents/MapContext'
@@ -26,6 +27,8 @@ import {
   ODOR_ALERT_VIEW2_FLOAT_HISTORY_GAP,
   ODOR_ALERT_VIEW2_FLOAT_HISTORY_WIDTH,
   ODOR_ALERT_VIEW2_FLOAT_LEFT_INSET,
+  ODOR_ALERT_VIEW2_FLOAT_MAX_WIDTH,
+  ODOR_ALERT_VIEW2_FLOAT_MIN_WIDTH,
   ODOR_ALERT_VIEW2_FLOAT_TOP,
   ODOR_ALERT_VIEW2_FLOAT_WIDTH,
   ODOR_ALERT_VIEW2_LIST_DEFAULT_WIDTH,
@@ -103,9 +106,12 @@ export function OdorAlertView2Shell({
   const { alerts } = useOdorAlertStore()
   const [uiMode, setUiMode] = useState<OdorAlertView2UiMode>('floating')
   const [listWidth, setListWidth] = useState(ODOR_ALERT_VIEW2_LIST_DEFAULT_WIDTH)
+  const [floatWidth, setFloatWidth] = useState(ODOR_ALERT_VIEW2_FLOAT_WIDTH)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [detailAlert, setDetailAlert] = useState<OdorAlertItem | null>(null)
   const [focusAlertId, setFocusAlertId] = useState<string | null>(null)
+  /** 해제이력→목록 단방향 선택. 목록 클릭 시에는 비움 */
+  const [historySelectedId, setHistorySelectedId] = useState<string | null>(null)
 
   const isFloating = uiMode === 'floating'
 
@@ -146,6 +152,7 @@ export function OdorAlertView2Shell({
   }
 
   const handleSelectAlert = (alert: OdorAlertItem, source: OdorAlertRow) => {
+    setHistorySelectedId(null)
     if (detailAlert?.id === alert.id) {
       setDetailAlert(null)
       setFocusAlertId(null)
@@ -157,7 +164,8 @@ export function OdorAlertView2Shell({
   }
 
   const handleSelectHistory = (hist: OdorAckHistoryRow) => {
-    if (detailAlert?.id === hist.alertId) {
+    if (historySelectedId === hist.id) {
+      setHistorySelectedId(null)
       setDetailAlert(null)
       setFocusAlertId(null)
       return
@@ -165,6 +173,7 @@ export function OdorAlertView2Shell({
     const source = alerts.find((a) => a.id === hist.alertId)
     if (!source) return
     const alert = odorAlertRowToViewItem(source)
+    setHistorySelectedId(hist.id)
     setDetailAlert(alert)
     setFocusAlertId(source.id)
     flyToRow(source)
@@ -172,7 +181,7 @@ export function OdorAlertView2Shell({
 
   const floatLeft = leftOffsetPx + ODOR_ALERT_VIEW2_FLOAT_LEFT_INSET
   const panelLeft = isFloating ? floatLeft : leftOffsetPx
-  const panelWidth = isFloating ? ODOR_ALERT_VIEW2_FLOAT_WIDTH : listWidth
+  const panelWidth = isFloating ? floatWidth : listWidth
   const detailOpen = detailAlert != null
   /** 상세 열림 시 이력은 상세(48vh) 위까지만 — 하단 침범 방지 */
   const floatHistoryMaxHeight = detailOpen
@@ -214,6 +223,7 @@ export function OdorAlertView2Shell({
       onClose={() => {
         setDetailAlert(null)
         setFocusAlertId(null)
+        setHistorySelectedId(null)
       }}
     />
   )
@@ -236,12 +246,16 @@ export function OdorAlertView2Shell({
                 height: `calc(100vh - ${ODOR_ALERT_VIEW2_FLOAT_TOP + 10}px)`,
               }}
             >
-              <div
+              <MapFloatResizableFrame
+                width={floatWidth}
+                minWidth={ODOR_ALERT_VIEW2_FLOAT_MIN_WIDTH}
+                maxWidth={ODOR_ALERT_VIEW2_FLOAT_MAX_WIDTH}
+                onWidthChange={setFloatWidth}
+                resizeEdge="right"
                 className={cn(
-                  'pointer-events-auto flex h-full min-h-0 flex-col overflow-hidden',
+                  'pointer-events-auto h-full',
                   MAP_LAYER_PANEL_SURFACE_CLASS
                 )}
-                style={{ width: ODOR_ALERT_VIEW2_FLOAT_WIDTH }}
               >
                 <div className="standard-map-float-header shrink-0 border-b border-slate-200 dark:border-white/10">
                   <span className="standard-map-float-header-title">경보목록2</span>
@@ -287,7 +301,7 @@ export function OdorAlertView2Shell({
                     hideHeader
                   />
                 </div>
-              </div>
+              </MapFloatResizableFrame>
 
               {historyOpen ? (
                 <div
@@ -306,7 +320,7 @@ export function OdorAlertView2Shell({
                     onClose={() => setHistoryOpen(false)}
                     variant="float"
                     className="h-full"
-                    selectedAlertId={selectedAlertId}
+                    selectedHistoryId={historySelectedId}
                     onSelectHistory={handleSelectHistory}
                   />
                 </div>
@@ -340,7 +354,7 @@ export function OdorAlertView2Shell({
         open={historyOpen}
         leftPx={panelLeft + panelWidth}
         onClose={() => setHistoryOpen(false)}
-        selectedAlertId={selectedAlertId}
+        selectedHistoryId={historySelectedId}
         onSelectHistory={handleSelectHistory}
       />
     </>

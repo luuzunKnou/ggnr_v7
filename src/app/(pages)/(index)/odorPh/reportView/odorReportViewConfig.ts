@@ -8,7 +8,7 @@ export const ODOR_REPORT_VIEW_UI_MODE_OPTIONS: {
   value: OdorReportViewUiMode
   label: string
 }[] = [
-  { value: 'legacy', label: '풀패널 UI' },
+  { value: 'legacy', label: '패널 UI' },
   { value: 'floating', label: '플로팅 UI' },
 ]
 

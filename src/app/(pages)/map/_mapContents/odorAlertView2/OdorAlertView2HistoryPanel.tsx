@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils'
 import {
   ODOR_ALERT_GRADE_LABEL,
   ODOR_ALERT_KIND_LABEL,
+  type OdorAckMode,
   type OdorAlertGrade,
 } from '../odorAlert/odorAlertConfig'
 import { formatOdorAlertTime, type OdorAckHistoryRow } from '../odorAlert/odorAlertMock'
@@ -16,12 +17,42 @@ type Props = {
   /** 플로팅 사이드 패널 — 맵 서피스 헤더 스타일 */
   variant?: 'panel' | 'float'
   className?: string
-  /** 경보목록에서 선택된 경보 id — 이력 행 강조 */
-  selectedAlertId?: string | null
+  /** 이력에서 직접 고른 행 id — 경보목록 클릭으로는 설정하지 않음 */
+  selectedHistoryId?: string | null
   onSelectHistory?: (row: OdorAckHistoryRow) => void
 }
 
+type ModeFilter = 'all' | OdorAckMode
+
 const PAGE_SIZE = 10
+
+function modeLabel(mode: OdorAckMode): string {
+  return mode === 'bulk' ? '일괄' : '단건'
+}
+
+/** 표에 보이는 컬럼값만 통합검색 대상 */
+function historyColumnSearchText(row: OdorAckHistoryRow): string {
+  return [
+    row.sensorLabel,
+    ODOR_ALERT_KIND_LABEL[row.kind],
+    modeLabel(row.mode),
+    formatOdorAlertTime(row.at),
+    row.reason,
+  ]
+    .join(' ')
+    .toLowerCase()
+}
+
+function toYmdSeoul(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  return new Intl.DateTimeFormat('sv-SE', {
+    timeZone: 'Asia/Seoul',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(d)
+}
 
 function pageMeta(total: number, page: number) {
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE) || 1)
@@ -37,29 +68,30 @@ export function OdorAlertView2HistoryPanel({
   onClose,
   variant = 'panel',
   className,
-  selectedAlertId = null,
+  selectedHistoryId = null,
   onSelectHistory,
 }: Props) {
   const { history } = useOdorAlertStore()
+  const [modeFilter, setModeFilter] = useState<ModeFilter>('all')
+  const [ackedDay, setAckedDay] = useState('')
   const [keyword, setKeyword] = useState('')
   const [page, setPage] = useState(1)
 
   const filtered = useMemo(() => {
     const kw = keyword.trim().toLowerCase()
-    if (!kw) return history
-    return history.filter((r) =>
-      [r.at, r.actor, r.sensorLabel, r.reason, r.mode, ODOR_ALERT_KIND_LABEL[r.kind]]
-        .join(' ')
-        .toLowerCase()
-        .includes(kw)
-    )
-  }, [history, keyword])
+    return history.filter((r) => {
+      if (modeFilter !== 'all' && r.mode !== modeFilter) return false
+      if (ackedDay && toYmdSeoul(r.at) !== ackedDay) return false
+      if (kw && !historyColumnSearchText(r).includes(kw)) return false
+      return true
+    })
+  }, [history, modeFilter, ackedDay, keyword])
 
   const { pageCount, safePage, from, to, hasNext } = pageMeta(filtered.length, page)
 
   useEffect(() => {
     setPage(1)
-  }, [keyword])
+  }, [modeFilter, ackedDay, keyword])
 
   useEffect(() => {
     if (page > pageCount) setPage(pageCount)
@@ -93,18 +125,62 @@ export function OdorAlertView2HistoryPanel({
 
       <div
         className={cn(
-          'shrink-0 border-b border-border px-2 py-1.5',
+          'standard-filter-section shrink-0 space-y-2 border-b border-border px-2 py-1.5',
           isFloat && 'border-slate-100 dark:border-white/10'
         )}
       >
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <div className="flex min-w-0 items-center gap-1.5">
+            <span className="shrink-0 text-[11px] font-medium text-muted-foreground">구분</span>
+            <div className="standard-filter-chips">
+              {(
+                [
+                  ['all', '전체'],
+                  ['single', '단건'],
+                  ['bulk', '일괄'],
+                ] as const
+              ).map(([key, label]) => (
+                <button
+                  key={key}
+                  type="button"
+                  title={label}
+                  onClick={() => setModeFilter(key)}
+                  className={cn(
+                    'standard-filter-chip cursor-pointer',
+                    modeFilter === key && 'standard-filter-chip-active'
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="flex min-w-0 items-center gap-1.5">
+            <label
+              htmlFor="odor-alert-history-acked-day"
+              className="shrink-0 text-[11px] font-medium text-muted-foreground"
+            >
+              해제시각
+            </label>
+            <input
+              id="odor-alert-history-acked-day"
+              type="date"
+              value={ackedDay}
+              onChange={(e) => setAckedDay(e.target.value)}
+              title="해제시각"
+              className="standard-detail-input h-7 min-w-0"
+            />
+          </div>
+        </div>
+
         <div className="standard-search-wrap">
           <Search className="standard-search-icon" aria-hidden />
           <input
             type="search"
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
-            placeholder="센서·사유·사용자 검색"
-            title="검색"
+            placeholder="통합검색"
+            title="통합검색"
             className="standard-search-input"
           />
         </div>
@@ -131,7 +207,7 @@ export function OdorAlertView2HistoryPanel({
                 </tr>
               ) : (
                 paged.map((row: OdorAckHistoryRow) => {
-                  const selected = selectedAlertId === row.alertId
+                  const selected = selectedHistoryId === row.id
                   const gradeLabel =
                     row.grade != null
                       ? ODOR_ALERT_GRADE_LABEL[row.grade as OdorAlertGrade]
@@ -172,7 +248,7 @@ export function OdorAlertView2HistoryPanel({
                               : 'standard-status-badge-muted'
                           )}
                         >
-                          {row.mode === 'bulk' ? '일괄' : '단건'}
+                          {modeLabel(row.mode)}
                         </span>
                       </td>
                       <td

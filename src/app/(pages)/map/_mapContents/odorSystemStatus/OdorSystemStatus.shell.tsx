@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { fromLonLat } from 'ol/proj'
+import { MapFloatResizableFrame } from '../../_mapComponents/MapFloatResizableFrame'
 import { MapSideListPanel } from '../../_mapComponents/MapSideListPanel'
 import { scheduleAnimateMapToCenter3857 } from '../../_mapComponents/config/mapAutoNavigation'
 import { useMapContext } from '../../_mapComponents/MapContext'
@@ -20,6 +21,8 @@ import {
   ODOR_SYSTEM_STATUS_FLOAT_EXPAND_WIDTH,
   ODOR_SYSTEM_STATUS_FLOAT_GAP,
   ODOR_SYSTEM_STATUS_FLOAT_LEFT_INSET,
+  ODOR_SYSTEM_STATUS_FLOAT_MAX_WIDTH,
+  ODOR_SYSTEM_STATUS_FLOAT_MIN_WIDTH,
   ODOR_SYSTEM_STATUS_FLOAT_WIDTH,
   ODOR_SYSTEM_STATUS_MAX_WIDTH,
   ODOR_SYSTEM_STATUS_MIN_WIDTH,
@@ -93,6 +96,7 @@ export function OdorSystemStatusShell({
   const [uiMode, setUiMode] = useState<OdorSystemStatusUiMode>('floating')
   const [listWidth, setListWidth] = useState(ODOR_SYSTEM_STATUS_DEFAULT_WIDTH)
   const [expandWidth, setExpandWidth] = useState(ODOR_SYSTEM_STATUS_EXPAND_DEFAULT_WIDTH)
+  const [floatWidth, setFloatWidth] = useState(ODOR_SYSTEM_STATUS_FLOAT_WIDTH)
 
   const isFloating = uiMode === 'floating'
   const legacyTotal = listWidth + (model.expandOpen ? expandWidth : 0)
@@ -159,12 +163,16 @@ export function OdorSystemStatusShell({
             height: 'calc(100vh - 70px)',
           }}
         >
-          <div
+          <MapFloatResizableFrame
+            width={floatWidth}
+            minWidth={ODOR_SYSTEM_STATUS_FLOAT_MIN_WIDTH}
+            maxWidth={ODOR_SYSTEM_STATUS_FLOAT_MAX_WIDTH}
+            onWidthChange={setFloatWidth}
+            resizeEdge="right"
             className={cn(
-              'pointer-events-auto flex min-h-0 flex-col overflow-hidden',
+              'pointer-events-auto h-full',
               MAP_LAYER_PANEL_SURFACE_CLASS
             )}
-            style={{ width: ODOR_SYSTEM_STATUS_FLOAT_WIDTH }}
           >
             <OdorSystemStatusPanelView
               variant="map"
@@ -175,7 +183,7 @@ export function OdorSystemStatusShell({
               headerExtra={headerExtra}
               className="h-full"
             />
-          </div>
+          </MapFloatResizableFrame>
           {model.expandOpen && model.selected ? (
             <div
               className={cn(

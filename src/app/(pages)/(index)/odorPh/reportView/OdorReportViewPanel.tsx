@@ -77,17 +77,19 @@ type Props = {
   onUiModeChange?: (v: OdorReportViewUiMode) => void
   /** false면 select 숨김(셸 헤더에서만 표시). 기본 true */
   showUiModeSelect?: boolean
+  /** false면 검색조건 엑셀·PDF 숨김(플로팅 도구 모달 분리). 기본 true */
+  showExport?: boolean
 }
 
 /**
  * 보고서 조회
- * - 탭 → 검색조건(엑셀·PDF) → 본문
- * - 본문: (카드+그래프 flex-col) | 집계표  = flex
+ * - 탭 → 검색조건 → 본문(카드→그래프→집계표 flex-col)
  */
 export function OdorReportViewPanel({
   uiMode: uiModeProp,
   onUiModeChange,
   showUiModeSelect = true,
+  showExport = true,
 }: Props = {}) {
   const controlled = uiModeProp != null
   const [innerMode, setInnerMode] = useState<OdorReportViewUiMode>(() =>
@@ -100,6 +102,7 @@ export function OdorReportViewPanel({
 
   const uiMode = controlled ? uiModeProp : innerMode
   const isFloating = uiMode === 'floating'
+  const bodyLayout = 'stack' as const
 
   const setUiMode = (next: OdorReportViewUiMode) => {
     if (!controlled) setInnerMode(next)
@@ -112,13 +115,18 @@ export function OdorReportViewPanel({
     writeStoredUiMode(innerMode)
   }, [controlled, innerMode])
 
+  /** 맵 셸(헤더·MapSideListPanel)이 표면을 담당하면 이중 테두리 생략 */
+  const embeddedInShell = !showUiModeSelect
+
   return (
     <div
       className={cn(
         'flex h-full min-h-0 flex-1 flex-col overflow-hidden',
-        isFloating
-          ? cn('rounded border border-border bg-background', MAP_LAYER_PANEL_SURFACE_CLASS)
-          : 'rounded border border-border bg-card'
+        embeddedInShell
+          ? 'bg-background'
+          : isFloating
+            ? cn('rounded border border-border bg-background', MAP_LAYER_PANEL_SURFACE_CLASS)
+            : 'rounded border border-border bg-card'
       )}
     >
       <div
@@ -160,11 +168,12 @@ export function OdorReportViewPanel({
         value={period}
         onChange={setPeriod}
         showEmd={tab === 'abatement'}
+        showExport={showExport}
         className="shrink-0 bg-card"
       />
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-card">
-        <OdorReportTabFullBody tab={tab} period={period} />
+        <OdorReportTabFullBody tab={tab} period={period} layout={bodyLayout} />
       </div>
     </div>
   )

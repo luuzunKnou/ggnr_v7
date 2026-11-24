@@ -3,10 +3,16 @@
 export const ODOR_REPORT_VIEW_OPENED_KEY = 'odorReportView'
 export const ODOR_REPORT_VIEW_SER_ENG = 'odorReportView'
 
-/** 풀패널 최소 폭 */
-export const ODOR_REPORT_VIEW_LEGACY_MIN_WIDTH = 720
+/** 패널 UI — MapSideListPanel 폭 (경보목록2와 동일 컴포넌트) */
+export const ODOR_REPORT_VIEW_PANEL_DEFAULT_WIDTH = 540
+export const ODOR_REPORT_VIEW_PANEL_MIN_WIDTH = 500
+export const ODOR_REPORT_VIEW_PANEL_MAX_WIDTH = 800
 
-/** 플로팅 — 우측 맵 컨트롤 inset (대시보드2와 동일) */
-export const ODOR_REPORT_VIEW_FLOAT_RIGHT_INSET = 16 + 45 + 12
+/** 플로팅 — 본문 폭(패널 기본과 동일) */
+export const ODOR_REPORT_VIEW_FLOAT_WIDTH = ODOR_REPORT_VIEW_PANEL_DEFAULT_WIDTH
+export const ODOR_REPORT_VIEW_FLOAT_MIN_WIDTH = ODOR_REPORT_VIEW_PANEL_MIN_WIDTH
+export const ODOR_REPORT_VIEW_FLOAT_MAX_WIDTH = ODOR_REPORT_VIEW_PANEL_MAX_WIDTH
 /** 플로팅 — 좌측 inset */
 export const ODOR_REPORT_VIEW_FLOAT_LEFT_INSET = 20
+/** 플로팅 — top offset */
+export const ODOR_REPORT_VIEW_FLOAT_TOP = 60

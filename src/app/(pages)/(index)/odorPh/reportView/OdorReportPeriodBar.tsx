@@ -22,6 +22,8 @@ type Props = {
   onChange: (next: OdorReportPeriodState) => void
   /** 저감장치 탭만 읍면동 select */
   showEmd?: boolean
+  /** false면 엑셀·PDF 숨김(플로팅 도구 모달로 분리 시) */
+  showExport?: boolean
   className?: string
 }
 
@@ -55,12 +57,14 @@ export function OdorReportPeriodBar({
   value,
   onChange,
   showEmd = false,
+  showExport = true,
   className,
 }: Props) {
   const set = (patch: Partial<OdorReportPeriodState>) => onChange({ ...value, ...patch })
 
   return (
     <div
+      data-odor-report-search
       className={cn(
         'flex flex-wrap items-center gap-2 border-b border-border bg-muted/20 px-2 py-1.5',
         className
@@ -144,9 +148,11 @@ export function OdorReportPeriodBar({
         </>
       ) : null}
 
-      <div className="ml-auto">
-        <OdorReportExportButtons />
-      </div>
+      {showExport ? (
+        <div className="ml-auto">
+          <OdorReportExportButtons />
+        </div>
+      ) : null}
     </div>
   )
 }

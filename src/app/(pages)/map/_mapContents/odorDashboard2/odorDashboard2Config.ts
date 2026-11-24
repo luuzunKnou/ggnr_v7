@@ -18,8 +18,12 @@ export const ODOR_DASHBOARD2_UI_MODE_OPTIONS: {
 
 /** 플로팅 UI — 좌측 통계 폭 */
 export const ODOR_DASHBOARD2_FLOAT_STATS_WIDTH = 340
+export const ODOR_DASHBOARD2_FLOAT_STATS_MIN_WIDTH = 280
+export const ODOR_DASHBOARD2_FLOAT_STATS_MAX_WIDTH = 480
 /** 플로팅 UI — 우측 경보 폭 */
 export const ODOR_DASHBOARD2_FLOAT_ALERT_WIDTH = 360
+export const ODOR_DASHBOARD2_FLOAT_ALERT_MIN_WIDTH = 280
+export const ODOR_DASHBOARD2_FLOAT_ALERT_MAX_WIDTH = 520
 /** 우측 맵 컨트롤: right-4(16) + 메뉴 45 + 간격 12 */
 export const ODOR_DASHBOARD2_FLOAT_RIGHT_INSET = 16 + 45 + 12
 /** 좌측 패널과 상세 모달 간격 */

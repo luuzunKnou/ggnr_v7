@@ -34,15 +34,14 @@ const OdorReportMultiMetricChart = dynamic(
   }
 )
 
-/**
- * 좌: 카드+그래프(flex-col) / 우: 집계표 — 가로 flex 2:3, 패널 높이 가득
- */
+/** stack: 카드→그래프→집계표 / split: 좌 카드+그래프 · 우 집계표 */
 function ReportMainLayout({
   cards,
   charts,
   tableTitle,
   tableCols,
   tableRows,
+  layout = 'stack',
   className,
 }: {
   cards: ReportStatCard[]
@@ -50,8 +49,31 @@ function ReportMainLayout({
   tableTitle: string
   tableCols: ReportTableCol[]
   tableRows: ReportTableRow[]
+  layout?: 'stack' | 'split'
   className?: string
 }) {
+  if (layout === 'stack') {
+    return (
+      <div
+        className={cn(
+          'flex h-full min-h-0 flex-1 flex-col gap-2 overflow-hidden p-2',
+          className
+        )}
+      >
+        <OdorReportStatCards cards={cards} className="shrink-0" />
+        <div className="flex min-h-[160px] min-w-0 flex-[2] flex-col overflow-hidden">
+          {charts}
+        </div>
+        <OdorReportDataTable
+          title={tableTitle}
+          cols={tableCols}
+          rows={tableRows}
+          className="min-h-[180px] min-w-0 flex-[3]"
+        />
+      </div>
+    )
+  }
+
   return (
     <div className={cn('flex h-full min-h-0 flex-1 items-stretch gap-2 overflow-hidden p-2', className)}>
       <div className="flex h-full min-h-0 min-w-0 flex-[2] flex-col gap-2 overflow-hidden">
@@ -90,6 +112,7 @@ function CardMetricsChart({
 
 type BodyProps = {
   period?: OdorReportPeriodState
+  layout?: 'stack' | 'split'
   className?: string
 }
 
@@ -97,13 +120,14 @@ function resolvePeriod(period?: OdorReportPeriodState): OdorReportPeriodState {
   return period ?? defaultOdorReportPeriodState()
 }
 
-export function OdorReportAbatementBody({ period, className }: BodyProps) {
+export function OdorReportAbatementBody({ period, layout, className }: BodyProps) {
   const p = resolvePeriod(period)
   const data = buildAbatementReportMock()
   const cards = scaleCardsForPeriod(data.cards, p.mode)
   return (
     <ReportMainLayout
       className={className}
+      layout={layout}
       cards={cards}
       charts={<CardMetricsChart cards={data.cards} period={p} />}
       tableTitle="지점별 저감장치 동작 집계표"
@@ -113,13 +137,14 @@ export function OdorReportAbatementBody({ period, className }: BodyProps) {
   )
 }
 
-export function OdorReportAlertBody({ period, className }: BodyProps) {
+export function OdorReportAlertBody({ period, layout, className }: BodyProps) {
   const p = resolvePeriod(period)
   const data = buildAlertReportMock()
   const cards = scaleCardsForPeriod(data.cards, p.mode)
   return (
     <ReportMainLayout
       className={className}
+      layout={layout}
       cards={cards}
       charts={<CardMetricsChart cards={data.cards} period={p} />}
       tableTitle="지점별 경보 집계표"
@@ -129,13 +154,14 @@ export function OdorReportAlertBody({ period, className }: BodyProps) {
   )
 }
 
-export function OdorReportComplaintBody({ period, className }: BodyProps) {
+export function OdorReportComplaintBody({ period, layout, className }: BodyProps) {
   const p = resolvePeriod(period)
   const data = buildComplaintReportMock()
   const cards = scaleCardsForPeriod(data.cards, p.mode)
   return (
     <ReportMainLayout
       className={className}
+      layout={layout}
       cards={cards}
       charts={<CardMetricsChart cards={data.cards} period={p} />}
       tableTitle="민원 접수 목록"
@@ -145,13 +171,14 @@ export function OdorReportComplaintBody({ period, className }: BodyProps) {
   )
 }
 
-export function OdorReportActionBody({ period, className }: BodyProps) {
+export function OdorReportActionBody({ period, layout, className }: BodyProps) {
   const p = resolvePeriod(period)
   const data = buildActionReportMock()
   const cards = scaleCardsForPeriod(data.cards, p.mode)
   return (
     <ReportMainLayout
       className={className}
+      layout={layout}
       cards={cards}
       charts={<CardMetricsChart cards={data.cards} period={p} />}
       tableTitle="조치내역(현장 조사) 목록표"
@@ -164,20 +191,22 @@ export function OdorReportActionBody({ period, className }: BodyProps) {
 export function OdorReportTabFullBody({
   tab,
   period,
+  layout = 'stack',
 }: {
   tab: OdorReportTabId
   period?: OdorReportPeriodState
+  layout?: 'stack' | 'split'
 }) {
   const p = resolvePeriod(period)
   const body =
     tab === 'abatement' ? (
-      <OdorReportAbatementBody period={p} />
+      <OdorReportAbatementBody period={p} layout={layout} />
     ) : tab === 'alert' ? (
-      <OdorReportAlertBody period={p} />
+      <OdorReportAlertBody period={p} layout={layout} />
     ) : tab === 'complaint' ? (
-      <OdorReportComplaintBody period={p} />
+      <OdorReportComplaintBody period={p} layout={layout} />
     ) : tab === 'action' ? (
-      <OdorReportActionBody period={p} />
+      <OdorReportActionBody period={p} layout={layout} />
     ) : null
   return <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">{body}</div>
 }

@@ -23,6 +23,8 @@ export const ODOR_ALERT_VIEW2_LIST_MAX_WIDTH = 800
 
 /** 플로팅 UI — 목록 폭 */
 export const ODOR_ALERT_VIEW2_FLOAT_WIDTH = 560
+export const ODOR_ALERT_VIEW2_FLOAT_MIN_WIDTH = 560
+export const ODOR_ALERT_VIEW2_FLOAT_MAX_WIDTH = 800
 /** 플로팅 UI — 해제 이력 패널 폭 */
 export const ODOR_ALERT_VIEW2_FLOAT_HISTORY_WIDTH = 360
 /** 플로팅 UI — 목록↔이력 간격 */

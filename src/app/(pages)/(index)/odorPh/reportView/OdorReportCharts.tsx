@@ -17,9 +17,15 @@ import {
   type ChartData,
   type ChartOptions,
 } from 'chart.js'
-import { Bar, Line, Pie } from 'react-chartjs-2'
+import { Bar, Chart, Line, Pie } from 'react-chartjs-2'
 import { cn } from '@/lib/utils'
 import type { ReportBarPoint, ReportLinePoint, ReportPieSlice } from './odorReportViewMock'
+
+/** 카드 accent 파란(#3b82f6) — 멀티차트에서 꺾은선으로 표시 */
+function isBlueSeriesColor(color: string): boolean {
+  const c = color.trim().toLowerCase().replace(/\s+/g, '')
+  return c === '#3b82f6' || c === 'rgb(59,130,246)' || c === 'rgba(59,130,246,1)'
+}
 
 ChartJS.register(
   CategoryScale,
@@ -189,24 +195,44 @@ type MultiMetricProps = {
   className?: string
 }
 
-/** 카드 지표 전부 — 그룹 막대 한 그래프 */
+/** 카드 지표 전부 — 그룹 막대 + 파란 지표는 꺾은선 */
 export function OdorReportMultiMetricChart({
   title,
   labels,
   series,
   className,
 }: MultiMetricProps) {
-  const data = useMemo<ChartData<'bar'>>(
+  const data = useMemo(
     () => ({
       labels,
-      datasets: series.map((s) => ({
-        label: s.label,
-        data: s.values,
-        backgroundColor: s.color,
-        borderWidth: 0,
-        borderRadius: 2,
-        maxBarThickness: 18,
-      })),
+      datasets: series.map((s) => {
+        if (isBlueSeriesColor(s.color)) {
+          return {
+            type: 'line' as const,
+            label: s.label,
+            data: s.values,
+            borderColor: s.color,
+            backgroundColor: 'transparent',
+            borderWidth: 2,
+            pointRadius: 2.5,
+            pointHoverRadius: 4,
+            pointBackgroundColor: s.color,
+            tension: 0.3,
+            fill: false,
+            order: 0,
+          }
+        }
+        return {
+          type: 'bar' as const,
+          label: s.label,
+          data: s.values,
+          backgroundColor: s.color,
+          borderWidth: 0,
+          borderRadius: 2,
+          maxBarThickness: 18,
+          order: 1,
+        }
+      }),
     }),
     [labels, series]
   )
@@ -239,7 +265,7 @@ export function OdorReportMultiMetricChart({
 
   return (
     <ChartShell title={title} className={className}>
-      <Bar data={data} options={options} />
+      <Chart type="bar" data={data as ChartData<'bar'>} options={options} />
     </ChartShell>
   )
 }
