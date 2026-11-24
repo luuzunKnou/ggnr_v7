@@ -1,7 +1,39 @@
 'use client'
 
+/**
+ * =============================================================================
+ * [공사대장 · 지도 맞춤 UX 의도 — 임의로 바꾸지 말 것]
+ * =============================================================================
+ *
+ * 1) 공사목록에서 공사 선택
+ *    → 해당 공사 전체 범위로 맞춤 (필요하면 줌아웃). «화면만» 체크와 무관.
+ *
+ * 2) 공사위치 행 선택 («화면에 보이는 시설만» ON 일 때)
+ *    - 전체공사 축척처럼 대상이 화면에 걸치지만 너무 작음 → 줌인 (의도된 진입)
+ *    - 이미 가까이 보고 있음(걸침 + 줌인 불필요) → 맵무브·줌 없음 (휠은 사용자)
+ *    - 화면 밖 → 그쪽으로 이동 (줌아웃만 금지)
+ *    ※ «화면에 보이면 무조건 줌 금지»로 바꾸면 1→2 줌인이 사라짐. 금지.
+ *
+ * 3) 관련시설·필지·수용가 등 목록 선택
+ *    → 강조만. 맵무브·줌인·줌아웃 없음 («화면만» ON).
+ *
+ * 4) 사용자가 휠·드래그로 보는 중
+ *    → 자동 fit 으로 가로채지 말 것. 목록 범위 갱신은 moveend 이후.
+ *
+ * 관련: WtlConsRelatedTabs (조회 범위·체크), wtlConsRelatedStyle (아이콘)
+ * =============================================================================
+ */
+
 import { useEffect, useRef } from 'react'
 import Feature from 'ol/Feature'
+import {
+  containsXY,
+  getCenter,
+  getIntersection,
+  intersects as extentIntersects,
+  isEmpty,
+} from 'ol/extent'
+import type { Geometry } from 'ol/geom'
 import type Map from 'ol/Map'
 import GeoJSON from 'ol/format/GeoJSON'
 import VectorLayer from 'ol/layer/Vector'
@@ -15,7 +47,6 @@ import { useMapContext } from '../../../_mapComponents/MapContext'
 import {
   createDataQueryIdentifyHoverStyle,
   createDataQuerySelectionRowHighlightStyle,
-  DATA_QUERY_SELECTION_PULSE_STEP,
 } from '@/lib/mapDataQueryMapHighlight'
 import { LAYER_GEOM_STACK_SKIP_KEY } from '@/lib/mapLayerGeometryOrder'
 import type { WtlConsGeom4326 } from './wtlConsLedgerApi'
@@ -24,6 +55,9 @@ import {
   prefetchRelatedFacilityStyles,
   resolveRelatedFacilityOlStyle,
 } from './wtlConsRelatedStyle'
+
+/** 공사대장 포커스(공사이력·시설 등) 펄스 — 공용 0.08보다 약간 빠르게 */
+const WTL_CONS_FOCUS_PULSE_STEP = 0.11
 
 const MAIN_FILL = 'rgba(37, 99, 235, 0.18)'
 const MAIN_STROKE = '#1d4ed8'
@@ -224,6 +258,13 @@ function readGeom(
   })
 }
 
+/** 공사이력 플로팅 요약(드래그 창) */
+export type WtlConsMapFocusTooltip = {
+  consCode: string
+  title: string
+  summary?: Array<{ label: string; value: string }>
+}
+
 export type WtlConsMapFocus = {
   geom: Record<string, unknown>
   projection: 'EPSG:4326' | 'EPSG:3857'
@@ -232,6 +273,56 @@ export type WtlConsMapFocus = {
   styleCode?: string | null
   /** true면 이 포커스로 지도 맞춤하지 않음(화면만 표시 등) */
   skipFit?: boolean
+  /** 있으면 공사이력 드래그 상세 창 */
+  tooltip?: WtlConsMapFocusTooltip | null
+}
+
+/**
+ * 플로팅 기본 위치용 앵커: «지금 화면 ∩ 도형».
+ * 큰 공사면의 중심이 화면 밖이어도, 보이는 구간에 붙인다.
+ */
+export function focusTipCoordinate(map: Map, geom: Geometry | undefined): number[] | undefined {
+  if (!geom) return undefined
+  const view = extentOfVisibleMap(map)
+  const geomExtent = geom.getExtent()
+  if (!geomExtent.every((n) => Number.isFinite(n))) return undefined
+
+  if (!view || !extentIntersects(view, geomExtent)) {
+    // 화면과 안 겹치면 표시하지 않음(걸침만 요구)
+    return undefined
+  }
+
+  const type = geom.getType()
+  if (type === 'Point' || type === 'MultiPoint') {
+    const c = geom.getFirstCoordinate()
+    if (!c || c.length < 2) return undefined
+    return containsXY(view, c[0]!, c[1]!) ? c : undefined
+  }
+
+  const overlap = getIntersection(view, geomExtent)
+  if (!overlap || isEmpty(overlap)) return undefined
+  const candidate = getCenter(overlap)
+  if (typeof geom.intersectsCoordinate === 'function' && geom.intersectsCoordinate(candidate)) {
+    return candidate
+  }
+
+  const closest = geom.getClosestPoint(candidate)
+  if (closest?.length >= 2 && containsXY(view, closest[0]!, closest[1]!)) {
+    return closest
+  }
+
+  // 화면 중심에 가장 가까운 도형 점 — 화면 안이면 사용
+  const viewCenter = getCenter(view)
+  const toView = geom.getClosestPoint(viewCenter)
+  if (toView?.length >= 2 && containsXY(view, toView[0]!, toView[1]!)) {
+    return toView
+  }
+
+  // 최후: 겹침 extent 중심을 화면 안으로 클램프(오목 도형 등)
+  return [
+    Math.min(Math.max(candidate[0]!, view[0]!), view[2]!),
+    Math.min(Math.max(candidate[1]!, view[1]!), view[3]!),
+  ]
 }
 
 /** 관련시설 목록 도형 — 지하시설물 패널과 무관하게 벡터로만 그림 */
@@ -268,12 +359,12 @@ export type WtlConsMapInput = {
   /** 첨부파일이 가리는 아래 높이. 드래그 중에는 바꾸지 않는다. */
   bottomInset?: number
   /**
-   * «화면에 보이는 시설만» ON
-   * - 공사위치·시설·이력: 너무 축소면 줌인. 걸친 큰 도형 줌아웃·불필요 무브 없음
-   * - 필지·건물: 이미 겹치면 맵무브·줌 없음(목록 갱신 방지)
-   * OFF(전체): 선택 시 해당 범위로 맞춤(줌인·줌아웃)
+   * «화면에 보이는 시설만» ON (= suppressListFit).
+   * 파일 상단 [공사대장 · 지도 맞춤 UX 의도] 와 동일. 한 가지만 고쳐 다른 단계를 깨지 말 것.
    */
   suppressListFit?: boolean
+  /** 알림으로 연 공사. 화면 안이어도 그 도형 범위로 이동한다 */
+  forceFit?: boolean
 }
 
 function finiteExtent(extent: number[] | undefined | null): number[] | null {
@@ -282,11 +373,36 @@ function finiteExtent(extent: number[] | undefined | null): number[] | null {
   return extent
 }
 
-/** 대상 extent가 현재 지도 화면과 겹치면 true */
-export function extentTouchesView(map: Map, extent: number[]): boolean {
+/**
+ * 좌·우·상·하 패널(view.padding)에 가려진 픽셀을 뺀 지도 범위.
+ * «화면에 보이는 시설만» 필터·맵무브 걸침 판정 공통.
+ */
+export function extentOfVisibleMap(map: Map): number[] | null {
   const size = map.getSize()
-  if (!size || size[0]! <= 0 || size[1]! <= 0) return false
-  const viewExtent = map.getView().calculateExtent(size)
+  if (!size || size[0]! <= 0 || size[1]! <= 0) return null
+  const padding = map.getView().padding ?? [0, 0, 0, 0]
+  const top = Math.max(0, padding[0] ?? 0)
+  const right = Math.max(0, padding[1] ?? 0)
+  const bottom = Math.max(0, padding[2] ?? 0)
+  const left = Math.max(0, padding[3] ?? 0)
+  const x2 = size[0]! - right
+  const y2 = size[1]! - bottom
+  if (x2 - left < 8 || y2 - top < 8) return null
+  const sw = map.getCoordinateFromPixel([left, y2])
+  const ne = map.getCoordinateFromPixel([x2, top])
+  if (!sw || !ne) return null
+  const minX = Math.min(sw[0]!, ne[0]!)
+  const minY = Math.min(sw[1]!, ne[1]!)
+  const maxX = Math.max(sw[0]!, ne[0]!)
+  const maxY = Math.max(sw[1]!, ne[1]!)
+  if (![minX, minY, maxX, maxY].every((n) => Number.isFinite(n))) return null
+  return [minX, minY, maxX, maxY]
+}
+
+/** 대상 extent가 패딩 반영 실제 지도 화면과 겹치면 true (패널 가림 영역 제외) */
+export function extentTouchesView(map: Map, extent: number[]): boolean {
+  const viewExtent = extentOfVisibleMap(map)
+  if (!viewExtent) return false
   return (
     extent[0]! < viewExtent[2]! &&
     extent[2]! > viewExtent[0]! &&
@@ -299,22 +415,15 @@ function resolutionForExtent(map: Map, extent: number[]): number | null {
   const view = map.getView()
   const size = map.getSize()
   if (!size || size[0]! <= 0 || size[1]! <= 0) return null
-  const availW = Math.max(1, size[0]! - 160)
-  const availH = Math.max(1, size[1]! - 160)
+  const padding = view.padding ?? [0, 0, 0, 0]
+  const availW = Math.max(1, size[0]! - (padding[1] ?? 0) - (padding[3] ?? 0))
+  const availH = Math.max(1, size[1]! - (padding[0] ?? 0) - (padding[2] ?? 0))
   const needed = view.getResolutionForExtent(extent, [availW, availH])
   if (!Number.isFinite(needed) || !(needed > 0)) return null
   return needed
 }
 
-/** 대상 전체를 넣으려면 지금보다 축소해야 하면 true */
-function fitWouldZoomOut(map: Map, extent: number[]): boolean {
-  const currentRes = map.getView().getResolution()
-  const needed = resolutionForExtent(map, extent)
-  if (currentRes == null || !(currentRes > 0) || needed == null) return false
-  return needed > currentRes * 1.02
-}
-
-/** 대상에 맞추려면 지금보다 확대(줌인)해야 하면 true */
+/** 공사 전체 축척처럼 대상이 너무 작아, 맞추려면 줌인해야 하면 true */
 function fitWouldZoomIn(map: Map, extent: number[]): boolean {
   const currentRes = map.getView().getResolution()
   const needed = resolutionForExtent(map, extent)
@@ -360,6 +469,9 @@ export function useWtlConsMapLayer(input: WtlConsMapInput) {
   }, [bottomRef, mapContext?.applyMapViewPaddingRef])
   const inputRef = useRef(input)
   inputRef.current = input
+  /** 체크 ON/OFF만으로 도형 이펙트·핏을 다시 돌리지 않음(목록 카운트와 분리) */
+  const suppressListFitRef = useRef(Boolean(input.suppressListFit))
+  suppressListFitRef.current = Boolean(input.suppressListFit)
   const projectKey = input.projectGeoms.map((item) => `${item.id}:${item.geom4326 ? 1 : 0}`).join(',')
   /** 맵무브 조건용. 사업 전체 도형 ON으로 형제 도형만 추가될 때는 변하지 않음 */
   const selectedGeomKey = input.selectedId
@@ -368,7 +480,9 @@ export function useWtlConsMapLayer(input: WtlConsMapInput) {
       }`
     : `*|${input.projectGeoms.filter((item) => item.geom4326).length}`
   const zoneKey = `${input.zoneId ?? ''}|${input.zones.map((zone) => `${zone.id}:${zone.geometry3857 ? 1 : 0}`).join(',')}`
-  const focusKey = input.focus ? `${input.focus.projection}:${JSON.stringify(input.focus.geom).slice(0, 180)}` : ''
+  const focusKey = input.focus
+    ? `${input.focus.projection}:${JSON.stringify(input.focus.geom).slice(0, 180)}|${input.focus.tooltip?.consCode ?? ''}`
+    : ''
   const relatedKey = (input.relatedFacilities ?? [])
     .map(
       (item) =>
@@ -451,7 +565,7 @@ export function useWtlConsMapLayer(input: WtlConsMapInput) {
   useEffect(() => {
     let rafId = 0
     const loop = () => {
-      focusPhaseRef.current += DATA_QUERY_SELECTION_PULSE_STEP
+      focusPhaseRef.current += WTL_CONS_FOCUS_PULSE_STEP
       focusSourceRef.current?.forEachFeature((feature) => {
         if (feature.get('focus')) feature.changed()
       })
@@ -494,39 +608,52 @@ export function useWtlConsMapLayer(input: WtlConsMapInput) {
     let focusFeature: Feature | null = null
     let selectedFeature: Feature | null = null
     let zoneFeature: Feature | null = null
-    try {
-      const hasWorkSelection = Boolean(current.selectedId)
-      for (const item of current.projectGeoms) {
-        if (!item.geom4326) continue
+    // 도형 1건 실패로 공사·공사위치 전체를 지우지 않음
+    const hasWorkSelection = Boolean(current.selectedId)
+    for (const item of current.projectGeoms) {
+      if (!item.geom4326) continue
+      try {
         const geometry = readGeom(format, item.geom4326, 'EPSG:4326')
         const feature = new Feature(geometry)
         feature.setId(item.id)
         const selectedWork = item.id === current.selectedId
-        // 선택 공사(또는 사업만 볼 때)는 강조 테두리, 형제 도형은 기본 표시
         if (selectedWork) feature.set('workOn', true)
         else if (!hasWorkSelection) feature.set('rim', true)
         source.addFeature(feature)
         if (selectedWork) selectedFeature = feature
+      } catch {
+        /* 잘못된 본표 도형 스킵 */
       }
-      for (const zone of current.zones) {
-        if (!zone.geometry3857) continue
+    }
+    for (const zone of current.zones) {
+      if (!zone.geometry3857) continue
+      try {
         const feature = new Feature(readGeom(format, zone.geometry3857, 'EPSG:3857'))
         const selected = zone.id === current.zoneId
         feature.setId(`zone:${zone.id}`)
-        feature.set('zoneOn', selected)
+        // 관련시설 등 포커스 중엔 검정 선택 스타일만 끔(zoneId·조회 범위는 유지)
+        feature.set('zoneOn', selected && !hasFocus)
         zoneSource.addFeature(feature)
         if (selected) zoneFeature = feature
+      } catch {
+        /* 잘못된 공사위치 도형 스킵 */
       }
-      for (const item of current.relatedFacilities ?? []) {
-        if (!item.geom) continue
+    }
+    for (const item of current.relatedFacilities ?? []) {
+      if (!item.geom) continue
+      try {
         const feature = new Feature(readGeom(format, item.geom, item.projection))
         feature.setId(`related:${item.id}`)
         feature.set('related', true)
         feature.set('styleName', item.styleName)
         feature.set('styleCode', item.styleCode ?? '')
         relatedSource.addFeature(feature)
+      } catch {
+        /* 관련시설 도형 스킵 */
       }
-      if (current.focus?.geom) {
+    }
+    if (current.focus?.geom) {
+      try {
         focusFeature = new Feature(readGeom(format, current.focus.geom, current.focus.projection))
         focusFeature.set('focus', true)
         if (current.focus.styleName) {
@@ -538,120 +665,115 @@ export function useWtlConsMapLayer(input: WtlConsMapInput) {
           focusFeature.set('isRadarPoint', true)
         }
         focusSource.addFeature(focusFeature)
+      } catch {
+        focusFeature = null
       }
+    }
+
+    try {
+      const prev = fitGateRef.current
+      const suppressListFit = suppressListFitRef.current
+      const forceFit = Boolean(current.forceFit)
+      const focusAcquired = Boolean(focusKey) && focusKey !== prev?.focusKey
+      const zoneAcquired =
+        Boolean(current.zoneId) && current.zoneId !== prev?.zoneId
+      const zoneReleased =
+        Boolean(prev?.zoneId) && !current.zoneId && !focusKey
+      const focusWantsFit = focusAcquired
+      const zoneWantsFit = zoneAcquired
+      const shouldFit =
+        !prev ||
+        prev.fitToken !== current.fitToken ||
+        prev.selectedId !== current.selectedId ||
+        prev.selectedGeomKey !== selectedGeomKey ||
+        focusWantsFit ||
+        zoneWantsFit ||
+        zoneReleased
+      const gateSnapshot = {
+        fitToken: current.fitToken,
+        selectedId: current.selectedId,
+        selectedGeomKey,
+        focusKey,
+        zoneId: current.zoneId,
+      }
+      if (!shouldFit) return
+
+      const paddingRef = mapContext?.applyMapViewPaddingRef
+      const mapRef = mapContext?.mapInstanceRef
+
+      /** kind 분기 — 파일 상단 UX 의도 참고 */
+      const fitListTarget = (extent: number[], kind: 'work' | 'zone' | 'focus') => {
+        const liveMap = mapRef?.current
+        if (!liveMap) return
+        fitGateRef.current = gateSnapshot
+        if (kind === 'focus') {
+          if (suppressListFit || current.focus?.skipFit) return
+          scheduleFitMapToExtent3857(liveMap, extent, {
+            maxZoom: MAP_AUTO_NAV_MAX_ZOOM,
+            applyMapViewPadding: () => paddingRef?.current?.(),
+          })
+          return
+        }
+        if (kind === 'work' || forceFit) {
+          scheduleFitMapToExtent3857(liveMap, extent, {
+            maxZoom: MAP_AUTO_NAV_MAX_ZOOM,
+            applyMapViewPadding: () => paddingRef?.current?.(),
+          })
+          return
+        }
+        // zone: 걸침+이미 가까움 → skip / 걸침+너무 작음 → 줌인 / 화면 밖 → 이동(줌아웃 금지)
+        if (suppressListFit) {
+          if (extentTouchesView(liveMap, extent) && !fitWouldZoomIn(liveMap, extent)) {
+            return
+          }
+        }
+        scheduleFitMapToExtent3857(liveMap, extent, {
+          maxZoom: MAP_AUTO_NAV_MAX_ZOOM,
+          noZoomOut: suppressListFit,
+          applyMapViewPadding: () => paddingRef?.current?.(),
+        })
+      }
+
+      if (focusWantsFit) {
+        const focusExtent = finiteExtent(focusFeature?.getGeometry()?.getExtent())
+        // 도형 미도착 시 gate 고정 금지 — 로드 후 다시 맞춤
+        if (!focusExtent) return
+        const timer = window.setTimeout(() => fitListTarget(focusExtent, 'focus'), 80)
+        return () => window.clearTimeout(timer)
+      }
+
+      if (zoneWantsFit) {
+        const zoneExtent = finiteExtent(zoneFeature?.getGeometry()?.getExtent())
+        if (!zoneExtent) {
+          const zoneRow = current.zones.find((z) => z.id === current.zoneId)
+          // 행은 있는데 도형 자체가 없으면 맞춤 포기. 아직 목록 전이면 대기
+          if (zoneRow && !zoneRow.geometry3857) {
+            fitGateRef.current = gateSnapshot
+          }
+          return
+        }
+        const timer = window.setTimeout(() => fitListTarget(zoneExtent, 'zone'), 80)
+        return () => window.clearTimeout(timer)
+      }
+
+      // 공사 선택·구역 해제·fitToken — 공사 전체 맞춤(줌아웃 포함)
+      const preferred =
+        selectedFeature?.getGeometry()?.getExtent() ??
+        finiteExtent(source.getExtent()) ??
+        undefined
+      const extent = finiteExtent(preferred)
+      if (!extent) return
+      const timer = window.setTimeout(() => fitListTarget(extent, 'work'), 80)
+      return () => window.clearTimeout(timer)
     } catch {
-      source.clear()
-      zoneSource.clear()
-      relatedSource.clear()
-      focusSource.clear()
-      return
+      /* 맞춤 실패해도 도형 표시는 유지 */
     }
-
-    const prev = fitGateRef.current
-    const suppressListFit = Boolean(current.suppressListFit)
-    const focusAcquired = Boolean(focusKey) && focusKey !== prev?.focusKey
-    /** 공사위치·목록 포커스: 화면만이면 겹칠 때 무브 없음, 밖만 맞춤 */
-    const zoneAcquired =
-      Boolean(current.zoneId) && current.zoneId !== prev?.zoneId
-    /** 공사위치 해제 시 선택 공사로 줌아웃. 이력·시설 포커스로 지운 경우는 제외 */
-    const zoneReleased =
-      Boolean(prev?.zoneId) && !current.zoneId && !focusKey
-    const focusWantsFit = focusAcquired
-    const zoneWantsFit = zoneAcquired
-    const shouldFit =
-      !prev ||
-      prev.fitToken !== current.fitToken ||
-      prev.selectedId !== current.selectedId ||
-      prev.selectedGeomKey !== selectedGeomKey ||
-      focusWantsFit ||
-      zoneWantsFit ||
-      zoneReleased
-    const gateSnapshot = {
-      fitToken: current.fitToken,
-      selectedId: current.selectedId,
-      selectedGeomKey,
-      focusKey,
-      zoneId: current.zoneId,
-    }
-    if (!shouldFit) return
-
-    const paddingRef = mapContext?.applyMapViewPaddingRef
-    const mapRef = mapContext?.mapInstanceRef
-
-    /**
-     * 화면만 ON (공사위치·시설·이력):
-     * - 줌아웃 필요(큰 도형) → 무브·줌 없음
-     * - 이미 적정 줌으로 보임 → 무브 없음
-     * - 너무 축소 → 줌인만(noZoomOut)
-     * 전체 OFF → 범위 맞춤
-     */
-    const fitListTarget = (extent: number[]) => {
-      const liveMap = mapRef?.current
-      if (!liveMap) return
-      fitGateRef.current = gateSnapshot
-      if (suppressListFit) {
-        if (fitWouldZoomOut(liveMap, extent)) return
-        if (extentTouchesView(liveMap, extent) && !fitWouldZoomIn(liveMap, extent)) return
-      }
-      scheduleFitMapToExtent3857(liveMap, extent, {
-        maxZoom: MAP_AUTO_NAV_MAX_ZOOM,
-        noZoomOut: suppressListFit,
-        applyMapViewPadding: () => paddingRef?.current?.(),
-      })
-    }
-
-    // 관련시설·수용가·공사이력 포커스
-    if (focusWantsFit) {
-      const focusExtent = finiteExtent(focusFeature?.getGeometry()?.getExtent())
-      if (!focusExtent) {
-        fitGateRef.current = gateSnapshot
-        return
-      }
-      const timer = window.setTimeout(() => fitListTarget(focusExtent), 80)
-      return () => window.clearTimeout(timer)
-    }
-
-    // 공사위치
-    if (zoneWantsFit) {
-      const zoneExtent = finiteExtent(zoneFeature?.getGeometry()?.getExtent())
-      if (!zoneExtent) {
-        fitGateRef.current = gateSnapshot
-        return
-      }
-      const timer = window.setTimeout(() => fitListTarget(zoneExtent), 80)
-      return () => window.clearTimeout(timer)
-    }
-
-    // 공사 선택·구역 해제 등
-    const preferred = (() => {
-      if (zoneReleased) {
-        return (
-          selectedFeature?.getGeometry()?.getExtent() ??
-          finiteExtent(source.getExtent()) ??
-          undefined
-        )
-      }
-      if (current.zoneId && zoneFeature) return zoneFeature.getGeometry()?.getExtent()
-      return selectedFeature?.getGeometry()?.getExtent()
-    })()
-    const extent = finiteExtent(preferred) ?? finiteExtent(source.getExtent())
-    if (!extent) return
-    const timer = window.setTimeout(() => {
-      const liveMap = mapRef?.current
-      if (!liveMap) return
-      fitGateRef.current = gateSnapshot
-      scheduleFitMapToExtent3857(liveMap, extent, {
-        maxZoom: MAP_AUTO_NAV_MAX_ZOOM,
-        applyMapViewPadding: () => paddingRef?.current?.(),
-      })
-    }, 80)
-    return () => window.clearTimeout(timer)
   }, [
     projectKey,
     selectedGeomKey,
     input.fitToken,
     input.selectedId,
-    input.suppressListFit,
+    input.forceFit,
     zoneKey,
     focusKey,
     relatedKey,

@@ -1048,7 +1048,9 @@ CREATE TABLE IF NOT EXISTS layer.cons_alert_setting (
   id SERIAL PRIMARY KEY,
   kind varchar(8) NOT NULL,
   cons_code varchar(64) NOT NULL,
+  cycle_on boolean NOT NULL DEFAULT true,
   cycle_years integer NOT NULL DEFAULT 1,
+  cycle_end varchar(10) NOT NULL DEFAULT '',
   done_before_days integer NOT NULL DEFAULT 30,
   done_before_on boolean NOT NULL DEFAULT true,
   done_after_days integer NOT NULL DEFAULT 7,
@@ -2357,7 +2359,56 @@ export async function ensureConsAlertSettingTable(result?: EnsureResult): Promis
     createSql: CONS_ALERT_SETTING_SQL,
     result: out,
   });
+  await ensureConsAlertCycleEndColumn(out);
+  await ensureConsAlertCycleOnColumn(out);
   return out;
+}
+
+/** 이미 만들어진 알림설정 테이블에 반복 종료일 칸이 없으면 추가 */
+async function ensureConsAlertCycleEndColumn(result: EnsureResult): Promise<void> {
+  const fq = 'layer.cons_alert_setting.cycle_end';
+  try {
+    if ((await tableExists('layer', 'cons_alert_setting')) !== 'BASE TABLE') return;
+    if (await columnExists('layer', 'cons_alert_setting', 'cycle_end')) return;
+    await db.execute(
+      sql.raw(
+        `ALTER TABLE layer.cons_alert_setting ADD COLUMN cycle_end varchar(10) NOT NULL DEFAULT ''`
+      )
+    );
+    await db.execute(
+      sql.raw(
+        `COMMENT ON COLUMN layer.cons_alert_setting.cycle_end IS '주기 알림 종료일(YYYY-MM-DD). 비어 있으면 주기 알림 없음'`
+      )
+    );
+    result.created.push(fq);
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    result.errors.push(`${fq}: ${msg}`);
+  }
+}
+
+/** 이미 만들어진 알림설정 테이블에 반복 사용 칸이 없으면 추가. 주기가 0이던 행은 끔으로 둔다 */
+async function ensureConsAlertCycleOnColumn(result: EnsureResult): Promise<void> {
+  const fq = 'layer.cons_alert_setting.cycle_on';
+  try {
+    if ((await tableExists('layer', 'cons_alert_setting')) !== 'BASE TABLE') return;
+    if (await columnExists('layer', 'cons_alert_setting', 'cycle_on')) return;
+    await db.execute(
+      sql.raw(
+        `ALTER TABLE layer.cons_alert_setting ADD COLUMN cycle_on boolean NOT NULL DEFAULT true`
+      )
+    );
+    await db.execute(
+      sql.raw(`UPDATE layer.cons_alert_setting SET cycle_on = false WHERE cycle_years = 0`)
+    );
+    await db.execute(
+      sql.raw(`COMMENT ON COLUMN layer.cons_alert_setting.cycle_on IS '반복 알림 사용'`)
+    );
+    result.created.push(fq);
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    result.errors.push(`${fq}: ${msg}`);
+  }
 }
 
 export async function ensureVillagePatrolTable(result?: EnsureResult): Promise<EnsureResult> {
