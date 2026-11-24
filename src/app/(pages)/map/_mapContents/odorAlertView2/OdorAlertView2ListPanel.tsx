@@ -487,7 +487,7 @@ export function OdorAlertView2ListPanel({
             </colgroup>
             <thead className="standard-table-thead">
               <tr>
-                <th className="standard-table-th !w-9 px-0.5 text-center">
+                <th className="standard-table-th w-9! px-0.5 text-center">
                   <span className="sr-only">선택</span>
                 </th>
                 {ALERT_COLUMNS.map((col) => {
@@ -517,7 +517,7 @@ export function OdorAlertView2ListPanel({
                     </th>
                   )
                 })}
-                <th className="standard-table-th !w-13 px-0.5">
+                <th className="standard-table-th w-13! px-0.5">
                   <span className="sr-only">해제</span>
                 </th>
               </tr>
@@ -549,7 +549,7 @@ export function OdorAlertView2ListPanel({
                     )}
                   >
                     <td
-                      className="standard-table-td-compact !w-9 px-0.5 text-center align-middle"
+                      className="standard-table-td-compact w-9! px-0.5 text-center align-middle"
                       onClick={(e) => e.stopPropagation()}
                     >
                       <input
@@ -615,7 +615,7 @@ export function OdorAlertView2ListPanel({
                       </span>
                     </td>
                     <td
-                      className="standard-table-td-compact !w-13 px-0.5 text-center"
+                      className="standard-table-td-compact w-13! px-0.5 text-center"
                       onClick={(e) => e.stopPropagation()}
                     >
                       {canWrite && !row.confirmed ? (

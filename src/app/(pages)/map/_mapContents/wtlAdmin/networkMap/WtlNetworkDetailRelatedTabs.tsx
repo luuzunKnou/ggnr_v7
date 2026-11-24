@@ -112,7 +112,7 @@ function RelatedListSkeleton({
       aria-label="목록 불러오는 중"
       title="목록 불러오는 중"
     >
-      <thead className="sticky top-0 z-[3]">
+      <thead className="sticky top-0 z-3">
         <tr>
           {Array.from({ length: cols }, (_, i) => (
             <th
@@ -726,7 +726,7 @@ export function WtlNetworkDetailRelatedTabs({
               ) : (
                 /* border-collapse+sticky 는 th 보더·배경이 깨져 tbody가 비침 → separate 고정 */
                 <table className="w-full min-w-0 table-fixed border-separate border-spacing-0 text-left text-[11px]">
-                  <thead className="sticky top-0 z-[3]">
+                  <thead className="sticky top-0 z-3">
                     <tr>
                       {listFields.map((f, i) => {
                         const key = String(f.define_field_name ?? '').trim()

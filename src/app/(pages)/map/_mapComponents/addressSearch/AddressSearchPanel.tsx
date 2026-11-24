@@ -369,7 +369,7 @@ export function AddressSearchPanel({
     createPortal(
       <div
         ref={fieldDropdownRef}
-        className="pointer-events-auto fixed z-[120] overflow-x-hidden overflow-y-auto rounded-md border border-border bg-card shadow-lg"
+        className="pointer-events-auto fixed z-120 overflow-x-hidden overflow-y-auto rounded-md border border-border bg-card shadow-lg"
         style={{
           top: fieldRect.top,
           left: fieldRect.left,

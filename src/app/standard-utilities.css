@@ -4,24 +4,24 @@
 @utility scrollbar-thin {
   scrollbar-width: thin;
   scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
 
-  &::-webkit-scrollbar {
-    width: 5px;
-    height: 5px;
-  }
+.scrollbar-thin::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
 
-  &::-webkit-scrollbar-track {
-    background: var(--scrollbar-track);
-  }
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+}
 
-  &::-webkit-scrollbar-thumb {
-    background-color: var(--scrollbar-thumb);
-    border-radius: 9999px;
-  }
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb);
+  border-radius: 9999px;
+}
 
-  &::-webkit-scrollbar-thumb:hover {
-    background-color: var(--scrollbar-thumb-hover);
-  }
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scrollbar-thumb-hover);
 }
 
 @utility standard-panel-root {
@@ -208,7 +208,7 @@
 }
 
 @utility standard-list-row-selected {
-  @apply border-l-[3px] border-l-primary bg-primary/[0.11] ring-1 ring-inset ring-primary/20 hover:bg-primary/[0.14] dark:bg-primary/20 dark:hover:bg-primary/25;
+  @apply border-l-[3px] border-l-primary bg-primary/11 ring-1 ring-inset ring-primary/20 hover:bg-primary/14 dark:bg-primary/20 dark:hover:bg-primary/25;
 }
 
 @utility standard-table-td-compact {
@@ -405,18 +405,18 @@
   @apply inline-flex h-7 cursor-pointer items-center gap-1 rounded border border-destructive/30 bg-background px-2 text-[11px] font-medium text-destructive hover:bg-destructive/10 disabled:opacity-50;
 }
 
+/* 라벨 열 ~120px — roadInfra 기본정보와 유사 (div+grid) */
 @utility standard-detail-attr-table {
-  /* 라벨 열 ~120px — roadInfra 기본정보와 유사 (div+grid) */
   @apply grid grid-cols-[7.5rem_minmax(0,1fr)] overflow-hidden rounded border border-border;
+}
 
-  /* 마지막 행 border-b는 바깥 테두리와 겹치므로 제거 (.contents 래퍼 / 직접 자식 둘 다) */
-  & > .contents:last-child > .standard-detail-attr-cell-border {
-    @apply border-b-0;
-  }
+/* 마지막 행 border-b는 바깥 테두리와 겹치므로 제거 (.contents 래퍼 / 직접 자식 둘 다) */
+.standard-detail-attr-table > .contents:last-child > .standard-detail-attr-cell-border {
+  border-bottom-width: 0;
+}
 
-  & > .standard-detail-attr-cell-border:nth-last-child(-n + 2) {
-    @apply border-b-0;
-  }
+.standard-detail-attr-table > .standard-detail-attr-cell-border:nth-last-child(-n + 2) {
+  border-bottom-width: 0;
 }
 
 /* table/th/td 상세 속성 — div grid와 동일 외형 */
@@ -612,7 +612,7 @@ td.standard-detail-attr-value.standard-detail-attr-value-title,
 }
 
 @utility standard-layer-toggle-chip-active {
-  @apply border-primary/45 bg-primary/[0.08] text-foreground ring-1 ring-inset ring-primary/15 hover:bg-primary/[0.11] dark:bg-primary/15 dark:hover:bg-primary/20;
+  @apply border-primary/45 bg-primary/8 text-foreground ring-1 ring-inset ring-primary/15 hover:bg-primary/11 dark:bg-primary/15 dark:hover:bg-primary/20;
 }
 
 @utility standard-layer-toggle-chip-inactive {

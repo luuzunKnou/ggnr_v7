@@ -3645,12 +3645,12 @@ export default function OpenLayersMap({
             <>
               <button
                 type="button"
-                className="fixed inset-0 z-[70] cursor-default bg-transparent"
+                className="fixed inset-0 z-70 cursor-default bg-transparent"
                 aria-label="닫기"
                 onClick={() => setOrthoOverlapMenu(null)}
               />
               <div
-                className="fixed z-[80] max-h-80 w-80 overflow-y-auto rounded-md border border-border bg-background py-1 shadow-md"
+                className="fixed z-80 max-h-80 w-80 overflow-y-auto rounded-md border border-border bg-background py-1 shadow-md"
                 style={{ left: orthoOverlapMenu.x, top: orthoOverlapMenu.y }}
               >
                 <p className="px-3 py-1.5 text-[11px] text-muted-foreground">
@@ -3720,7 +3720,7 @@ export default function OpenLayersMap({
       {/* 지도 중심점 마크 — 맵 로컬 z만(플로팅·모달 map-ui-z-* 아래). 거리뷰 ON 시 숨김 */}
       {!activeControls.includes('street-view') && (
       <div
-        className="absolute z-[1] -translate-x-1/2 -translate-y-1/2 pointer-events-none flex items-center justify-center"
+        className="absolute z-1 -translate-x-1/2 -translate-y-1/2 pointer-events-none flex items-center justify-center"
         style={
           centerPixel
             ? { left: centerPixel.x, top: centerPixel.y }
@@ -3749,7 +3749,7 @@ export default function OpenLayersMap({
         createPortal(
           <div
             ref={mapControlFixedRef}
-            className="pointer-events-none fixed right-4 z-[40] flex flex-col items-end gap-3"
+            className="pointer-events-none fixed right-4 z-40 flex flex-col items-end gap-3"
             style={{ top: '60px' }}
           >
             <div ref={mapControlOverlayRowRef} className="pointer-events-none flex items-start gap-3">
@@ -4013,7 +4013,7 @@ export default function OpenLayersMap({
       {/* 하단 디버그 패널 — body 포털(목록·상세 z-10 오버레이 위에 표시) */}
       {showDebugUi &&
         createPortal(
-          <div className="pointer-events-auto fixed bottom-4 left-1/2 z-[50] flex w-full max-w-2xl -translate-x-1/2 flex-col gap-1 px-2">
+          <div className="pointer-events-auto fixed bottom-4 left-1/2 z-50 flex w-full max-w-2xl -translate-x-1/2 flex-col gap-1 px-2">
             {/* GeoServer 로그 */}
             <div
               tabIndex={0}

@@ -207,7 +207,7 @@ export function OdorSystemStatusDiagram({ nodes, selectedId, onSelect }: Props) 
                           e.stopPropagation()
                           toggleOpen(node.id)
                         }}
-                        className="relative z-[1] inline-flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center rounded text-foreground/80 hover:bg-muted hover:text-foreground"
+                        className="relative z-1 inline-flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center rounded text-foreground/80 hover:bg-muted hover:text-foreground"
                       >
                         {open ? (
                           <ChevronDown className="h-3.5 w-3.5 shrink-0" aria-hidden />

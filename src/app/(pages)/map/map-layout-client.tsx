@@ -2887,7 +2887,7 @@ function MapLayoutContent({
         <HangulSearchIme />
         {mapContext?.layerRowGeomEdit && (
           <div
-            className="pointer-events-none fixed inset-0 z-[100] box-border border-2 border-primary/40"
+            className="pointer-events-none fixed inset-0 z-100 box-border border-2 border-primary/40"
             aria-hidden
           />
         )}
@@ -3414,7 +3414,7 @@ function MapLayoutContent({
             qgisLayerPortalReady &&
             createPortal(
               <div
-                className="pointer-events-auto fixed inset-y-0 right-0 z-[55] flex flex-col border-l border-border bg-background shadow-lg"
+                className="pointer-events-auto fixed inset-y-0 right-0 z-55 flex flex-col border-l border-border bg-background shadow-lg"
                 style={{ left: qgisLayerControlPanelLeftPx }}
               >
                 <SerWriteAccessProvider serEng="qgisLayerControl">

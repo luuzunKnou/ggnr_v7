@@ -113,7 +113,7 @@ export function WtlOutageZoomHint({
 
   return createPortal(
     <div
-      className="pointer-events-none fixed z-[45]"
+      className="pointer-events-none fixed z-45"
       style={{ top: hintTopPx, left: centerX, transform: 'translateX(-50%)' }}
     >
       <div

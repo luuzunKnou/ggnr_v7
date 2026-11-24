@@ -23,7 +23,7 @@ export function OdorReportDataTable({ title, cols, rows, className }: Props) {
       </h3>
       <div className="min-h-0 flex-1 overflow-auto">
         <table className="w-full min-w-[480px] border-collapse text-left text-[11px]">
-          <thead className="sticky top-0 z-[1] bg-muted/90 backdrop-blur-sm">
+          <thead className="sticky top-0 z-1 bg-muted/90 backdrop-blur-sm">
             <tr>
               {cols.map((c) => (
                 <th

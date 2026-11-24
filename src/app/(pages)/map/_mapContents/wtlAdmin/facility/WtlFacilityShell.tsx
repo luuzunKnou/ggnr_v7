@@ -55,7 +55,7 @@ import {
 } from './resolveEquipmentFacilityInfoPreview'
 
 const RELATED_BTN =
-  'standard-layer-toggle-chip !w-[120px] !max-w-[120px] !min-w-[120px] shrink-0 cursor-pointer'
+  'standard-layer-toggle-chip w-[120px]! max-w-[120px]! min-w-[120px]! shrink-0 cursor-pointer'
 const RELATED_BTN_ON = 'standard-layer-toggle-chip-active'
 const RELATED_BTN_OFF = 'standard-layer-toggle-chip-inactive'
 
@@ -1334,7 +1334,7 @@ export function WtlFacilityShell({
               </button>
             </div>
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-              <div className="standard-filter-section shrink-0 border-b-1 !pb-[13px]">
+              <div className="standard-filter-section shrink-0 border-b pb-[13px]!">
                 <div className="mb-2 flex flex-wrap items-center gap-1.5">
                   {catalog.tabs
                     .filter((name) => isTabEnabled(name))
@@ -1349,12 +1349,12 @@ export function WtlFacilityShell({
                           title={label}
                           className={cn(
                             RELATED_BTN,
-                            '!w-auto !min-w-0 !max-w-none px-2',
+                            'w-auto! min-w-0! max-w-none! px-2',
                             on ? RELATED_BTN_ON : RELATED_BTN_OFF
                           )}
                           onClick={() => handleTabClick(name)}
                         >
-                          <span className="min-w-0 truncate [word-break:keep-all]">
+                          <span className="min-w-0 truncate break-keep">
                             {label}
                           </span>
                         </button>
@@ -1364,7 +1364,7 @@ export function WtlFacilityShell({
                 {tab && isTabEnabled(tab) && groupOptions.length > 0 ? (
                   <div className="space-y-1.5">
                     <div className="flex items-center gap-1">
-                      <span className="standard-detail-hit-label w-16 !text-foreground">
+                      <span className="standard-detail-hit-label w-16 text-foreground!">
                         레이어 그룹
                       </span>
                       <select
@@ -1403,7 +1403,7 @@ export function WtlFacilityShell({
                             className="flex items-start gap-1"
                           >
                             <span
-                              className="standard-detail-hit-label mt-1 w-16 shrink-0 !text-foreground"
+                              className="standard-detail-hit-label mt-1 w-16 shrink-0 text-foreground!"
                               title={group.category}
                             >
                               {group.category}
@@ -1430,7 +1430,7 @@ export function WtlFacilityShell({
                                     }
                                   >
                                     <WtlLayerMark layerKey={item.tableName} />
-                                    <span className="min-w-0 truncate [word-break:keep-all]">
+                                    <span className="min-w-0 truncate break-keep">
                                       {label}
                                     </span>
                                   </button>
@@ -1443,7 +1443,7 @@ export function WtlFacilityShell({
                     ) : null}
                     {showLocationFilter ? (
                       <div className="flex items-center gap-1">
-                        <span className="standard-detail-hit-label w-16 !text-foreground">위치</span>
+                        <span className="standard-detail-hit-label w-16 text-foreground!">위치</span>
                         <div className="grid min-w-0 flex-1 grid-cols-3 gap-1">
                           <select
                             value={emdSelected}
@@ -1508,7 +1508,7 @@ export function WtlFacilityShell({
                       </div>
                     ) : null}
                     <div className="flex items-center gap-1">
-                      <span className="standard-detail-hit-label w-16 !text-foreground">통합검색</span>
+                      <span className="standard-detail-hit-label w-16 text-foreground!">통합검색</span>
                       <input
                         type="search"
                         value={keywordDraft}
@@ -1540,7 +1540,7 @@ export function WtlFacilityShell({
                   </p>
                 )}
               </div>
-              {tab && isTabEnabled(tab) && (selectedSource || groupsLoading || !visibleSyncReady) ? (
+              {tab && isTabEnabled(tab) && (selectedSource || groupsLoading || visibleSyncReady!) ? (
                 <WtlFacilityListView
                   rows={
                     visibleSyncReady && groupsReadyTabRef.current === tab
@@ -1552,7 +1552,7 @@ export function WtlFacilityShell({
                       ? total
                       : 0
                   }
-                  loading={loading || groupsLoading || !visibleSyncReady}
+                  loading={loading || groupsLoading || visibleSyncReady!}
                   loadingMore={loadingMore}
                   error={
                     visibleSyncReady && groupsReadyTabRef.current === tab

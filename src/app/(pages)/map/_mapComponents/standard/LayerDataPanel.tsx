@@ -2348,10 +2348,10 @@ export function LayerDataPanel({
           'flex flex-col overflow-hidden',
           isIdentifyMode
             ? hasDetail
-              ? 'flex-[3] min-h-0'
+              ? 'flex-3 min-h-0'
               : 'flex-1 min-h-0'
             : hasDetail
-              ? 'flex-[3] min-h-0'
+              ? 'flex-3 min-h-0'
               : 'flex-1 min-h-0'
         )}
       >
@@ -2583,7 +2583,7 @@ export function LayerDataPanel({
 
       {/* Detail section - 2/3 */}
       {hasDetail && selectedRow && (
-        <div className="flex-[7] min-h-0 flex flex-col border-t-2 border-primary/30 bg-background overflow-hidden">
+        <div className="flex-7 min-h-0 flex flex-col border-t-2 border-primary/30 bg-background overflow-hidden">
           {/* Detail tabs */}
           <div className="flex border-b border-border shrink-0">
             {detailTabs.map(({ id, label, icon: TabIcon }) => (

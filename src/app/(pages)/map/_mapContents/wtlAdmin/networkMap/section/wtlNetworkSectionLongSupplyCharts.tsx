@@ -204,7 +204,7 @@ function ElevCompositionMergeTable({ rows }: { rows: ElevRoleRow[] }) {
       aria-label="표고별 구역·분구·블록 구성"
     >
       <table className="w-full border-collapse text-[11px]">
-        <thead className="sticky top-0 z-[1] bg-muted">
+        <thead className="sticky top-0 z-1 bg-muted">
           <tr>
             <th className="w-14 border-b border-border px-1.5 py-1.5 text-left font-semibold text-muted-foreground">
               표고

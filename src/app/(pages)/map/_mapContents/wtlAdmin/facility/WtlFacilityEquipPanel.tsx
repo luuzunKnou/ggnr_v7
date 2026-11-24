@@ -87,7 +87,7 @@ export function WtlFacilityEquipPanel({ plant, equipment, onClose }: Props) {
         </button>
       </div>
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <div className="flex min-h-0 flex-[4] flex-col overflow-hidden border-b border-border">
+        <div className="flex min-h-0 flex-4 flex-col overflow-hidden border-b border-border">
           <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border bg-muted/40 px-3 py-1.5">
             <span className="text-[11px] font-semibold text-foreground">제원</span>
             <span className={cn('text-[11px]', statusClass(equipment.status))}>{equipment.status}</span>
@@ -108,7 +108,7 @@ export function WtlFacilityEquipPanel({ plant, equipment, onClose }: Props) {
           </div>
         </div>
 
-        <div className="flex min-h-0 flex-[6] flex-col overflow-hidden">
+        <div className="flex min-h-0 flex-6 flex-col overflow-hidden">
           <div className="flex shrink-0 border-b border-border">
             {(
               [

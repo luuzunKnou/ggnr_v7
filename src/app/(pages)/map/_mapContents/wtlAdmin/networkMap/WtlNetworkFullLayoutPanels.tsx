@@ -182,7 +182,7 @@ export function WtlNetworkFullLayoutPanels({
   const left = leftOffsetPx + 20
 
   return (
-    <div className="pointer-events-none fixed inset-0 z-[39]">
+    <div className="pointer-events-none fixed inset-0 z-39">
       <div
         className={cn(
           'pointer-events-auto absolute flex flex-col overflow-hidden',

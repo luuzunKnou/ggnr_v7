@@ -54,7 +54,7 @@ export function OdorComplaintManageModal({
           contentClassName
         )}
       >
-        <div className="standard-map-float-header cursor-default !py-2">
+        <div className="standard-map-float-header cursor-default py-2!">
           <div className="flex min-w-0 flex-1 items-center gap-1.5">
             <MessageSquareWarning className="h-4 w-4 shrink-0 text-primary" aria-hidden />
             <span className="standard-map-float-header-title text-sm font-semibold">

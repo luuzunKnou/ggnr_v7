@@ -1558,7 +1558,7 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
               </div>
 
               {isGroupOpen && (
-                <div className={cn(hasActiveLayer ? 'bg-primary/[0.03]' : 'bg-muted/30')}>
+                <div className={cn(hasActiveLayer ? 'bg-primary/3' : 'bg-muted/30')}>
                   {filteredLayers.map((layer) => {
                     const isOrtho = isOrthoDataQueryLayerId(layer.tableName);
                     const isActive = activeTableName === layer.tableName;

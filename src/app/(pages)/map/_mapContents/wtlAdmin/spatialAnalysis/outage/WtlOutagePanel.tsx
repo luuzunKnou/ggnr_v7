@@ -854,7 +854,7 @@ export function WtlOutagePanel({
                       key={item.id}
                       className={cn(
                         'h-7 cursor-pointer border-b border-border hover:bg-primary/5',
-                        historyId === item.id && 'bg-primary/[0.12] ring-1 ring-inset ring-primary/25',
+                        historyId === item.id && 'bg-primary/12 ring-1 ring-inset ring-primary/25',
                         historyPageItems.length >= ANALYSIS_HISTORY_PAGE_SIZE &&
                           rowIdx === historyPageItems.length - 1 &&
                           'border-b-0'
@@ -1022,7 +1022,7 @@ export function WtlOutagePanel({
                     key={row.id}
                     className={cn(
                       'cursor-pointer border-b border-border hover:bg-primary/5',
-                      selectedTargetId === row.id && 'bg-primary/[0.12] ring-1 ring-inset ring-primary/25'
+                      selectedTargetId === row.id && 'bg-primary/12 ring-1 ring-inset ring-primary/25'
                     )}
                     onClick={() => toggleTargetRow(row.id, row.point, 'parcel')}
                   >
@@ -1054,7 +1054,7 @@ export function WtlOutagePanel({
                     key={row.id}
                     className={cn(
                       'cursor-pointer border-b border-border hover:bg-primary/5',
-                      selectedTargetId === row.id && 'bg-primary/[0.12] ring-1 ring-inset ring-primary/25'
+                      selectedTargetId === row.id && 'bg-primary/12 ring-1 ring-inset ring-primary/25'
                     )}
                     onClick={() =>
                       toggleTargetRow(row.id, row.point, 'point', { ogcFid: row.ogcFid })
@@ -1090,7 +1090,7 @@ export function WtlOutagePanel({
                   data-target-row={row.id}
                   className={cn(
                     'cursor-pointer border-b border-border hover:bg-primary/5',
-                    selectedTargetId === row.id && 'bg-primary/[0.12] ring-1 ring-inset ring-primary/25'
+                    selectedTargetId === row.id && 'bg-primary/12 ring-1 ring-inset ring-primary/25'
                   )}
                   onClick={() =>
                     toggleTargetRow(row.id, row.point, 'customer', {

@@ -141,7 +141,7 @@ export function WtlNetworkSectionDrawGuide({
 
   return createPortal(
     <div
-      className="pointer-events-none absolute z-[15] flex flex-col items-center gap-1.5"
+      className="pointer-events-none absolute z-15 flex flex-col items-center gap-1.5"
       style={{
         top: topPx,
         left: mapPaddingLeft,

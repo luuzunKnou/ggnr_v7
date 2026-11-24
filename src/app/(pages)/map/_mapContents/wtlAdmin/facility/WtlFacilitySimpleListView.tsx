@@ -41,7 +41,7 @@ export function WtlFacilitySimpleListView({ config, selectedId, onSelect }: Prop
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <div className={cn('flex min-h-0 flex-col overflow-hidden', selected ? 'flex-[3]' : 'flex-1')}>
+      <div className={cn('flex min-h-0 flex-col overflow-hidden', selected ? 'flex-3' : 'flex-1')}>
         <div className="min-h-0 flex-1 overflow-auto">
           <table className="w-full table-fixed border-collapse text-left text-xs">
             <thead className="sticky top-0 bg-muted">
@@ -58,7 +58,7 @@ export function WtlFacilitySimpleListView({ config, selectedId, onSelect }: Prop
                   key={item.id}
                   className={cn(
                     'cursor-pointer border-b border-border hover:bg-primary/5',
-                    selectedId === item.id && 'bg-primary/[0.12] ring-1 ring-inset ring-primary/25'
+                    selectedId === item.id && 'bg-primary/12 ring-1 ring-inset ring-primary/25'
                   )}
                   onClick={() => onSelect(item)}
                 >
@@ -77,7 +77,7 @@ export function WtlFacilitySimpleListView({ config, selectedId, onSelect }: Prop
       </div>
 
       {selected && (
-        <div className="flex min-h-0 flex-[7] flex-col overflow-hidden border-t-2 border-primary/30 bg-background">
+        <div className="flex min-h-0 flex-7 flex-col overflow-hidden border-t-2 border-primary/30 bg-background">
           <div className="min-h-0 flex-1 overflow-auto">
             <AttrRows rows={selected.attrs} />
           </div>

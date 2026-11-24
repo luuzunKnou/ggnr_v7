@@ -539,7 +539,7 @@ export function WtlNetworkExportMenu({
               'rounded border border-border bg-background px-1.5 text-[11px] font-medium text-foreground hover:bg-muted/50',
             variant === 'fullLayout' &&
               (active || open) &&
-              'border-primary !bg-primary text-primary-foreground hover:!bg-primary/90',
+              'border-primary bg-primary! text-primary-foreground hover:bg-primary/90!',
             variant === 'iconLabelColor' &&
               'rounded border px-1.5 text-[11px] font-medium transition-colors',
             variant === 'iconLabelColor' &&

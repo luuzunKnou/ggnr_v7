@@ -583,7 +583,7 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
 
           <div className="standard-filter-section">
             <div className="flex items-center justify-between gap-2">
-              <p className="standard-detail-hint min-w-0 flex-1 !text-[11px]">
+              <p className="standard-detail-hint min-w-0 flex-1 text-[11px]!">
                 목록에 추가할 계량기 번호 또는 주소를 입력해주세요
               </p>
               <button
@@ -624,7 +624,7 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
               </button>
             </div>
             {notice ? (
-              <p className="standard-detail-hint !text-[11px]" aria-live="polite">
+              <p className="standard-detail-hint text-[11px]!" aria-live="polite">
                 {notice}
               </p>
             ) : null}
@@ -652,7 +652,7 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
                 </colgroup>
                 <thead className="standard-table-thead">
                   <tr>
-                    <th className="standard-table-th w-28 min-w-28 !max-w-none !overflow-visible whitespace-nowrap text-center">
+                    <th className="standard-table-th w-28 min-w-28 max-w-none! overflow-visible! whitespace-nowrap text-center">
                       <span className="inline-flex shrink-0 items-center justify-center gap-1 whitespace-nowrap">
                         <input
                           ref={reportAllRef}
@@ -671,7 +671,7 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
                         보고서
                       </span>
                     </th>
-                    <th className="standard-table-th standard-table-th-left w-24 !max-w-none whitespace-nowrap">
+                    <th className="standard-table-th standard-table-th-left w-24 max-w-none! whitespace-nowrap">
                       구역
                     </th>
                     <th className="standard-table-th w-12 whitespace-nowrap text-center">
@@ -735,7 +735,7 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
                               <>
                                 <td
                                   rowSpan={zone.rowIds.length}
-                                  className="standard-table-td-text w-32 min-w-32 !max-w-none !overflow-visible whitespace-nowrap border-r border-border text-center align-top"
+                                  className="standard-table-td-text w-32 min-w-32 max-w-none! overflow-visible! whitespace-nowrap border-r border-border text-center align-top"
                                 >
                                   <input
                                     type="checkbox"
@@ -865,7 +865,7 @@ export function WtlMeterLocationShell({ leftOffsetPx, onTotalWidthChange, onClos
         <MapFloatingPanel
           viewport
           zLayer="detailFloating"
-          width="min(56rem, calc(100vw - 1.5rem))"
+          width="min(64rem, calc(100vw - 1.5rem))"
           maxHeight="min(90vh, 900px)"
           className="bg-background backdrop-blur-none"
           defaultPosition={{

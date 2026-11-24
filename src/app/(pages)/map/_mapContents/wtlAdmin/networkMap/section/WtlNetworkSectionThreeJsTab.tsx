@@ -1192,7 +1192,7 @@ export function WtlNetworkSectionThreeJsTab({
           <div ref={hostRef} className="absolute inset-0" />
           <div
             ref={tipRef}
-            className="pointer-events-none absolute z-[2] hidden max-w-[320px] min-w-[200px] rounded border border-border bg-background px-2.5 py-2 shadow-md"
+            className="pointer-events-none absolute z-2 hidden max-w-[320px] min-w-[200px] rounded border border-border bg-background px-2.5 py-2 shadow-md"
             style={{ display: 'none' }}
           />
           {viewReady && !error ? (
@@ -1204,7 +1204,7 @@ export function WtlNetworkSectionThreeJsTab({
           {busy || !viewReady ? (
             <p
               className={cn(
-                'pointer-events-none absolute inset-0 z-[1] flex items-center justify-center text-[11px]',
+                'pointer-events-none absolute inset-0 z-1 flex items-center justify-center text-[11px]',
                 isDark ? 'text-slate-400' : 'text-slate-500'
               )}
             >

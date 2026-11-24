@@ -84,7 +84,7 @@ export function OdorAlertDetailBottomSheet({
       className={cn(
         'pointer-events-auto fixed flex flex-col overflow-hidden',
         MAP_LAYER_PANEL_SURFACE_CLASS,
-        '!opacity-100',
+        'opacity-100!',
         MAP_UI_Z_CLASS.detailFloating,
         'transition-transform duration-300 ease-out',
         entered ? 'translate-y-0' : 'translate-y-full',
@@ -140,7 +140,7 @@ export function OdorAlertDetailBottomSheet({
 
       <div
         className={cn(
-          'flex min-h-0 flex-col overflow-hidden transition-[opacity] duration-300 ease-out',
+          'flex min-h-0 flex-col overflow-hidden transition-opacity duration-300 ease-out',
           bodyOpen
             ? 'min-h-0 flex-1 opacity-100'
             : 'pointer-events-none h-0 opacity-0'

@@ -420,7 +420,7 @@ export default function MapViewModeWrapper({
           {mapControlPortalReady3d &&
             createPortal(
               <div
-                className="pointer-events-none fixed right-4 z-[40] flex flex-col items-end gap-3"
+                className="pointer-events-none fixed right-4 z-40 flex flex-col items-end gap-3"
                 style={{ top: '60px' }}
               >
                 <div className="pointer-events-none flex items-start gap-3">

@@ -245,7 +245,7 @@ function StatsExpandFloatingModal({
 
   return createPortal(
     <div
-      className="pointer-events-auto fixed z-[80] flex flex-col overflow-hidden rounded-md border border-border bg-card shadow-xl"
+      className="pointer-events-auto fixed z-80 flex flex-col overflow-hidden rounded-md border border-border bg-card shadow-xl"
       style={{ left: pos.x, top: pos.y, width: size.width, height: size.height }}
       role="dialog"
       aria-label={title}
@@ -547,7 +547,7 @@ function AxisMatrixTable({
                 {matrix.columns.map((col) => (
                   <th
                     key={col}
-                    className="sticky z-[4] border-b border-l border-border bg-muted p-[6px] font-medium text-foreground"
+                    className="sticky z-4 border-b border-l border-border bg-muted p-[6px] font-medium text-foreground"
                     style={{
                       top: 0,
                       minWidth: DIP_COL_W,
@@ -559,27 +559,27 @@ function AxisMatrixTable({
                   </th>
                 ))}
                 <th
-                  className="sticky z-[4] whitespace-nowrap border-b border-l border-border bg-muted p-[6px] font-medium text-foreground"
+                  className="sticky z-4 whitespace-nowrap border-b border-l border-border bg-muted p-[6px] font-medium text-foreground"
                   style={{ top: 0, minWidth: DIP_METRIC_W, width: DIP_METRIC_W }}
                 >
                   경년관 연장
                 </th>
                 <th
-                  className="sticky z-[4] whitespace-nowrap border-b border-l border-border bg-muted p-[6px] font-medium text-foreground"
+                  className="sticky z-4 whitespace-nowrap border-b border-l border-border bg-muted p-[6px] font-medium text-foreground"
                   style={{ top: 0, minWidth: DIP_METRIC_W, width: DIP_METRIC_W }}
                 >
                   경년관 비율(%)
                 </th>
                 {isYear ? (
                   <th
-                    className="sticky z-[4] whitespace-nowrap border-b border-l border-border bg-muted p-[6px] font-medium text-foreground"
+                    className="sticky z-4 whitespace-nowrap border-b border-l border-border bg-muted p-[6px] font-medium text-foreground"
                     style={{ top: 0, minWidth: DIP_METRIC_W, width: DIP_METRIC_W }}
                   >
                     연장가중 평균연령
                   </th>
                 ) : null}
                 <th
-                  className="sticky z-[4] whitespace-nowrap border-b border-l border-border bg-muted p-[6px] font-medium text-foreground"
+                  className="sticky z-4 whitespace-nowrap border-b border-l border-border bg-muted p-[6px] font-medium text-foreground"
                   style={{ top: 0, minWidth: DIP_METRIC_W, width: DIP_METRIC_W }}
                 >
                   비내식성 관로 비율(%)
@@ -600,7 +600,7 @@ function AxisMatrixTable({
                   {matrix.columns.map((col, idx) => (
                     <th
                       key={`age-${col}`}
-                      className="sticky z-[4] border-b border-l border-border bg-muted p-[6px] tabular-nums font-medium text-foreground"
+                      className="sticky z-4 border-b border-l border-border bg-muted p-[6px] tabular-nums font-medium text-foreground"
                       style={{
                         top: headerRow0H,
                         minWidth: DIP_COL_W,
@@ -612,19 +612,19 @@ function AxisMatrixTable({
                     </th>
                   ))}
                   <th
-                    className="sticky z-[4] border-b border-l border-border bg-muted p-[6px]"
+                    className="sticky z-4 border-b border-l border-border bg-muted p-[6px]"
                     style={{ top: headerRow0H, minWidth: DIP_METRIC_W, width: DIP_METRIC_W }}
                   />
                   <th
-                    className="sticky z-[4] border-b border-l border-border bg-muted p-[6px]"
+                    className="sticky z-4 border-b border-l border-border bg-muted p-[6px]"
                     style={{ top: headerRow0H, minWidth: DIP_METRIC_W, width: DIP_METRIC_W }}
                   />
                   <th
-                    className="sticky z-[4] border-b border-l border-border bg-muted p-[6px]"
+                    className="sticky z-4 border-b border-l border-border bg-muted p-[6px]"
                     style={{ top: headerRow0H, minWidth: DIP_METRIC_W, width: DIP_METRIC_W }}
                   />
                   <th
-                    className="sticky z-[4] border-b border-l border-border bg-muted p-[6px]"
+                    className="sticky z-4 border-b border-l border-border bg-muted p-[6px]"
                     style={{ top: headerRow0H, minWidth: DIP_METRIC_W, width: DIP_METRIC_W }}
                   />
                 </tr>
@@ -649,7 +649,7 @@ function AxisMatrixTable({
                   {matrix.columns.map((col) => (
                     <td
                       key={`total-${col}`}
-                      className="sticky z-[4] border-b border-l border-border bg-muted p-[6px] tabular-nums text-foreground"
+                      className="sticky z-4 border-b border-l border-border bg-muted p-[6px] tabular-nums text-foreground"
                       style={{
                         top: theadH,
                         minWidth: DIP_COL_W,
@@ -661,27 +661,27 @@ function AxisMatrixTable({
                     </td>
                   ))}
                   <td
-                    className="sticky z-[4] border-b border-l border-border bg-muted p-[6px] tabular-nums text-foreground"
+                    className="sticky z-4 border-b border-l border-border bg-muted p-[6px] tabular-nums text-foreground"
                     style={{ top: theadH, minWidth: DIP_METRIC_W, width: DIP_METRIC_W }}
                   >
                     {fmtMeters(totalRow.agedLength)}
                   </td>
                   <td
-                    className="sticky z-[4] border-b border-l border-border bg-muted p-[6px] tabular-nums text-foreground"
+                    className="sticky z-4 border-b border-l border-border bg-muted p-[6px] tabular-nums text-foreground"
                     style={{ top: theadH, minWidth: DIP_METRIC_W, width: DIP_METRIC_W }}
                   >
                     {fmtRatio(totalRow.agedRatio)}
                   </td>
                   {isYear ? (
                     <td
-                      className="sticky z-[4] border-b border-l border-border bg-muted p-[6px] tabular-nums text-foreground"
+                      className="sticky z-4 border-b border-l border-border bg-muted p-[6px] tabular-nums text-foreground"
                       style={{ top: theadH, minWidth: DIP_METRIC_W, width: DIP_METRIC_W }}
                     >
                       {totalRow.avgAge != null ? fmtRatio(totalRow.avgAge) : ''}
                     </td>
                   ) : null}
                   <td
-                    className="sticky z-[4] border-b border-l border-border bg-muted p-[6px] tabular-nums text-foreground"
+                    className="sticky z-4 border-b border-l border-border bg-muted p-[6px] tabular-nums text-foreground"
                     style={{ top: theadH, minWidth: DIP_METRIC_W, width: DIP_METRIC_W }}
                   >
                     {totalRow.nonCorrosionRatio != null
@@ -904,7 +904,7 @@ function SaaMatrixTable({
                 {matrix.columns.map((col) => (
                   <th
                     key={col}
-                    className="sticky z-[4] border-b border-l border-border bg-muted p-[6px] font-medium text-foreground"
+                    className="sticky z-4 border-b border-l border-border bg-muted p-[6px] font-medium text-foreground"
                     style={{
                       top: 0,
                       minWidth: DIP_COL_W,
@@ -937,7 +937,7 @@ function SaaMatrixTable({
                   {matrix.columns.map((col) => (
                     <td
                       key={`saa-total-${col}`}
-                      className="sticky z-[4] border-b border-l border-border bg-muted p-[6px] tabular-nums text-foreground"
+                      className="sticky z-4 border-b border-l border-border bg-muted p-[6px] tabular-nums text-foreground"
                       style={{
                         top: theadH,
                         minWidth: DIP_COL_W,

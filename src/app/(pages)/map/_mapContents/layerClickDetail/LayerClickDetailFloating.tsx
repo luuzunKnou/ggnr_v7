@@ -1247,7 +1247,7 @@ export function LayerClickDetailFloating({
       }
     >
       {pickListMode ? (
-        <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto overflow-x-hidden py-1">
+        <div className="scrollbar-thin max-h-[240px] min-h-0 flex-1 overflow-y-auto overflow-x-hidden py-1">
           <ul className="m-0 list-none p-0" role="listbox" aria-label="레이어 선택">
             {hits.map((hit) => {
               const label = hitLabel(hit)

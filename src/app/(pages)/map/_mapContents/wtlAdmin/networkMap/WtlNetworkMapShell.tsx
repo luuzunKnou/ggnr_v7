@@ -625,7 +625,7 @@ function DualRange({
 
   return (
     <div className="flex items-center gap-1">
-      <span className="standard-detail-hit-label w-[4.5rem] shrink-0 !text-foreground">{label}</span>
+      <span className="standard-detail-hit-label w-[4.5rem] shrink-0 text-foreground!">{label}</span>
       <div
         className="relative h-7 min-w-0 flex-1"
         title={`${label} 범위 · 클릭하면 직접 입력`}
@@ -2016,7 +2016,7 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
       const inView = onlyInViewRef.current
       const bbox = bboxRef.current
       // 화면 내: 지도 범위 확정 전엔 조회하지 않음 (extent 도착 시 다시 예약)
-      if (inView && !bbox) return
+      if (inView && bbox!) return
       // 시설목록·통계를 직렬로 두지 않음 — bbox 확정 즉시 통계도 함께 시작
       if (inView && bbox) setStatsBbox(bbox)
       void (async () => {
@@ -2101,7 +2101,7 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
    */
   useEffect(() => {
     if (availableLayerKeys == null) return
-    if (onlyInView && !bboxRef.current) return
+    if (onlyInView && bboxRef.current!) return
     scheduleListFetch()
   }, [availableLayerKeys, onlyInView, listQuerySig, scheduleListFetch])
 
@@ -2179,7 +2179,7 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
       const prevDetail = commonDetailRef.current
       // 지도 클릭으로 이미 떠 있는 모달은 목록 행으로 내용만 바꾸고 위치는 유지
       const keepMapPlacement =
-        !fromMap && prevDetail?.placement === 'mapClick' && prevDetail.anchor != null
+        fromMap! && prevDetail?.placement === 'mapClick' && prevDetail.anchor != null
       // 최소화 유지 — 선택·데이터만 바뀌어도 자동 펼침 금지
       setCommonDetail({
         item: next,
@@ -2199,7 +2199,7 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
     const map = mapContext?.mapInstanceRef?.current
     const applyPad = () => mapContext?.applyMapViewPaddingRef?.current?.()
     const extent = extent3857FromGeoJson4326(next.geom)
-    if (!map || !extent) return
+    if (!map || extent!) return
     if (opts?.center) {
       const center: [number, number] = [
         (extent[0] + extent[2]) / 2,
@@ -2371,9 +2371,9 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
           const sourceId = String(r.id).split(':')[0] as WtlNetMapSourceId
           if (!extraOn.has(key)) return false
           if (
-            !isFullLayout &&
+            isFullLayout! &&
             getWtlNetMapSource(sourceId) &&
-            !mapSources.has(sourceId)
+            mapSources.has!(sourceId)
           ) {
             return false
           }
@@ -2385,9 +2385,9 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
       const sourceId = String(prev.item.id).split(':')[0] as WtlNetMapSourceId
       if (!extraOn.has(key)) return null
       if (
-        !isFullLayout &&
+        isFullLayout! &&
         getWtlNetMapSource(sourceId) &&
-        !mapSources.has(sourceId)
+        mapSources.has!(sourceId)
       ) {
         return null
       }
@@ -2399,9 +2399,9 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
       const sourceId = String(prevSel.id).split(':')[0] as WtlNetMapSourceId
       if (!extraOn.has(key)) return null
       if (
-        !isFullLayout &&
+        isFullLayout! &&
         getWtlNetMapSource(sourceId) &&
-        !mapSources.has(sourceId)
+        mapSources.has!(sourceId)
       ) {
         return null
       }
@@ -2531,7 +2531,7 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
     const emd = emdSelected.trim()
     const ri = riSelected.trim()
     const block = supplyBlock.trim()
-    if (!emd && !ri && !block) {
+    if (!emd && ri! && block!) {
       setAreaWkts5181([])
       return
     }
@@ -2729,7 +2729,7 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
         for (const item of g.items) {
           const key = item.define_table_name
           if (getLayerShowMode(key) !== 'underground') continue
-          if (availableLayerKeys && !availableLayerKeys.has(key)) continue
+          if (availableLayerKeys && availableLayerKeys.has!(key)) continue
 
           const def = getWtlNetLayerDef(key)
           const names: string[] = []
@@ -2761,7 +2761,7 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
               // 대진: 분할 키는 UF에 없고 remap 물리명만 있음
               for (const sid of sourceIds) {
                 const src = getWtlNetMapSource(sid)
-                if (!src || !baseLow) continue
+                if (!src || baseLow!) continue
                 const remapped = src.remapTable(baseLow)
                 if (remapped.toLowerCase() === baseLow) continue
                 if (visible.has(remapped)) {
@@ -2965,7 +2965,7 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
         for (const item of g.items) {
           if (getLayerShowMode(item.define_table_name) === 'thematic') continue
           if (isWtlNetZoneLayerKey(item.define_table_name)) continue
-          if (availableLayerKeys && !availableLayerKeys.has(item.define_table_name)) {
+          if (availableLayerKeys && availableLayerKeys.has!(item.define_table_name)) {
             continue
           }
           const names = resolveUndergroundTableNames(item.define_table_name, sid)
@@ -2994,7 +2994,7 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
       ''
     if (zoneGroup && zoneSid) {
       for (const item of zoneGroup.items) {
-        if (availableLayerKeys && !availableLayerKeys.has(item.define_table_name)) {
+        if (availableLayerKeys && availableLayerKeys.has!(item.define_table_name)) {
           continue
         }
         const names = resolveUndergroundTableNames(item.define_table_name, zoneSid)
@@ -3113,7 +3113,7 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
     <div
       className={cn(
         'flex shrink-0 gap-1 bg-background p-2',
-        isFullLayout ? 'w-[5rem] flex-col !bg-transparent !p-1' : 'border-t border-border'
+        isFullLayout ? 'w-[5rem] flex-col bg-transparent! p-1!' : 'border-t border-border'
       )}
     >
       {SEARCH_TOOLS.map((label) => {
@@ -3127,31 +3127,31 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
               aria-label={zoneToolLabel}
               aria-pressed={zoneActive}
               className={cn(
-                !isFullLayout &&
+                isFullLayout! &&
                   'flex h-7 min-w-0 flex-1 cursor-pointer items-center justify-center gap-0.5 whitespace-nowrap',
                 isFullLayout && fullLayoutToolBtnClass,
                 isFullLayout &&
                   zoneActive &&
-                  'border-primary !bg-primary text-primary-foreground hover:!bg-primary/90',
-                !isFullLayout &&
+                  'border-primary bg-primary! text-primary-foreground hover:bg-primary/90!',
+                isFullLayout! &&
                   toolUi === 'legacy' &&
                   'rounded-[5px] px-0.5 text-[11px] font-semibold leading-none',
-                !isFullLayout &&
+                isFullLayout! &&
                   toolUi === 'legacy' &&
                   (zoneActive
                     ? 'bg-[#14607a] text-white hover:bg-[#0f4d62] dark:bg-[#d7ebf1] dark:text-[#14607a] dark:hover:bg-[#c5e3eb]'
                     : 'bg-[#d7ebf1] text-[#14607a] hover:bg-[#c5e3eb] dark:bg-[#14607a] dark:text-[#d7ebf1] dark:hover:bg-[#0f4d62]'),
-                !isFullLayout &&
+                isFullLayout! &&
                   toolUi === 'iconLabel' &&
                   'standard-detail-action-btn px-1.5 text-[11px] font-medium',
-                !isFullLayout &&
+                isFullLayout! &&
                   toolUi === 'iconLabel' &&
                   zoneActive &&
                   'border-primary bg-primary text-primary-foreground hover:bg-primary/90',
-                !isFullLayout &&
+                isFullLayout! &&
                   toolUi === 'iconLabelColor' &&
                   'gap-0.5 rounded border px-1.5 text-[11px] font-medium transition-colors',
-                !isFullLayout &&
+                isFullLayout! &&
                   toolUi === 'iconLabelColor' &&
                   (zoneActive
                     ? 'border-primary bg-primary text-primary-foreground hover:bg-primary/90'
@@ -3230,33 +3230,33 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
             type="button"
             title={title}
             className={cn(
-              !isFullLayout &&
+              isFullLayout! &&
                 'flex h-7 min-w-0 flex-1 cursor-pointer items-center justify-center whitespace-nowrap',
               isFullLayout && fullLayoutToolBtnClass,
               isFullLayout &&
                 isSection &&
                 sectionActive &&
-                'border-primary !bg-primary text-primary-foreground hover:!bg-primary/90',
-              !isFullLayout &&
+                'border-primary bg-primary! text-primary-foreground hover:bg-primary/90!',
+              isFullLayout! &&
                 toolUi === 'legacy' &&
                 'rounded-[5px] px-0.5 text-[11px] font-semibold leading-none',
-              !isFullLayout &&
+              isFullLayout! &&
                 toolUi === 'legacy' &&
                 (isSection && sectionActive
                   ? 'bg-[#14607a] text-white hover:bg-[#0f4d62] dark:bg-[#d7ebf1] dark:text-[#14607a] dark:hover:bg-[#c5e3eb]'
                   : 'bg-[#d7ebf1] text-[#14607a] hover:bg-[#c5e3eb] dark:bg-[#14607a] dark:text-[#d7ebf1] dark:hover:bg-[#0f4d62]'),
-              !isFullLayout &&
+              isFullLayout! &&
                 toolUi === 'iconLabel' &&
                 'standard-detail-action-btn gap-0.5 px-1.5 text-[11px] font-medium',
-              !isFullLayout &&
+              isFullLayout! &&
                 toolUi === 'iconLabel' &&
                 isSection &&
                 sectionActive &&
                 'border-primary bg-primary text-primary-foreground hover:bg-primary/90',
-              !isFullLayout &&
+              isFullLayout! &&
                 toolUi === 'iconLabelColor' &&
                 'gap-0.5 rounded border px-1.5 text-[11px] font-medium transition-colors',
-              !isFullLayout &&
+              isFullLayout! &&
                 toolUi === 'iconLabelColor' &&
                 (isSection && sectionActive
                   ? 'border-primary bg-primary text-primary-foreground hover:bg-primary/90'
@@ -3283,7 +3283,7 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
           title={resultOpen ? '시설목록 접기' : '시설목록 펼치기'}
           aria-label={resultOpen ? '시설목록 접기' : '시설목록 펼치기'}
           aria-pressed={resultOpen}
-          onClick={() => setResultOpen((v) => !v)}
+          onClick={() => setResultOpen((v) => v!)}
           className={cn(
             'flex h-7 min-w-0 flex-1 cursor-pointer items-center justify-center gap-0.5 whitespace-nowrap',
             toolUi === 'legacy' &&
@@ -3307,7 +3307,7 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
         >
           {toolUi !== 'legacy' ? (
             <ChevronLeft
-              className={cn('h-3 w-3 shrink-0', !resultOpen && 'rotate-180')}
+              className={cn('h-3 w-3 shrink-0', resultOpen! && 'rotate-180')}
               aria-hidden
             />
           ) : null}
@@ -3389,7 +3389,7 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
         }}
       />
       <div className="flex items-start gap-1">
-        <span className="standard-detail-hit-label w-[3.5rem] shrink-0 pt-0.5 !text-foreground">
+        <span className="standard-detail-hit-label w-[3.5rem] shrink-0 pt-0.5 text-foreground!">
           재질
         </span>
         <MaterialChoices
@@ -3399,7 +3399,7 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
         />
       </div>
       <label className="flex cursor-pointer items-center gap-1.5">
-        <span className="standard-detail-hit-label shrink-0 !text-foreground">
+        <span className="standard-detail-hit-label shrink-0 text-foreground!">
           화면 내 시설만 표시
         </span>
         <input
@@ -3530,7 +3530,7 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
                     )}
                     onClick={() => {
                       void pickRow(item, {
-                        fly: !onlyInView,
+                        fly: onlyInView!,
                         hitRows: [],
                       })
                     }}
@@ -3654,7 +3654,7 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
           onGroupTabChange={handleFullLayoutGroupTab}
           onLayerTabChange={setListLayerTab}
           listOpen={fullListOpen}
-          onToggleListOpen={() => setFullListOpen((v) => !v)}
+          onToggleListOpen={() => setFullListOpen((v) => v!)}
           listMeta={fullLayoutListMeta}
           listBody={fullLayoutListBody}
           listError={listError || undefined}
@@ -3716,7 +3716,7 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
             </div>
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
               <div className="scrollbar-thin max-h-[58%] shrink-0 overflow-y-auto">
-                <div className="standard-filter-section border-b-0 !pb-[13px]">
+                <div className="standard-filter-section border-b-0 pb-[13px]!">
                   <div className="grid grid-cols-3 gap-1">
                     {sourceButtons.map((src) => {
                       const on = mapSources.has(src.id)
@@ -3825,7 +3825,7 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
                                     ] ?? null
                                   }
                                 />
-                            <span className="min-w-0 truncate [word-break:keep-all]">
+                            <span className="min-w-0 truncate break-keep">
                               {item.define_table_kor_name}
                             </span>
                           </button>
@@ -3833,9 +3833,9 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
                       })}
                     </div>
                   )}
-                  <div className="space-y-2 !mt-[13px] border-t border-border pt-[13px]">
+                  <div className="space-y-2 mt-[13px]! border-t border-border pt-[13px]">
                     <div className="flex items-center gap-1">
-                      <span className="standard-detail-hit-label w-[4.5rem] shrink-0 !text-foreground">위치</span>
+                      <span className="standard-detail-hit-label w-[4.5rem] shrink-0 text-foreground!">위치</span>
                       <div className="grid min-w-0 flex-1 grid-cols-3 gap-1">
                         <select
                           value={emdSelected}
@@ -3907,7 +3907,7 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
                       }}
                     />
                     <div className="flex items-start gap-1">
-                      <span className="standard-detail-hit-label w-[4.5rem] shrink-0 pt-0.5 !text-foreground">
+                      <span className="standard-detail-hit-label w-[4.5rem] shrink-0 pt-0.5 text-foreground!">
                         관로 재질
                       </span>
                       <MaterialChoices
@@ -3917,7 +3917,7 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
                       />
                     </div>
                     <div className="flex items-center gap-1">
-                      <span className="standard-detail-hit-label w-[4.5rem] shrink-0 !text-foreground">통합검색</span>
+                      <span className="standard-detail-hit-label w-[4.5rem] shrink-0 text-foreground!">통합검색</span>
                       <input
                         type="search"
                         value={keywordDraft}
@@ -4028,7 +4028,7 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
                           <div
                             className={cn(
                               'flex min-w-0 items-center gap-1.5 bg-muted/50 px-2 py-1.5',
-                              !boxCollapsed && 'border-b border-border'
+                              boxCollapsed! && 'border-b border-border'
                             )}
                           >
                             <WtlLayerMark
@@ -4126,7 +4126,7 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
                                         )}
                                         onClick={() => {
                                           void pickRow(item, {
-                                            fly: !onlyInView,
+                                            fly: onlyInView!,
                                             hitRows: [],
                                           })
                                         }}

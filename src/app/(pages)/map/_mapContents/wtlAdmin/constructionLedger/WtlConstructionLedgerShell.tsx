@@ -950,7 +950,7 @@ export function WtlConstructionLedgerShell({
         typeof document !== 'undefined' &&
         createPortal(
         <div
-          className="pointer-events-auto fixed bottom-0 z-[56] flex flex-col border-t border-slate-200 bg-white/95 shadow-[0_-4px_16px_rgba(15,23,42,0.08)] backdrop-blur-sm"
+          className="pointer-events-auto fixed bottom-0 z-56 flex flex-col border-t border-slate-200 bg-white/95 shadow-[0_-4px_16px_rgba(15,23,42,0.08)] backdrop-blur-sm"
           style={{
             left: leftOffsetPx + total,
             right: 0,

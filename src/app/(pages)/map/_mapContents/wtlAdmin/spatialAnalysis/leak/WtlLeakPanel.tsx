@@ -267,7 +267,7 @@ export function WtlLeakPanel({ active = true, mapLeftPx = 0, onHandoffToOutage }
                       key={item.id}
                       className={cn(
                         'h-7 cursor-pointer border-b border-border hover:bg-primary/5',
-                        historyId === item.id && 'bg-primary/[0.12] ring-1 ring-inset ring-primary/25',
+                        historyId === item.id && 'bg-primary/12 ring-1 ring-inset ring-primary/25',
                         historyPageItems.length >= ANALYSIS_HISTORY_PAGE_SIZE &&
                           rowIdx === historyPageItems.length - 1 &&
                           'border-b-0'
@@ -390,7 +390,7 @@ export function WtlLeakPanel({ active = true, mapLeftPx = 0, onHandoffToOutage }
                       className={cn(
                         'cursor-pointer border-b border-border hover:bg-primary/5',
                         selectedGateId === gate.id &&
-                          'bg-primary/[0.12] ring-1 ring-inset ring-primary/25'
+                          'bg-primary/12 ring-1 ring-inset ring-primary/25'
                       )}
                       onClick={() => focusGate(gate)}
                     >

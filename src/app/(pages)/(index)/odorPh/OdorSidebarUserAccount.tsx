@@ -58,7 +58,7 @@ export function OdorSidebarUserAccount({ collapsed, onOpenAlertNotif }: Props) {
 
   const panelClassName = collapsed ? 'left-14' : 'left-[16.5rem]'
   const sideModalClassName = cn(
-    'fixed bottom-[7px] z-[130] flex w-[400px] flex-col overflow-hidden rounded-[5px] border border-border bg-background shadow-2xl',
+    'fixed bottom-[7px] z-130 flex w-[400px] flex-col overflow-hidden rounded-[5px] border border-border bg-background shadow-2xl',
     collapsed ? 'left-[calc(3.5rem+340px+8px)]' : 'left-[calc(16.5rem+340px+8px)]'
   )
 

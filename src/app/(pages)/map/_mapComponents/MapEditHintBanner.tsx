@@ -34,7 +34,7 @@ export function MapEditHintBanner({
 
   return createPortal(
     <div
-      className="pointer-events-none absolute z-[15] flex -translate-x-1/2 flex-col gap-1.5 rounded border border-red-300 bg-red-50/95 px-3 py-1.5 text-[11px] font-medium text-red-700 shadow-sm dark:border-red-800 dark:bg-red-950/80 dark:text-red-300"
+      className="pointer-events-none absolute z-15 flex -translate-x-1/2 flex-col gap-1.5 rounded border border-red-300 bg-red-50/95 px-3 py-1.5 text-[11px] font-medium text-red-700 shadow-sm dark:border-red-800 dark:bg-red-950/80 dark:text-red-300"
       style={
         centerPixel
           ? { left: centerPixel.x, top: hintTopPx }

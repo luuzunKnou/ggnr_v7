@@ -61,14 +61,14 @@ function ReportMainLayout({
         )}
       >
         <OdorReportStatCards cards={cards} className="shrink-0" />
-        <div className="flex min-h-[160px] min-w-0 flex-[2] flex-col overflow-hidden">
+        <div className="flex min-h-[160px] min-w-0 flex-2 flex-col overflow-hidden">
           {charts}
         </div>
         <OdorReportDataTable
           title={tableTitle}
           cols={tableCols}
           rows={tableRows}
-          className="min-h-[180px] min-w-0 flex-[3]"
+          className="min-h-[180px] min-w-0 flex-3"
         />
       </div>
     )
@@ -76,7 +76,7 @@ function ReportMainLayout({
 
   return (
     <div className={cn('flex h-full min-h-0 flex-1 items-stretch gap-2 overflow-hidden p-2', className)}>
-      <div className="flex h-full min-h-0 min-w-0 flex-[2] flex-col gap-2 overflow-hidden">
+      <div className="flex h-full min-h-0 min-w-0 flex-2 flex-col gap-2 overflow-hidden">
         <OdorReportStatCards cards={cards} className="shrink-0" />
         <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-hidden">
           {charts}
@@ -86,7 +86,7 @@ function ReportMainLayout({
         title={tableTitle}
         cols={tableCols}
         rows={tableRows}
-        className="h-full min-h-0 min-w-0 flex-[3]"
+        className="h-full min-h-0 min-w-0 flex-3"
       />
     </div>
   )

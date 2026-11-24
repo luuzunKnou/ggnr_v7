@@ -235,7 +235,7 @@ export function OdorSystemStatusExpandPanel({
 
           {!showSensor && detailRows ? (
             <section className="standard-detail-section-block-first space-y-2">
-              <div className="standard-detail-section-body !px-0">
+              <div className="standard-detail-section-body px-0!">
                 <AttrRows rows={detailRows} />
               </div>
               {onGoToStation && node.lon != null && node.lat != null ? (
@@ -285,7 +285,7 @@ function SensorDetailBody({
         </span>
         <CommStatusBadge status={node.status} />
       </div>
-      <div className="standard-detail-section-body !px-0">
+      <div className="standard-detail-section-body px-0!">
         <AttrRows rows={rows} />
       </div>
       {onGoToStation && node.lon != null && node.lat != null ? (
@@ -472,7 +472,7 @@ function AgencyDeviceList({
               <th className="standard-table-th standard-table-th-left w-[18%]">상태</th>
               <th className="standard-table-th standard-table-th-left w-[18%]">농도</th>
               <th className="standard-table-th standard-table-th-left w-[14%]">설비</th>
-              <th className="standard-table-th !w-6 px-0.5">
+              <th className="standard-table-th w-6! px-0.5">
                 <span className="sr-only">상세</span>
               </th>
             </tr>
@@ -531,7 +531,7 @@ function AgencyDeviceList({
                   <td className="standard-table-td-compact">
                     {row.abatementRunning ? '가동' : '정지'}
                   </td>
-                  <td className="standard-table-td-compact !w-6 px-0.5 text-center">
+                  <td className="standard-table-td-compact w-6! px-0.5 text-center">
                     <ChevronRight
                       className="mx-auto h-3.5 w-3.5 text-muted-foreground"
                       aria-hidden

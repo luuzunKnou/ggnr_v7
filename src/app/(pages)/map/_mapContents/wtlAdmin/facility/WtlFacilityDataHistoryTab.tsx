@@ -408,7 +408,7 @@ export function WtlFacilityDataHistoryTab({
           <DialogHeader className="shrink-0">
             <DialogTitle className="text-base">데이터 이력 상세</DialogTitle>
             {detailRow ? (
-              <p className="break-words text-xs text-muted-foreground">
+              <p className="wrap-break-word text-xs text-muted-foreground">
                 {cellText(detailRow.date)} · {cellText(detailRow.workType)} ·{' '}
                 {cellText(detailRow.category)} · {cellText(detailRow.keyField)} |{' '}
                 {cellText(detailRow.keyValue)}

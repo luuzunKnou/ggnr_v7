@@ -1264,7 +1264,7 @@ function CrossSectionChart({
   return (
     <div className="flex h-full min-h-0 gap-2 overflow-hidden rounded border-2 border-border bg-background p-2">
       <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
-        <div className="relative z-[2] min-h-0 flex-1">
+        <div className="relative z-2 min-h-0 flex-1">
           <Chart
             ref={chartRef}
             type="scatter"
@@ -1273,7 +1273,7 @@ function CrossSectionChart({
             plugins={[axisFooterPlugin, gapDecorPlugin, insetSyncPlugin]}
           />
         </div>
-        <div className="relative z-[1] max-h-[28%] shrink-0 overflow-y-auto">
+        <div className="relative z-1 max-h-[28%] shrink-0 overflow-y-auto">
           <SupplyAreaGanttChart
             bands={supplyAreaBands}
             totalLengthM={xmaxForLayout}
@@ -1765,7 +1765,7 @@ function LongSectionChart({
   return (
     <div className="flex h-full min-h-0 gap-2 overflow-hidden rounded border-2 border-border bg-background p-2">
       <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
-        <div className="relative z-[2] min-h-0 flex-1">
+        <div className="relative z-2 min-h-0 flex-1">
           <Chart
             ref={chartRef}
             type="scatter"
@@ -1773,7 +1773,7 @@ function LongSectionChart({
             options={options}
           />
         </div>
-        <div className="relative z-[1] max-h-[40%] shrink-0 overflow-y-auto">
+        <div className="relative z-1 max-h-[40%] shrink-0 overflow-y-auto">
           <WtlNetworkLongSupplyElevCharts
             ground={ground}
             groundMin={groundMin}

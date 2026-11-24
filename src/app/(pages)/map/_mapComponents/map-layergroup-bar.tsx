@@ -344,14 +344,14 @@ export function MapLayergroupBar() {
             <div
               ref={dropdownRef}
               className={cn(
-                'fixed z-[9999] w-[220px] transition-opacity duration-300',
+                'fixed z-9999 w-[220px] transition-opacity duration-300',
                 dropdownFadeIn ? 'opacity-100' : 'opacity-0'
               )}
               style={{ left: dropdownLeft, top: dropdownTop }}
             >
               <div className="overflow-hidden rounded-[10px] border border-slate-200 bg-white shadow-lg">
                 {/* Header */}
-                <div className="flex items-center justify-between border-b border-slate-200 bg-primary/[0.03] px-4 py-1.5">
+                <div className="flex items-center justify-between border-b border-slate-200 bg-primary/3 px-4 py-1.5">
                   <div className="flex items-center gap-3.5 h-2">
                   </div>
                 </div>
@@ -373,7 +373,7 @@ export function MapLayergroupBar() {
                             tabIndex={0}
                             className={cn(
                               'group flex items-center gap-1.5 px-4 py-[3px] transition-all duration-150 cursor-pointer',
-                              isChecked ? 'bg-primary/[0.04]' : 'hover:bg-slate-50'
+                              isChecked ? 'bg-primary/4' : 'hover:bg-slate-50'
                             )}
                             onClick={() => {
                               if (visibleLayerNames.has(defineTableName)) return;

@@ -459,7 +459,7 @@ export function WtlNetworkMapAttachmentSection({ item, fields, canEdit = true }:
                     aria-label={
                       canPreview ? `${f.name} 크게 보기` : `${f.name} 다운로드`
                     }
-                    className="group flex cursor-pointer items-center gap-2 rounded-lg border border-border/80 bg-card p-1 transition-colors hover:bg-muted/30 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                    className="group flex cursor-pointer items-center gap-2 rounded-lg border border-border/80 bg-card p-1 transition-colors hover:bg-muted/30 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
                     onClick={activateRow}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' || e.key === ' ') {
@@ -468,7 +468,7 @@ export function WtlNetworkMapAttachmentSection({ item, fields, canEdit = true }:
                       }
                     }}
                   >
-                    <div className="relative flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-muted/50">
+                    <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted/50">
                       <span
                         className={cn(
                           'transition-opacity',
