@@ -40,9 +40,9 @@ export type MapDetailFloatingPanelProps = {
   headerActions?: ReactNode
   /** 펼침·최소화 모두 최소화·닫기 왼쪽에 표시 (위치 이동 등) */
   headerActionsAlways?: ReactNode
-  /** 헤더 우클릭 — 고정 창으로 보기(플로팅 분리) */
+  /** 헤더·우클릭 — 고정창으로 전환(플로팅 분리) */
   onHeaderOpenInScreen?: () => void
-  /** 헤더 우클릭 — 새 창으로 보기(blank) */
+  /** 헤더·우클릭 — 새 창으로 보기(blank) */
   onHeaderOpenInNewWindow?: () => void
   pinPosition?: { top: number; left: number } | null
   focusToken?: number
@@ -240,6 +240,28 @@ export function MapDetailFloatingPanel({
           <div className="flex shrink-0 items-center gap-1">
             {!minimized ? headerActions : null}
             {headerActionsAlways}
+            {showScreenItem ? (
+              <button
+                type="button"
+                title="고정창으로 전환"
+                aria-label="고정창으로 전환"
+                onClick={() => onHeaderOpenInScreen?.()}
+                className={closeBtnClass}
+              >
+                <Pin className="h-3.5 w-3.5" aria-hidden />
+              </button>
+            ) : null}
+            {showBlankItem ? (
+              <button
+                type="button"
+                title="새 창으로 보기"
+                aria-label="새 창으로 보기"
+                onClick={() => onHeaderOpenInNewWindow?.()}
+                className={closeBtnClass}
+              >
+                <SquareArrowOutUpRight className="h-3.5 w-3.5" aria-hidden />
+              </button>
+            ) : null}
             {allowMinimize ? (
               <button
                 type="button"
@@ -306,7 +328,7 @@ export function MapDetailFloatingPanel({
                     <button
                       type="button"
                       role="menuitem"
-                      title="고정 창으로 보기"
+                      title="고정창으로 전환"
                       className="flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-left text-foreground hover:bg-primary/10"
                       onClick={() => {
                         setCtxMenu(null)
@@ -314,7 +336,7 @@ export function MapDetailFloatingPanel({
                       }}
                     >
                       <Pin className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                      고정 창으로 보기
+                      고정창으로 전환
                     </button>
                   ) : null}
                   {showBlankItem ? (

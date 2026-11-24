@@ -105,6 +105,8 @@ type Props = {
   seriesMode?: WtlNetworkStatusChartSeriesMode
   /** 현재 탭(관경/연도/관용도)에 맞는 도표 확대 모달 */
   onExpand?: (kind: WtlNetworkStatusChartKind) => void
+  /** 외곽 «관로 통계» 헤더 안에 넣을 때 — 자체 테두리·제목 숨김 */
+  embedded?: boolean
 }
 
 /**
@@ -123,6 +125,7 @@ export function WtlNetworkStatusCombinedChart({
   solidHeader = false,
   seriesMode = 'material',
   onExpand,
+  embedded = false,
 }: Props) {
   const theme = useResolvedThemeSafe()
   const isDark = theme === 'dark'
@@ -389,37 +392,42 @@ export function WtlNetworkStatusCombinedChart({
     })
   }
 
+  const expandBtn = onExpand ? (
+    <button
+      type="button"
+      onClick={() => onExpand(kind)}
+      className="cursor-pointer shrink-0 rounded p-0.5 text-muted-foreground/70 transition-colors hover:bg-muted hover:text-foreground/90"
+      title="통계 도표 보기"
+      aria-label="통계 도표 보기"
+    >
+      <Scaling className="h-3.5 w-3.5" />
+    </button>
+  ) : null
+
   return (
-    <section
+    <div
       className={cn(
-        'flex shrink-0 flex-col overflow-hidden rounded border border-border bg-background',
+        'flex shrink-0 flex-col overflow-hidden bg-background',
+        !embedded && 'rounded border border-border',
         className
       )}
     >
-      <div
-        className={
-          solidHeader
-            ? 'standard-map-float-header shrink-0 gap-1.5 px-2 py-1 text-xs'
-            : 'flex shrink-0 items-center justify-between gap-1.5 border-b border-border bg-muted/50 px-2 py-1 text-xs font-medium text-foreground'
-        }
-      >
-        <div className="flex min-w-0 items-center gap-1.5">
-          <span className="h-3 w-0.5 shrink-0 rounded-sm bg-primary" aria-hidden />
-          <span className="truncate">관로 연장 그래프</span>
+      {!embedded ? (
+        <div
+          className={
+            solidHeader
+              ? 'standard-map-float-header shrink-0 gap-1.5 px-2 py-1 text-xs'
+              : 'flex shrink-0 items-center justify-between gap-1.5 border-b border-border bg-muted/50 px-2 py-1 text-xs font-medium text-foreground'
+          }
+        >
+          <div className="flex min-w-0 items-center gap-1.5">
+            <span className="h-3 w-0.5 shrink-0 rounded-sm bg-primary" aria-hidden />
+            <span className="truncate">관로 통계</span>
+          </div>
+          {expandBtn}
         </div>
-        {onExpand ? (
-          <button
-            type="button"
-            onClick={() => onExpand(kind)}
-            className="cursor-pointer shrink-0 rounded p-0.5 text-muted-foreground/70 transition-colors hover:bg-muted hover:text-foreground/90"
-            title="통계 도표 보기"
-            aria-label="통계 도표 보기"
-          >
-            <Scaling className="h-3.5 w-3.5" />
-          </button>
-        ) : null}
-      </div>
-      <div className="standard-filter-chips shrink-0 overflow-x-auto px-1.5 py-1">
+      ) : null}
+      <div className="standard-filter-chips shrink-0 items-center overflow-x-auto px-1.5 py-1">
         {CHART_KIND_OPTIONS.map((opt) => {
           const on = opt.id === kind
           return (
@@ -437,6 +445,7 @@ export function WtlNetworkStatusCombinedChart({
             </button>
           )
         })}
+        {embedded ? <div className="ml-auto flex shrink-0 items-center">{expandBtn}</div> : null}
       </div>
       {/* 그래프 본체 높이 200px 고정 — material일 때만 좌측 관재질 목록 스크롤 */}
       <div className="flex h-50 min-h-50 w-full min-w-0 shrink-0 overflow-hidden">
@@ -498,6 +507,6 @@ export function WtlNetworkStatusCombinedChart({
           )}
         </div>
       </div>
-    </section>
+    </div>
   )
 }

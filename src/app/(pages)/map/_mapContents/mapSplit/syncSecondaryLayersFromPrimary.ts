@@ -59,10 +59,15 @@ export function syncSecondaryLayersFromPrimary(
 ): void {
   const secondaryByKey = new globalThis.Map<string, BaseLayer>();
   let secondaryService: BaseLayer | undefined;
+  let secondaryUfService: BaseLayer | undefined;
   for (const layer of secondary.getLayers().getArray()) {
     if (layer.get(MAP_SPLIT_MIRROR_TWIN)) continue;
     if (layer.get('serviceLayer')) {
       secondaryService = layer;
+      continue;
+    }
+    if (layer.get('undergroundFacilityServiceLayer')) {
+      secondaryUfService = layer;
       continue;
     }
     const key = layerMatchKey(layer);
@@ -75,6 +80,13 @@ export function syncSecondaryLayersFromPrimary(
       if (secondaryService) {
         copyVisibility(pLayer, secondaryService);
         copySourceParams(pLayer, secondaryService);
+      }
+      continue;
+    }
+    if (pLayer.get('undergroundFacilityServiceLayer')) {
+      if (secondaryUfService) {
+        copyVisibility(pLayer, secondaryUfService);
+        copySourceParams(pLayer, secondaryUfService);
       }
       continue;
     }

@@ -14,7 +14,7 @@ import { createBasicSectionLayers } from '../../_mapComponents/layerFactory/basi
 import { createJimokLayers } from '../../_mapComponents/layerFactory/jimokLayerFactory';
 import { createOwnershipLayers } from '../../_mapComponents/layerFactory/ownershipLayerFactory';
 import { createThematicMapLayers } from '../../_mapComponents/layerFactory/thematicMapLayerFactory';
-import { createUndergroundFacilityLayers } from '../../_mapComponents/layerFactory/undergroundFacilityLayerFactory';
+import { createUndergroundFacilityServiceLayer } from '../../_mapComponents/layerFactory/undergroundFacilityLayerFactory';
 import { createSafetydataMapLayers } from '../../_mapComponents/layerFactory/safetydataMapLayerFactory';
 import { createServiceLayer } from '../../_mapComponents/layerFactory/serviceLayerFactory';
 import { bindMapGeometryStackOrder, mergeDefineLayerShpTypesIntoGeometryMap } from '@/lib/mapLayerGeometryOrder';
@@ -79,7 +79,7 @@ export function MapSplitSecondaryHost({ active }: MapSplitSecondaryHostProps) {
         ...createJimokLayers(),
         ...createOwnershipLayers(),
         ...createThematicMapLayers(),
-        ...createUndergroundFacilityLayers(),
+        createUndergroundFacilityServiceLayer(),
         ...createSafetydataMapLayers(),
       ],
       view: new View({

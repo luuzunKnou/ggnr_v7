@@ -208,7 +208,7 @@ export function useLayerClickDetail(opts?: {
     )
   }, [])
 
-  /** origin = 기존(기본) 모달 좌상단 — 새 창은 그보다 약간 오른쪽 */
+  /** origin = 기본 모달 좌상단 — 같은 자리에서 고정창으로 전환 후 기본 모달 닫음 */
   const detachKeep = useCallback(
     (
       origin?: { top: number; left: number } | null,
@@ -221,6 +221,10 @@ export function useLayerClickDetail(opts?: {
         curHits.find((h) => h.key === curKey) ?? curHits[0] ?? null
       if (!cur) return
       const facilityKey = cur.key
+      const base = origin ?? anchorRef.current
+      const sameAnchor = base
+        ? { left: base.left, top: base.top }
+        : { left: 80, top: 72 }
       setKeptModals((prev) => {
         // 같은 시설 고정창이 있으면 앞으로 (형제 행은 새 창)
         const existing = prev.find((m) => m.selectedKey === facilityKey)
@@ -237,9 +241,6 @@ export function useLayerClickDetail(opts?: {
         }
         const stackIndex =
           prev.reduce((max, m) => Math.max(max, m.stackIndex), -1) + 1
-        const base = origin ?? anchorRef.current
-        const offsetX = 28 + stackIndex * 28
-        const offsetY = 14 + stackIndex * 14
         return [
           ...prev,
           {
@@ -247,17 +248,16 @@ export function useLayerClickDetail(opts?: {
             // 고정창은 해당 시설 1건만 — 다중 목록 전체를 넣으면 다른 행 핀이 덮어쓰기 됨
             hits: [{ ...cur, data: { ...cur.data } }],
             selectedKey: cur.key,
-            anchor: base
-              ? { left: base.left + offsetX, top: base.top + offsetY }
-              : { left: 80 + offsetX, top: 72 + offsetY },
+            anchor: sameAnchor,
             stackIndex,
             focusToken: 0,
             minimized: false,
           },
         ]
       })
+      close()
     },
-    []
+    [close]
   )
 
   const closeKeep = useCallback((modalKey: string) => {

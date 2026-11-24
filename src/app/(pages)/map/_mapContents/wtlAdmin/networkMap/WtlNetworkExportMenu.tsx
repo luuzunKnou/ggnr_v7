@@ -27,12 +27,11 @@ import {
   DialogTitle,
 } from '@/app/shadcnComponents/ui/dialog'
 
-/** 관망조회 하단 도구 버튼 스타일 · 전체 UI 레이아웃 */
+/** 관망조회 하단 도구 버튼 스타일 */
 export type WtlNetworkToolBtnVariant =
   | 'legacy'
   | 'iconLabel'
   | 'iconLabelColor'
-  | 'fullLayout'
 
 export type WtlNetworkExportScope = 'all' | 'filtered'
 
@@ -512,8 +511,7 @@ export function WtlNetworkExportMenu({
     <>
       <div
         className={cn(
-          'relative min-w-0',
-          variant === 'fullLayout' ? 'w-full shrink-0' : 'flex-1',
+          'relative min-w-0 flex-1',
           className
         )}
       >
@@ -535,11 +533,6 @@ export function WtlNetworkExportMenu({
             variant === 'iconLabel' &&
               (active || open) &&
               'border-primary bg-primary text-primary-foreground hover:bg-primary/90',
-            variant === 'fullLayout' &&
-              'rounded border border-border bg-background px-1.5 text-[11px] font-medium text-foreground hover:bg-muted/50',
-            variant === 'fullLayout' &&
-              (active || open) &&
-              'border-primary bg-primary! text-primary-foreground hover:bg-primary/90!',
             variant === 'iconLabelColor' &&
               'rounded border px-1.5 text-[11px] font-medium transition-colors',
             variant === 'iconLabelColor' &&

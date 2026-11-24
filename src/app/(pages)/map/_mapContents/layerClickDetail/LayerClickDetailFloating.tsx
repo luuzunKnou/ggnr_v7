@@ -1125,7 +1125,7 @@ export function LayerClickDetailFloating({
             <p className="m-0">제목을 두 번 클릭하면 최소화됩니다</p>
             <p className="m-0">제목을 끌면 창을 옮길 수 있습니다</p>
             <p className="m-0">
-              제목을 우클릭하면 고정 창·새 창으로 열 수 있습니다
+              헤더에서 고정창·새 창으로 열 수 있습니다
             </p>
           </div>
           <button
@@ -1305,8 +1305,8 @@ export function LayerClickDetailFloating({
                     <span className="flex shrink-0 items-center gap-0.5">
                       <button
                         type="button"
-                        title="고정창으로 보기"
-                        aria-label="고정창으로 보기"
+                        title="고정창으로 전환"
+                        aria-label="고정창으로 전환"
                         onClick={(e) => {
                           e.stopPropagation()
                           setListHighlightKey(hit.key)

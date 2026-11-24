@@ -1978,25 +1978,38 @@ export async function listWtlNetworkAvailableLayerKeys(params: {
     if (ok) availableKeys.push(plan.key);
   }
 
-  /** 한글명 후보 중 데이터 있는 물리 테이블 — 출처×키 */
+  /**
+   * 출처×키 → 물리 테이블.
+   * 테이블 존재(layerExist)만으로 고른다 — 키마다 geom LIMIT 1을 치면
+   * 가용키 API가 레이어 WMS 표시를 가로막는다.
+   * (geom 우선 해석은 상세·목록 등 resolvePhysicalTableInSource 경로 유지)
+   */
   const physicalBySource: Record<string, Record<string, string>> = {};
-  await Promise.all(
-    sources.map(async (source) => {
-      const byKey: Record<string, string> = {};
-      await Promise.all(
-        availableKeys.map(async (key) => {
-          const def = getWtlNetLayerDef(key);
-          const base = String(def?.table ?? key)
-            .trim()
-            .toLowerCase();
-          if (!base) return;
-          const phys = await resolvePhysicalTableInSource(source, base);
-          if (phys) byKey[key] = phys;
-        })
-      );
-      if (Object.keys(byKey).length > 0) physicalBySource[source.id] = byKey;
-    })
-  );
+  for (const source of sources) {
+    const byKey: Record<string, string> = {};
+    for (const key of availableKeys) {
+      const def = getWtlNetLayerDef(key);
+      const base = String(def?.table ?? key)
+        .trim()
+        .toLowerCase();
+      if (!base) continue;
+      const remapped = String(source.remapTable(base) ?? '')
+        .trim()
+        .toLowerCase();
+      const sameKorInGroup = listWtlNetSameKorTablesInGroup(source.tables, base);
+      const ordered = [
+        ...new Set(
+          [...sameKorInGroup, remapped, base]
+            .map((n) => String(n ?? '').trim().toLowerCase())
+            .filter(Boolean)
+        ),
+      ];
+      const pick = ordered.find((n) => layerExist.has(n)) ?? null;
+      // 프로세스 캐시에는 넣지 않음 — 목록·상세는 geom 우선 resolve 유지
+      if (pick) byKey[key] = pick;
+    }
+    if (Object.keys(byKey).length > 0) physicalBySource[source.id] = byKey;
+  }
 
   return { availableKeys, physicalBySource };
 }

@@ -7,6 +7,12 @@ import ImageLayer from 'ol/layer/Image';
 import ImageWMS from 'ol/source/ImageWMS';
 import type { Map as OlMap } from 'ol';
 import tables from '@/config/defineLayer/tables.json';
+import {
+  markLayerGeomStack,
+  mergeDefineLayerShpTypesIntoGeometryMap,
+  sortLayerNamesForWmsStack,
+  type LayerDbGeometryKind,
+} from '@/lib/mapLayerGeometryOrder';
 import { WORKSPACE } from './serviceLayerFactory';
 import type {
   ThematicMapLayerGroup,
@@ -181,6 +187,78 @@ export const UNDERGROUND_FACILITY_LAYER_GROUPS: ThematicMapLayerGroup[] =
 export const UNDERGROUND_FACILITY_LAYERS: ThematicMapLayerOption[] =
   UNDERGROUND_FACILITY_LAYER_GROUPS.flatMap((g) => g.layers);
 
+/** 테이블별 div_query(CQL) — 묶음 GetMap 시 레이어 순과 맞춤 */
+function buildBaseCqlByTable(
+  layers: ThematicMapLayerOption[] = UNDERGROUND_FACILITY_LAYERS
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const opt of layers) {
+    const t = String(opt.tableName ?? '').trim();
+    const cql = String(opt.cqlFilter ?? '').trim();
+    if (t && cql) out[t] = cql;
+  }
+  return out;
+}
+
+const UF_GEOM_TYPES: Record<string, LayerDbGeometryKind> =
+  mergeDefineLayerShpTypesIntoGeometryMap({}, tables as unknown[]);
+
+function mergeCqlParts(...parts: Array<string | null | undefined>): string {
+  const clauses = parts
+    .map((p) => String(p ?? '').trim())
+    .filter((p) => p && p !== 'INCLUDE');
+  if (clauses.length === 0) return 'INCLUDE';
+  if (clauses.length === 1) return clauses[0]!;
+  return clauses.map((c) => `(${c})`).join(' AND ');
+}
+
+export function findUndergroundFacilityServiceLayer(
+  map: OlMap | null | undefined
+): ImageLayer<ImageWMS> | null {
+  if (!map) return null;
+  for (const raw of map.getLayers().getArray()) {
+    if (!raw.get('undergroundFacilityServiceLayer')) continue;
+    return raw as ImageLayer<ImageWMS>;
+  }
+  return null;
+}
+
+/**
+ * 지도 본용 — 데이터 조회(serviceLayer)와 동일하게 켜진 테이블을 한 GetMap에 묶는다.
+ * (위상분석 등 전용 복제 레이어는 createUndergroundFacilityLayers 유지)
+ */
+export function createUndergroundFacilityServiceLayer(): ImageLayer<ImageWMS> {
+  const geoServerBase = getGeoServerBase();
+  const wmsUrl = `${geoServerBase}/${WORKSPACE}/wms`;
+  const layer = new ImageLayer({
+    minZoom: 8,
+    maxZoom: 30,
+    visible: false,
+    source: new ImageWMS({
+      url: wmsUrl,
+      params: {
+        LAYERS: '',
+        STYLES: '',
+        TRANSPARENT: true,
+        EXCEPTIONS: 'application/vnd.ogc.se_xml',
+      },
+      serverType: 'geoserver',
+      ratio: 1.5,
+      imageLoadFunction: geoserverWmsImageLoadFunction,
+    }),
+  });
+  layer.set('name', '지하시설물');
+  layer.set('undergroundFacilityLayer', true);
+  layer.set('undergroundFacilityServiceLayer', true);
+  layer.set('layerCqlByTable', buildBaseCqlByTable());
+  markLayerGeomStack(layer, 'LINE');
+  return layer;
+}
+
+/**
+ * 테이블당 ImageWMS — 위상분석 배경 등 개별 스타일/SLD가 필요할 때.
+ * 지도 기본 지하시설물 표시는 createUndergroundFacilityServiceLayer 사용.
+ */
 export function createUndergroundFacilityLayers(
   layers: ThematicMapLayerOption[] = UNDERGROUND_FACILITY_LAYERS
 ): ImageLayer<ImageWMS>[] {
@@ -205,7 +283,6 @@ export function createUndergroundFacilityLayers(
         params,
         serverType: 'geoserver',
         ratio: 1.5,
-        // 읍면동·리 INTERSECTS 등 긴 CQL은 GET 414 → 이전(전체) 이미지가 남는 문제 방지
         imageLoadFunction: geoserverWmsImageLoadFunction,
       }),
     });
@@ -218,17 +295,107 @@ export function createUndergroundFacilityLayers(
   });
 }
 
+/**
+ * 지도 본 지하시설물 묶음 GetMap 파라미터 반영.
+ * ufTempHideTables / layerSearchCqlByTable 을 레이어 속성에서 읽어 조건에 합친다.
+ */
+export function applyUndergroundFacilityServiceWms(
+  map: OlMap | null | undefined,
+  selectedNames: readonly string[],
+  groupOn: boolean
+): void {
+  const layer = findUndergroundFacilityServiceLayer(map);
+  if (!layer || !map) return;
+  const source = layer.getSource();
+  if (!source || typeof source.updateParams !== 'function') return;
+
+  layer.set('ufSyncSelected', [...selectedNames]);
+  layer.set('ufSyncGroupOn', groupOn);
+
+  const hideRaw = layer.get('ufTempHideTables');
+  const hide = new Set(
+    (Array.isArray(hideRaw) ? hideRaw : [])
+      .map((n) => String(n ?? '').trim())
+      .filter(Boolean)
+  );
+  const names = sortLayerNamesForWmsStack(
+    selectedNames.filter((n) => n && !hide.has(n)),
+    UF_GEOM_TYPES
+  );
+
+  if (!groupOn || names.length === 0) {
+    source.updateParams({
+      LAYERS: '',
+      STYLES: '',
+      CQL_FILTER: undefined,
+      _dc: String(Date.now()),
+    });
+    layer.setVisible(false);
+    source.changed();
+    return;
+  }
+
+  const baseCql =
+    (layer.get('layerCqlByTable') as Record<string, string> | undefined) ?? {};
+  const searchCql =
+    (layer.get('layerSearchCqlByTable') as Record<string, string> | undefined) ??
+    {};
+  const layersParam = names.map((n) => `${WORKSPACE}:${n}`).join(',');
+  const stylesParam = names.join(',');
+  const cqlArr = names.map((n) =>
+    mergeCqlParts(baseCql[n], searchCql[n] ?? searchCql[n.toLowerCase()])
+  );
+  const allInclude = cqlArr.every((c) => c === 'INCLUDE');
+  const cqlParam = allInclude ? '' : cqlArr.join(';');
+
+  if (allInclude) {
+    source.updateParams({
+      LAYERS: layersParam,
+      STYLES: stylesParam,
+      CQL_FILTER: undefined,
+      TRANSPARENT: 'true',
+      EXCEPTIONS: 'application/vnd.ogc.se_xml',
+      _dc: String(Date.now()),
+    });
+  } else {
+    source.updateParams({
+      LAYERS: layersParam,
+      STYLES: stylesParam,
+      CQL_FILTER: cqlParam,
+      TRANSPARENT: 'true',
+      EXCEPTIONS: 'application/vnd.ogc.se_xml',
+      _dc: String(Date.now()),
+    });
+  }
+  layer.setVisible(true);
+  source.changed();
+}
+
+/** 속성(ufTempHideTables·검색 CQL)만 바뀐 뒤 마지막 선택 상태로 다시 그림 */
+export function reapplyUndergroundFacilityServiceWms(
+  map: OlMap | null | undefined
+): void {
+  const layer = findUndergroundFacilityServiceLayer(map);
+  if (!layer) return;
+  const selected = layer.get('ufSyncSelected');
+  const names = Array.isArray(selected)
+    ? selected.map((n) => String(n ?? '').trim()).filter(Boolean)
+    : [];
+  const groupOn = layer.get('ufSyncGroupOn') === true;
+  applyUndergroundFacilityServiceWms(map, names, groupOn);
+}
+
 /** DB 도형 변경 후 지하시설물 WMS 이미지를 바로 다시 받는다. */
 export function refreshUndergroundFacilityWmsLayers(map: OlMap | null | undefined): void {
   if (!map) return;
   const stamp = String(Date.now());
-  for (const layer of map.getLayers().getArray()) {
-    if (!layer.get('undergroundFacilityLayer')) continue;
-    const source = (layer as ImageLayer<ImageWMS>).getSource();
+  for (const raw of map.getLayers().getArray()) {
+    if (!raw.get('undergroundFacilityLayer')) continue;
+    const source = (raw as ImageLayer<ImageWMS>).getSource();
     if (!source || typeof source.updateParams !== 'function') continue;
     source.updateParams({ ...source.getParams(), _dc: stamp });
     source.changed();
-    layer.changed();
+    raw.changed();
   }
   map.render();
 }
@@ -246,18 +413,42 @@ export function useUndergroundFacilityLayerSync(
     const groupOn = activeControls.includes('underground-facility');
     const catalogReady = availableTableNames != null;
     const showAll = visibleTableNames == null;
+
+    const serviceLayer = findUndergroundFacilityServiceLayer(map);
+    if (serviceLayer) {
+      const selected: string[] = [];
+      if (groupOn && catalogReady && availableTableNames) {
+        for (const name of availableTableNames) {
+          if (suppressDrawTableNames?.has(name)) continue;
+          if (!showAll && !(visibleTableNames?.has(name) ?? false)) continue;
+          selected.push(name);
+        }
+      }
+      applyUndergroundFacilityServiceWms(map, selected, groupOn);
+      return;
+    }
+
+    // 레거시: 테이블당 ImageWMS (맵 분할 구버전 등)
     map.getLayers().getArray().forEach((l) => {
       if (!l.get('undergroundFacilityLayer')) return;
+      if (l.get('undergroundFacilityServiceLayer')) return;
       const tableName = l.get('layerTableName') as string | undefined;
       if (tableName != null && suppressDrawTableNames?.has(tableName)) {
         l.setVisible(false);
         return;
       }
       const inCatalog =
-        catalogReady && tableName != null && availableTableNames.has(tableName);
+        catalogReady && tableName != null && availableTableNames!.has(tableName);
       const selected =
         showAll || (tableName != null && (visibleTableNames?.has(tableName) ?? false));
       l.setVisible(groupOn && inCatalog && selected);
     });
-  }, [map, mapReady, activeControls, visibleTableNames, availableTableNames, suppressDrawTableNames]);
+  }, [
+    map,
+    mapReady,
+    activeControls,
+    visibleTableNames,
+    availableTableNames,
+    suppressDrawTableNames,
+  ]);
 }
