@@ -70,6 +70,7 @@ import {
 } from './layerClickFacilityInfo'
 import { resolveWtlNetworkRowEditTarget } from '../wtlAdmin/networkMap/WtlNetworkMapAttachmentSection'
 import { openLayerClickDetailBlank } from './openLayerClickDetailBlank'
+import { recordDataViewLog } from '@/lib/recordDataViewLog'
 
 const DETAIL_WIDTH = 'min(520px, calc(100vw - 2rem))'
 const DETAIL_WIDTH_FALLBACK_PX = 520
@@ -830,6 +831,37 @@ export function LayerClickDetailFloating({
     if (!networkItem || !fields.length) return null
     return resolveWtlNetworkRowEditTarget(networkItem, fields)
   }, [networkItem, fields])
+
+  const viewLogServiceName =
+    writeSerEng === 'wtlNetworkMap' ? '관망조회' : '데이터조회'
+
+  // 데이터 이력관리에 조회 저장을 위해 추가
+  // 레이어명 = 화면 레이어(define). fields 로딩 후 1회(키 확정)
+  useEffect(() => {
+    if (!open || !editTarget || !selected || fieldsLoading) return
+    const logTable = String(selected.tableName ?? '')
+      .trim()
+      .replace(/^.*\./, '')
+      .toLowerCase()
+    if (!logTable) return
+    recordDataViewLog({
+      tableName: logTable,
+      keyField: editTarget.keyField,
+      keyValue: editTarget.keyValue,
+      tableKorName: String(selected.korName ?? '').trim() || undefined,
+      serviceName: viewLogServiceName,
+    })
+  }, [
+    open,
+    fieldsLoading,
+    selected?.key,
+    selected?.tableName,
+    selected?.korName,
+    editTarget?.keyField,
+    editTarget?.keyValue,
+    viewLogServiceName,
+  ])
+
   const showEditButton =
     Boolean(writeSerEng) &&
     canWrite &&
@@ -1459,6 +1491,7 @@ export function LayerClickDetailFloating({
           fields={fields}
           relatedChildAsModal
           relatedModalAnchorHostRef={panelRef}
+          serviceName={viewLogServiceName}
         />
       ) : null}
       {showOpenFullDetail || canToggleDetail || showEditButton || editing ? (
@@ -1543,6 +1576,7 @@ export function LayerClickDetailFloating({
     {facilityInfo ? (
       <WtlMappedFacilityFloating
         target={facilityInfo}
+        serviceName={viewLogServiceName}
         onClose={() => {
           setFacilityInfo(null)
           setFacilityInfoAnchor(null)

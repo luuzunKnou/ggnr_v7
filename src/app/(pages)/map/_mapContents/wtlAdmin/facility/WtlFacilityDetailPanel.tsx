@@ -76,6 +76,7 @@ import {
   type FacilityReportAttrRow,
   type FacilityReportTableSection,
 } from './wtlFacilityDetailReport'
+import { recordDataViewLog } from '@/lib/recordDataViewLog'
 
 const SER_ENG = 'wtlFacility'
 
@@ -143,6 +144,8 @@ type Props = {
   showFacilityInfoLink?: boolean
   /** 설비관리 — data_history 이력 카드 탭 (추가·수정·삭제, agency 공개) */
   showHistoryCard?: boolean
+  /** 데이터 이력관리 조회 서비스명 (시설관리·설비관리 등) */
+  serviceName?: string | null
 }
 
 type FieldEditMeta = DefineFieldLike & {
@@ -224,6 +227,7 @@ export function WtlFacilityDetailPanel({
   onHistoryReverted,
   showFacilityInfoLink = false,
   showHistoryCard = false,
+  serviceName = '시설관리',
 }: Props) {
   const canWrite = useSerWriteAccess(SER_ENG)
   const theme = useResolvedThemeSafe()
@@ -549,6 +553,32 @@ export function WtlFacilityDetailPanel({
     if (!keyField || !keyValue) return null
     return { table, schema, keyField, keyValue }
   }, [row.tableName, row.fieldsTable, row.record, row.ogcFid, keyFieldName, schema])
+
+  // 데이터 이력관리에 조회 저장을 위해 추가
+  // 레이어명 = 선택 레이어(tableName). fields 로딩 후 1회(키필드 확정)
+  useEffect(() => {
+    if (!editTarget) return
+    if (row.fieldsTable && !bundle) return
+    const logTable = String(row.tableName ?? '')
+      .trim()
+      .replace(/^.*\./, '')
+      .toLowerCase()
+    if (!logTable) return
+    recordDataViewLog({
+      tableName: logTable,
+      keyField: editTarget.keyField,
+      keyValue: editTarget.keyValue,
+      serviceName,
+    })
+  }, [
+    row.id,
+    row.tableName,
+    row.fieldsTable,
+    bundle,
+    editTarget?.keyField,
+    editTarget?.keyValue,
+    serviceName,
+  ])
 
   const isFieldEditable = useCallback(
     (f: FieldEditMeta) => {
@@ -1694,6 +1724,7 @@ export function WtlFacilityDetailPanel({
           bundle={relatedBundle}
           table={activeRelated.table}
           schema={schema}
+          serviceName={serviceName}
           onClose={() => setRelatedDetail(null)}
           collapsed={detailCollapsed}
           onToggleCollapsed={() => setDetailCollapsed((v) => !v)}
@@ -1702,6 +1733,7 @@ export function WtlFacilityDetailPanel({
       {facilityInfo ? (
         <WtlMappedFacilityFloating
           target={facilityInfo}
+          serviceName={serviceName}
           onClose={() => setFacilityInfo(null)}
           collapsed={detailCollapsed}
           onToggleCollapsed={() => setDetailCollapsed((v) => !v)}

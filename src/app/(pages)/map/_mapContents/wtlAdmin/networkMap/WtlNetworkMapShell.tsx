@@ -125,8 +125,6 @@ const TOOL_BTN_VARIANT_OPTIONS: {
   label: string
 }[] = [
   { value: 'legacy', label: '기존 UI' },
-  { value: 'iconLabel', label: '아이콘+라벨 UI' },
-  { value: 'iconLabelColor', label: '아이콘+라벨+색 UI' },
   { value: 'fullLayout', label: '플로팅 UI' },
 ]
 
@@ -144,14 +142,9 @@ function readStoredToolBtnVariant(): WtlNetworkToolBtnVariant {
   if (typeof window === 'undefined') return 'legacy'
   try {
     const raw = window.localStorage.getItem(TOOL_BTN_VARIANT_STORAGE_KEY)
-    if (
-      raw === 'legacy' ||
-      raw === 'iconLabel' ||
-      raw === 'iconLabelColor' ||
-      raw === 'fullLayout'
-    ) {
-      return raw
-    }
+    if (raw === 'legacy' || raw === 'fullLayout') return raw
+    /** 제거된 아이콘+라벨 계열은 기존 UI로 */
+    if (raw === 'iconLabel' || raw === 'iconLabelColor') return 'legacy'
   } catch {
     /* ignore */
   }

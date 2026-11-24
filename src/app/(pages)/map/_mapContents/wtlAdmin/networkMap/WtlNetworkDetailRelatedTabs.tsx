@@ -85,6 +85,8 @@ type Props = {
    * 지도 기본 모달 루트 — 있으면 자식 상세를 그 좌측(공간 없으면 위)에 배치.
    */
   relatedModalAnchorHostRef?: RefObject<HTMLElement | null>
+  /** 데이터 이력관리 조회 서비스명 (펌프현황 등 자식 상세) */
+  serviceName?: string | null
 }
 
 type ActiveTab = 'map' | 'attach' | 'dataHistory' | 'wimsHistory' | string
@@ -200,6 +202,7 @@ export function WtlNetworkDetailRelatedTabs({
   mapTabContent,
   relatedChildAsModal = false,
   relatedModalAnchorHostRef,
+  serviceName = '관망조회',
 }: Props) {
   const hasMapTab = mapTabContent != null
   const mapContext = useMapContext()
@@ -795,12 +798,13 @@ export function WtlNetworkDetailRelatedTabs({
       </div>
       {relatedChildAsModal && relatedDetail ? (
         <WtlFacilityRelatedDetailFloating
-          key={`related-${relatedDetail.ogcFid ?? selectedIdx ?? 0}-${relatedDetailAnchor?.left ?? 'd'}-${relatedDetailAnchor?.top ?? 'd'}`}
+          key={`related-${activeTable}-${relatedDetail.ogcFid ?? selectedIdx ?? 0}`}
           title={activeRelatedLabel}
           row={relatedDetail}
           bundle={listBundle}
           table={activeTable}
           schema="layer"
+          serviceName={serviceName}
           anchorPosition={relatedDetailAnchor}
           onClose={() => {
             setRelatedDetail(null)

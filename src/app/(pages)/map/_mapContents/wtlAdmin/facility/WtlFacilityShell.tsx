@@ -508,8 +508,6 @@ export function WtlFacilityShell({
     }
   }, [layerGroupsMode, selectedSource?.tableName, tab])
 
-  /** 이 셸이 visible에 마지막으로 켠 테이블 — 전 탭 일괄 delete 금지(점멸 원인) */
-  const lastAppliedVisibleRef = useRef<string[]>([])
   /** 그룹 API가 완료된 탭 — 로딩 중·탭 불일치 시 visible sync 생략 */
   const groupsReadyTabRef = useRef<string | null>(null)
   /** 연관 초기 ON 반영 후에만 visible sync (직접만 먼저 켜는 2단 적용 방지) */
@@ -519,7 +517,7 @@ export function WtlFacilityShell({
   onTotalWidthChangeRef.current = onTotalWidthChange
   const onCloseRef = useRef(onClose)
   onCloseRef.current = onClose
-  /** 닫기 중 — 패널을 먼저 내리고 무거운 언마운트·레이어 OFF는 뒤로 */
+  /** 닫기 중 — 패널을 먼저 내리고 무거운 언마운트는 뒤로 (레이어는 유지) */
   const closingRef = useRef(false)
   const [isClosing, setIsClosing] = useState(false)
 
@@ -628,8 +626,6 @@ export function WtlFacilityShell({
     const toggleable = toggleableRelatedKey
       ? toggleableRelatedKey.split('\0')
       : []
-    const wantedToggleable = toggleable.filter((name) => onSet.has(name))
-    const prevApplied = lastAppliedVisibleRef.current
 
     setVisible((prev) => {
       const next = new Set(prev)
@@ -650,9 +646,6 @@ export function WtlFacilityShell({
       }
       return next
     })
-    lastAppliedVisibleRef.current = [
-      ...new Set([...prevApplied, direct, ...wantedToggleable]),
-    ]
   }, [
     mapContext?.setVisibleLayerNames,
     selectedSource?.tableName,
@@ -679,7 +672,6 @@ export function WtlFacilityShell({
 
     const pipes = pipeRelatedKey ? pipeRelatedKey.split('\0') : []
     if (pipes.length === 0) return
-    const prevApplied = lastAppliedVisibleRef.current
 
     setVisible((prev) => {
       const next = new Set(prev)
@@ -692,9 +684,6 @@ export function WtlFacilityShell({
       }
       return changed ? next : prev
     })
-    lastAppliedVisibleRef.current = [
-      ...new Set([...prevApplied, ...pipes]),
-    ]
   }, [
     mapContext?.setVisibleLayerNames,
     selectedSource?.tableName,
@@ -702,27 +691,6 @@ export function WtlFacilityShell({
     pipeRelatedKey,
     visibleSyncReady,
   ])
-
-  /** 시설·설비 종료 시 이 셸이 켠 레이어 제거 — 닫기 페인트 뒤로 미룸 */
-  useEffect(() => {
-    const setVisible = mapContext?.setVisibleLayerNames
-    if (!setVisible) return
-    return () => {
-      const applied = lastAppliedVisibleRef.current
-      lastAppliedVisibleRef.current = []
-      if (applied.length === 0) return
-      window.setTimeout(() => {
-        setVisible((prev) => {
-          let changed = false
-          const next = new Set(prev)
-          for (const t of applied) {
-            if (next.delete(t)) changed = true
-          }
-          return changed ? next : prev
-        })
-      }, 0)
-    }
-  }, [mapContext?.setVisibleLayerNames])
 
   /** 탭 변경 시 목록·필터·연관 레이어 초기화 + DB에 있는 레이어 그룹만 조회 */
   useEffect(() => {
@@ -1647,6 +1615,7 @@ export function WtlFacilityShell({
               schema={selectedSource?.schema}
               showFacilityInfoLink={title === '설비관리' || title === '이력관리'}
               showHistoryCard={title === '설비관리' || title === '이력관리'}
+              serviceName={title}
               onClose={() => {
                 setSelectedId(null)
                 setSelectedRow(null)
