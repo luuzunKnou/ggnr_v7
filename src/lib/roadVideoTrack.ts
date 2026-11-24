@@ -15,14 +15,31 @@ import { resolveGgnrDataDir } from '@/lib/turbopackFsPath';
 export const ROAD_VIDEO_LAYER_ID = 'a0020000';
 /** 교차시설(면) — 교차로 한 바퀴 회전을 허용하는 노선 구간 */
 const ROAD_VIDEO_CROSSING_LAYER_ID = 'a0080000';
+/** 도로중심선교점 — 분기·접속 위치 기준점 */
+const ROAD_VIDEO_BRANCH_LAYER_ID = 'a9990001';
+/** 분기 버퍼 반경(m) — 교차시설과 같이 회전 허용 구역 */
+const ROAD_VIDEO_BRANCH_BUF_M = 20;
+/** 분기 기준점 최소 간격(m) — 너무 촘촘하면 직선 구간이 모두 자유구역이 됨 */
+const ROAD_VIDEO_BRANCH_MIN_SEP_M = 120;
+/** 본선과 방위 차가 이보다 작으면(거의 평행 짧은선) 제외 — 교점은 보통 작아도 유효 */
+const ROAD_VIDEO_BRANCH_MIN_ANGLE_DEG = 2;
 export const ROAD_VIDEO_EXT_RE = /\.(mp4|mov|webm)$/i;
 export const ROAD_VIDEO_SRID = 5181;
 /** python/pipeline/road_video_track.py ANALYZER_VERSION 과 같게. 올리면 이전 결과는 다시 분석 */
-export const ROAD_VIDEO_ANALYZER_VERSION = 2;
+/** 15: 수동 기준점(시각·거리) 강제 맞춤 + 분기·교차·분할 */
+export const ROAD_VIDEO_ANALYZER_VERSION = 15;
 
 export type RoadVideoCoord = [number, number];
 
 export type RoadVideoFile = { roadKey: string; fileName: string; abs: string; size: number; mtimeMs: number };
+
+/** 수동 기준점 — 파일 로컬 시각·노선 시작 기준 m */
+export type RoadVideoManualLandmark = {
+  id: number;
+  fileName: string;
+  timeSec: number;
+  routeM: number;
+};
 
 /** 첨부 폴더의 도로영상 1건 — 경로 검증 후 크기·수정시각. 없거나 영상이 아니면 null */
 export async function statRoadVideoFile(roadKey: string, fileName: string): Promise<RoadVideoFile | null> {
@@ -87,6 +104,22 @@ CREATE INDEX IF NOT EXISTS road_video_anchor_track_time_idx
 COMMENT ON TABLE layer.road_video_anchor IS '도로영상 위치맞춤 시각별 노선위치';
 COMMENT ON COLUMN layer.road_video_anchor.route_m IS '노선 시작 기준 거리(m, track.geom 기준)';
 COMMENT ON COLUMN layer.road_video_anchor.kind IS '구분(auto=자동, manual=수동 보정)';
+
+CREATE TABLE IF NOT EXISTS layer.road_video_landmark (
+  id serial PRIMARY KEY,
+  layer_id text NOT NULL,
+  road_key text NOT NULL,
+  file_name text NOT NULL,
+  time_sec double precision NOT NULL,
+  route_m double precision NOT NULL,
+  created_by text,
+  created_at timestamptz DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS road_video_landmark_file_idx
+  ON layer.road_video_landmark (layer_id, road_key, file_name, time_sec);
+COMMENT ON TABLE layer.road_video_landmark IS '도로영상 수동 기준점(재분석에도 유지)';
+COMMENT ON COLUMN layer.road_video_landmark.time_sec IS '해당 파일 영상 시각(초)';
+COMMENT ON COLUMN layer.road_video_landmark.route_m IS '노선 시작 기준 거리(m)';
 `;
 
 let ensurePromise: Promise<void> | null = null;
@@ -241,4 +274,112 @@ export async function loadRoadVideoCrossingZones(line: RoadVideoCoord[]): Promis
     [lineJson]
   );
   return r.rows.flatMap((row) => geoJsonParts(row.ring));
+}
+
+/**
+ * 도로중심선교점(분기·접속) — 노선 시작 기준 m 과 분석용 원형 구역.
+ * 노선과 방위가 비슷한 짧은 중심선은 제외하고, 간격이 너무 좁으면 하나로 묶는다.
+ */
+export async function loadRoadVideoBranchLandmarks(
+  line: RoadVideoCoord[]
+): Promise<{ meters: number[]; zones: RoadVideoCoord[][] }> {
+  const exists = await pool.query<{ ok: boolean }>(
+    `SELECT to_regclass('layer.${ROAD_VIDEO_BRANCH_LAYER_ID}') IS NOT NULL AS ok`
+  );
+  if (!exists.rows[0]?.ok || line.length < 2) return { meters: [], zones: [] };
+  const lineJson = JSON.stringify({ type: 'LineString', coordinates: line });
+  const r = await pool.query<{ m: number; ring: string | null; angle: number }>(
+    `WITH a AS (SELECT ST_SetSRID(ST_GeomFromGeoJSON($1), ${ROAD_VIDEO_SRID}) AS g),
+          s AS (SELECT ST_SRID(geom) AS srid FROM layer.${ROAD_VIDEO_BRANCH_LAYER_ID} WHERE geom IS NOT NULL LIMIT 1),
+          hits AS (
+            SELECT ST_ClosestPoint(a.g, ST_Transform(ST_LineMerge(o.geom), ${ROAD_VIDEO_SRID})) AS p,
+                   ST_Transform(ST_LineMerge(o.geom), ${ROAD_VIDEO_SRID}) AS br
+              FROM layer.${ROAD_VIDEO_BRANCH_LAYER_ID} o, a, s
+             WHERE o.geom IS NOT NULL
+               AND ST_DWithin(ST_Transform(o.geom, ${ROAD_VIDEO_SRID}), a.g, $2)
+               AND ST_Length(ST_Transform(ST_LineMerge(o.geom), ${ROAD_VIDEO_SRID})) > 5
+          ),
+          scored AS (
+            SELECT ST_LineLocatePoint(a.g, h.p) * ST_Length(a.g) AS m,
+                   abs(
+                     degrees(ST_Azimuth(ST_StartPoint(h.br), ST_EndPoint(h.br)))
+                     - degrees(ST_Azimuth(
+                         ST_LineInterpolatePoint(a.g, GREATEST(0, ST_LineLocatePoint(a.g, h.p) - 8 / NULLIF(ST_Length(a.g),0))),
+                         ST_LineInterpolatePoint(a.g, LEAST(1, ST_LineLocatePoint(a.g, h.p) + 8 / NULLIF(ST_Length(a.g),0)))
+                       ))
+                   ) AS raw_ang,
+                   ST_ExteriorRing(ST_Buffer(h.p, $2)) AS ring
+              FROM hits h, a
+          )
+     SELECT m,
+            LEAST(raw_ang, 360 - raw_ang) AS angle,
+            ST_AsGeoJSON(ring) AS ring
+       FROM scored
+      WHERE LEAST(raw_ang, 360 - raw_ang) >= ${ROAD_VIDEO_BRANCH_MIN_ANGLE_DEG}
+      ORDER BY m`,
+    [lineJson, ROAD_VIDEO_BRANCH_BUF_M]
+  );
+
+  type Cand = { m: number; angle: number; ring: RoadVideoCoord[] };
+  const cands: Cand[] = [];
+  for (const row of r.rows) {
+    const m = Number(row.m);
+    const angle = Number(row.angle);
+    if (!Number.isFinite(m) || !Number.isFinite(angle)) continue;
+    // geoJsonParts → 선분 배열. 고리 좌표는 첫 선분의 점 개수
+    const ring = geoJsonParts(row.ring)[0];
+    if (!ring || ring.length < 3) continue;
+    cands.push({ m: Math.round(m * 10) / 10, angle, ring });
+  }
+  // 방위 차가 큰 분기 우선, 최소 간격으로 고르고 노선 순으로 정렬
+  cands.sort((a, b) => b.angle - a.angle || a.m - b.m);
+  const picked: Cand[] = [];
+  for (const c of cands) {
+    if (picked.some((p) => Math.abs(p.m - c.m) < ROAD_VIDEO_BRANCH_MIN_SEP_M)) continue;
+    picked.push(c);
+    if (picked.length >= 20) break;
+  }
+  picked.sort((a, b) => a.m - b.m);
+  return {
+    meters: picked.map((p) => p.m),
+    zones: picked.map((p) => p.ring),
+  };
+}
+
+/** 파일별 수동 기준점 (재분석 입력용 — 성공 후 삭제) */
+export async function loadRoadVideoManualLandmarks(
+  roadKey: string,
+  fileNames: string[]
+): Promise<RoadVideoManualLandmark[]> {
+  if (!fileNames.length) return [];
+  await ensureRoadVideoTrackTables();
+  const r = await pool.query<{
+    id: number;
+    file_name: string;
+    time_sec: number;
+    route_m: number;
+  }>(
+    `SELECT id, file_name, time_sec, route_m
+       FROM layer.road_video_landmark
+      WHERE layer_id = $1 AND road_key = $2 AND file_name = ANY($3)
+      ORDER BY file_name, time_sec, id`,
+    [ROAD_VIDEO_LAYER_ID, roadKey, fileNames]
+  );
+  return r.rows.map((row) => ({
+    id: row.id,
+    fileName: row.file_name,
+    timeSec: Number(row.time_sec),
+    routeM: Number(row.route_m),
+  }));
+}
+
+/** 재분석에 쓴 수동 기준점 제거 */
+export async function clearRoadVideoManualLandmarks(roadKey: string, fileNames: string[]): Promise<void> {
+  if (!fileNames.length) return;
+  await ensureRoadVideoTrackTables();
+  await pool.query(
+    `DELETE FROM layer.road_video_landmark
+      WHERE layer_id = $1 AND road_key = $2 AND file_name = ANY($3)`,
+    [ROAD_VIDEO_LAYER_ID, roadKey, fileNames]
+  );
 }

@@ -1,20 +1,21 @@
 'use client';
 
-import { useCallback, useEffect, useId, useMemo, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { cn } from '@/lib/utils';
+import {
+  RoadRewardAttrTable,
+  type RoadRewardAttrEntry,
+} from '../road/roadReward/RoadRewardAttrTable';
 import {
   occupationParcelModalFieldFullWidth,
   occupationParcelModalMaxWidthClass,
 } from './occupationLedgerListWidth';
 
 const fieldClass =
-  'h-7 w-full min-w-0 border-0 bg-transparent px-0.5 text-[11px] text-foreground outline-none focus:bg-muted/40';
-const fieldViewClass = 'flex min-h-7 w-full min-w-0 items-center break-all text-[11px] text-foreground';
-const modalTableClass = 'w-full table-fixed border-collapse text-[11px]';
-const modalThClass =
-  'border border-border bg-muted px-2 py-1.5 text-left align-middle font-medium text-muted-foreground break-keep';
-const modalTdClass = 'border border-border bg-background px-1.5 py-0.5 align-middle';
+  'box-border h-[22px] w-full min-w-0 rounded border border-border bg-background px-1.5 text-[11px] leading-none outline-none focus:border-primary focus:ring-1 focus:ring-primary/25';
+const fieldViewClass =
+  'flex min-h-7 w-full min-w-0 items-center break-all text-[11px] text-foreground/90';
 const btnPrimary =
   'inline-flex h-7 items-center gap-1 rounded border border-primary bg-primary px-2 text-[11px] font-medium text-white hover:bg-primary/90 disabled:opacity-50';
 const btnGhost =
@@ -40,31 +41,7 @@ type Props = {
   overlayWidthPx: number;
 };
 
-function buildRows(
-  fields: OccupationParcelFieldDef[],
-  values: Record<string, string>
-) {
-  const rows: { full: boolean; items: OccupationParcelFieldDef[] }[] = [];
-  let i = 0;
-  const isFull = (f: OccupationParcelFieldDef) => {
-    const val = String(values[f.field] ?? values[f.field.toLowerCase()] ?? '');
-    return occupationParcelModalFieldFullWidth(f.field, f.label, val);
-  };
-  while (i < fields.length) {
-    const cur = fields[i]!;
-    const next = fields[i + 1];
-    if (isFull(cur) || !next || isFull(next)) {
-      rows.push({ full: true, items: [cur] });
-      i += 1;
-      continue;
-    }
-    rows.push({ full: false, items: [cur, next] });
-    i += 2;
-  }
-  return rows;
-}
-
-/** 수정·신규 등록 중 필지 속성 편집 (보상편입용지 필지 모달과 동일 방향) */
+/** 수정·신규 등록 중 필지 속성 편집 (속성정보 표와 동일 테두리) */
 export function OccupationLedgerParcelEditModal({
   title,
   address,
@@ -78,7 +55,6 @@ export function OccupationLedgerParcelEditModal({
 }: Props) {
   const titleId = useId();
   const close = useCallback(() => onClose(), [onClose]);
-  const rows = useMemo(() => buildRows(fieldDefs, values), [fieldDefs, values]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -88,31 +64,53 @@ export function OccupationLedgerParcelEditModal({
     return () => window.removeEventListener('keydown', onKey);
   }, [close]);
 
+  const entries = useMemo<RoadRewardAttrEntry[]>(() => {
+    const valueOf = (field: string): string => {
+      if (values[field] != null) return String(values[field]);
+      const fl = field.toLowerCase();
+      if (values[fl] != null) return String(values[fl]);
+      const hit = Object.entries(values).find(([k]) => k.toLowerCase() === fl);
+      return hit ? String(hit[1] ?? '') : '';
+    };
+    return fieldDefs.map((def) => {
+      const raw = valueOf(def.field);
+      const display = raw.trim() || '—';
+      let value: RoadRewardAttrEntry['value'];
+      if (def.readOnly) {
+        value = <div className={fieldViewClass}>{display}</div>;
+      } else {
+        const typeLower = String(def.type ?? '').toLowerCase();
+        const inputType = typeLower.includes('date')
+          ? 'date'
+          : typeLower.includes('number')
+            ? 'number'
+            : 'text';
+        // date input 은 yyyy-mm-dd 만 받음
+        const inputValue =
+          inputType === 'date' && raw.trim()
+            ? raw.trim().slice(0, 10)
+            : raw;
+        value = (
+          <input
+            type={inputType}
+            className={fieldClass}
+            value={inputValue}
+            onChange={(e) => onFieldChange(def.field, e.target.value)}
+          />
+        );
+      }
+      return {
+        fieldKey: def.field,
+        label: def.label,
+        value,
+        fullWidth: occupationParcelModalFieldFullWidth(def.field, def.label, raw),
+        required: Boolean(def.required && !def.readOnly),
+      };
+    });
+  }, [fieldDefs, onFieldChange, values]);
+
   if (typeof document === 'undefined') return null;
   const fullScreen = overlayWidthPx <= 0;
-
-  const renderCell = (def: OccupationParcelFieldDef, colSpan?: number) => {
-    const val = String(values[def.field] ?? values[def.field.toLowerCase()] ?? '').trim();
-    if (def.readOnly) {
-      return (
-        <td key={def.field} colSpan={colSpan} className={modalTdClass}>
-          <div className={fieldViewClass}>{val || '—'}</div>
-        </td>
-      );
-    }
-    const typeLower = String(def.type ?? '').toLowerCase();
-    const inputType = typeLower.includes('date') ? 'date' : typeLower.includes('number') ? 'number' : 'text';
-    return (
-      <td key={def.field} colSpan={colSpan} className={modalTdClass}>
-        <input
-          type={inputType}
-          className={fieldClass}
-          value={values[def.field] ?? ''}
-          onChange={(e) => onFieldChange(def.field, e.target.value)}
-        />
-      </td>
-    );
-  };
 
   return createPortal(
     <div
@@ -137,7 +135,9 @@ export function OccupationLedgerParcelEditModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2">
-          <h3 id={titleId} className="text-sm font-semibold text-foreground">{title}</h3>
+          <h3 id={titleId} className="text-sm font-semibold text-foreground">
+            {title}
+          </h3>
           {address ? (
             <span className="min-w-0 truncate text-[11px] text-muted-foreground" title={address}>
               {address}
@@ -147,35 +147,11 @@ export function OccupationLedgerParcelEditModal({
 
         <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2 scrollbar-thin">
           {fieldDefs.length === 0 ? (
-            <p className="py-4 text-center text-[11px] text-muted-foreground">편집할 속성 정의가 없습니다.</p>
+            <p className="py-4 text-center text-[11px] text-muted-foreground">
+              편집할 속성 정의가 없습니다.
+            </p>
           ) : (
-            <div className="overflow-hidden rounded border border-border">
-              <table className={modalTableClass}>
-                <colgroup>
-                  <col className="w-[26%]" />
-                  <col className="w-[24%]" />
-                  <col className="w-[26%]" />
-                  <col className="w-[24%]" />
-                </colgroup>
-                <tbody>
-                  {rows.map((row) =>
-                    row.full ? (
-                      <tr key={row.items[0]!.field}>
-                        <th className={modalThClass}>{row.items[0]!.label}</th>
-                        {renderCell(row.items[0]!, 3)}
-                      </tr>
-                    ) : (
-                      <tr key={`${row.items[0]!.field}-${row.items[1]!.field}`}>
-                        <th className={modalThClass}>{row.items[0]!.label}</th>
-                        {renderCell(row.items[0]!)}
-                        <th className={modalThClass}>{row.items[1]!.label}</th>
-                        {renderCell(row.items[1]!)}
-                      </tr>
-                    )
-                  )}
-                </tbody>
-              </table>
-            </div>
+            <RoadRewardAttrTable entries={entries} stringValueMaxLines={2} />
           )}
         </div>
 
