@@ -151,7 +151,7 @@ export function OdorSystemStatusShell({
     const floatLeft = leftOffsetPx + ODOR_SYSTEM_STATUS_FLOAT_LEFT_INSET
     return createPortal(
       <div
-        className="pointer-events-none fixed inset-0 map-ui-z-viewport"
+        className="pointer-events-none fixed inset-0 z-30"
         data-ser-eng={ODOR_SYSTEM_STATUS_SER_ENG}
       >
         <div
@@ -171,7 +171,8 @@ export function OdorSystemStatusShell({
             resizeEdge="right"
             className={cn(
               'pointer-events-auto h-full',
-              MAP_LAYER_PANEL_SURFACE_CLASS
+              MAP_LAYER_PANEL_SURFACE_CLASS,
+              'opacity-100! bg-white dark:bg-black'
             )}
           >
             <OdorSystemStatusPanelView
@@ -181,14 +182,15 @@ export function OdorSystemStatusShell({
               onGoToStation={handleGoToStation}
               expandMode="none"
               headerExtra={headerExtra}
-              className="h-full"
+              className="h-full bg-white opacity-100 dark:bg-black"
             />
           </MapFloatResizableFrame>
           {model.expandOpen && model.selected ? (
             <div
               className={cn(
                 'pointer-events-auto flex min-h-0 flex-col overflow-hidden',
-                MAP_LAYER_PANEL_SURFACE_CLASS
+                MAP_LAYER_PANEL_SURFACE_CLASS,
+                'opacity-100! bg-white dark:bg-black'
               )}
               style={{
                 width: ODOR_SYSTEM_STATUS_FLOAT_EXPAND_WIDTH,
@@ -208,7 +210,7 @@ export function OdorSystemStatusShell({
                 onBackToAgencyList={() => model.setSensorDetailId(null)}
                 onGoToStation={handleGoToStation}
                 onClose={model.closeExpand}
-                className="h-full w-full"
+                className="h-full w-full bg-white opacity-100 dark:bg-black"
               />
             </div>
           ) : null}

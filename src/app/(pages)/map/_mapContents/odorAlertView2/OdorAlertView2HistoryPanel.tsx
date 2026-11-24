@@ -105,9 +105,15 @@ export function OdorAlertView2HistoryPanel({
   const isFloat = variant === 'float'
 
   return (
-    <div className={cn('flex h-full min-h-0 flex-1 flex-col overflow-hidden', className)}>
+    <div
+      className={cn(
+        'flex h-full min-h-0 flex-1 flex-col overflow-hidden',
+        isFloat && 'bg-white opacity-100 dark:bg-black',
+        className
+      )}
+    >
       {isFloat ? (
-        <div className="standard-map-float-header shrink-0 border-b border-slate-200 dark:border-white/10">
+        <div className="standard-map-float-header shrink-0 border-b border-slate-200 opacity-100 dark:border-white/10 dark:bg-white/20">
           <div className="min-w-0 flex-1">
             <span className="standard-map-float-header-title">해제(인지) 이력</span>
           </div>

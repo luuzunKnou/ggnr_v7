@@ -234,7 +234,7 @@ export function OdorAlertView2Shell({
       <>
         {createPortal(
           <div
-            className="pointer-events-none fixed inset-0 map-ui-z-viewport"
+            className="pointer-events-none fixed inset-0 z-30"
             data-ser-eng={ODOR_ALERT_VIEW2_SER_ENG}
           >
             <div
@@ -254,10 +254,11 @@ export function OdorAlertView2Shell({
                 resizeEdge="right"
                 className={cn(
                   'pointer-events-auto h-full',
-                  MAP_LAYER_PANEL_SURFACE_CLASS
+                  MAP_LAYER_PANEL_SURFACE_CLASS,
+                  'opacity-100! bg-white dark:bg-black'
                 )}
               >
-                <div className="standard-map-float-header shrink-0 border-b border-slate-200 dark:border-white/10">
+                <div className="standard-map-float-header shrink-0 border-b border-slate-200 opacity-100 dark:border-white/10 dark:bg-white/20">
                   <span className="standard-map-float-header-title">경보목록2</span>
                   <div className="flex shrink-0 items-center gap-1">
                     <UiModeSelect
@@ -289,7 +290,7 @@ export function OdorAlertView2Shell({
                     </button>
                   </div>
                 </div>
-                <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-white opacity-100 dark:bg-black">
                   <OdorAlertView2ListPanel
                     onClose={onClose}
                     historyOpen={historyOpen}
@@ -307,7 +308,8 @@ export function OdorAlertView2Shell({
                 <div
                   className={cn(
                     'pointer-events-auto flex min-h-0 flex-col overflow-hidden',
-                    MAP_LAYER_PANEL_SURFACE_CLASS
+                    MAP_LAYER_PANEL_SURFACE_CLASS,
+                    'opacity-100! bg-white dark:bg-black'
                   )}
                   style={{
                     width: ODOR_ALERT_VIEW2_FLOAT_HISTORY_WIDTH,

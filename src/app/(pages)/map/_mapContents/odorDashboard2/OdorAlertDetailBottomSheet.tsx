@@ -6,7 +6,6 @@ import { ChevronDown, X } from 'lucide-react'
 import { OdorAlertDetailPanel } from './panels/OdorAlertDetailPanel'
 import type { OdorAlertItem } from '@/app/(pages)/(index)/odorPh/odorPhDashboardMock'
 import { cn } from '@/lib/utils'
-import { MAP_UI_Z_CLASS } from '@/lib/mapUiZIndex'
 import { MAP_LAYER_PANEL_SURFACE_CLASS } from '../../_mapComponents/mapControlPanel/mapLayerPanelLayout'
 import {
   ODOR_DASHBOARD2_FLOAT_ALERT_WIDTH,
@@ -84,8 +83,9 @@ export function OdorAlertDetailBottomSheet({
       className={cn(
         'pointer-events-auto fixed flex flex-col overflow-hidden',
         MAP_LAYER_PANEL_SURFACE_CLASS,
-        'opacity-100!',
-        MAP_UI_Z_CLASS.detailFloating,
+        'opacity-100! bg-white dark:bg-black',
+        /* 우측 메뉴(z-40)보다 아래 */
+        'z-30',
         'transition-transform duration-300 ease-out',
         entered ? 'translate-y-0' : 'translate-y-full',
         bodyOpen ? 'h-[48vh]' : 'h-auto'
@@ -100,7 +100,7 @@ export function OdorAlertDetailBottomSheet({
       aria-label={title}
     >
       <div
-        className="standard-map-float-header shrink-0 border-b border-slate-200 dark:border-white/10"
+        className="standard-map-float-header shrink-0 border-b border-slate-200 opacity-100 dark:border-white/10 dark:bg-white/20"
         title={`${title} — 더블클릭으로 접기/펼치기`}
         onDoubleClick={(e) => {
           if ((e.target as HTMLElement).closest('button, select, input, a')) return
@@ -146,7 +146,7 @@ export function OdorAlertDetailBottomSheet({
             : 'pointer-events-none h-0 opacity-0'
         )}
       >
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-2">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-white p-2 opacity-100 dark:bg-black">
           <OdorAlertDetailPanel
             key={mountedAlert.id}
             alert={mountedAlert}

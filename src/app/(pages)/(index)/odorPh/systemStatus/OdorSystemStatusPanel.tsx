@@ -204,7 +204,13 @@ export function OdorSystemStatusPanelView({
 
   return (
     <div className={cn('flex h-full min-h-0 flex-1 flex-col overflow-hidden', className)}>
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-2 py-1.5">
+      <div
+        className={cn(
+          'flex shrink-0 items-center justify-between gap-2 border-b border-border px-2 py-1.5',
+          variant === 'map' &&
+            'opacity-100 dark:border-white/10 dark:bg-white/20'
+        )}
+      >
         <div className="min-w-0">
           <p className="truncate text-xs font-semibold text-foreground">시스템 상태•통신</p>
           <p className="truncate text-[10px] text-muted-foreground">
