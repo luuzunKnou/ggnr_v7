@@ -339,16 +339,16 @@ export function useBikeRoadSegmentDraw({
     net: BikeRoadNet,
     res: number
   ): { hit: RoadNetHit; name: string | null; fromAnchor: boolean } | null => {
-    /** 클로저 갱신은 let 좁히기에서 never가 되므로 객체로 담는다 */
-    const best = {
-      anchor: null as { point: Pt; name: string | null; d: number } | null,
-    };
+    // 클로저 할당은 TS가 null로만 좁히므로 홀더로 둔다
+    const anchorHold: {
+      cur: { point: Pt; name: string | null; d: number } | null;
+    } = { cur: null };
 
     const consider = (point: Pt, nameRaw: string | null | undefined, d: number) => {
       if (d > ANCHOR_SNAP_M) return;
-      if (best.anchor && d >= best.anchor.d) return;
+      if (anchorHold.cur && d >= anchorHold.cur.d) return;
       const nm = nameRaw?.trim() || null;
-      best.anchor = {
+      anchorHold.cur = {
         point: [point[0], point[1]],
         name: isBikeRoadPlaceholderName(nm) ? null : nm,
         d,
@@ -390,8 +390,8 @@ export function useBikeRoadSegmentDraw({
     }
 
     const tol = snapTolM(res);
+    const bestAnchor = anchorHold.cur;
     // 기존 시·종점 근처 → 그 좌표 그대로 (도로 투영으로 살짝 밀리지 않게)
-    const bestAnchor = best.anchor;
     if (bestAnchor) {
       const anchorHit = projectOnNet(
         net,

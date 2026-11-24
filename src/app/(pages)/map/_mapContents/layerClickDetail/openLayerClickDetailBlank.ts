@@ -192,14 +192,15 @@ export function readLayerClickDetailBlankPayload(
 function popupFeatures(): string {
   const width = 540
   const height = 680
-  const screen = window.screen as Screen & { availLeft?: number; availTop?: number }
+  // DOM Screen 타입에 없는 멀티모니터 오프셋 (Chrome 등에서 제공)
+  const scr = window.screen as Screen & { availLeft?: number; availTop?: number }
   const left = Math.max(
     0,
-    Math.round(((screen?.availWidth ?? width) - width) / 2) + (screen?.availLeft ?? 0)
+    Math.round(((scr?.availWidth ?? width) - width) / 2) + (scr?.availLeft ?? 0)
   )
   const top = Math.max(
     0,
-    Math.round(((screen?.availHeight ?? height) - height) / 2) + (screen?.availTop ?? 0)
+    Math.round(((scr?.availHeight ?? height) - height) / 2) + (scr?.availTop ?? 0)
   )
   return [
     `width=${width}`,

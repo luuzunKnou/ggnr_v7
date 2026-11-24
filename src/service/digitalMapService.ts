@@ -1,15 +1,19 @@
 /**
  * 수치지형도
- * - 지도 타일: GGNR_DATA_DIR/digital_map/*.pmtiles (available / listFolders)
- * - DXF 색인·내보내기·고도: 하위 폴더 *.dxf + meta 색인 (getFolderIndex / collect)
+ * - 지도 UI: GGNR_DATA_DIR/digital_map/*.pmtiles (listFolders / available)
+ * - DXF 색인·내보내기·고도: digital_map/{폴더}/*.dxf (getFolderIndex / collect*)
  */
 import fs from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { getSessionUsrId } from '@/lib/auth/guard';
 import { decodeDxfBytes } from '@/lib/dxfTextEncoding';
-import { hasDigitalMapPmtiles, listDigitalMapPmtiles, type DigitalMapPmtilesInfo } from '@/lib/digitalMapPmtiles';
 import { GGNR_DATA_PATHS } from '@/lib/ggnrDataPaths';
+import {
+  hasDigitalMapPmtiles,
+  listDigitalMapPmtiles,
+  type DigitalMapPmtilesInfo,
+} from '@/lib/digitalMapPmtiles';
 import { resolveGgnrDataDir } from '@/lib/turbopackFsPath';
 import { detectCrsCandidatesByExtent } from '@/service/shpUploadService';
 
@@ -35,7 +39,7 @@ export type DigitalMapFolderIndex = {
   crs?: string;
 };
 
-/** 사이드·타일 목록용 — PMTiles 메타 */
+/** 지도 사이드 «수치지형도» 목록 — PMTiles 메타 */
 export type DigitalMapFolderInfo = DigitalMapPmtilesInfo;
 
 const INDEX_VERSION = 1;
@@ -289,6 +293,18 @@ export async function listFolders(_params: Params = {}): Promise<{ folders: Digi
   return { folders: await listDigitalMapPmtiles() };
 }
 
+/** 내보내기용 — 세션 없이 digital_map 하위 DXF 폴더명만 */
+async function listDigitalMapFolderNames(): Promise<string[]> {
+  const root = rootDir();
+  if (!existsSync(root)) return [];
+  try {
+    const entries = await fs.readdir(root, { withFileTypes: true });
+    return entries.filter((e) => e.isDirectory()).map((e) => e.name);
+  } catch {
+    return [];
+  }
+}
+
 export async function getFolderIndex(params: Params = {}): Promise<DigitalMapFolderIndex> {
   await getSessionUsrId();
   const folder = assertSafeFolderName(params.folder);
@@ -317,18 +333,6 @@ function boxesOverlap(
   b: { minX: number; minY: number; maxX: number; maxY: number }
 ): boolean {
   return !(a.maxX < b.minX || a.minX > b.maxX || a.maxY < b.minY || a.minY > b.maxY);
-}
-
-/** 내보내기용 — 세션 없이 digital_map 하위 폴더명만 */
-async function listDigitalMapFolderNames(): Promise<string[]> {
-  const root = rootDir();
-  if (!existsSync(root)) return [];
-  try {
-    const entries = await fs.readdir(root, { withFileTypes: true });
-    return entries.filter((e) => e.isDirectory()).map((e) => e.name);
-  } catch {
-    return [];
-  }
 }
 
 /**

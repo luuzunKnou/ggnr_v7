@@ -1,22 +1,20 @@
 'use client';
 
-import { useCallback, useEffect, useId, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Loader2 } from 'lucide-react';
 import { call } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { useSerWriteAccess } from '@/hooks/useSerWriteAccess';
 import {
+  RoadRewardAttrTable,
+  type RoadRewardAttrEntry,
+} from '../road/roadReward/RoadRewardAttrTable';
+import {
   occupationParcelModalFieldFullWidth,
   occupationParcelModalMaxWidthClass,
 } from './occupationLedgerListWidth';
 
-/** 보상편입용지 필지 모달과 같은 표·버튼 */
-const modalTableClass = 'w-full table-fixed border-collapse text-[11px]';
-const modalThClass =
-  'border border-border bg-muted px-2 py-1.5 text-left align-middle font-medium text-muted-foreground break-keep';
-const modalTdClass = 'border border-border bg-background px-1.5 py-0.5 align-middle';
-const fieldViewClass = 'flex min-h-7 w-full min-w-0 items-center break-all text-[11px] text-foreground';
 const btnGhost =
   'inline-flex h-7 items-center gap-1 rounded border border-border bg-background px-2 text-[11px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50';
 const btnPrimary =
@@ -38,27 +36,7 @@ type Props = {
   overlayWidthPx: number;
 };
 
-/** 값이 길거나 비고류만 한 줄 전체, 나머지는 속성 두 개씩 한 행 */
-function buildRows(attrs: ChildAttr[]) {
-  const rows: { full: boolean; items: ChildAttr[] }[] = [];
-  let i = 0;
-  const isFull = (a: ChildAttr) =>
-    occupationParcelModalFieldFullWidth(a.field, a.label, a.value);
-  while (i < attrs.length) {
-    const cur = attrs[i]!;
-    const next = attrs[i + 1];
-    if (isFull(cur) || !next || isFull(next)) {
-      rows.push({ full: true, items: [cur] });
-      i += 1;
-      continue;
-    }
-    rows.push({ full: false, items: [cur, next] });
-    i += 2;
-  }
-  return rows;
-}
-
-/** 필지·물건지 상세 — 필드 정의 «상세보기» 칸만 (정의가 없으면 받은 칸 전부) */
+/** 필지·물건지 상세 — 필드 정의 «상세보기» 칸만 (정의가 없으면 보이는 칸 전부) */
 export function OccupationLedgerChildModal({
   serEng,
   role,
@@ -113,10 +91,22 @@ export function OccupationLedgerChildModal({
     return () => window.removeEventListener('keydown', onKey);
   }, [close]);
 
+  const entries = useMemo<RoadRewardAttrEntry[]>(() => {
+    const attrs = result?.key === reqKey ? result.attributes : [];
+    return attrs.map((a) => {
+      const value = String(a.value ?? '').trim() || '—';
+      return {
+        fieldKey: a.field,
+        label: a.label,
+        value,
+        fullWidth: occupationParcelModalFieldFullWidth(a.field, a.label, value),
+      };
+    });
+  }, [reqKey, result]);
+
   if (typeof document === 'undefined') return null;
 
   const loading = result?.key !== reqKey;
-  const attrs = loading ? [] : (result?.attributes ?? []);
   const title = role === 'mgj' ? '물건지 상세' : '필지 상세';
   const fullScreen = overlayWidthPx <= 0;
 
@@ -161,37 +151,10 @@ export function OccupationLedgerChildModal({
             </div>
           ) : result?.error ? (
             <p className="py-4 text-[11px] text-destructive">{result.error}</p>
-          ) : attrs.length === 0 ? (
+          ) : entries.length === 0 ? (
             <p className="py-4 text-center text-[11px] text-muted-foreground">표시할 속성이 없습니다.</p>
           ) : (
-            <div className="overflow-hidden rounded border border-border">
-              <table className={modalTableClass}>
-                <colgroup>
-                  <col className="w-[26%]" />
-                  <col className="w-[24%]" />
-                  <col className="w-[26%]" />
-                  <col className="w-[24%]" />
-                </colgroup>
-                <tbody>
-                  {buildRows(attrs).map((row) =>
-                    row.full ? (
-                      <tr key={row.items[0]!.field}>
-                        <th className={modalThClass}>{row.items[0]!.label}</th>
-                        <td colSpan={3} className={modalTdClass}>
-                          <div className={fieldViewClass}>{String(row.items[0]!.value ?? '').trim() || '—'}</div>
-                        </td>
-                      </tr>
-                    ) : (
-                      <tr key={`${row.items[0]!.field}-${row.items[1]!.field}`}>
-                        {row.items.map((a) => (
-                          <ChildCells key={a.field} attr={a} />
-                        ))}
-                      </tr>
-                    )
-                  )}
-                </tbody>
-              </table>
-            </div>
+            <RoadRewardAttrTable entries={entries} stringValueMaxLines={2} />
           )}
         </div>
 
@@ -208,16 +171,5 @@ export function OccupationLedgerChildModal({
       </div>
     </div>,
     document.body
-  );
-}
-
-function ChildCells({ attr }: { attr: ChildAttr }) {
-  return (
-    <>
-      <th className={modalThClass}>{attr.label}</th>
-      <td className={modalTdClass}>
-        <div className={fieldViewClass}>{String(attr.value ?? '').trim() || '—'}</div>
-      </td>
-    </>
   );
 }
