@@ -88,6 +88,7 @@ import * as fmsLinkageService from './fmsLinkageService';
 import * as groundwaterPermitService from './groundwaterPermitService';
 import * as waterAdminComplaintService from './waterAdminComplaintService';
 import * as bizNotifService from './bizNotifService';
+import * as consAlertService from './consAlertService';
 import * as thematicMapService from './thematicMapService';
 import * as roadWorkHandbookService from './roadWorkHandbookService';
 import * as qgisLayerControlService from './qgisLayerControlService';
@@ -192,6 +193,7 @@ export {
   groundwaterPermitService,
   waterAdminComplaintService,
   bizNotifService,
+  consAlertService,
   roadWorkHandbookService,
   qgisLayerControlService,
   userDataUploadService,

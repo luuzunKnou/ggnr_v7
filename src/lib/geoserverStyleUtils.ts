@@ -786,12 +786,18 @@ export type SldConditionalSymbol = {
  * SLD Rule 중 PointSymbolizer+ExternalGraphic 이고
  * PropertyIsEqualTo(속성=코드) 조건이 있는 심볼 목록.
  * (밸브·소방 등 ftr_cde별 SVG)
+ *
+ * `<Not>` 이 있는 Rule은 제외한다.
+ * (예: Not(SA200|…|SA202) + 기본 SVG — «그 외 코드»용이라 코드→심볼 표에 넣으면
+ *  전용 아이콘이 기본 SVG로 덮인다.)
  */
 export function parseSldConditionalSymbols(sld: string): SldConditionalSymbol[] {
   if (!String(sld ?? '').trim()) return []
   const out: SldConditionalSymbol[] = []
   const seen = new Set<string>()
   for (const rule of sldRuleBlocks(sld)) {
+    // 제외(Not) Rule의 Equal 코드를 매핑에 넣지 않음 — 전용 심볼 덮어쓰기 방지
+    if (/<(?:[\w]+:)?Not\b/i.test(rule)) continue
     if (!/<(?:[\w]+:)?PointSymbolizer\b/i.test(rule)) continue
     if (!/<(?:[\w]+:)?ExternalGraphic\b/i.test(rule)) continue
     const href = sldExternalGraphicHref(rule)
@@ -812,11 +818,16 @@ export function parseSldConditionalSymbols(sld: string): SldConditionalSymbol[] 
       const prop =
         block.match(/<(?:[\w]+:)?PropertyName>\s*([^<\s]+)\s*<\/(?:[\w]+:)?PropertyName>/i)?.[1]?.trim() ??
         ''
-      const lit =
-        block.match(/<(?:[\w]+:)?Literal>\s*([^<]*?)\s*<\/(?:[\w]+:)?Literal>/i)?.[1]?.trim() ??
-        ''
-      if (!prop || !lit) continue
+      if (!prop) continue
       const property = prop.toLowerCase()
+      // ftr_cde / saa_cde 만 (env(ignore_scale) 등 제외)
+      if (property !== 'ftr_cde' && property !== 'saa_cde') continue
+      // strToUpperCase(PropertyName) + Literal 형태면 마지막 Literal이 코드값
+      const lits = [
+        ...block.matchAll(/<(?:[\w]+:)?Literal>\s*([^<]*?)\s*<\/(?:[\w]+:)?Literal>/gi),
+      ].map((m) => String(m[1] ?? '').trim())
+      const lit = lits[lits.length - 1] ?? ''
+      if (!lit) continue
       const value = lit.toUpperCase()
       const key = `${property}=${value}|${symbolUrl}`
       if (seen.has(key)) continue

@@ -197,6 +197,8 @@ export function WtlConstructionLedgerShell({
   const [supplyBlock, setSupplyBlock] = useState('')
   const [projectId, setProjectId] = useState<string | null>(null)
   const [fitToken, setFitToken] = useState(0)
+  /** 알림으로 연 fitToken. 이 값과 같으면 지도가 그 공사로 이동한다 */
+  const [alertFitToken, setAlertFitToken] = useState(0)
   const [alertJump, setAlertJump] = useState(0)
   const pinProjectRef = useRef<string | null>(null)
   /** 사업 다시 눌러 해제했을 때, 필터 effect가 첫 사업을 다시 고르지 않게 함 */
@@ -503,8 +505,12 @@ export function WtlConstructionLedgerShell({
     return projectGeoms.filter((item) => item.id === work.consCode)
   }, [projectGeoms, work, showAllProjectGeoms])
 
-  /** 관련탭 «화면에 보이는 시설만» — ON이면 목록 선택 시 맵무브 안 함 */
-  const [suppressListFit, setSuppressListFit] = useState(true)
+  /**
+   * «화면에 보이는 시설만»
+   * - 목록 필터 + 맵무브 억제(suppressListFit) 공통 상태
+   * - 의도 전문: WtlConsRelatedTabs / useWtlConsMapLayer 파일 상단
+   */
+  const [onlyInView, setOnlyInView] = useState(true)
 
   useWtlConsMapLayer({
     projectGeoms: visibleProjectGeoms,
@@ -515,7 +521,8 @@ export function WtlConstructionLedgerShell({
     relatedFacilities,
     fitToken,
     bottomInset: mapBottomInset,
-    suppressListFit,
+    suppressListFit: onlyInView,
+    forceFit: alertFitToken > 0 && alertFitToken === fitToken,
   })
 
   useEffect(() => {
@@ -593,6 +600,7 @@ export function WtlConstructionLedgerShell({
       setWorkId(workItem.id)
     }
     setFitToken((token) => token + 1)
+    setAlertFitToken((token) => token + 1)
   }, [alertJump, projects, projectId, kind])
 
   const searchText = projectQuery.trim()
@@ -611,9 +619,12 @@ export function WtlConstructionLedgerShell({
       setZoneLoading(false)
       return
     }
+    // API는 공사코드 기준. work.id 가 코드와 다를 수 있음(샘플 w-gid)
+    const consCode =
+      projects.flatMap((p) => p.works).find((w) => w.id === workId)?.consCode?.trim() || workId
     setZoneLoading(true)
     let cancelled = false
-    void loadWtlConsZones(workId, kind)
+    void loadWtlConsZones(consCode, kind)
       .then((zoneResult) => {
         if (cancelled) return
         setZones(zoneResult.zones)
@@ -627,7 +638,7 @@ export function WtlConstructionLedgerShell({
     return () => {
       cancelled = true
     }
-  }, [workId, kind])
+  }, [workId, kind, projects])
 
   return (
     <>
@@ -918,12 +929,13 @@ export function WtlConstructionLedgerShell({
                     setZoneId((prev) => (prev === id ? null : id))
                   }}
                   onFocus={(focus) => {
+                    // zoneId 유지 필수 — 지우면 조회 범위가 흔들림(관련탭 UX 의도).
+                    // 포커스 중 구역 검정 스타일만 지도 훅에서 끔.
                     setMapFocus(focus)
-                    // 공사이력·관련시설 포커스 시 공사위치 검정 선택 해제(미선택 스타일로)
-                    if (focus) setZoneId(null)
                   }}
                   onRelatedFacilities={setRelatedFacilities}
-                  onOnlyInViewChange={setSuppressListFit}
+                  onlyInView={onlyInView}
+                  onOnlyInViewChange={setOnlyInView}
                   workGeom4326={work ? geomByCode[work.consCode] ?? null : null}
                   kind={kind}
                   consCode={work?.consCode ?? null}
