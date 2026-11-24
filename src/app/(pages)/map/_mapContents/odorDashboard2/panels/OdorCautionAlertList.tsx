@@ -70,7 +70,7 @@ export function OdorCautionAlertList({
     <section
       className={cn(
         'flex min-h-0 flex-col overflow-hidden',
-        hideHeader ? 'h-full p-2' : 'h-full border border-border p-3'
+        hideHeader ? 'h-full' : 'h-full border border-border p-3'
       )}
     >
       {!hideHeader ? (
@@ -87,9 +87,21 @@ export function OdorCautionAlertList({
           </button>
         </div>
       ) : null}
-      <p className="mb-1.5 shrink-0 text-[11px] text-muted-foreground">3등급 주의 경보 · 미인지 우선</p>
+      <p
+        className={cn(
+          'mb-1.5 shrink-0 text-[11px] text-muted-foreground',
+          hideHeader && 'px-2 pt-2'
+        )}
+      >
+        3등급 주의 경보 · 미인지 우선
+      </p>
 
-      <div className="standard-filter-chips mb-1.5 shrink-0">
+      <div
+        className={cn(
+          'standard-filter-chips mb-1.5 shrink-0',
+          hideHeader && 'px-2'
+        )}
+      >
         <button
           type="button"
           title="전체"

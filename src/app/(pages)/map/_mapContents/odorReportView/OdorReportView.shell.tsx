@@ -17,6 +17,11 @@ import { MapFloatResizableFrame } from '../../_mapComponents/MapFloatResizableFr
 import { MapSideListPanel } from '../../_mapComponents/MapSideListPanel'
 import { MAP_LAYER_PANEL_SURFACE_CLASS } from '../../_mapComponents/mapControlPanel/mapLayerPanelLayout'
 import {
+  ODOR_MAP_FLOAT_SURFACE_OPACITY_RESET_CLASS,
+  odorMapFloatBodyOpacityStyle,
+  odorMapFloatHeaderOpacityStyle,
+} from '../odorMapFloatOpacity'
+import {
   ODOR_REPORT_VIEW_FLOAT_LEFT_INSET,
   ODOR_REPORT_VIEW_FLOAT_MAX_WIDTH,
   ODOR_REPORT_VIEW_FLOAT_MIN_WIDTH,
@@ -157,10 +162,13 @@ export function OdorReportViewShell({
               className={cn(
                 'pointer-events-auto h-full',
                 MAP_LAYER_PANEL_SURFACE_CLASS,
-                'opacity-100! bg-white dark:bg-black'
+                ODOR_MAP_FLOAT_SURFACE_OPACITY_RESET_CLASS
               )}
             >
-              <div className="standard-map-float-header shrink-0 border-b border-slate-200 opacity-100 dark:border-white/10 dark:bg-white/20">
+              <div
+                className="standard-map-float-header shrink-0 border-b border-slate-200 dark:border-white/10"
+                style={odorMapFloatHeaderOpacityStyle()}
+              >
                 <span className="standard-map-float-header-title">보고서 조회</span>
                 <div className="flex shrink-0 items-center gap-1">
                   <OdorReportUiModeSelect
@@ -180,7 +188,10 @@ export function OdorReportViewShell({
                   </button>
                 </div>
               </div>
-              <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-white opacity-100 dark:bg-black">
+              <div
+                className="flex min-h-0 flex-1 flex-col overflow-hidden"
+                style={odorMapFloatBodyOpacityStyle()}
+              >
                 {body}
               </div>
             </MapFloatResizableFrame>
@@ -191,9 +202,12 @@ export function OdorReportViewShell({
             className={cn(
               'pointer-events-auto shrink-0 overflow-hidden',
               MAP_LAYER_PANEL_SURFACE_CLASS,
-              'opacity-100! bg-white dark:bg-black'
+              ODOR_MAP_FLOAT_SURFACE_OPACITY_RESET_CLASS
             )}
-            style={{ marginTop: floatToolsTopPx }}
+            style={{
+              marginTop: floatToolsTopPx,
+              ...odorMapFloatBodyOpacityStyle(),
+            }}
           >
             <OdorReportExportButtons variant="floatTools" />
           </div>

@@ -69,7 +69,7 @@ export function OdorRecentAlertList({
     <section
       className={cn(
         'flex min-h-0 flex-col overflow-hidden',
-        hideHeader ? 'h-full p-2' : 'h-full border border-border p-3'
+        hideHeader ? 'h-full' : 'h-full border border-border p-3'
       )}
     >
       {!hideHeader ? (
@@ -86,9 +86,21 @@ export function OdorRecentAlertList({
           </button>
         </div>
       ) : null}
-      <p className="mb-1.5 shrink-0 text-[11px] text-muted-foreground">방금 발생한 악취 경보</p>
+      <p
+        className={cn(
+          'mb-1.5 shrink-0 text-[11px] text-muted-foreground',
+          hideHeader && 'px-2 pt-2'
+        )}
+      >
+        방금 발생한 악취 경보
+      </p>
 
-      <div className="standard-filter-chips mb-1.5 shrink-0">
+      <div
+        className={cn(
+          'standard-filter-chips mb-1.5 shrink-0',
+          hideHeader && 'px-2'
+        )}
+      >
         <button
           type="button"
           title="전체"

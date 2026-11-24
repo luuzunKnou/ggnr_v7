@@ -34,6 +34,11 @@ import { cn } from '@/lib/utils'
 import { MapFloatResizableFrame } from '../../_mapComponents/MapFloatResizableFrame'
 import { MAP_LAYER_PANEL_SURFACE_CLASS } from '../../_mapComponents/mapControlPanel/mapLayerPanelLayout'
 import {
+  ODOR_MAP_FLOAT_SURFACE_OPACITY_RESET_CLASS,
+  odorMapFloatBodyOpacityStyle,
+  odorMapFloatHeaderOpacityStyle,
+} from '../odorMapFloatOpacity'
+import {
   ODOR_DASHBOARD2_DETAIL_LEFT_GAP,
   ODOR_DASHBOARD2_FLOAT_ALERT_MAX_WIDTH,
   ODOR_DASHBOARD2_FLOAT_ALERT_MIN_WIDTH,
@@ -161,13 +166,14 @@ function FloatCollapsiblePanel({
       className={cn(
         'pointer-events-auto flex min-h-0 flex-col overflow-hidden',
         MAP_LAYER_PANEL_SURFACE_CLASS,
-        'opacity-100! bg-white dark:bg-black',
+        ODOR_MAP_FLOAT_SURFACE_OPACITY_RESET_CLASS,
         className
       )}
       style={style}
     >
       <div
-        className="standard-map-float-header shrink-0 border-b border-slate-200 opacity-100 dark:border-white/10 dark:bg-white/20"
+        className="standard-map-float-header shrink-0 border-b border-slate-200 dark:border-white/10"
+        style={odorMapFloatHeaderOpacityStyle()}
         title={`${title} — 더블클릭으로 접기/펼치기`}
         onDoubleClick={(e) => {
           if ((e.target as HTMLElement).closest('button, select, input, a')) return
@@ -204,9 +210,10 @@ function FloatCollapsiblePanel({
       {open ? (
         <div
           className={cn(
-            'flex min-h-0 flex-1 flex-col overflow-hidden bg-white opacity-100 dark:bg-black',
+            'flex min-h-0 flex-1 flex-col overflow-hidden',
             bodyClassName
           )}
+          style={odorMapFloatBodyOpacityStyle()}
         >
           {children}
         </div>

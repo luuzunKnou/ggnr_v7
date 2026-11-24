@@ -8,6 +8,11 @@ import type { OdorAlertItem } from '@/app/(pages)/(index)/odorPh/odorPhDashboard
 import { cn } from '@/lib/utils'
 import { MAP_LAYER_PANEL_SURFACE_CLASS } from '../../_mapComponents/mapControlPanel/mapLayerPanelLayout'
 import {
+  ODOR_MAP_FLOAT_SURFACE_OPACITY_RESET_CLASS,
+  odorMapFloatBodyOpacityStyle,
+  odorMapFloatHeaderOpacityStyle,
+} from '../odorMapFloatOpacity'
+import {
   ODOR_DASHBOARD2_FLOAT_ALERT_WIDTH,
   ODOR_DASHBOARD2_FLOAT_RIGHT_INSET,
 } from './odorDashboard2Config'
@@ -83,7 +88,7 @@ export function OdorAlertDetailBottomSheet({
       className={cn(
         'pointer-events-auto fixed flex flex-col overflow-hidden',
         MAP_LAYER_PANEL_SURFACE_CLASS,
-        'opacity-100! bg-white dark:bg-black',
+        ODOR_MAP_FLOAT_SURFACE_OPACITY_RESET_CLASS,
         /* 우측 메뉴(z-40)보다 아래 */
         'z-30',
         'transition-transform duration-300 ease-out',
@@ -100,7 +105,8 @@ export function OdorAlertDetailBottomSheet({
       aria-label={title}
     >
       <div
-        className="standard-map-float-header shrink-0 border-b border-slate-200 opacity-100 dark:border-white/10 dark:bg-white/20"
+        className="standard-map-float-header shrink-0 border-b border-slate-200 dark:border-white/10"
+        style={odorMapFloatHeaderOpacityStyle()}
         title={`${title} — 더블클릭으로 접기/펼치기`}
         onDoubleClick={(e) => {
           if ((e.target as HTMLElement).closest('button, select, input, a')) return
@@ -142,11 +148,12 @@ export function OdorAlertDetailBottomSheet({
         className={cn(
           'flex min-h-0 flex-col overflow-hidden transition-opacity duration-300 ease-out',
           bodyOpen
-            ? 'min-h-0 flex-1 opacity-100'
+            ? 'min-h-0 flex-1'
             : 'pointer-events-none h-0 opacity-0'
         )}
+        style={bodyOpen ? odorMapFloatBodyOpacityStyle() : undefined}
       >
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-white p-2 opacity-100 dark:bg-black">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-2">
           <OdorAlertDetailPanel
             key={mountedAlert.id}
             alert={mountedAlert}

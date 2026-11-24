@@ -3,6 +3,10 @@
 import type { ReactNode } from 'react'
 import { AlertTriangle, RefreshCw, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import {
+  odorMapFloatBodyOpacityStyle,
+  odorMapFloatHeaderOpacityStyle,
+} from '@/app/(pages)/map/_mapContents/odorMapFloatOpacity'
 import { formatCommTime } from './odorSystemStatusJudge'
 import { OdorSystemStatusDiagram } from './OdorSystemStatusDiagram'
 import { OdorSystemStatusExpandPanel } from './OdorSystemStatusExpandPanel'
@@ -207,9 +211,9 @@ export function OdorSystemStatusPanelView({
       <div
         className={cn(
           'flex shrink-0 items-center justify-between gap-2 border-b border-border px-2 py-1.5',
-          variant === 'map' &&
-            'opacity-100 dark:border-white/10 dark:bg-white/20'
+          variant === 'map' && 'dark:border-white/10'
         )}
+        style={variant === 'map' ? odorMapFloatHeaderOpacityStyle() : undefined}
       >
         <div className="min-w-0">
           <p className="truncate text-xs font-semibold text-foreground">시스템 상태•통신</p>
@@ -241,6 +245,10 @@ export function OdorSystemStatusPanelView({
         </div>
       </div>
 
+      <div
+        className="flex min-h-0 flex-1 flex-col overflow-hidden"
+        style={variant === 'map' ? odorMapFloatBodyOpacityStyle() : undefined}
+      >
       <div className="flex shrink-0 flex-col gap-1.5 border-b border-border px-2 py-1.5">
         <CommOkRateCircle
           okCount={summary.okCount}
@@ -357,6 +365,7 @@ export function OdorSystemStatusPanelView({
             {expandPanel}
           </div>
         ) : null}
+      </div>
       </div>
     </div>
   )

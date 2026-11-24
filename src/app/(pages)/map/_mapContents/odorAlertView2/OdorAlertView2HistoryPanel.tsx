@@ -11,6 +11,10 @@ import {
 } from '../odorAlert/odorAlertConfig'
 import { formatOdorAlertTime, type OdorAckHistoryRow } from '../odorAlert/odorAlertMock'
 import { useOdorAlertStore } from '../odorAlert/odorAlertStore'
+import {
+  odorMapFloatBodyOpacityStyle,
+  odorMapFloatHeaderOpacityStyle,
+} from '../odorMapFloatOpacity'
 
 type Props = {
   onClose: () => void
@@ -108,12 +112,14 @@ export function OdorAlertView2HistoryPanel({
     <div
       className={cn(
         'flex h-full min-h-0 flex-1 flex-col overflow-hidden',
-        isFloat && 'bg-white opacity-100 dark:bg-black',
         className
       )}
     >
       {isFloat ? (
-        <div className="standard-map-float-header shrink-0 border-b border-slate-200 opacity-100 dark:border-white/10 dark:bg-white/20">
+        <div
+          className="standard-map-float-header shrink-0 border-b border-slate-200 dark:border-white/10"
+          style={odorMapFloatHeaderOpacityStyle()}
+        >
           <div className="min-w-0 flex-1">
             <span className="standard-map-float-header-title">해제(인지) 이력</span>
           </div>
@@ -129,6 +135,10 @@ export function OdorAlertView2HistoryPanel({
         </div>
       ) : null}
 
+      <div
+        className="flex min-h-0 flex-1 flex-col overflow-hidden"
+        style={isFloat ? odorMapFloatBodyOpacityStyle() : undefined}
+      >
       <div
         className={cn(
           'standard-filter-section shrink-0 space-y-2 border-b border-border px-2 py-1.5',
@@ -302,6 +312,7 @@ export function OdorAlertView2HistoryPanel({
             </button>
           </div>
         </div>
+      </div>
       </div>
     </div>
   )

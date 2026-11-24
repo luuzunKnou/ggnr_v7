@@ -8,6 +8,10 @@ import { MapSideListPanel } from '../../_mapComponents/MapSideListPanel'
 import { scheduleAnimateMapToCenter3857 } from '../../_mapComponents/config/mapAutoNavigation'
 import { useMapContext } from '../../_mapComponents/MapContext'
 import { MAP_LAYER_PANEL_SURFACE_CLASS } from '../../_mapComponents/mapControlPanel/mapLayerPanelLayout'
+import {
+  ODOR_MAP_FLOAT_SURFACE_OPACITY_RESET_CLASS,
+  odorMapFloatBodyOpacityStyle,
+} from '../odorMapFloatOpacity'
 import { OdorSystemStatusExpandPanel } from '@/app/(pages)/(index)/odorPh/systemStatus/OdorSystemStatusExpandPanel'
 import { OdorSystemStatusPanelView } from '@/app/(pages)/(index)/odorPh/systemStatus/OdorSystemStatusPanel'
 import { useOdorSystemStatusModel } from '@/app/(pages)/(index)/odorPh/systemStatus/useOdorSystemStatusModel'
@@ -172,7 +176,7 @@ export function OdorSystemStatusShell({
             className={cn(
               'pointer-events-auto h-full',
               MAP_LAYER_PANEL_SURFACE_CLASS,
-              'opacity-100! bg-white dark:bg-black'
+              ODOR_MAP_FLOAT_SURFACE_OPACITY_RESET_CLASS
             )}
           >
             <OdorSystemStatusPanelView
@@ -182,7 +186,7 @@ export function OdorSystemStatusShell({
               onGoToStation={handleGoToStation}
               expandMode="none"
               headerExtra={headerExtra}
-              className="h-full bg-white opacity-100 dark:bg-black"
+              className="h-full"
             />
           </MapFloatResizableFrame>
           {model.expandOpen && model.selected ? (
@@ -190,11 +194,12 @@ export function OdorSystemStatusShell({
               className={cn(
                 'pointer-events-auto flex min-h-0 flex-col overflow-hidden',
                 MAP_LAYER_PANEL_SURFACE_CLASS,
-                'opacity-100! bg-white dark:bg-black'
+                ODOR_MAP_FLOAT_SURFACE_OPACITY_RESET_CLASS
               )}
               style={{
                 width: ODOR_SYSTEM_STATUS_FLOAT_EXPAND_WIDTH,
                 marginLeft: ODOR_SYSTEM_STATUS_FLOAT_GAP - 8,
+                ...odorMapFloatBodyOpacityStyle(),
               }}
             >
               <OdorSystemStatusExpandPanel
@@ -210,7 +215,7 @@ export function OdorSystemStatusShell({
                 onBackToAgencyList={() => model.setSensorDetailId(null)}
                 onGoToStation={handleGoToStation}
                 onClose={model.closeExpand}
-                className="h-full w-full bg-white opacity-100 dark:bg-black"
+                className="h-full w-full"
               />
             </div>
           ) : null}
