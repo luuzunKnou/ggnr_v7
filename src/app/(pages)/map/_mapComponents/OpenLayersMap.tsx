@@ -1242,11 +1242,15 @@ export default function OpenLayersMap({
         });
       }
       const anyOn = [...wanted].some((n) => available.has(n));
-      if (anyOn) {
-        setActiveControls((prev) =>
-          prev.includes('underground-facility') ? prev : [...prev, 'underground-facility']
-        );
-      }
+      setActiveControls((prev) => {
+        if (anyOn) {
+          return prev.includes('underground-facility')
+            ? prev
+            : [...prev, 'underground-facility'];
+        }
+        if (!prev.includes('underground-facility')) return prev;
+        return prev.filter((id) => id !== 'underground-facility');
+      });
     };
     return () => {
       syncRef.current = null;
@@ -1327,27 +1331,23 @@ export default function OpenLayersMap({
     setVisibleLayerNames,
   ]);
 
-  /** 지하시설물 ImageLayer로 그리는 테이블은 serviceLayer에서 제외(이중 표시 방지) */
+  /**
+   * 지하시설물 카탈로그 테이블은 묶음 ImageWMS 전용.
+   * 패널 선택·그룹 ON 전이라도 serviceLayer에 넣으면 이중·잔상(이전 그룹 깜빡임)이 난다.
+   */
   const serviceVisibleLayerNames = useMemo(() => {
     if (undergroundFacilityCatalogLoading) return visibleLayerNames;
-    const ufSelected = visibleUndergroundFacilityLayerNames;
-    if (
-      ufSelected == null ||
-      ufSelected.size === 0 ||
-      !activeControls.includes('underground-facility')
-    ) {
-      return visibleLayerNames;
-    }
+    const available = undergroundFacilityAvailableTableNames;
+    if (available.size === 0) return visibleLayerNames;
     const next = new Set(visibleLayerNames);
     let changed = false;
-    for (const t of ufSelected) {
+    for (const t of available) {
       if (next.delete(t)) changed = true;
     }
     return changed ? next : visibleLayerNames;
   }, [
     visibleLayerNames,
-    visibleUndergroundFacilityLayerNames,
-    activeControls,
+    undergroundFacilityAvailableTableNames,
     undergroundFacilityCatalogLoading,
   ]);
 

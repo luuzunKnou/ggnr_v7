@@ -34,6 +34,7 @@ import {
   isEmpty,
 } from 'ol/extent'
 import type { Geometry } from 'ol/geom'
+import type SimpleGeometry from 'ol/geom/SimpleGeometry'
 import type Map from 'ol/Map'
 import GeoJSON from 'ol/format/GeoJSON'
 import VectorLayer from 'ol/layer/Vector'
@@ -294,7 +295,7 @@ export function focusTipCoordinate(map: Map, geom: Geometry | undefined): number
 
   const type = geom.getType()
   if (type === 'Point' || type === 'MultiPoint') {
-    const c = geom.getFirstCoordinate()
+    const c = (geom as SimpleGeometry).getFirstCoordinate()
     if (!c || c.length < 2) return undefined
     return containsXY(view, c[0]!, c[1]!) ? c : undefined
   }

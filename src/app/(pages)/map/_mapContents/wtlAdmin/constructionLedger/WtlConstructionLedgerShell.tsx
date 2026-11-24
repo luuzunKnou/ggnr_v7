@@ -934,7 +934,6 @@ export function WtlConstructionLedgerShell({
                     setMapFocus(focus)
                   }}
                   onRelatedFacilities={setRelatedFacilities}
-                  onlyInView={onlyInView}
                   onOnlyInViewChange={setOnlyInView}
                   workGeom4326={work ? geomByCode[work.consCode] ?? null : null}
                   kind={kind}

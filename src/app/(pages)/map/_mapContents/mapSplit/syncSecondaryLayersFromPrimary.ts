@@ -86,7 +86,14 @@ export function syncSecondaryLayersFromPrimary(
     if (pLayer.get('undergroundFacilityServiceLayer')) {
       if (secondaryUfService) {
         copyVisibility(pLayer, secondaryUfService);
-        copySourceParams(pLayer, secondaryUfService);
+        const pSrc = (pLayer as Layer<Source>).getSource?.() as ParamsSource | null;
+        const sAsLayer = secondaryUfService as Layer<Source>;
+        // 본맵에서 소스 제거(체크 해제) 시 보조맵도 같이 비움 — 이전 이미지 잔상 방지
+        if (!pSrc) {
+          sAsLayer.setSource?.(null);
+        } else {
+          copySourceParams(pLayer, secondaryUfService);
+        }
       }
       continue;
     }

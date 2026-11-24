@@ -1796,6 +1796,45 @@ function defineTableIdxForSort(names: readonly (string | null | undefined)[]): n
   return 999999;
 }
 
+/** 스키마 테이블 목록·가용키 API 프로세스 캐시 TTL (DDL 드묾) */
+const WTL_NET_SCHEMA_TABLES_TTL_MS = 90_000;
+
+type SchemaTablesCacheEntry = { at: number; tables: Set<string> };
+const schemaTablesCache = new Map<'layer' | 'public_layer', SchemaTablesCacheEntry>();
+
+type AvailableLayerKeysCacheEntry = {
+  at: number;
+  value: {
+    availableKeys: string[];
+    physicalBySource: Record<string, Record<string, string>>;
+  };
+};
+const availableLayerKeysCache = new Map<string, AvailableLayerKeysCacheEntry>();
+
+/** pg_tables 스키마 전체 (소문자) — TTL 내 재사용 */
+async function loadSchemaTableNames(
+  schema: 'layer' | 'public_layer'
+): Promise<Set<string>> {
+  const hit = schemaTablesCache.get(schema);
+  if (hit && Date.now() - hit.at < WTL_NET_SCHEMA_TABLES_TTL_MS) {
+    return hit.tables;
+  }
+  const res = await db.execute(
+    sql.raw(
+      `SELECT lower(tablename) AS t
+       FROM pg_catalog.pg_tables
+       WHERE schemaname = '${schema}'`
+    )
+  );
+  const tables = new Set(
+    (res.rows ?? [])
+      .map((r) => String((r as { t?: string }).t ?? '').trim().toLowerCase())
+      .filter(Boolean)
+  );
+  schemaTablesCache.set(schema, { at: Date.now(), tables });
+  return tables;
+}
+
 /** layer·public_layer 실테이블 존재 여부 (소문자 테이블명 Set) */
 async function existingTablesInSchema(
   schema: 'layer' | 'public_layer',
@@ -1807,16 +1846,19 @@ async function existingTablesInSchema(
     ),
   ];
   if (names.length === 0) return new Set();
-  const inList = names.map((n) => `'${esc(n)}'`).join(',');
-  const res = await db.execute(
-    sql.raw(
-      `SELECT lower(table_name) AS t
-       FROM information_schema.tables
-       WHERE table_schema = '${schema}'
-         AND lower(table_name) IN (${inList})`
-    )
-  );
-  return new Set((res.rows ?? []).map((r) => String((r as { t?: string }).t ?? '')));
+  const all = await loadSchemaTableNames(schema);
+  const out = new Set<string>();
+  for (const n of names) {
+    if (all.has(n)) out.add(n);
+  }
+  return out;
+}
+
+function availableLayerKeysCacheKey(
+  sourceIds: string[],
+  keys: string[]
+): string {
+  return `${[...sourceIds].sort().join('\0')}\n${[...keys].sort().join('\0')}`;
 }
 
 /**
@@ -1837,6 +1879,19 @@ export async function listWtlNetworkAvailableLayerKeys(params: {
   if (keys.length === 0) return { availableKeys: [], physicalBySource: {} };
 
   const sourceIds = parseMapSourceIds(params.mapSources);
+  const cacheKey = availableLayerKeysCacheKey(sourceIds, keys);
+  const cached = availableLayerKeysCache.get(cacheKey);
+  if (cached && Date.now() - cached.at < WTL_NET_SCHEMA_TABLES_TTL_MS) {
+    return {
+      availableKeys: [...cached.value.availableKeys],
+      physicalBySource: Object.fromEntries(
+        Object.entries(cached.value.physicalBySource).map(([sid, byKey]) => [
+          sid,
+          { ...byKey },
+        ])
+      ),
+    };
+  }
   const sources = sourceIds
     .map((id) => resolveWtlNetMapSource(id))
     .filter((s): s is WtlNetMapSourceDef => Boolean(s));
@@ -2005,13 +2060,23 @@ export async function listWtlNetworkAvailableLayerKeys(params: {
         ),
       ];
       const pick = ordered.find((n) => layerExist.has(n)) ?? null;
-      // 프로세스 캐시에는 넣지 않음 — 목록·상세는 geom 우선 resolve 유지
+      // physicalTableBySourceCache(geom 우선)와 별개 — 목록·상세는 resolve 경로 유지
       if (pick) byKey[key] = pick;
     }
     if (Object.keys(byKey).length > 0) physicalBySource[source.id] = byKey;
   }
 
-  return { availableKeys, physicalBySource };
+  const value = { availableKeys, physicalBySource };
+  availableLayerKeysCache.set(cacheKey, {
+    at: Date.now(),
+    value: {
+      availableKeys: [...availableKeys],
+      physicalBySource: Object.fromEntries(
+        Object.entries(physicalBySource).map(([sid, byKey]) => [sid, { ...byKey }])
+      ),
+    },
+  });
+  return value;
 }
 
 /** 가압장·정수장 상세 하단 연관 탭 후보 */

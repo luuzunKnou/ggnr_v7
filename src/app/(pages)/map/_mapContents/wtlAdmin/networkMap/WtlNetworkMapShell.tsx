@@ -1316,8 +1316,10 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
     if (applyFromCache(sourceIds)) return
 
     let cancelled = false
-    /** 미캐시 출처만 스켈레톤 */
-    setAvailableLayerKeys(null)
+    /** 첫 로드만 null(스켈레톤). 재조회는 이전 키 유지해 동기화·WMS가 다시 막히지 않음 */
+    if (availableLayerKeysRef.current == null) {
+      setAvailableLayerKeys(null)
+    }
     const layerKeys = allKeysOfAllDisplayGroups()
     void call('', 'POST', {
       service: 'wtlNetworkService',

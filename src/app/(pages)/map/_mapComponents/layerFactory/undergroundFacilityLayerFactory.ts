@@ -223,28 +223,40 @@ export function findUndergroundFacilityServiceLayer(
   return null;
 }
 
+function createUfImageWmsSource(
+  params: Record<string, string | boolean | undefined>
+): ImageWMS {
+  const geoServerBase = getGeoServerBase();
+  const wmsUrl = `${geoServerBase}/${WORKSPACE}/wms`;
+  const next: Record<string, string | boolean> = {
+    TRANSPARENT: true,
+    EXCEPTIONS: 'application/vnd.ogc.se_xml',
+  };
+  for (const [k, v] of Object.entries(params)) {
+    if (v === undefined) continue;
+    next[k] = v;
+  }
+  return new ImageWMS({
+    url: wmsUrl,
+    params: next,
+    serverType: 'geoserver',
+    ratio: 1.5,
+    imageLoadFunction: geoserverWmsImageLoadFunction,
+  });
+}
+
 /**
  * 지도 본용 — 데이터 조회(serviceLayer)와 동일하게 켜진 테이블을 한 GetMap에 묶는다.
  * (위상분석 등 전용 복제 레이어는 createUndergroundFacilityLayers 유지)
  */
 export function createUndergroundFacilityServiceLayer(): ImageLayer<ImageWMS> {
-  const geoServerBase = getGeoServerBase();
-  const wmsUrl = `${geoServerBase}/${WORKSPACE}/wms`;
   const layer = new ImageLayer({
     minZoom: 8,
     maxZoom: 30,
     visible: false,
-    source: new ImageWMS({
-      url: wmsUrl,
-      params: {
-        LAYERS: '',
-        STYLES: '',
-        TRANSPARENT: true,
-        EXCEPTIONS: 'application/vnd.ogc.se_xml',
-      },
-      serverType: 'geoserver',
-      ratio: 1.5,
-      imageLoadFunction: geoserverWmsImageLoadFunction,
+    source: createUfImageWmsSource({
+      LAYERS: '',
+      STYLES: '',
     }),
   });
   layer.set('name', '지하시설물');
@@ -295,9 +307,41 @@ export function createUndergroundFacilityLayers(
   });
 }
 
+/** LAYERS 교체 후 새 이미지가 올 때까지 숨김 — gen이 바뀌면 이전 리스너는 무시 */
+function hideUfUntilImageReady(
+  layer: ImageLayer<ImageWMS>,
+  source: ImageWMS
+): void {
+  const gen = ((layer.get('ufWmsGen') as number | undefined) ?? 0) + 1;
+  layer.set('ufWmsGen', gen);
+  layer.setOpacity(0);
+  const finish = () => {
+    if (layer.get('ufWmsGen') !== gen) return;
+    layer.setOpacity(1);
+    source.un('imageloadend', finish);
+    source.un('imageloaderror', finish);
+    const t = layer.get('ufWmsRevealTimer') as ReturnType<typeof setTimeout> | undefined;
+    if (t != null) {
+      clearTimeout(t);
+      layer.unset('ufWmsRevealTimer');
+    }
+  };
+  source.on('imageloadend', finish);
+  source.on('imageloaderror', finish);
+  const prevTimer = layer.get('ufWmsRevealTimer') as
+    | ReturnType<typeof setTimeout>
+    | undefined;
+  if (prevTimer != null) clearTimeout(prevTimer);
+  // imageloadend 누락 시에도 영구 투명 방지
+  layer.set(
+    'ufWmsRevealTimer',
+    setTimeout(finish, 12_000)
+  );
+}
+
 /**
  * 지도 본 지하시설물 묶음 GetMap 파라미터 반영.
- * ufTempHideTables / layerSearchCqlByTable 을 레이어 속성에서 읽어 조건에 합친다.
+ * 체크 해제 = 소스 제거(이전 이미지 삭제). 새 LAYERS = 소스 교체 후 로드 완료 때만 표시.
  */
 export function applyUndergroundFacilityServiceWms(
   map: OlMap | null | undefined,
@@ -306,8 +350,6 @@ export function applyUndergroundFacilityServiceWms(
 ): void {
   const layer = findUndergroundFacilityServiceLayer(map);
   if (!layer || !map) return;
-  const source = layer.getSource();
-  if (!source || typeof source.updateParams !== 'function') return;
 
   layer.set('ufSyncSelected', [...selectedNames]);
   layer.set('ufSyncGroupOn', groupOn);
@@ -323,15 +365,25 @@ export function applyUndergroundFacilityServiceWms(
     UF_GEOM_TYPES
   );
 
+  /** 체크 해제·그룹 끔 — 투명 유지가 아니라 소스까지 비워 완전히 지움 */
   if (!groupOn || names.length === 0) {
-    source.updateParams({
-      LAYERS: '',
-      STYLES: '',
-      CQL_FILTER: undefined,
-      _dc: String(Date.now()),
-    });
+    const emptySig = 'off';
+    if (layer.get('ufWmsSig') === emptySig && !layer.getVisible() && !layer.getSource()) {
+      return;
+    }
+    layer.set('ufWmsSig', emptySig);
+    layer.set('ufWmsGen', ((layer.get('ufWmsGen') as number | undefined) ?? 0) + 1);
+    const prevTimer = layer.get('ufWmsRevealTimer') as
+      | ReturnType<typeof setTimeout>
+      | undefined;
+    if (prevTimer != null) {
+      clearTimeout(prevTimer);
+      layer.unset('ufWmsRevealTimer');
+    }
     layer.setVisible(false);
-    source.changed();
+    layer.setOpacity(1);
+    layer.setSource(null);
+    map.render();
     return;
   }
 
@@ -347,16 +399,50 @@ export function applyUndergroundFacilityServiceWms(
   );
   const allInclude = cqlArr.every((c) => c === 'INCLUDE');
   const cqlParam = allInclude ? '' : cqlArr.join(';');
+  const onSig = `on|${layersParam}|${stylesParam}|${cqlParam}`;
+  // 동일 구성이면 재적용 생략(검색 CQL reapply가 opacity 복구·GetMap을 가로채지 않게)
+  if (layer.get('ufWmsSig') === onSig && layer.getSource()) {
+    return;
+  }
+  layer.set('ufWmsSig', onSig);
 
+  const nextParams: Record<string, string | boolean | undefined> = {
+    LAYERS: layersParam,
+    STYLES: stylesParam,
+    TRANSPARENT: 'true',
+    EXCEPTIONS: 'application/vnd.ogc.se_xml',
+    _dc: String(Date.now()),
+  };
+  if (!allInclude) nextParams.CQL_FILTER = cqlParam;
+
+  const prevSource = layer.getSource();
+  const prevLayers = prevSource
+    ? String((prevSource.getParams() as Record<string, string | undefined>).LAYERS ?? '')
+    : '';
+  const layersChanged = prevLayers !== layersParam || !prevSource;
+
+  // LAYERS가 바뀌거나 소스가 없으면 새 소스(이전 그림 삭제). 로드 전엔 opacity 0.
+  if (layersChanged) {
+    const newSource = createUfImageWmsSource(nextParams);
+    layer.setSource(newSource);
+    layer.setVisible(true);
+    hideUfUntilImageReady(layer, newSource);
+    map.render();
+    return;
+  }
+
+  const source = layer.getSource();
+  if (!source || typeof source.updateParams !== 'function') return;
+  const cur = source.getParams() as Record<string, string | undefined>;
   if (allInclude) {
     source.updateParams({
       LAYERS: layersParam,
       STYLES: stylesParam,
-      CQL_FILTER: undefined,
       TRANSPARENT: 'true',
       EXCEPTIONS: 'application/vnd.ogc.se_xml',
       _dc: String(Date.now()),
     });
+    delete cur.CQL_FILTER;
   } else {
     source.updateParams({
       LAYERS: layersParam,
@@ -367,6 +453,7 @@ export function applyUndergroundFacilityServiceWms(
       _dc: String(Date.now()),
     });
   }
+  layer.setOpacity(1);
   layer.setVisible(true);
   source.changed();
 }
