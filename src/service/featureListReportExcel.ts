@@ -3,6 +3,7 @@
  * — 호출측에서 ENABLED_SYSTEMS 필터된 systems·serviceList 를 넘긴다.
  */
 import * as XLSX from "xlsx-js-style"
+import { strFromU8, strToU8, unzipSync, zipSync } from "fflate"
 
 export type FeatureListReportSystem = {
   sys_key: string
@@ -31,6 +32,8 @@ type ExcelCell = { v: string; t: "s"; s: CellStyle }
 
 type UiRow = { kind: string; ui: string; desc: string }
 
+const KIND_MAIN = "기본"
+
 const headerStyle: CellStyle = {
   font: { bold: true },
   alignment: { vertical: "center", horizontal: "center", wrapText: true },
@@ -46,7 +49,7 @@ function kindLabel(funcType: string | null | undefined): string {
   const t = String(funcType ?? "")
     .trim()
     .toLowerCase()
-  if (t === "main") return "주요"
+  if (t === "main") return KIND_MAIN
   if (t === "extra") return "추가"
   return String(funcType ?? "").trim()
 }
@@ -75,8 +78,8 @@ function remarkRows(ser: FeatureListReportService): UiRow[] {
     .filter((r) => r.kind || r.ui || r.desc)
   if (!rows.length) return [{ kind: "", ui: "", desc: "" }]
   rows.sort((a, b) => {
-    if (a.kind === "주요" && b.kind !== "주요") return -1
-    if (b.kind === "주요" && a.kind !== "주요") return 1
+    if (a.kind === KIND_MAIN && b.kind !== KIND_MAIN) return -1
+    if (b.kind === KIND_MAIN && a.kind !== KIND_MAIN) return 1
     return a.ui.localeCompare(b.ui, "ko")
   })
   return rows
@@ -88,15 +91,24 @@ function padDateStamp(): string {
   return `${now.getFullYear()}${p(now.getMonth() + 1)}${p(now.getDate())}`
 }
 
+function colLetter(index0: number): string {
+  let n = index0 + 1
+  let s = ""
+  while (n > 0) {
+    const r = (n - 1) % 26
+    s = String.fromCharCode(65 + r) + s
+    n = Math.floor((n - 1) / 26)
+  }
+  return s
+}
+
 function buildSystemSheet(
   systems: FeatureListReportSystem[],
-  serByEng: Map<string, FeatureListReportService>,
-  envLabel: string
+  serByEng: Map<string, FeatureListReportService>
 ): { aoa: ExcelCell[][]; cols: { wch: number }[] } {
   const aoa: ExcelCell[][] = [
     [
       cell("시스템명(시스템키)", headerStyle),
-      cell("사용 env", headerStyle),
       cell("서비스명(서비스키)", headerStyle),
       cell("UI구분", headerStyle),
       cell("UI내용", headerStyle),
@@ -120,7 +132,6 @@ function buildSystemSheet(
     if (!services.length) {
       aoa.push([
         cell(sysText, topStyle),
-        cell(envLabel, topStyle),
         cell("", cellStyle),
         cell("", cellStyle),
         cell("", cellStyle),
@@ -134,7 +145,6 @@ function buildSystemSheet(
       for (const ur of remarkRows(ser)) {
         aoa.push([
           cell(sysText, topStyle),
-          cell(envLabel, topStyle),
           cell(label, cellStyle),
           cell(ur.kind, cellStyle),
           cell(ur.ui, cellStyle),
@@ -146,14 +156,13 @@ function buildSystemSheet(
 
   return {
     aoa,
-    cols: [{ wch: 36 }, { wch: 36 }, { wch: 36 }, { wch: 8 }, { wch: 28 }, { wch: 72 }],
+    cols: [{ wch: 36 }, { wch: 36 }, { wch: 8 }, { wch: 28 }, { wch: 72 }],
   }
 }
 
 function buildServiceSheet(
   systems: FeatureListReportSystem[],
-  serByEng: Map<string, FeatureListReportService>,
-  envLabel: string
+  serByEng: Map<string, FeatureListReportService>
 ): { aoa: ExcelCell[][]; cols: { wch: number }[] } {
   type Entry = {
     label: string
@@ -196,7 +205,6 @@ function buildServiceSheet(
     [
       cell("서비스명(서비스키)", headerStyle),
       cell("사용 시스템", headerStyle),
-      cell("사용 env", headerStyle),
       cell("UI구분", headerStyle),
       cell("UI내용", headerStyle),
       cell("기능 설명", headerStyle),
@@ -212,8 +220,8 @@ function buildServiceSheet(
     const sysText = keys.map((k) => sysMeta.get(k) || k).join("\n")
     const uiRows = [...entry.ui.values()]
     uiRows.sort((a, b) => {
-      if (a.kind === "주요" && b.kind !== "주요") return -1
-      if (b.kind === "주요" && a.kind !== "주요") return 1
+      if (a.kind === KIND_MAIN && b.kind !== KIND_MAIN) return -1
+      if (b.kind === KIND_MAIN && a.kind !== KIND_MAIN) return 1
       return a.ui.localeCompare(b.ui, "ko")
     })
     if (!uiRows.length) uiRows.push({ kind: "", ui: "", desc: "" })
@@ -222,7 +230,6 @@ function buildServiceSheet(
       aoa.push([
         cell(entry.label, cellStyle),
         cell(sysText, topStyle),
-        cell(envLabel, topStyle),
         cell(ur.kind, cellStyle),
         cell(ur.ui, cellStyle),
         cell(ur.desc, cellStyle),
@@ -232,21 +239,51 @@ function buildServiceSheet(
 
   return {
     aoa,
-    cols: [{ wch: 36 }, { wch: 36 }, { wch: 36 }, { wch: 8 }, { wch: 28 }, { wch: 72 }],
+    cols: [{ wch: 36 }, { wch: 36 }, { wch: 8 }, { wch: 28 }, { wch: 72 }],
   }
 }
 
 function sheetFromAoa(aoa: ExcelCell[][], cols: { wch: number }[]): XLSX.WorkSheet {
   const ws = XLSX.utils.aoa_to_sheet(aoa)
   ws["!cols"] = cols
-  ws["!rows"] = aoa.map(() => ({ hpt: 18 }))
+  const lastRow = Math.max(0, aoa.length - 1)
+  const lastCol = Math.max(0, (aoa[0]?.length ?? 1) - 1)
+  const end = `${colLetter(lastCol)}${lastRow + 1}`
+  ws["!autofilter"] = { ref: `A1:${end}` }
   return ws
+}
+
+/** SheetJS community는 freeze 미지원 — sheetViews pane 주입 (첫 행 고정) */
+function injectFrozenHeaderRows(xlsxBytes: Uint8Array): Uint8Array {
+  const files = unzipSync(xlsxBytes)
+  const paneXml =
+    `<sheetViews>` +
+    `<sheetView workbookViewId="0">` +
+    `<pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/>` +
+    `<selection pane="bottomLeft" activeCell="A2" sqref="A2"/>` +
+    `</sheetView>` +
+    `</sheetViews>`
+
+  for (const name of Object.keys(files)) {
+    if (!/^xl\/worksheets\/sheet\d+\.xml$/i.test(name)) continue
+    const raw = files[name]
+    if (!raw) continue
+    let xml = strFromU8(raw)
+    if (/<sheetViews[\s\S]*?<\/sheetViews>/.test(xml)) {
+      xml = xml.replace(/<sheetViews[\s\S]*?<\/sheetViews>/, paneXml)
+    } else if (/<sheetView\b[^>]*\/>/.test(xml)) {
+      xml = xml.replace(/<sheetViews[^>]*>\s*<sheetView\b[^>]*\/>\s*<\/sheetViews>/, paneXml)
+    } else {
+      xml = xml.replace(/(<dimension\b[^>]*\/>)/, `$1${paneXml}`)
+    }
+    files[name] = strToU8(xml)
+  }
+  return zipSync(files, { level: 6 })
 }
 
 export function buildFeatureListReportBuffer(params: {
   systems: FeatureListReportSystem[]
   services: FeatureListReportService[]
-  envLabel: string
   projectId: string
 }): { buffer: Buffer; fileName: string } {
   const serByEng = new Map<string, FeatureListReportService>()
@@ -255,15 +292,17 @@ export function buildFeatureListReportBuffer(params: {
     if (eng) serByEng.set(eng, s)
   }
 
-  const sysSheet = buildSystemSheet(params.systems, serByEng, params.envLabel)
-  const serSheet = buildServiceSheet(params.systems, serByEng, params.envLabel)
+  const sysSheet = buildSystemSheet(params.systems, serByEng)
+  const serSheet = buildServiceSheet(params.systems, serByEng)
 
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, sheetFromAoa(sysSheet.aoa, sysSheet.cols), "시스템별 기능목록")
   XLSX.utils.book_append_sheet(wb, sheetFromAoa(serSheet.aoa, serSheet.cols), "기능목록별 설명")
 
   const raw = XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as Buffer
-  const buffer = Buffer.isBuffer(raw) ? raw : Buffer.from(raw)
+  const asBytes = Buffer.isBuffer(raw) ? new Uint8Array(raw) : new Uint8Array(Buffer.from(raw))
+  const frozen = injectFrozenHeaderRows(asBytes)
+  const buffer = Buffer.from(frozen)
   const project = params.projectId.trim() || "project"
   const fileName = `${padDateStamp()}_${project}_기능목록_보고서.xlsx`
   return { buffer, fileName }

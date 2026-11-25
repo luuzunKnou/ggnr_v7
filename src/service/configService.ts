@@ -8,7 +8,6 @@
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "fs"
 import { join } from "path"
 import { unstable_noStore as noStore } from "next/cache"
-import { getBasePath } from "@/lib/basePath"
 import { getGeoServerInternalBase } from "@/lib/geoserverUrl"
 import { buildFeatureListReportBuffer } from "@/service/featureListReportExcel"
 
@@ -1516,18 +1515,31 @@ export function saveServiceList(params: { ser: SerConfigItem[] }): { saved: numb
 /**
  * 현재 프로젝트 ENABLED_SYSTEMS 기준 기능 목록 보고서 엑셀 (base64).
  * 시트: 시스템별 기능목록 / 기능목록별 설명
+ * — 메인 포털(index: 공지·자료실·데이터요청)은 ENABLED_SYSTEMS 에 없어도 포함.
  */
 export function exportFeatureListReport(_params?: unknown): {
   fileName: string
   base64: string
 } {
   noStore()
-  const { systems } = getSystemList()
+  const { systems: enabled } = getSystemList()
+  const systems = [...enabled]
+  if (!systems.some((s) => (s.sys_key ?? "").trim() === "index")) {
+    const indexSys = getSystemListAll().systems.find(
+      (s) => (s.sys_key ?? "").trim() === "index"
+    )
+    if (indexSys) {
+      const disabled = getDisabledServiceEngSet()
+      systems.unshift({
+        ...indexSys,
+        serviceList: (indexSys.serviceList ?? []).filter(
+          (eng) => !disabled.has(String(eng).trim())
+        ),
+      })
+    }
+  }
   const { ser } = getServiceList()
   const projectId = (process.env.GGNR_PROJECT ?? "").trim() || "project"
-  const kor = getSystemKorName()
-  const base = getBasePath() || `/${projectId}`
-  const envLabel = `${kor}(${base})`
   const { buffer, fileName } = buildFeatureListReportBuffer({
     systems: systems.map((s) => ({
       sys_key: s.sys_key,
@@ -1539,7 +1551,6 @@ export function exportFeatureListReport(_params?: unknown): {
       ser_eng: s.ser_eng,
       ser_remark: s.ser_remark ?? null,
     })),
-    envLabel,
     projectId,
   })
   return { fileName, base64: buffer.toString("base64") }
