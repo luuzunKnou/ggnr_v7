@@ -18,6 +18,7 @@ import { call } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { RoadDocListItem } from "@/lib/roadDocTypes";
 import { roadDocPreviewPngFileName } from "@/lib/roadDocPreviewPngName";
+import { requestAttachmentPledge } from "@/app/(pages)/_components/securityPledge/attachmentPledgeGate";
 import { ServiceFileImagePreview } from "@/app/(pages)/map/_mapComponents/standard/ServiceFileImagePreview";
 import { ServiceFileDxfPreview } from "@/app/(pages)/map/_mapComponents/standard/ServiceFileDxfPreview";
 import { MapSideDetailScroll } from "../../../_mapComponents/MapSideDetailScroll";
@@ -296,14 +297,22 @@ export function RoadDocManualPanel({
   }, []);
 
   const triggerFileDownload = useCallback((name: string, scope: ApiScope) => {
-    const a = document.createElement("a");
-    a.href = downloadHref(name, scope);
-    a.download = name.includes("/") ? (name.split("/").pop() ?? name) : name;
-    a.rel = "noopener";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-  }, [downloadHref]);
+    const fileName = name.includes("/") ? (name.split("/").pop() ?? name) : name;
+    const source = scope === "doc" ? "roadDoc" : "roadCad";
+    if (
+      requestAttachmentPledge({
+        mode: "managed",
+        source,
+        paths: [name],
+        tableKorName: fileName,
+      })
+    ) {
+      return;
+    }
+    window.alert(
+      "보안서약 화면을 열 수 없습니다. 페이지를 새로고침한 뒤 다시 시도해 주세요."
+    );
+  }, []);
 
   const handleRowActivate = useCallback(
     async (name: string, scope: ApiScope) => {

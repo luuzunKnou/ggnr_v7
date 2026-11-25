@@ -1,4 +1,5 @@
 import { downloadExcelWithPledge } from "@/app/(pages)/_components/securityPledge/excelPledgeGate"
+import { requestAttachmentPledge } from "@/app/(pages)/_components/securityPledge/attachmentPledgeGate"
 
 export function triggerBlobDownload(blob: Blob, filename: string) {
   const a = document.createElement("a")
@@ -117,16 +118,22 @@ export async function downloadLayersCad(
     throw new Error("CAD 변환 시간이 너무 깁니다. 레이어·라벨을 줄인 뒤 다시 시도하세요.")
   }
 
-  // fetch+blob 은 대용량에서 Failed to fetch 가 나기 쉬움 → 브라우저 기본 다운로드 사용
-  onProgress?.("파일 저장 중…")
-  const url = `/api/download/cad?jobId=${encodeURIComponent(jobId)}&download=1`
-  const a = document.createElement("a")
-  a.href = url
-  a.download = fileName
-  a.rel = "noopener"
-  document.body.appendChild(a)
-  a.click()
-  document.body.removeChild(a)
+  onProgress?.("보안서약 접수 준비…")
+  const tableKorName = fileName.replace(/\.(dxf|dwg)$/i, "") || "레이어 CAD"
+  if (
+    requestAttachmentPledge({
+      mode: "managed",
+      source: "cadJob",
+      paths: [jobId],
+      tableKorName,
+    })
+  ) {
+    return
+  }
+  console.warn("[downloadLayersCad] SecurityPledgeAttachmentHost 미등록")
+  window.alert(
+    "보안서약 화면을 열 수 없습니다. 페이지를 새로고침한 뒤 다시 시도해 주세요."
+  )
 }
 
 /** 업로드 원본 Excel/CSV 파일 다운로드 */
@@ -165,5 +172,10 @@ export async function downloadLayerCsvFromDb(
   const cd = res.headers.get("Content-Disposition") ?? ""
   const m = /filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i.exec(cd)
   const rawName = m?.[1] ? decodeURIComponent(m[1]) : m?.[2]
-  triggerBlobDownload(blob, rawName?.trim() || `${tableName}.csv`)
+  const fileName = rawName?.trim() || `${tableName}.csv`
+  downloadExcelWithPledge({
+    data: blob,
+    fileName,
+    tableKorName: fileName.replace(/\.(xlsx|xls|csv)$/i, "") || tableName,
+  })
 }

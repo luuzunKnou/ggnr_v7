@@ -10,6 +10,7 @@ import {
   type TrendRange,
 } from '@/app/(pages)/(index)/odorPh/odorAlertDetailMock'
 import type { OdorAlertItem } from '@/app/(pages)/(index)/odorPh/odorPhDashboardMock'
+import { downloadExcelWithPledge } from '@/app/(pages)/_components/securityPledge/excelPledgeGate'
 import { cn } from '@/lib/utils'
 
 const OdorAlertPpmChart = dynamic(
@@ -68,16 +69,13 @@ function downloadTrendCsv(opts: {
   const blob = new Blob(['\uFEFF' + lines.join('\r\n')], {
     type: 'text/csv;charset=utf-8',
   })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
   const safeName = opts.sensorKorNm.replace(/[\\/:*?"<>|]/g, '_').slice(0, 40)
-  a.href = url
-  a.download = `악취경향_${safeName}_${TREND_RANGE_FILE[opts.range]}.csv`
-  a.rel = 'noopener'
-  document.body.appendChild(a)
-  a.click()
-  a.remove()
-  URL.revokeObjectURL(url)
+  const fileName = `악취경향_${safeName}_${TREND_RANGE_FILE[opts.range]}.csv`
+  downloadExcelWithPledge({
+    data: blob,
+    fileName,
+    tableKorName: fileName.replace(/\.csv$/i, '') || '악취경향',
+  })
 }
 
 const MAINT_PAGE_SIZE = 7

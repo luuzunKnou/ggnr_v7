@@ -28,6 +28,16 @@ import { exportLayerTableToShp } from '@/service/shpUploadService';
 import { exportWtlNetworkShpZip } from '@/service/wtlNetworkService';
 import { exportFacilityShpZip } from '@/service/wtlFacilityService';
 import { recordLayerDownloadLog } from '@/service/layerDownloadLog';
+import { getFileManagerDownloadTarget } from '@/service/fileManagerService';
+import {
+  cleanupLayerCadExportJob,
+  getLayerCadExportJob,
+} from '@/service/layerCadExportService';
+import {
+  getRoadCadFileDir,
+  getRoadDocFileDir,
+  resolveSafeRelativeUnderBase,
+} from '@/lib/roadDocServerPaths';
 import {
   createServiceFileDataZipBuffer,
   createServiceFileEntriesZipBuffer,
@@ -855,4 +865,273 @@ export async function resolveDownloadZip(params: {
   }
 
   return { success: true, absPath, fileName: zipName };
+}
+
+export type ManagedPathSource = 'fileManager' | 'roadDoc' | 'roadCad' | 'aerial';
+
+async function collectDirFilesRecursive(
+  absDir: string,
+  prefix = ''
+): Promise<ZipFileEntry[]> {
+  let entries;
+  try {
+    entries = await fs.readdir(absDir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  const out: ZipFileEntry[] = [];
+  for (const ent of entries) {
+    const name = String(ent.name ?? '');
+    if (!name || name === '.' || name === '..') continue;
+    const absPath = path.join(absDir, name);
+    const entryName = prefix ? `${prefix}/${name}` : name;
+    if (ent.isDirectory()) {
+      out.push(...(await collectDirFilesRecursive(absPath, entryName)));
+      continue;
+    }
+    if (ent.isFile()) {
+      out.push({ absPath, entryName });
+    }
+  }
+  return out;
+}
+
+function resolveRoadDocOrCadAbs(
+  source: 'roadDoc' | 'roadCad',
+  rawName: string
+): string | null {
+  const base =
+    source === 'roadDoc' ? getRoadDocFileDir() : getRoadCadFileDir();
+  if (source === 'roadDoc') {
+    const baseName = path.basename(rawName.trim());
+    if (!baseName || baseName === '.' || baseName === '..') return null;
+    const target = path.resolve(base, baseName);
+    const rel = path.relative(path.resolve(base), target);
+    if (rel.startsWith('..') || path.isAbsolute(rel)) return null;
+    return target;
+  }
+  return resolveSafeRelativeUnderBase(base, rawName);
+}
+
+function resolveAerialAbs(rawPath: string): string | null {
+  const normalized = rawPath.replace(/\\/g, '/').replace(/^\/+/, '');
+  if (!normalized.startsWith('aerial/') || normalized.includes('..')) return null;
+  const base = path.resolve(resolveGgnrDataDir());
+  const resolved = path.resolve(base, ...normalized.split('/').filter(Boolean));
+  const rel = path.relative(base, resolved);
+  if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return null;
+  return resolved;
+}
+
+/**
+ * 파일관리자·도로대장/CAD·정사영상 등 경로 기반 파일 접수.
+ * service-files 첨부(serEng)와 별도.
+ */
+export async function submitManagedPathRequest(params: {
+  pledgeName?: string;
+  userIp?: string;
+  tableKorName?: string;
+  source?: string;
+  paths?: string[];
+  zipName?: string;
+}) {
+  const user = await resolveSessionUser();
+  if (!user) return { success: false as const, error: 'Unauthorized' };
+  const nameErr = assertPledgeName(user.usrName, String(params.pledgeName ?? ''));
+  if (nameErr) return { success: false as const, error: nameErr };
+
+  const source = String(params.source ?? '').trim() as ManagedPathSource;
+  const allowed: ManagedPathSource[] = ['fileManager', 'roadDoc', 'roadCad', 'aerial'];
+  if (!allowed.includes(source)) {
+    return { success: false as const, error: '유효하지 않은 다운로드 출처입니다.' };
+  }
+
+  const paths = Array.isArray(params.paths)
+    ? params.paths.map((p) => String(p ?? '').trim()).filter(Boolean)
+    : [];
+  if (paths.length === 0) {
+    return { success: false as const, error: '파일 경로가 필요합니다.' };
+  }
+
+  const tableKorName =
+    String(params.tableKorName ?? '').trim() ||
+    (source === 'aerial'
+      ? '정사영상'
+      : source === 'fileManager'
+        ? '파일관리자'
+        : source === 'roadCad'
+          ? '도로 CAD'
+          : '도로대장');
+
+  const entries: ZipFileEntry[] = [];
+  const used = new Set<string>();
+
+  try {
+    if (source === 'fileManager') {
+      for (const rel of paths) {
+        const target = await getFileManagerDownloadTarget({ relativePath: rel });
+        if (target.isDirectory) {
+          const nested = await collectDirFilesRecursive(
+            target.absolutePath,
+            path.basename(target.absolutePath)
+          );
+          for (const f of nested) {
+            entries.push({
+              absPath: f.absPath,
+              entryName: uniqueZipEntryName(f.entryName, used),
+            });
+          }
+        } else {
+          entries.push({
+            absPath: target.absolutePath,
+            entryName: uniqueZipEntryName(target.fileName, used),
+          });
+        }
+      }
+    } else if (source === 'roadDoc' || source === 'roadCad') {
+      for (const name of paths) {
+        const abs = resolveRoadDocOrCadAbs(source, name);
+        if (!abs) continue;
+        try {
+          const st = await fs.stat(abs);
+          if (!st.isFile()) continue;
+        } catch {
+          continue;
+        }
+        entries.push({
+          absPath: abs,
+          entryName: uniqueZipEntryName(path.basename(abs), used),
+        });
+      }
+    } else {
+      for (const rel of paths) {
+        const abs = resolveAerialAbs(rel);
+        if (!abs) continue;
+        try {
+          const st = await fs.stat(abs);
+          if (!st.isFile()) continue;
+        } catch {
+          continue;
+        }
+        entries.push({
+          absPath: abs,
+          entryName: uniqueZipEntryName(path.basename(abs), used),
+        });
+      }
+    }
+  } catch (e: unknown) {
+    return {
+      success: false as const,
+      error: e instanceof Error ? e.message : '파일 준비 실패',
+    };
+  }
+
+  if (entries.length === 0) {
+    return { success: false as const, error: '다운로드할 파일이 없습니다.' };
+  }
+
+  const customZip = String(params.zipName ?? '').trim();
+  const packed = await createServiceFileEntriesZipBuffer(
+    entries,
+    customZip ||
+      `${seoulCompactTimestampForZip()}_${tableKorName}${entries.length > 1 ? '' : `_${entries[0]!.entryName}`}.zip`
+  );
+
+  const fileType =
+    source === 'aerial' ? '정사영상' : entries.length > 1 || source === 'fileManager' ? 'ZIP' : '첨부파일';
+
+  const saved = await writeZipAndInsert({
+    user,
+    userIp: normalizeClientIp(params.userIp),
+    fileType,
+    layers: [
+      {
+        layer: entries[0] ? path.basename(entries[0].entryName) : source,
+        layerKor: tableKorName,
+      },
+    ],
+    zipBuffer: packed.zipBuffer,
+    zipName: packed.downloadFileName,
+  });
+  if (!saved.success) return saved;
+  return { success: true as const, fileGroupKey: saved.fileGroupKey };
+}
+
+/** 레이어 CAD 변환 잡 완료 후 서약 접수 (job 임시파일 → 데이터요청 ZIP) */
+export async function submitCadJobRequest(params: {
+  pledgeName?: string;
+  userIp?: string;
+  jobId?: string;
+  tableKorName?: string;
+}) {
+  const user = await resolveSessionUser();
+  if (!user) return { success: false as const, error: 'Unauthorized' };
+  const nameErr = assertPledgeName(user.usrName, String(params.pledgeName ?? ''));
+  if (nameErr) return { success: false as const, error: nameErr };
+
+  const jobId = String(params.jobId ?? '').trim();
+  if (!jobId) return { success: false as const, error: 'jobId가 필요합니다.' };
+
+  const job = getLayerCadExportJob(jobId);
+  if (!job) {
+    return { success: false as const, error: 'CAD 작업을 찾을 수 없습니다.' };
+  }
+  if (job.status === 'pending') {
+    return { success: false as const, error: 'CAD 변환이 아직 완료되지 않았습니다.' };
+  }
+  if (job.status === 'error') {
+    return {
+      success: false as const,
+      error: job.error || 'CAD 변환에 실패했습니다.',
+    };
+  }
+
+  const fileName = String(job.fileName ?? '').trim() || `layers.${job.format ?? 'dxf'}`;
+  const tableKorName =
+    String(params.tableKorName ?? '').trim() ||
+    fileName.replace(/\.(dxf|dwg)$/i, '') ||
+    '레이어 CAD';
+
+  try {
+    const st = await fs.stat(job.filePath);
+    if (!st.isFile()) {
+      return { success: false as const, error: 'CAD 파일이 없습니다.' };
+    }
+  } catch {
+    return { success: false as const, error: 'CAD 파일을 찾을 수 없습니다.' };
+  }
+
+  try {
+    for (const tableName of job.included ?? []) {
+      try {
+        await recordLayerDownloadLog({
+          tableName,
+          format: job.format === 'dwg' ? 'DWG' : 'DXF',
+        });
+      } catch (e) {
+        console.warn('[submitCadJobRequest] data_log', e instanceof Error ? e.message : e);
+      }
+    }
+
+    const packed = await createServiceFileEntriesZipBuffer(
+      [{ absPath: job.filePath, entryName: fileName }],
+      `${seoulCompactTimestampForZip()}_${fileName}.zip`
+    );
+    const saved = await writeZipAndInsert({
+      user,
+      userIp: normalizeClientIp(params.userIp),
+      fileType: 'ZIP',
+      layers: [{ layer: fileName, layerKor: tableKorName }],
+      zipBuffer: packed.zipBuffer,
+      zipName: packed.downloadFileName,
+    });
+    await cleanupLayerCadExportJob(jobId);
+    if (!saved.success) return saved;
+    return { success: true as const, fileGroupKey: saved.fileGroupKey };
+  } catch (e: unknown) {
+    return {
+      success: false as const,
+      error: e instanceof Error ? e.message : 'CAD 접수 실패',
+    };
+  }
 }

@@ -16,8 +16,8 @@ import {
   Upload,
 } from 'lucide-react';
 import { call } from '@/lib/api';
-import { appFetch, withBasePath } from '@/lib/basePath';
 import { cn } from '@/lib/utils';
+import { requestAttachmentPledge } from '@/app/(pages)/_components/securityPledge/attachmentPledgeGate';
 import { Button } from '@/app/shadcnComponents/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/shadcnComponents/ui/card';
 import { Input } from '@/app/shadcnComponents/ui/input';
@@ -114,25 +114,6 @@ function formatModified(iso?: string): string {
 
 function pathDisplayName(relativePath: string, rootName: string): string {
   return relativePath ? relativePath.split('/').pop() ?? relativePath : rootName;
-}
-
-function fileNameFromDisposition(header: string | null): string | null {
-  if (!header) return null;
-  const utf8 = /filename\*=UTF-8''([^;]+)/i.exec(header);
-  if (utf8?.[1]) return decodeURIComponent(utf8[1]);
-  const ascii = /filename="([^"]+)"/i.exec(header);
-  return ascii?.[1] ?? null;
-}
-
-function triggerBlobDownload(blob: Blob, fileName: string): void {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = fileName;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
 }
 
 function TreeNode({
@@ -546,52 +527,28 @@ export function FileManagerContent() {
     }
   }, [refreshCurrent, selectedRows]);
 
-  const handleDownload = useCallback(async () => {
+  const handleDownload = useCallback(() => {
     if (selectedRows.length === 0) return;
-    setActionLoading(true);
     setActionError(null);
-    try {
-      if (selectedRows.length === 1 && selectedRows[0]!.kind === 'file') {
-        const row = selectedRows[0]!;
-        const res = await appFetch(
-          `/api/file-manager/download?path=${encodeURIComponent(row.relativePath)}`,
-          {
-            method: 'GET',
-            cache: 'no-store',
-            credentials: 'include',
-          }
-        );
-        if (!res.ok) {
-          const text = await res.text();
-          throw new Error(text || '다운로드 실패');
-        }
-        const blob = await res.blob();
-        triggerBlobDownload(
-          blob,
-          fileNameFromDisposition(res.headers.get('content-disposition')) ?? row.name
-        );
-      } else {
-        const res = await appFetch(withBasePath('/api/file-manager/download-zip'), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({ paths: selectedRows.map((row) => row.relativePath) }),
-        });
-        if (!res.ok) {
-          const text = await res.text();
-          throw new Error(text || 'ZIP 다운로드 실패');
-        }
-        const blob = await res.blob();
-        triggerBlobDownload(
-          blob,
-          fileNameFromDisposition(res.headers.get('content-disposition')) ?? 'download.zip'
-        );
-      }
-    } catch (e: unknown) {
-      setActionError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setActionLoading(false);
+    const paths = selectedRows.map((row) => row.relativePath);
+    const singleFile = selectedRows.length === 1 && selectedRows[0]!.kind === 'file';
+    const tableKorName = singleFile
+      ? selectedRows[0]!.name
+      : `파일관리자_${selectedRows.length}건`;
+    if (
+      requestAttachmentPledge({
+        mode: 'managed',
+        source: 'fileManager',
+        paths,
+        tableKorName,
+        zipName: singleFile ? undefined : 'download.zip',
+      })
+    ) {
+      return;
     }
+    setActionError(
+      '보안서약 화면을 열 수 없습니다. 페이지를 새로고침한 뒤 다시 시도해 주세요.'
+    );
   }, [selectedRows]);
 
   const breadcrumbs = useMemo(() => {

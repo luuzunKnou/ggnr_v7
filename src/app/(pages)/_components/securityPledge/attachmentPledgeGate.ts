@@ -29,10 +29,20 @@ export type AttachmentPledgeMulti = {
   tableKorName: string
 }
 
+/** 파일관리자·도로대장/CAD·정사영상·CAD잡 등 경로/잡 기반 */
+export type AttachmentPledgeManaged = {
+  mode: 'managed'
+  source: 'fileManager' | 'roadDoc' | 'roadCad' | 'aerial' | 'cadJob'
+  paths: string[]
+  zipName?: string
+  tableKorName: string
+}
+
 export type AttachmentPledgeRequest =
   | AttachmentPledgeSingle
   | AttachmentPledgeFolderZip
   | AttachmentPledgeMulti
+  | AttachmentPledgeManaged
 
 type Opener = (req: AttachmentPledgeRequest) => void
 
