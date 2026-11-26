@@ -38,6 +38,7 @@ import {
   ELEVATION_SPLIT_LAYER_NAMES,
   elevationSplitKindFromLayerName,
 } from '@/lib/geoserverStyles/elevationContourStyle';
+import { buildSpfFacCss, SPF_FAC_LAYER_NAME } from '@/lib/geoserverStyles/spfFacStyle';
 import { normalizeDefineTableSource, dedupeDefineLayerTablesByName } from '@/lib/defineLayerTablesNormalize';
 import {
   getDefineLayerCodeWriteFilePath,
@@ -1114,8 +1115,10 @@ const LAYER_TEMP_TABLE_NAME_RE = /^_(cmp_|sync_|rctmp_)/i;
 /**
  * layer, public_layer 스키마의 geometry 테이블 목록 조회
  * 백업용 `…_BAK`, `…_BAK20260423` 형태 테이블은 레이어 목록·발행 UI에서 제외
+ * includeAttributeTables=true 이면 geometry 없는 BASE TABLE도 geometryColumn=null 로 포함
+ * (데이터조회·레이어관리용. GeoServer 발행 등 기본 호출은 geom만)
  */
-export async function getLayerTableList() {
+export async function getLayerTableList(params?: { includeAttributeTables?: boolean }) {
   try {
     const result = await db.execute(
       sql`
@@ -1128,7 +1131,7 @@ export async function getLayerTableList() {
     const tables = (result.rows as Array<{
       f_table_schema: string;
       f_table_name: string;
-      f_geometry_column: string;
+      f_geometry_column: string | null;
     }>)
       .map((r) => ({
         schema: r.f_table_schema,
@@ -1140,6 +1143,39 @@ export async function getLayerTableList() {
           !LAYER_BACKUP_TABLE_NAME_RE.test(String(r.table ?? '')) &&
           !LAYER_TEMP_TABLE_NAME_RE.test(String(r.table ?? ''))
       );
+
+    if (params?.includeAttributeTables) {
+      const geomKeys = new Set(
+        tables.map((t) => `${String(t.schema).toLowerCase()}:${String(t.table).toLowerCase()}`)
+      );
+      const attrResult = await db.execute(
+        sql`
+          SELECT table_schema AS f_table_schema, table_name AS f_table_name
+          FROM information_schema.tables
+          WHERE table_schema IN ('layer', 'public_layer')
+            AND table_type = 'BASE TABLE'
+          ORDER BY table_schema, table_name
+        `
+      );
+      for (const r of attrResult.rows as Array<{
+        f_table_schema: string;
+        f_table_name: string;
+      }>) {
+        const schema = r.f_table_schema;
+        const table = r.f_table_name;
+        if (LAYER_BACKUP_TABLE_NAME_RE.test(String(table ?? ''))) continue;
+        if (LAYER_TEMP_TABLE_NAME_RE.test(String(table ?? ''))) continue;
+        const key = `${String(schema).toLowerCase()}:${String(table).toLowerCase()}`;
+        if (geomKeys.has(key)) continue;
+        geomKeys.add(key);
+        tables.push({ schema, table, geometryColumn: null });
+      }
+      tables.sort((a, b) => {
+        const s = String(a.schema).localeCompare(String(b.schema));
+        return s !== 0 ? s : String(a.table).localeCompare(String(b.table));
+      });
+    }
+
     return { success: true, tables };
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -3419,6 +3455,27 @@ export async function applyDefaultStyleToLayer(params: {
       );
       if (!renderRes.ok) return { success: false, error: renderRes.error, uploaded: true };
       return elevRes;
+    }
+
+    /* spf_fac — geom 점·선 혼재, 시설 type 속성으로 스타일 분기 */
+    if (layerName === SPF_FAC_LAYER_NAME) {
+      const cssBody = buildSpfFacCss();
+      const spfRes = await uploadElevationCssStyle({
+        url: baseUrl,
+        workspace,
+        layerName,
+        cssBody,
+        linkIfLayerExists: true,
+      });
+      if (!spfRes.success) return spfRes;
+      const renderRes = await verifyLayerStyleRender(
+        baseUrl,
+        workspace,
+        layerName,
+        ftInfo.latLonBoundingBox
+      );
+      if (!renderRes.ok) return { success: false, error: renderRes.error, uploaded: true };
+      return spfRes;
     }
 
     if (await geoServerStyleExists(baseUrl, layerName)) {

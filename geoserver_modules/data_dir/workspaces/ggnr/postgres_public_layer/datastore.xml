@@ -14,7 +14,7 @@
     <entry key="port">5433</entry>
     <entry key="passwd">crypt1:Vb/sWijaIXM5X/jiuDpr7PAFqrd17AbX</entry>
     <entry key="validate connections">true</entry>
-    <entry key="host">192.168.127.32</entry>
+    <entry key="host">localhost</entry>
     <entry key="dbtype">postgis</entry>
     <entry key="namespace">http://ggnr</entry>
     <entry key="Loose bbox">true</entry>

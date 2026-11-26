@@ -24,6 +24,8 @@ export const usr = pgTable('usr', {
   usrCancleTime: timestamp('usr_cancle_time', { mode: 'string' }),
   usrRejectReason: varchar('usr_reject_reason'),
   usrLoginFailCnt: integer('usr_login_fail_cnt').default(0),
+  /** 임시 비밀번호 변경 안내를 «현재 비밀번호 사용»으로 영구 넘김. 초기화·본인 변경 시 false */
+  usrPwdSkip: boolean('usr_pwd_skip').default(false),
 });
 
 /** 테이블 코멘트 (동기화·DB COMMENT ON TABLE 에 사용) */
@@ -48,6 +50,7 @@ export const usrColumnComments: Record<string, string> = {
   usr_cancle_time: '반려시간',
   usr_reject_reason: '가입 반려사유',
   usr_login_fail_cnt: '로그인 인증오류 횟수',
+  usr_pwd_skip: '임시 비밀번호 변경 안내 넘김 여부',
 };
 
 export type Usr = typeof usr.$inferSelect;

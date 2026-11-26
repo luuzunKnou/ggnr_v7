@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useRef } from 'react'
-import { Search } from 'lucide-react'
+import { Loader2, Search } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
   SmallPublicSortTh,
@@ -12,8 +12,12 @@ import {
 } from '../smallPublicUi'
 import type { SmallPublicInspectionReport } from './smallPublicInspectionReport'
 
-/** 보고서 목록 한 줄 — 그해 점검을 마친 대상 수 */
-export type SmallPublicReportListRow = { report: SmallPublicInspectionReport; inspected: number }
+/** 보고서 목록 한 줄 — 대상·점검 건수는 서버 집계(rows 전체 불필요) */
+export type SmallPublicReportListRow = {
+  report: SmallPublicInspectionReport
+  inspected: number
+  targetCount: number
+}
 
 type SortKey = 'year' | 'title' | 'targets' | 'inspected'
 const initialSortDir = (key: SortKey) => (key === 'title' ? 'asc' : 'desc')
@@ -33,6 +37,7 @@ type Props = {
   onClose: () => void
   /** 상세와 위·아래 배치 — 헤더·푸터 생략, 높이만 채움 */
   embedded?: boolean
+  loading?: boolean
 }
 
 /** 안전점검 보고서 목록 — 연도 필터·검색·표 형식 */
@@ -46,16 +51,17 @@ export function SmallPublicInspectionListPanel({
   selectedId,
   onSelect,
   embedded = false,
+  loading = false,
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null)
   useSmallPublicScrollSelectedIntoView(scrollRef, selectedId)
   const sort = useSmallPublicSort<SortKey>(initialSortDir)
   const sortedRows = useMemo(
     () =>
-      smallPublicSortRows(rows, sort.sorts, ({ report: r, inspected }, key) => {
+      smallPublicSortRows(rows, sort.sorts, ({ report: r, inspected, targetCount }, key) => {
         if (key === 'year') return r.year
         if (key === 'title') return r.title
-        if (key === 'targets') return r.rows.length
+        if (key === 'targets') return targetCount
         return inspected
       }),
     [rows, sort.sorts]
@@ -94,8 +100,8 @@ export function SmallPublicInspectionListPanel({
           <colgroup>
             <col className="w-[52px]" />
             <col />
-            <col className="w-[64px]" />
-            <col className="w-[80px]" />
+            <col className="w-[4.75rem]" />
+            <col className="w-[7rem]" />
           </colgroup>
           <thead className="sticky top-0 z-[1] bg-muted">
             <tr className="[&>th]:whitespace-nowrap [&>th]:px-1.5 [&>th]:py-1.5 [&>th]:font-semibold [&>th]:text-foreground/90 [&>th]:[box-shadow:inset_0_-2px_0_0_var(--border)]">
@@ -105,15 +111,24 @@ export function SmallPublicInspectionListPanel({
               <SmallPublicSortTh sort={sort} sortKey="inspected" label="점검" align="center" className="px-1.5 py-1.5" />
             </tr>
           </thead>
-          <tbody>
-            {sortedRows.length === 0 ? (
+          <tbody className={cn(loading && rows.length > 0 && 'opacity-60 transition-opacity')}>
+            {loading && rows.length === 0 ? (
+              <tr>
+                <td colSpan={4} className="px-3 py-10 text-center text-muted-foreground">
+                  <span className="inline-flex items-center gap-2 text-[12px]">
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                    목록을 불러오는 중…
+                  </span>
+                </td>
+              </tr>
+            ) : sortedRows.length === 0 ? (
               <tr>
                 <td colSpan={4} className="px-3 py-8 text-center text-muted-foreground">
                   보고서가 없습니다. «보고서 추가»로 만드세요.
                 </td>
               </tr>
             ) : (
-              sortedRows.map(({ report: r, inspected }) => {
+              sortedRows.map(({ report: r, inspected, targetCount }) => {
                 const active = selectedId === r.id
                 return (
                   <tr
@@ -142,12 +157,12 @@ export function SmallPublicInspectionListPanel({
                     >
                       {r.title}
                     </td>
-                    <td className="px-1.5 py-1.5 text-center tabular-nums">{r.rows.length}</td>
+                    <td className="px-1.5 py-1.5 text-center tabular-nums">{targetCount}</td>
                     <td className="px-1.5 py-1.5 text-center tabular-nums">
                       {inspected}
                       <span className="text-muted-foreground">
                         {' '}
-                        ({r.rows.length ? Math.round((inspected / r.rows.length) * 100) : 0}%)
+                        ({targetCount ? Math.round((inspected / targetCount) * 100) : 0}%)
                       </span>
                     </td>
                   </tr>

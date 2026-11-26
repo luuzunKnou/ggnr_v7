@@ -305,7 +305,11 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
   // 데이터 조회 레이어 목록: DB + defineLayer 메타 → 현재 시스템 layerGroupList ∪ 미소속(공통) 그룹
   useEffect(() => {
     let cancelled = false;
-    const dbPromise = call('', 'POST', { service: 'devTestService', action: 'getLayerTableList', params: {} });
+    const dbPromise = call('', 'POST', {
+      service: 'devTestService',
+      action: 'getLayerTableList',
+      params: { includeAttributeTables: true },
+    });
     /** 레이어 설정 순서·프로젝트 분할 idx — 지하시설물과 동일 소스 */
     const metaPromise = call('', 'POST', {
       service: 'devTestService',

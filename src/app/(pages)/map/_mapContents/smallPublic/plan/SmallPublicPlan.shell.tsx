@@ -1,20 +1,12 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
-import { useSession } from 'next-auth/react'
-import type { SmallPublicFacility } from '../smallPublicMock'
-import { ensureSmallPublicSeed, useSmallPublicStore } from '../smallPublicStore'
-import { applyConstructionToUnits } from '../budget/smallPublicBudgetCalc'
-import { useSmallPublicBudgetStore } from '../budget/smallPublicBudgetStore'
+import { call } from '@/lib/api'
 import { exportSmallPublicPlanExcel } from './exportSmallPublicPlanExcel'
-import { rankPlans, todayYmd } from './smallPublicPlanCalc'
-import { smallPublicPlanActions, useSmallPublicPlanStore } from './smallPublicPlanStore'
-import { canLinkToBudget, currentVersion, isPlanInAnalysis } from './smallPublicPlanTypes'
-import { SmallPublicPlanAnalysisModal } from './SmallPublicPlanAnalysisModal'
-import { SmallPublicPlanBudgetLinkModal } from './SmallPublicPlanBudgetLinkModal'
-import { SmallPublicPlanFixedModal } from './SmallPublicPlanFixedModal'
-import { SmallPublicPlanAnalyzePickModal } from './SmallPublicPlanModals'
+import type { PlanDbPeriod, PlanDbRow, PlanSaveEntry, PlanSheetPayload } from './smallPublicPlanDb'
+import { useSmallPublicPlanRefreshSeq } from './smallPublicPlanRefresh'
+import { SmallPublicPlanPeriodModal } from './SmallPublicPlanPeriodModal'
 import { SmallPublicPlanSheet, type SmallPublicPlanFilter } from './SmallPublicPlanSheet'
 
 const MIN_WIDTH = 720
@@ -24,14 +16,12 @@ function subscribeResize(cb: () => void) {
   return () => window.removeEventListener('resize', cb)
 }
 
-/** 브라우저 너비 */
 function useViewportWidth(): number {
   return useSyncExternalStore(subscribeResize, () => window.innerWidth, () => 1600)
 }
 
 const noopSubscribe = () => () => undefined
 
-/** 브라우저에서만 true — 서버 렌더에서는 body 포털을 만들지 않는다 */
 function useIsClient(): boolean {
   return useSyncExternalStore(noopSubscribe, () => true, () => false)
 }
@@ -40,37 +30,33 @@ type Props = {
   leftOffsetPx: number
   onTotalWidthChange: (width: number) => void
   onClose: () => void
-  /** 예산 계획 후 예산·공사 화면으로 전환 */
-  onOpenBudget?: () => void
+}
+
+type ServiceResult<T> = ({ success?: boolean; error?: string } & T) | undefined
+
+async function callPlanService<T>(action: string, params: Record<string, unknown>): Promise<ServiceResult<T>> {
+  const res = await call('', 'POST', { service: 'smallPublicPlanService', action, params })
+  return (res?.data ?? res) as ServiceResult<T>
 }
 
 /**
- * 정비계획 — 지도 없이 사이드바 오른쪽을 꽉 채운 중기계획 명세서.
- * 레이어 관리 패널처럼 body 포털로 띄워 오른쪽 지도 메뉴를 덮고, 닫으면 다시 보인다.
- * 모달은 그 위(z 80)에 뜬다.
- * 추정·검토 행은 분석 모달, 확정 이후 행은 개요·결과 모달. «분석»은 새 위험시설·분석 중 시설을 골라 분석 모달.
- * 입력 완료 추정·확정 시설을 골라 «예산 계획»으로 예산 배정(1차). 예산·공사 준공 실적은 «정비된 부분»에 합쳐 보여 준다.
+ * 정비계획 — DB(정비계획·계획시설) 기준 중기 명세서. 시설명·위치는 관리번호로 시설/묶음에서 조회.
  */
-export function SmallPublicPlanShell({ leftOffsetPx, onTotalWidthChange, onClose, onOpenBudget }: Props) {
-  const { data: session } = useSession()
-  const userName = session?.user?.name?.trim() || session?.user?.id || '미확인'
-  const { facilities } = useSmallPublicStore()
-  const { units, analyzeRequest } = useSmallPublicPlanStore()
-  const { constructions } = useSmallPublicBudgetStore()
-  useEffect(() => {
-    void ensureSmallPublicSeed()
-  }, [])
+export function SmallPublicPlanShell({ leftOffsetPx, onTotalWidthChange, onClose }: Props) {
   const viewport = useViewportWidth()
   const isClient = useIsClient()
   const width = Math.max(MIN_WIDTH, viewport - leftOffsetPx)
-  const [baseDate] = useState(todayYmd)
-  const [startYear, setStartYear] = useState(() => new Date().getFullYear())
-  const [openId, setOpenId] = useState<string | null>(null)
-  const [picking, setPicking] = useState(false)
-  const [budgetLinkOpen, setBudgetLinkOpen] = useState(false)
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
-  const [filter, setFilter] = useState<SmallPublicPlanFilter>({ keyword: '', emd: '', status: '' })
-  const handledAnalyzeSeq = useRef(0)
+  const refreshSeq = useSmallPublicPlanRefreshSeq()
+
+  const [periods, setPeriods] = useState<PlanDbPeriod[]>([])
+  const [planId, setPlanId] = useState<number | null>(null)
+  const [dbRows, setDbRows] = useState<PlanDbRow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
+  const [loadSeq, setLoadSeq] = useState(0)
+  const [filter, setFilter] = useState<SmallPublicPlanFilter>({ keyword: '', emd: '' })
+  const [periodModalOpen, setPeriodModalOpen] = useState(false)
+  const planIdRef = useRef<number | null>(null)
 
   useEffect(() => {
     onTotalWidthChange(width)
@@ -78,107 +64,90 @@ export function SmallPublicPlanShell({ leftOffsetPx, onTotalWidthChange, onClose
 
   useEffect(() => () => onTotalWidthChange(0), [onTotalWidthChange])
 
-  /** 준공 공사 실적(정비된 부분)·공사 상태(진행·완료)를 합친 계획 */
-  const applied = useMemo(() => applyConstructionToUnits(units, constructions), [units, constructions])
-  const ranked = useMemo(() => rankPlans(applied, baseDate), [applied, baseDate])
+  /** 연도구간(미지정 시 서버 기본)의 명세서를 불러온다 */
+  const load = useCallback(async (requested: number | null): Promise<boolean> => {
+    try {
+      const data = await callPlanService<PlanSheetPayload>('getPlanSheet', requested == null ? {} : { planId: requested })
+      if (!data || data.success === false || !Array.isArray(data.rows) || !Array.isArray(data.plans)) {
+        setLoadError(data?.error ?? '응답 오류')
+        setLoading(false)
+        return false
+      }
+      planIdRef.current = data.planId
+      setPeriods(data.plans)
+      setPlanId(data.planId)
+      setDbRows(data.rows)
+      setLoadError('')
+      setLoadSeq((s) => s + 1)
+      setLoading(false)
+      return true
+    } catch (e) {
+      setLoadError(e instanceof Error ? e.message : '요청 실패')
+      setLoading(false)
+      return false
+    }
+  }, [])
+
+  /** 최초 진입·이관 직후 다시 불러오기 */
+  useEffect(() => {
+    void load(planIdRef.current)
+  }, [load, refreshSeq])
+
+  const handlePlanChange = useCallback(
+    (next: number) => {
+      setLoading(true)
+      void load(next)
+    },
+    [load]
+  )
+
+  const handleSave = useCallback(
+    async (entries: PlanSaveEntry[]): Promise<boolean> => {
+      if (planId == null) return false
+      try {
+        const data = await callPlanService<object>('savePlanRows', { planId, entries })
+        if (!data || data.success === false) return false
+        await load(planId)
+        return true
+      } catch {
+        return false
+      }
+    },
+    [planId, load]
+  )
+
+  const handleRegisterPeriod = useCallback(
+    async ({ startYear, endYear }: { startYear: number; endYear: number }) => {
+      try {
+        const data = await callPlanService<{ planId?: number }>('createPlanPeriod', { startYear, endYear })
+        if (!data || data.success === false || data.planId == null) {
+          window.alert(data?.error ?? '연도를 등록하지 못했습니다.')
+          return
+        }
+        setLoading(true)
+        await load(data.planId)
+      } catch {
+        window.alert('연도를 등록하지 못했습니다.')
+      }
+    },
+    [load]
+  )
+
+  const startYear = useMemo(
+    () => periods.find((p) => p.id === planId)?.startYear ?? new Date().getFullYear(),
+    [periods, planId]
+  )
   const emdOptions = useMemo(
-    () => [...new Set(units.map((u) => u.emd))].sort((a, b) => a.localeCompare(b, 'ko')),
-    [units]
+    () =>
+      [...new Set(dbRows.map((r) => r.emd).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ko')),
+    [dbRows]
   )
   const rows = useMemo(() => {
     const q = filter.keyword.trim().toLowerCase()
-    return ranked
-      .filter((r) => !filter.emd || r.unit.emd === filter.emd)
-      .filter((r) => !filter.status || currentVersion(r.unit).status === filter.status)
-      .filter((r) => !q || [r.unit.unitName, r.unit.ri, r.unit.emd].join(' ').toLowerCase().includes(q))
-  }, [ranked, filter])
-
-  const facilityById = useMemo(() => new Map(facilities.map((f) => [f.id, f])), [facilities])
-  const unitByFacility = useMemo(() => new Map(units.map((u) => [u.facilityId, u])), [units])
-
-  /** 분석 대상 — 위험시설 중 정비계획에 없는 시설(분석 중인 시설은 명세서 행에서 연다) */
-  const analysisTargets = useMemo(
-    () => facilities.filter((f) => f.candidate === '위험' && !unitByFacility.has(f.id)),
-    [facilities, unitByFacility]
-  )
-
-  const opened = openId ? (ranked.find((r) => r.unit.id === openId) ?? null) : null
-  const overlay = { overlayLeftPx: leftOffsetPx, overlayWidthPx: width }
-
-  const analyze = (f: SmallPublicFacility) => {
-    const unit = smallPublicPlanActions.addUnit(f, userName)
-    setPicking(false)
-    setOpenId(unit.id)
-  }
-
-  const toggleSelect = (unitId: string) => {
-    const r = ranked.find((x) => x.unit.id === unitId)
-    if (!r || !canLinkToBudget(r)) return
-    setSelectedIds((prev) => {
-      const next = new Set(prev)
-      if (next.has(unitId)) next.delete(unitId)
-      else next.add(unitId)
-      return next
-    })
-  }
-
-  const toggleSelectAllShown = () => {
-    const linkable = rows.filter((r) => canLinkToBudget(r))
-    const allOn = linkable.length > 0 && linkable.every((r) => selectedIds.has(r.unit.id))
-    setSelectedIds((prev) => {
-      const next = new Set(prev)
-      if (allOn) {
-        for (const r of linkable) next.delete(r.unit.id)
-      } else {
-        for (const r of linkable) next.add(r.unit.id)
-      }
-      return next
-    })
-  }
-
-  const budgetLinkRows = useMemo(
-    () =>
-      ranked
-        .filter((r) => selectedIds.has(r.unit.id) && canLinkToBudget(r))
-        .map((r) => ({ ranked: r, defaultAmountWon: r.summary.cost.total })),
-    [ranked, selectedIds]
-  )
-
-  const openBudgetLink = () => {
-    if (budgetLinkRows.length === 0) {
-      window.alert(
-        '입력 완료된 추정·확정 시설을 먼저 선택하세요. (입력이 남은 추정·검토 중 시설은 예산 계획할 수 없습니다)'
-      )
-      return
-    }
-    setBudgetLinkOpen(true)
-  }
-
-  /** 안전점검 «정비계획 이관» — 시설을 모두 분석 목록에 넣고(닫아도 유지) 첫 건을 연다 */
-  useEffect(() => {
-    if (!analyzeRequest || analyzeRequest.seq === handledAnalyzeSeq.current) return
-    handledAnalyzeSeq.current = analyzeRequest.seq
-    const ids = analyzeRequest.facilityIds
-    smallPublicPlanActions.clearAnalyzeRequest()
-    setPicking(false)
-
-    const toAdd: SmallPublicFacility[] = []
-    let firstOpenId: string | null = null
-    for (const facilityId of ids) {
-      const existing = unitByFacility.get(facilityId)
-      if (existing) {
-        if (!firstOpenId) firstOpenId = existing.id
-        continue
-      }
-      const f = facilityById.get(facilityId)
-      if (!f || f.candidate !== '위험') continue
-      toAdd.push(f)
-    }
-    const added = toAdd.length > 0 ? smallPublicPlanActions.addUnits(toAdd, userName) : []
-    if (!firstOpenId && added[0]) firstOpenId = added[0].id
-    if (firstOpenId) setOpenId(firstOpenId)
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- seq만 트리거
-  }, [analyzeRequest?.seq])
+    return dbRows
+      .filter((r) => !filter.emd || r.emd === filter.emd)
+      .filter((r) => !q || [r.name, r.ri, r.emd].join(' ').toLowerCase().includes(q))
+  }, [dbRows, filter])
 
   return (
     <>
@@ -189,22 +158,26 @@ export function SmallPublicPlanShell({ leftOffsetPx, onTotalWidthChange, onClose
               style={{ left: leftOffsetPx }}
             >
               <SmallPublicPlanSheet
+                key={`${planId ?? 'none'}-${loadSeq}`}
                 filter={filter}
                 onFilterChange={(patch) => setFilter((prev) => ({ ...prev, ...patch }))}
                 emdOptions={emdOptions}
+                periods={periods}
+                planId={planId}
+                onPlanChange={handlePlanChange}
+                onRegisterPeriod={() => setPeriodModalOpen(true)}
                 startYear={startYear}
-                onStartYearChange={setStartYear}
                 rows={rows}
-                all={ranked}
-                needAnalysis={analysisTargets.length}
-                selectedIds={selectedIds}
-                onToggleSelect={toggleSelect}
-                onToggleSelectAllShown={toggleSelectAllShown}
-                onOpenBudgetLink={openBudgetLink}
-                onOpen={setOpenId}
-                onAnalyze={() => setPicking(true)}
+                all={dbRows}
+                loading={loading}
+                loadError={loadError}
+                onSave={handleSave}
                 onExport={() => {
-                  void exportSmallPublicPlanExcel(ranked, startYear).catch(() => window.alert('엑셀 파일을 만들지 못했습니다.'))
+                  /** 화면에서 고른 연도구간·읍면 그대로 내려받기 (연도구간은 불러온 명세서가 이미 그 구간) */
+                  const target = filter.emd ? dbRows.filter((r) => r.emd === filter.emd) : dbRows
+                  void exportSmallPublicPlanExcel(target, startYear, filter.emd).catch(() =>
+                    window.alert('엑셀 파일을 만들지 못했습니다.')
+                  )
                 }}
                 onClose={onClose}
               />
@@ -212,42 +185,13 @@ export function SmallPublicPlanShell({ leftOffsetPx, onTotalWidthChange, onClose
             document.body
           )
         : null}
-
-      {opened && isPlanInAnalysis(opened.version) ? (
-        <SmallPublicPlanAnalysisModal
-          key={`${opened.unit.id}-${opened.version.status}`}
-          {...overlay}
-          unit={opened.unit}
-          units={units}
-          facility={facilityById.get(opened.unit.facilityId) ?? null}
-          baseDate={baseDate}
-          startYear={startYear}
-          userName={userName}
-          onClose={() => setOpenId(null)}
-        />
-      ) : opened ? (
-        <SmallPublicPlanFixedModal
-          {...overlay}
-          ranked={opened}
-          facility={facilityById.get(opened.unit.facilityId) ?? null}
-          startYear={startYear}
-          onClose={() => setOpenId(null)}
-        />
-      ) : null}
-      {picking ? (
-        <SmallPublicPlanAnalyzePickModal {...overlay} facilities={analysisTargets} onCancel={() => setPicking(false)} onPicked={analyze} />
-      ) : null}
-      {budgetLinkOpen ? (
-        <SmallPublicPlanBudgetLinkModal
-          {...overlay}
-          rows={budgetLinkRows}
-          onCancel={() => setBudgetLinkOpen(false)}
-          onDone={(budget, linkedCount) => {
-            setBudgetLinkOpen(false)
-            setSelectedIds(new Set())
-            window.alert(`«${budget.title}»에 ${linkedCount}곳을 배정했습니다.`)
-            onOpenBudget?.()
-          }}
+      {periodModalOpen ? (
+        <SmallPublicPlanPeriodModal
+          overlayLeftPx={leftOffsetPx}
+          overlayWidthPx={width}
+          defaultStartYear={startYear}
+          onClose={() => setPeriodModalOpen(false)}
+          onRegister={(period) => void handleRegisterPeriod(period)}
         />
       ) : null}
     </>

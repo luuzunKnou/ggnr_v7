@@ -13,10 +13,6 @@ import {
 import { Button } from '@/app/shadcnComponents/ui/button';
 import { Input } from '@/app/shadcnComponents/ui/input';
 import { call } from '@/lib/api';
-import {
-  dismissForcedPasswordChange,
-  isForcedPasswordChangeDismissed,
-} from '@/lib/forcedPasswordChangeDismiss';
 
 type ProfilePayload = {
   success?: boolean;
@@ -53,10 +49,6 @@ export function ForcedPasswordChangeModal() {
       setOpen(false);
       return;
     }
-    if (isForcedPasswordChangeDismissed(usrId)) {
-      setOpen(false);
-      return;
-    }
     let cancelled = false;
     void call('', 'POST', {
       service: 'usrService',
@@ -83,9 +75,27 @@ export function ForcedPasswordChangeModal() {
     }
   }, [open]);
 
-  function closeAndRemember() {
-    dismissForcedPasswordChange(usrId);
-    setOpen(false);
+  /** «현재 비밀번호 사용» — 서버에 영구 넘김을 남긴 뒤에만 닫는다. 실패 시 창을 유지한다. */
+  async function closeAndRemember() {
+    setSaving(true);
+    setError('');
+    try {
+      const res = await call('', 'POST', {
+        service: 'usrService',
+        action: 'dismissOwnPasswordNotice',
+        params: {},
+      });
+      const err = unwrapError(res);
+      if (err) {
+        setError(err);
+        setSaving(false);
+        return;
+      }
+      setOpen(false);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : '안내 넘김 저장에 실패했습니다.');
+      setSaving(false);
+    }
   }
 
   function onOpenChange(next: boolean) {
@@ -111,7 +121,6 @@ export function ForcedPasswordChangeModal() {
         setSaving(false);
         return;
       }
-      dismissForcedPasswordChange(usrId);
       setOpen(false);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : '비밀번호 변경에 실패했습니다.');
@@ -162,7 +171,7 @@ export function ForcedPasswordChangeModal() {
               variant="outline"
               className="w-full"
               disabled={saving}
-              onClick={closeAndRemember}
+              onClick={() => void closeAndRemember()}
             >
               현재 비밀번호 사용
             </Button>

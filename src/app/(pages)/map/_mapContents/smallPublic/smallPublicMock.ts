@@ -49,7 +49,7 @@ export type SmallPublicDamageEvent = {
   note?: string
 }
 
-/** 속성은 전산화 자료 항목과 같음(관리번호·시설명·도형코드·유형·읍면명·리명·주소·시점·종점좌표·위험도등급·점수·수혜지역·위험시설지정일·현장조사일자·조사자·후보지·연장·폭·높이) */
+/** 속성은 ERD spf_fac 기준(관리번호·시설명·도형코드·유형·읍면·리·주소·좌표·수혜지역·위험지정일·구분·연장·폭·높이·부모) */
 export type SmallPublicFacility = {
   id: string
   mngNo: string
@@ -61,22 +61,28 @@ export type SmallPublicFacility = {
   address: string
   startXy: string
   endXy: string
-  /** 자료에 들어 있던 위험도 — 점검 이력이 있으면 화면은 최근 점검을 보여 줌 */
+  /** @deprecated 화면 미표시 — 점검은 SmallPublicInspection */
   riskRank: string
+  /** @deprecated 화면 미표시 */
   riskScore: string
   benefitArea: string
   riskDate: string
+  /** @deprecated 화면 미표시 */
   surveyDate: string
+  /** @deprecated 화면 미표시 */
   surveyor: string
   candidate: SmallPublicCandidate
   length: string
   width: string
   height: string
+  /** 부속이면 메인 시설 id — 없으면 메인 */
+  parentFacId: string | null
+  parentFacName: string
   /** EPSG:5187 — 선은 좌표 목록, 점은 한 좌표. 새로 등록하며 위치를 아직 안 찍었으면 null */
   coords: [number, number] | [number, number][] | null
   /** 첨부파일 탭(요약·대장 등). 평가·점검 파일은 각 이력에 둔다 */
   planFiles: SmallPublicFile[]
-  /** 시설 피해이력(정비계획 분석이 읽어 감) */
+  /** @deprecated 피해이력 탭 제거 — 호환용 */
   damageEvents: SmallPublicDamageEvent[]
   /** 계속 점검 대상(예외) — 일반·관리가 아니어도 새 안전점검 보고서에 들어감(위험시설 재점검 등) */
   inspectionTarget: boolean
@@ -105,6 +111,17 @@ export type SmallPublicInspection = {
   file?: SmallPublicFile | null
   /** 일반·관리 평가 첨부 */
   classFile?: SmallPublicFile | null
+  /** 현장조사 첨부 */
+  fieldFile?: SmallPublicFile | null
+  /** 이 점검 연도 폴더의 첨부 전부(올린 순서·이름 무관) — 있으면 file·classFile·fieldFile 대신 이것을 쓴다 */
+  files?: SmallPublicFile[]
+}
+
+/** 점검 첨부 목록 — files 우선, 없으면 위험도·구분·현장조사 칸 */
+export function smallPublicInspectionFiles(i: SmallPublicInspection | null | undefined): SmallPublicFile[] {
+  if (!i) return []
+  if (i.files) return i.files
+  return [i.file, i.classFile, i.fieldFile].filter((f): f is SmallPublicFile => !!f)
 }
 
 /** 후보지 평가 — 첨부 파일 + 평가일·평가자·선정여부 */
@@ -179,7 +196,7 @@ const SAMPLE_DAMAGE: Record<string, SmallPublicDamageEvent[]> = {
 }
 
 export function createSmallPublicMockFacilities(): SmallPublicFacility[] {
-  return SMALL_PUBLIC_MOCK_ROWS.map((r) => ({
+  const rows = SMALL_PUBLIC_MOCK_ROWS.map((r) => ({
     id: r.mngNo || `${r.type}-${r.geomCode}`,
     mngNo: r.mngNo,
     name: r.name,
@@ -200,6 +217,8 @@ export function createSmallPublicMockFacilities(): SmallPublicFacility[] {
     length: numText(r.length),
     width: numText(r.width),
     height: numText(r.height),
+    parentFacId: null as string | null,
+    parentFacName: '',
     coords: r.coords,
     planFiles:
       r.mngNo === SAMPLE_MNG
@@ -211,6 +230,7 @@ export function createSmallPublicMockFacilities(): SmallPublicFacility[] {
     damageEvents: SAMPLE_DAMAGE[r.name] ?? [],
     inspectionTarget: false,
   }))
+  return rows
 }
 
 const REMARK_BY_GRADE: Record<SmallPublicGrade, string> = {

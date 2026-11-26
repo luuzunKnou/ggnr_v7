@@ -15,7 +15,7 @@ export const PLAN_SOURCE_LABEL: Record<PlanSource, string> = {
 export type PlanStatus = 'DRAFT' | 'REVIEW' | 'APPROVED' | 'IN_PROGRESS' | 'DONE'
 
 export const PLAN_STATUS_LABEL: Record<PlanStatus, string> = {
-  DRAFT: '추정',
+  DRAFT: '작성중',
   REVIEW: '검토',
   APPROVED: '확정',
   IN_PROGRESS: '진행',
@@ -112,6 +112,12 @@ export type PlanVersion = {
   reported: PlanReported | null
   /** 정비된 부분(공사 실적) */
   done: { qty: number; costWon: number } | null
+  /** 5개년 후 정비대상 — 명세서 직접 입력 */
+  after?: { qty: number; costWon: number } | null
+  /** 사업효과 — 명세서 직접 입력(있으면 자동 추정 대신 사용) */
+  sheetEffect?: { people: number; farmHa: number; buildings: number } | null
+  /** 정비율(%) — 명세서 직접 입력(정비된·중기 계). 없으면 사업량 비율로 계산 */
+  sheetRates?: { doneRate: number | null; midRate: number | null } | null
   versionNo: number
   status: PlanStatus
   createdAt: string
@@ -140,6 +146,8 @@ export type PlanVersion = {
   supp: Record<SuppCode, 0 | 1 | null>
   /** 부가적 평가를 기본값(기존 계획에서 가장 많은 값)으로 둔 상태 */
   suppDefault: boolean
+  /** 중기 1~5년차 사업량(m)·사업비(원) — 명세서·엑셀 직접 입력 */
+  midYears?: { qty: number; costWon: number }[] | null
 }
 
 export type PlanHistory = { at: string; by: string; text: string }
