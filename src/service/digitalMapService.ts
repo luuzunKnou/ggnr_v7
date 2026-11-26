@@ -1,6 +1,7 @@
 /**
- * 수치지형도 — GGNR_DATA_DIR/digital_map/{폴더}/*.dxf
- * 도엽 범위는 DXF HEADER $EXTMIN/$EXTMAX 로 색인한다.
+ * 수치지형도
+ * - 지도 UI: GGNR_DATA_DIR/digital_map/*.pmtiles (listFolders / available)
+ * - DXF 색인·내보내기·고도: digital_map/{폴더}/*.dxf (getFolderIndex / collect*)
  */
 import fs from 'node:fs/promises';
 import { existsSync } from 'node:fs';
@@ -8,6 +9,11 @@ import path from 'node:path';
 import { getSessionUsrId } from '@/lib/auth/guard';
 import { decodeDxfBytes } from '@/lib/dxfTextEncoding';
 import { GGNR_DATA_PATHS } from '@/lib/ggnrDataPaths';
+import {
+  hasDigitalMapPmtiles,
+  listDigitalMapPmtiles,
+  type DigitalMapPmtilesInfo,
+} from '@/lib/digitalMapPmtiles';
 import { resolveGgnrDataDir } from '@/lib/turbopackFsPath';
 import { detectCrsCandidatesByExtent } from '@/service/shpUploadService';
 
@@ -33,11 +39,8 @@ export type DigitalMapFolderIndex = {
   crs?: string;
 };
 
-export type DigitalMapFolderInfo = {
-  name: string;
-  dxfCount: number;
-  indexed: boolean;
-};
+/** 지도 사이드 «수치지형도» 목록 — PMTiles 메타 */
+export type DigitalMapFolderInfo = DigitalMapPmtilesInfo;
 
 const INDEX_VERSION = 1;
 const HEADER_READ_BYTES = 64 * 1024;
@@ -172,8 +175,6 @@ async function listDxfNames(folder: string): Promise<string[]> {
 }
 
 const indexJobs = new Map<string, Promise<DigitalMapFolderIndex>>();
-let listFoldersCache: { at: number; folders: DigitalMapFolderInfo[] } | null = null;
-const LIST_FOLDERS_TTL_MS = 60_000;
 
 function sheetsUnionBox(sheets: DigitalMapSheet[]): {
   minX: number;
@@ -275,56 +276,33 @@ async function ensureIndex(folder: string, refresh = false): Promise<DigitalMapF
 
   const job = buildIndex(folder).finally(() => {
     indexJobs.delete(folder);
-    listFoldersCache = null;
   });
   indexJobs.set(folder, job);
   return job;
 }
 
+/** 서비스할 PMTiles 가 하나라도 있는지 — 사이드 «수치지형도» 버튼 노출 여부 */
 export async function available(): Promise<{ available: boolean }> {
   await getSessionUsrId();
-  const root = rootDir();
-  if (!existsSync(root)) return { available: false };
-  try {
-    const entries = await fs.readdir(root, { withFileTypes: true });
-    const hasFolder = entries.some((e) => e.isDirectory());
-    return { available: hasFolder };
-  } catch {
-    return { available: false };
-  }
+  return { available: await hasDigitalMapPmtiles() };
 }
 
+/** 서비스 중인 PMTiles 목록 (이름·줌 범위·위치) */
 export async function listFolders(_params: Params = {}): Promise<{ folders: DigitalMapFolderInfo[] }> {
   await getSessionUsrId();
-  if (listFoldersCache && Date.now() - listFoldersCache.at < LIST_FOLDERS_TTL_MS) {
-    return { folders: listFoldersCache.folders };
-  }
+  return { folders: await listDigitalMapPmtiles() };
+}
 
+/** 내보내기용 — 세션 없이 digital_map 하위 DXF 폴더명만 */
+async function listDigitalMapFolderNames(): Promise<string[]> {
   const root = rootDir();
-  if (!existsSync(root)) return { folders: [] };
-
-  const entries = await fs.readdir(root, { withFileTypes: true });
-  const folders: DigitalMapFolderInfo[] = [];
-  for (const ent of entries) {
-    if (!ent.isDirectory()) continue;
-    const name = ent.name;
-    const idx = await loadIndexFile(name);
-    let dxfCount = idx?.sheets.length ?? 0;
-    const indexed = Boolean(idx);
-    // 색인 없거나 0건이면 파일명만 센다
-    if (!indexed || dxfCount <= 0) {
-      try {
-        dxfCount = (await listDxfNames(name)).length;
-      } catch {
-        dxfCount = 0;
-      }
-    }
-    if (dxfCount > 0) folders.push({ name, dxfCount, indexed });
+  if (!existsSync(root)) return [];
+  try {
+    const entries = await fs.readdir(root, { withFileTypes: true });
+    return entries.filter((e) => e.isDirectory()).map((e) => e.name);
+  } catch {
+    return [];
   }
-  folders.sort((a, b) => a.name.localeCompare(b.name, 'ko'));
-  // 빈 목록은 캐시하지 않음 — 잘못된 색인·일시 오류가 남을 수 있음
-  listFoldersCache = folders.length > 0 ? { at: Date.now(), folders } : null;
-  return { folders };
 }
 
 export async function getFolderIndex(params: Params = {}): Promise<DigitalMapFolderIndex> {
@@ -342,6 +320,127 @@ export async function readDxfText(folderRaw: string, fileRaw: string): Promise<s
   const abs = fileAbs(folder, file);
   const buf = await fs.readFile(abs);
   return decodeDxfBytes(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength));
+}
+
+export type DigitalMapExportFile = {
+  /** ZIP 내 상대 경로 (수치지형도/폴더/파일.dxf) */
+  entryName: string;
+  absPath: string;
+};
+
+function boxesOverlap(
+  a: { minX: number; minY: number; maxX: number; maxY: number },
+  b: { minX: number; minY: number; maxX: number; maxY: number }
+): boolean {
+  return !(a.maxX < b.minX || a.minX > b.maxX || a.maxY < b.minY || a.minY > b.maxY);
+}
+
+/**
+ * EPSG:5181 bbox와 겹치는 수치지형도 DXF 목록.
+ * - folderNames 지정: 해당 폴더만
+ * - 미지정: 축척 폴더는 숫자 최소 폴더 우선, 없으면 전체 폴더
+ */
+export async function collectDigitalMapFilesIntersectingBbox5181(
+  bbox5181: [number, number, number, number],
+  opts?: { folderNames?: string[] | null }
+): Promise<DigitalMapExportFile[]> {
+  const [minX, minY, maxX, maxY] = bbox5181;
+  if (![minX, minY, maxX, maxY].every(Number.isFinite) || !(maxX > minX) || !(maxY > minY)) {
+    return [];
+  }
+  const query = { minX, minY, maxX, maxY };
+  const folderNames = await listDigitalMapFolderNames();
+  if (!folderNames.length) return [];
+
+  const wanted = (opts?.folderNames ?? [])
+    .map((n) => String(n ?? '').trim())
+    .filter(Boolean);
+  let targets: string[];
+  if (wanted.length > 0) {
+    const want = new Set(wanted);
+    targets = folderNames.filter((name) => want.has(name));
+  } else {
+    const { pickSmallestNumberFolder } = await import('@/service/digitalMapElevation');
+    const preferred = pickSmallestNumberFolder(folderNames);
+    targets = preferred ? [preferred] : folderNames;
+  }
+  if (!targets.length) return [];
+
+  const { default: proj4 } = await import('proj4');
+  proj4.defs(
+    'EPSG:5181',
+    '+proj=tmerc +lat_0=38 +lon_0=127 +k=1 +x_0=200000 +y_0=500000 +ellps=GRS80 +units=m +no_defs'
+  );
+  proj4.defs(
+    'EPSG:5186',
+    '+proj=tmerc +lat_0=38 +lon_0=127 +k=1 +x_0=200000 +y_0=600000 +ellps=GRS80 +units=m +no_defs'
+  );
+  proj4.defs(
+    'EPSG:5187',
+    '+proj=tmerc +lat_0=38 +lon_0=129 +k=1 +x_0=200000 +y_0=600000 +ellps=GRS80 +units=m +no_defs'
+  );
+  proj4.defs(
+    'EPSG:5179',
+    '+proj=tmerc +lat_0=38 +lon_0=127.5 +k=0.9996 +x_0=1000000 +y_0=2000000 +ellps=GRS80 +units=m +no_defs'
+  );
+
+  const out: DigitalMapExportFile[] = [];
+  for (const folderName of targets) {
+    let index: DigitalMapFolderIndex;
+    try {
+      index = await ensureIndex(folderName, false);
+    } catch {
+      continue;
+    }
+    const crsCode = String(index.crs ?? CRS_FALLBACK).replace(/^EPSG:/i, '');
+    const fromEpsg = `EPSG:${crsCode}`;
+    if (!proj4.defs(fromEpsg)) {
+      proj4.defs(
+        fromEpsg,
+        '+proj=tmerc +lat_0=38 +lon_0=127 +k=1 +x_0=200000 +y_0=600000 +ellps=GRS80 +units=m +no_defs'
+      );
+    }
+    for (const sheet of index.sheets) {
+      let sheet5181 = {
+        minX: sheet.minX,
+        minY: sheet.minY,
+        maxX: sheet.maxX,
+        maxY: sheet.maxY,
+      };
+      if (fromEpsg !== 'EPSG:5181') {
+        try {
+          const corners: Array<[number, number]> = [
+            [sheet.minX, sheet.minY],
+            [sheet.minX, sheet.maxY],
+            [sheet.maxX, sheet.minY],
+            [sheet.maxX, sheet.maxY],
+          ];
+          let sMinX = Infinity;
+          let sMinY = Infinity;
+          let sMaxX = -Infinity;
+          let sMaxY = -Infinity;
+          for (const c of corners) {
+            const p = proj4(fromEpsg, 'EPSG:5181', c) as [number, number];
+            sMinX = Math.min(sMinX, p[0]);
+            sMinY = Math.min(sMinY, p[1]);
+            sMaxX = Math.max(sMaxX, p[0]);
+            sMaxY = Math.max(sMaxY, p[1]);
+          }
+          sheet5181 = { minX: sMinX, minY: sMinY, maxX: sMaxX, maxY: sMaxY };
+        } catch {
+          // 변환 실패 시 원본 좌표로 비교
+        }
+      }
+      if (!boxesOverlap(query, sheet5181)) continue;
+      const abs = fileAbs(folderName, sheet.file);
+      if (!existsSync(abs)) continue;
+      out.push({
+        entryName: `수치지형도/${folderName}/${sheet.file}`,
+        absPath: abs,
+      });
+    }
+  }
+  return out;
 }
 
 /** 수치지형도 DXF 등고 점 고도 — 폴더명 숫자 최소 폴더 */

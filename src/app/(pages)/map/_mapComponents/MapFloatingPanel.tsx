@@ -50,6 +50,18 @@ export interface MapFloatingPanelProps {
   pinPosition?: { top: number; left: number } | null;
   /** 헤더 더블클릭 (최소화 펼치기 등). 버튼·select 위는 무시 */
   onHeaderDoubleClick?: () => void;
+  /**
+   * true면 화면 밖만 막음(여백 0).
+   * 클릭 모서리 부착 모달이 bottom gap clamp로 밀리지 않게 할 때.
+   */
+  flushViewportClamp?: boolean;
+  /**
+   * mapFloat: 우측 레이어 패널과 동일 surface·헤더(rounded-[5px]).
+   * default: 상세 플로팅(rounded-xl).
+   */
+  variant?: 'default' | 'mapFloat';
+  /** 패널 루트 기준 absolute 오버레이(튜토리얼 등). 헤더 위 노출용 */
+  overlay?: React.ReactNode;
 }
 
 export function MapFloatingPanel({
@@ -67,12 +79,18 @@ export function MapFloatingPanel({
   focusToken = 0,
   pinPosition = null,
   onHeaderDoubleClick,
+  flushViewportClamp = false,
+  variant = 'default',
+  overlay,
 }: MapFloatingPanelProps) {
+  const isMapFloat = variant === 'mapFloat';
   const useLeft = defaultPosition.left != null;
   const [position, setPosition] = useState(defaultPosition);
   const rootRef = useRef<HTMLDivElement | null>(null);
   /** 화면 기준 모드에서 사용자가 옮긴 뒤에는 기본 위치로 되돌리지 않는다 */
   const movedRef = useRef(false);
+  const edgeGap = flushViewportClamp ? 0 : VIEWPORT_EDGE_GAP;
+  const bottomGap = flushViewportClamp ? 0 : VIEWPORT_BOTTOM_GAP;
   /** 최소화(pin) 직전 펼침 위치 — 최대화 시 복원 */
   const prePinPositionRef = useRef<MapFloatingPanelPosition | null>(null);
   const wasPinnedRef = useRef(false);
@@ -152,27 +170,32 @@ export function MapFloatingPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- token-driven focus
   }, [focusToken, zClass]);
 
-  const clampToViewport = useCallback((next: { top: number; left: number }) => {
-    const el = rootRef.current;
-    const panelWidth = el?.offsetWidth ?? 0;
-    const panelHeight = el?.offsetHeight ?? 0;
-    const maxLeft = Math.max(
-      VIEWPORT_EDGE_GAP,
-      window.innerWidth - panelWidth - VIEWPORT_EDGE_GAP
-    );
-    const maxTop = Math.max(
-      VIEWPORT_EDGE_GAP,
-      window.innerHeight - panelHeight - VIEWPORT_BOTTOM_GAP
-    );
-    return {
-      top: Math.min(Math.max(VIEWPORT_EDGE_GAP, next.top), maxTop),
-      left: Math.min(Math.max(VIEWPORT_EDGE_GAP, next.left), maxLeft),
-    };
-  }, []);
+  const clampToViewport = useCallback(
+    (next: { top: number; left: number }) => {
+      const el = rootRef.current;
+      const panelWidth = el?.offsetWidth ?? 0;
+      const panelHeight = el?.offsetHeight ?? 0;
+      const maxLeft = Math.max(
+        edgeGap,
+        window.innerWidth - panelWidth - edgeGap
+      );
+      const maxTop = Math.max(
+        edgeGap,
+        window.innerHeight - panelHeight - bottomGap
+      );
+      return {
+        top: Math.min(Math.max(edgeGap, next.top), maxTop),
+        left: Math.min(Math.max(edgeGap, next.left), maxLeft),
+      };
+    },
+    [edgeGap, bottomGap]
+  );
 
   const handlePointerDown = useCallback(
     (e: React.PointerEvent) => {
       if (pinPosition) return;
+      // 좌클릭만 드래그 — 우클릭 컨텍스트 메뉴와 충돌 방지
+      if (e.button !== 0) return;
       if ((e.target as HTMLElement).closest('button')) return;
       dragRef.current = {
         isDragging: true,
@@ -301,20 +324,31 @@ export function MapFloatingPanel({
   }, [viewport, clampToViewport]);
 
   const { zIndex: _ignoredZ, ...restStyle } = style ?? {};
+  // 최소화 독 — pin 좌표를 스타일에 직접 반영(패널 폭 변경 시 effect 지연 없이 이동)
+  const isPinned = pinTop != null && pinLeft != null
+  const renderTop = isPinned ? pinTop : position.top
+  const renderLeft = isPinned ? pinLeft : position.left
 
   const panel = (
     <div
       ref={setRootRef}
       onPointerDownCapture={bringToFront}
       className={cn(
-        'flex flex-col rounded-xl border border-border bg-card/95 shadow-2xl backdrop-blur-md overflow-hidden pointer-events-auto',
+        // overflow-visible: 헤더 위 튜토리얼 등 overlay 노출. 본문만 overflow-hidden
+        'relative flex flex-col overflow-visible pointer-events-auto',
+        isMapFloat
+          ? // 우측 패널 surface와 동일 톤·radius. opacity-90은 센터마크가 비치므로 플로팅은 불투명
+            'standard-map-float-surface !opacity-100'
+          : 'rounded-xl border border-border bg-card/95 shadow-2xl backdrop-blur-md',
         zClass,
         className
       )}
       style={{
         position: viewport ? 'fixed' : 'absolute',
-        top: position.top,
-        ...(viewport || useLeft ? { left: position.left } : { right: position.right }),
+        top: renderTop,
+        ...(viewport || useLeft || isPinned
+          ? { left: renderLeft }
+          : { right: position.right }),
         width,
         maxWidth: viewport ? '100vw' : '95vw',
         maxHeight,
@@ -323,6 +357,7 @@ export function MapFloatingPanel({
         ...(!zClass && _ignoredZ != null ? { zIndex: _ignoredZ } : null),
       }}
     >
+      {overlay}
       <div
         role="button"
         tabIndex={0}
@@ -332,10 +367,22 @@ export function MapFloatingPanel({
           onHeaderDoubleClick?.()
         }}
         className={cn(
-          'flex shrink-0 items-center justify-between select-none bg-muted/40 hover:bg-muted/60',
-          pinPosition
-            ? 'cursor-pointer border-b-0 px-2 py-1'
-            : 'cursor-grab border-b border-border/60 px-3 py-1.5 active:cursor-grabbing'
+          'flex shrink-0 items-center justify-between select-none',
+          isMapFloat
+            ? cn(
+                'standard-map-float-header',
+                // 레이어 선택 등: 헤더 클릭·우클릭 기능 없음 → hover 배경 유지하지 않음
+                'hover:bg-slate-100 dark:hover:bg-white/10 dark:hover:text-white/90',
+                pinPosition
+                  ? 'cursor-pointer'
+                  : 'cursor-grab active:cursor-grabbing'
+              )
+            : cn(
+                'bg-muted/40 hover:bg-muted/60',
+                pinPosition
+                  ? 'cursor-pointer border-b-0 px-2 py-1'
+                  : 'cursor-grab border-b border-border/60 px-3 py-1.5 active:cursor-grabbing'
+              )
         )}
         onKeyDown={(e) => {
           if (e.key === ' ' || e.key === 'Enter') e.preventDefault();
@@ -346,7 +393,7 @@ export function MapFloatingPanel({
       {/* 최소화(pin) 시 본문 숨김(마운트 유지) — 높이·클릭은 헤더만 */}
       <div
         className={cn(
-          'flex min-h-0 flex-1 flex-col',
+          'flex min-h-0 flex-1 flex-col overflow-hidden',
           pinPosition && 'pointer-events-none hidden h-0 max-h-0 overflow-hidden !flex-none'
         )}
         aria-hidden={Boolean(pinPosition)}

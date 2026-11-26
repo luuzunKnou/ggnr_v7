@@ -36,6 +36,10 @@ import type { WtlNetworkRow } from './wtlNetworkTypes'
 
 const SER_ENG = SER_FILE_ENG.dataQuery
 
+/** 첨부 하단 «내려받기»·«선택 삭제» 공통 — enabled/disabled 톤 통일 */
+const ATTACH_FOOTER_TOOL_BTN_CLASS =
+  'inline-flex h-7 items-center gap-1 rounded border border-border bg-background px-2 text-[11px] text-muted-foreground enabled:cursor-pointer enabled:hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-50'
+
 function formatFileSize(n: number): string {
   if (n < 1024) return `${n} B`
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
@@ -169,7 +173,7 @@ export function WtlNetworkMapAttachmentSection({ item, fields, canEdit = true }:
     initialIndex: number
   } | null>(null)
   const [downloadMenuOpen, setDownloadMenuOpen] = useState(false)
-  const [individualMenuOpen, setIndividualMenuOpen] = useState(false)
+  const [selectedNames, setSelectedNames] = useState<Set<string>>(() => new Set())
   const downloadMenuRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const uploadingLockRef = useRef(false)
@@ -184,18 +188,98 @@ export function WtlNetworkMapAttachmentSection({ item, fields, canEdit = true }:
   const isUploading = batchProgress != null || chunkUpload.state.status === 'uploading'
 
   useEffect(() => {
-    if (!downloadMenuOpen) {
-      setIndividualMenuOpen(false)
-      return
-    }
+    setSelectedNames((prev) => {
+      if (prev.size === 0) return prev
+      const alive = new Set(query.files.map((f) => f.name))
+      let changed = false
+      const next = new Set<string>()
+      for (const n of prev) {
+        if (alive.has(n)) next.add(n)
+        else changed = true
+      }
+      return changed ? next : prev
+    })
+  }, [query.files])
+
+  useEffect(() => {
+    if (!downloadMenuOpen) return
     const onDoc = (e: MouseEvent) => {
       if (downloadMenuRef.current?.contains(e.target as Node)) return
       setDownloadMenuOpen(false)
-      setIndividualMenuOpen(false)
     }
     document.addEventListener('mousedown', onDoc)
     return () => document.removeEventListener('mousedown', onDoc)
   }, [downloadMenuOpen])
+
+  const toggleSelected = useCallback((name: string) => {
+    setSelectedNames((prev) => {
+      const next = new Set(prev)
+      if (next.has(name)) next.delete(name)
+      else next.add(name)
+      return next
+    })
+  }, [])
+
+  const downloadSelected = useCallback(() => {
+    if (!target) return
+    const list = query.files.filter((f) => selectedNames.has(f.name))
+    for (const f of list) {
+      triggerServiceFileDownload(
+        serviceFileDataDownloadUrl(
+          SER_ENG,
+          target.layerSegment,
+          target.keyValue,
+          f.name
+        ),
+        f.name
+      )
+    }
+    setDownloadMenuOpen(false)
+  }, [target, query.files, selectedNames])
+
+  const deleteSelected = useCallback(async () => {
+    if (!target || selectedNames.size === 0) return
+    const names = query.files
+      .filter((f) => selectedNames.has(f.name))
+      .map((f) => f.name)
+    if (names.length === 0) return
+    if (
+      !window.confirm(
+        names.length === 1
+          ? `「${names[0]}」을(를) 삭제할까요?`
+          : `선택한 파일 ${names.length}개를 삭제할까요?`
+      )
+    ) {
+      return
+    }
+    const failed: string[] = []
+    for (const fileName of names) {
+      const r = await requestServiceFileDataDelete({
+        serEng: SER_ENG,
+        layerSegment: target.layerSegment,
+        keyValue: target.keyValue,
+        fileName,
+      })
+      if (r.ok) {
+        query.removeFile(fileName)
+        setSelectedNames((prev) => {
+          if (!prev.has(fileName)) return prev
+          const next = new Set(prev)
+          next.delete(fileName)
+          return next
+        })
+      } else {
+        failed.push(fileName)
+      }
+    }
+    if (failed.length > 0) {
+      window.alert(
+        failed.length === 1
+          ? `「${failed[0]}」 삭제에 실패했습니다.`
+          : `${failed.length}개 파일 삭제에 실패했습니다.`
+      )
+    }
+  }, [target, query, selectedNames])
 
   const previewGalleryItems = useMemo((): ServiceFilePreviewItem[] => {
     if (!target) return []
@@ -270,7 +354,7 @@ export function WtlNetworkMapAttachmentSection({ item, fields, canEdit = true }:
   if (!enabled || !target) {
     return (
       <div className="flex h-full min-h-0 flex-col items-center justify-center p-6">
-        <p className="text-center text-[12px] text-muted-foreground/80">
+        <p className="text-center text-xs text-muted-foreground/80">
           첨부 폴더를 확인할 수 없습니다. (레이어·키 값 없음)
         </p>
       </div>
@@ -298,28 +382,52 @@ export function WtlNetworkMapAttachmentSection({ item, fields, canEdit = true }:
       >
         {dragOver && canEdit ? (
           <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-primary/10">
-            <p className="rounded border border-primary/40 bg-background/90 px-3 py-1.5 text-[12px] font-medium text-primary">
+            <p className="rounded border border-primary/40 bg-background/90 px-3 py-1.5 text-xs font-medium text-primary">
               여기에 파일을 놓으세요
             </p>
           </div>
         ) : null}
-        <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto">
-          <div className="flex flex-col gap-1 p-1">
-            {query.loading ? (
-              <div className="py-8 text-center text-[12px] text-muted-foreground/80">불러오는 중…</div>
-            ) : query.error ? (
-              <div className="py-8 text-center text-[12px] text-red-600">{query.error}</div>
-            ) : query.files.length === 0 ? (
-              <div className="flex flex-col items-center justify-center gap-1 px-3 py-8 text-center">
-                <p className="text-[12px] text-muted-foreground/80">첨부파일이 없습니다.</p>
-                {canEdit ? (
-                  <p className="text-[11px] text-muted-foreground/70">
-                    파일을 끌어다 놓거나 «파일 추가»로 등록하세요.
-                  </p>
-                ) : null}
-              </div>
-            ) : (
-              query.files.map((f) => {
+        <div className="scrollbar-thin flex min-h-0 flex-1 flex-col overflow-y-auto">
+          {query.loading ? (
+            <div
+              className="flex flex-col gap-1 p-1"
+              aria-busy
+              aria-label="첨부파일 불러오는 중"
+              title="첨부파일 불러오는 중"
+            >
+              {Array.from({ length: 4 }, (_, i) => (
+                <div
+                  key={`sk-file-${i}`}
+                  className="flex items-center gap-2 rounded-lg border border-border/80 bg-card p-1"
+                  aria-hidden
+                >
+                  <div className="h-10 w-10 shrink-0 animate-pulse rounded-lg bg-muted" />
+                  <div className="min-w-0 flex-1 space-y-1.5 py-0.5">
+                    <div
+                      className="h-3 animate-pulse rounded bg-muted"
+                      style={{ width: `${58 + ((i * 13) % 28)}%` }}
+                    />
+                    <div className="h-2.5 w-[40%] animate-pulse rounded bg-muted/80" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : query.error ? (
+            <div className="flex flex-1 items-center justify-center px-3 text-center text-xs text-red-600">
+              {query.error}
+            </div>
+          ) : query.files.length === 0 ? (
+            <div className="flex flex-1 flex-col items-center justify-center gap-1 px-3 text-center">
+              <p className="text-xs text-muted-foreground/80">첨부파일이 없습니다.</p>
+              {canEdit ? (
+                <p className="text-[11px] text-muted-foreground/70">
+                  파일을 끌어다 놓거나 «파일 추가»로 등록하세요.
+                </p>
+              ) : null}
+            </div>
+          ) : (
+            <div className="flex flex-col gap-1 p-1">
+              {query.files.map((f) => {
                 const url = serviceFileDataDownloadUrl(
                   SER_ENG,
                   target.layerSegment,
@@ -342,6 +450,7 @@ export function WtlNetworkMapAttachmentSection({ item, fields, canEdit = true }:
                     triggerServiceFileDownload(url, f.name)
                   }
                 }
+                const checked = selectedNames.has(f.name)
                 return (
                   <div
                     key={f.name}
@@ -359,12 +468,42 @@ export function WtlNetworkMapAttachmentSection({ item, fields, canEdit = true }:
                       }
                     }}
                   >
-                    <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-muted/50">
-                      {getFileIcon(f.name)}
+                    <div className="relative flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-muted/50">
+                      <span
+                        className={cn(
+                          'transition-opacity',
+                          checked ? 'hidden' : 'group-hover:opacity-0'
+                        )}
+                        aria-hidden={checked}
+                      >
+                        {getFileIcon(f.name)}
+                      </span>
+                      <input
+                        type="checkbox"
+                        title="선택"
+                        aria-label={`${f.name} 선택`}
+                        checked={checked}
+                        className={cn(
+                          'absolute inset-0 m-auto h-4 w-4 cursor-pointer accent-primary',
+                          checked
+                            ? 'opacity-100'
+                            : 'opacity-0 group-hover:opacity-100'
+                        )}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => {
+                          e.stopPropagation()
+                          toggleSelected(f.name)
+                        }}
+                      />
                     </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-[12px] font-normal text-foreground/90">{f.name}</p>
-                      <p className="text-[12px] text-muted-foreground/90">
+                    <div
+                      className={cn(
+                        'min-w-0 flex-1 transition-[padding]',
+                        'group-hover:pl-1'
+                      )}
+                    >
+                      <p className="truncate text-xs font-normal text-foreground/90">{f.name}</p>
+                      <p className="text-xs text-muted-foreground/90">
                         {formatFileSize(f.size)} | {modified}
                       </p>
                     </div>
@@ -398,8 +537,15 @@ export function WtlNetworkMapAttachmentSection({ item, fields, canEdit = true }:
                             keyValue: target.keyValue,
                             fileName: f.name,
                           }).then((r) => {
-                            if (r.ok) setRefreshNonce((n) => n + 1)
-                            else alert(r.error)
+                            if (r.ok) {
+                              query.removeFile(f.name)
+                              setSelectedNames((prev) => {
+                                if (!prev.has(f.name)) return prev
+                                const next = new Set(prev)
+                                next.delete(f.name)
+                                return next
+                              })
+                            } else alert(r.error)
                           })
                         }}
                       >
@@ -409,13 +555,13 @@ export function WtlNetworkMapAttachmentSection({ item, fields, canEdit = true }:
                     ) : null}
                   </div>
                 )
-              })
-            )}
-          </div>
+              })}
+            </div>
+          )}
         </div>
 
         <div className="mt-auto flex items-center justify-between gap-2 border-t border-border px-3 py-2.5">
-          <span className="text-[12px] text-muted-foreground">
+          <span className="text-xs text-muted-foreground">
             첨부파일{' '}
             <span className="font-semibold text-foreground">{query.files.length}</span>건
           </span>
@@ -428,115 +574,74 @@ export function WtlNetworkMapAttachmentSection({ item, fields, canEdit = true }:
                 {chunkUpload.state.error}
               </span>
             ) : null}
-            {query.files.length === 0 ? (
-              <span className="inline-flex h-7 cursor-not-allowed items-center rounded border border-border bg-muted/30 px-2 text-[11px] text-muted-foreground">
-                내려받기
-              </span>
-            ) : query.files.length === 1 ? (
+            <div className="relative" ref={downloadMenuRef}>
               <button
                 type="button"
                 title="내려받기"
-                className="inline-flex h-7 cursor-pointer items-center rounded border border-border bg-background px-2 text-[11px] text-muted-foreground hover:bg-muted/50"
+                aria-expanded={downloadMenuOpen}
+                aria-haspopup="menu"
+                disabled={query.files.length === 0}
+                className={ATTACH_FOOTER_TOOL_BTN_CLASS}
                 onClick={() => {
-                  const f = query.files[0]!
-                  triggerServiceFileDownload(
-                    serviceFileDataDownloadUrl(
+                  if (query.files.length === 0) return
+                  setDownloadMenuOpen((o) => !o)
+                }}
+              >
+                <Download className="h-3.5 w-3.5" aria-hidden />
+                내려받기
+                <ChevronDown className="h-3 w-3" aria-hidden />
+              </button>
+              {query.files.length > 0 && downloadMenuOpen ? (
+                <div
+                  role="menu"
+                  className="absolute bottom-full right-0 z-30 mb-1 min-w-[10.5rem] overflow-visible rounded-md border border-border bg-popover py-1 shadow-lg"
+                >
+                  <a
+                    role="menuitem"
+                    href={serviceFileDataZipDownloadUrl(
                       SER_ENG,
                       target.layerSegment,
                       target.keyValue,
-                      f.name
-                    ),
-                    f.name
-                  )
-                }}
-              >
-                내려받기
-              </button>
-            ) : (
-              <div className="relative" ref={downloadMenuRef}>
-                <button
-                  type="button"
-                  title="내려받기"
-                  aria-expanded={downloadMenuOpen}
-                  aria-haspopup="menu"
-                  className="inline-flex h-7 cursor-pointer items-center gap-0.5 rounded border border-border bg-background px-2 text-[11px] text-muted-foreground hover:bg-muted/50"
-                  onClick={() => setDownloadMenuOpen((o) => !o)}
-                >
-                  내려받기
-                  <ChevronDown className="h-3 w-3" aria-hidden />
-                </button>
-                {downloadMenuOpen ? (
-                  <div
-                    role="menu"
-                    className="absolute bottom-full right-0 z-30 mb-1 min-w-[10.5rem] overflow-visible rounded-md border border-border bg-popover py-1 shadow-lg"
+                      { layerDisplayName: target.layerDisplayName }
+                    )}
+                    download
+                    title="전체 내려받기"
+                    className="flex w-full cursor-pointer px-3 py-2 text-left text-xs text-foreground transition-colors hover:bg-muted/50"
+                    onClick={() => setDownloadMenuOpen(false)}
                   >
-                    <a
-                      role="menuitem"
-                      href={serviceFileDataZipDownloadUrl(
-                        SER_ENG,
-                        target.layerSegment,
-                        target.keyValue,
-                        { layerDisplayName: target.layerDisplayName }
-                      )}
-                      download
-                      title="묶음 내려받기"
-                      className="flex w-full cursor-pointer px-3 py-2 text-left text-[12px] text-foreground transition-colors hover:bg-muted/50"
-                      onClick={() => setDownloadMenuOpen(false)}
-                    >
-                      묶음 내려받기
-                    </a>
-                    <div className="relative">
-                      <button
-                        type="button"
-                        role="menuitem"
-                        title="개별 다운로드"
-                        className="flex w-full cursor-pointer items-center justify-between gap-2 px-3 py-2 text-left text-[12px] text-foreground transition-colors hover:bg-muted/50"
-                        onClick={() => setIndividualMenuOpen((o) => !o)}
-                      >
-                        개별 다운로드
-                        <ChevronDown
-                          className={cn(
-                            'h-3 w-3 shrink-0 transition-transform',
-                            individualMenuOpen && 'rotate-180'
-                          )}
-                          aria-hidden
-                        />
-                      </button>
-                      {individualMenuOpen ? (
-                        <ul className="max-h-40 overflow-y-auto border-t border-border py-1">
-                          {query.files.map((f) => (
-                            <li key={f.name}>
-                              <button
-                                type="button"
-                                title={f.name}
-                                className="flex w-full cursor-pointer truncate px-3 py-1.5 text-left text-[11px] text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
-                                onClick={() => {
-                                  triggerServiceFileDownload(
-                                    serviceFileDataDownloadUrl(
-                                      SER_ENG,
-                                      target.layerSegment,
-                                      target.keyValue,
-                                      f.name
-                                    ),
-                                    f.name
-                                  )
-                                  setDownloadMenuOpen(false)
-                                  setIndividualMenuOpen(false)
-                                }}
-                              >
-                                {f.name}
-                              </button>
-                            </li>
-                          ))}
-                        </ul>
-                      ) : null}
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-            )}
+                    전체 내려받기
+                  </a>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    title="선택 내려받기"
+                    disabled={selectedNames.size === 0}
+                    className="flex w-full cursor-pointer px-3 py-2 text-left text-xs text-foreground transition-colors hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-50"
+                    onClick={() => downloadSelected()}
+                  >
+                    선택 내려받기
+                    {selectedNames.size > 0 ? ` (${selectedNames.size})` : ''}
+                  </button>
+                </div>
+              ) : null}
+            </div>
             {canEdit ? (
               <>
+                <button
+                  type="button"
+                  title={
+                    selectedNames.size === 0
+                      ? '선택 삭제'
+                      : `선택 삭제 (${selectedNames.size})`
+                  }
+                  disabled={selectedNames.size === 0 || isUploading}
+                  className={ATTACH_FOOTER_TOOL_BTN_CLASS}
+                  onClick={() => void deleteSelected()}
+                >
+                  <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                  선택 삭제
+                  {selectedNames.size > 0 ? ` (${selectedNames.size})` : ''}
+                </button>
                 <input
                   ref={inputRef}
                   type="file"
@@ -547,19 +652,16 @@ export function WtlNetworkMapAttachmentSection({ item, fields, canEdit = true }:
                     void uploadFiles(list)
                   }}
                 />
-                <Button
+                <button
                   type="button"
-                  size="sm"
-                  title={isUploading ? `업로드 ${uploadLabel}` : '파일 추가 (여러 개 선택 가능)'}
+                  title={isUploading ? `업로드 ${uploadLabel}` : '파일 추가'}
                   disabled={isUploading}
-                  className={cn(
-                    'h-7 cursor-pointer gap-1.5 bg-primary px-2 text-[11px] text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed'
-                  )}
+                  className="inline-flex h-7 cursor-pointer items-center gap-1 rounded border border-primary bg-primary px-2 text-[11px] text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
                   onClick={() => inputRef.current?.click()}
                 >
-                  <Plus className="h-3.5 w-3.5" />
+                  <Plus className="h-3.5 w-3.5" aria-hidden />
                   {uploadLabel}
-                </Button>
+                </button>
               </>
             ) : null}
           </div>

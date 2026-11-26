@@ -64,8 +64,26 @@ export function takeMountainFromJibunRest(rest: string): { isMountain: boolean; 
   return { isMountain, jibunRest };
 }
 
+function isSidoOrSigunguToken(t: string): boolean {
+  const s = String(t ?? '').trim();
+  if (!s) return false;
+  if (
+    /^(?:서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충북|충남|전북|전남|경북|경남|제주)$/u.test(
+      s
+    )
+  ) {
+    return true;
+  }
+  if (/(?:특별자치시|특별자치도|특별시|광역시|도)$/u.test(s)) return true;
+  // «경산시» 등 — 읍·면·동·가·리로 끝나는 지명은 제외
+  if (/(?:시|군|구)$/u.test(s) && !/(?:읍|면|동|가|리)$/u.test(s)) return true;
+  return false;
+}
+
 /**
- * 엑셀 주소 문자열 → 읍면동·리·본번·부번·산여부.
+ * 엑셀·필지조회 주소 문자열 → 읍면동·리·본번·부번·산여부.
+ * - 읍·면 + 리 + 지번 (예: 진량읍 평사리 630-12)
+ * - 동·가 + 지번 (예: 사동 606-1) — 리 없음, PNU 리코드 00
  * 지명에 포함된 «산»은 제거하지 않는다.
  */
 export function parseAddressForPnu(address: string): ExcelUploadParsedPnuParts | null {
@@ -74,10 +92,40 @@ export function parseAddressForPnu(address: string): ExcelUploadParsedPnuParts |
   s = s.replace(/(\d+)\s*번지\s*\d+\s*호/gi, '$1번지');
   s = s.replace(/번지/g, '').trim();
   const parts = s.split(/\s+/).filter(Boolean);
-  if (parts.length < 5) return null;
-  const emdName = parts[2]!.trim();
-  const riName = parts[3]!.trim();
-  const { isMountain, jibunRest } = takeMountainFromJibunRest(parts.slice(4).join(' '));
+  if (parts.length < 2) return null;
+
+  let emdName = '';
+  let riName = '';
+  const jibunTokens: string[] = [];
+
+  for (const raw of parts) {
+    const t = raw.trim();
+    if (!t || isSidoOrSigunguToken(t)) continue;
+
+    if (!emdName && /(?:읍|면|동|가)$/u.test(t) && !/\d/u.test(t)) {
+      emdName = t;
+      continue;
+    }
+    // 리(행정리 숫자 포함: 서부3리). 읍·면 다음에만 취함
+    if (
+      emdName &&
+      !riName &&
+      /리$/u.test(t) &&
+      !/^\d/u.test(t) &&
+      /(?:읍|면)$/u.test(emdName)
+    ) {
+      riName = t;
+      continue;
+    }
+    if (/^(?:산\s*)?\d/u.test(t) || /^산\d/u.test(t)) {
+      jibunTokens.push(t);
+      continue;
+    }
+  }
+
+  if (!emdName || jibunTokens.length === 0) return null;
+
+  const { isMountain, jibunRest } = takeMountainFromJibunRest(jibunTokens.join(' '));
   const addrParts = jibunRest.split('-').map((p) => p.trim());
   const bonbunRaw = (addrParts[0] ?? '0').replace(/\D/g, '') || '0';
   const bubunRaw = (addrParts[1] ?? '0').replace(/\D/g, '') || '0';

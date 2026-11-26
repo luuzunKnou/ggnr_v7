@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { X, Video, Loader2 } from 'lucide-react';
 import { fromLonLat } from 'ol/proj';
 import { call } from '@/lib/api';
+import { fetchMergedItsCctvListClient } from '@/lib/itsClient';
 import { cn } from '@/lib/utils';
 import { useMapContext } from '../../../_mapComponents/MapContext';
 import type { ItsCctvItem } from './itsCctvTypes';
@@ -13,49 +14,7 @@ type Props = {
   onClose: () => void;
 };
 
-/** ITS CCTV API: HLS */
-const CCTV_TYPE_HLS = '1';
-
 type Wgs84Bbox = { minX: number; maxX: number; minY: number; maxY: number };
-
-async function fetchCctvList(params: {
-  minX: number;
-  maxX: number;
-  minY: number;
-  maxY: number;
-  type: string;
-  cctvType: string;
-}): Promise<ItsCctvItem[]> {
-  const sp = new URLSearchParams({
-    minX: String(params.minX),
-    maxX: String(params.maxX),
-    minY: String(params.minY),
-    maxY: String(params.maxY),
-    type: params.type,
-    cctvType: params.cctvType,
-    getType: 'xml',
-  });
-  const res = await fetch(`/api/its/cctv?${sp.toString()}`);
-  const data = (await res.json()) as { items?: ItsCctvItem[]; error?: string };
-  if (!res.ok) {
-    throw new Error(data.error ?? `HTTP ${res.status}`);
-  }
-  return Array.isArray(data.items) ? data.items : [];
-}
-
-/** 고속도로(ex) + 국도(its) 병합. 동일 URL 또는 동일 좌표+명칭은 한 건만 유지 */
-function mergeExAndIts(exList: ItsCctvItem[], itsList: ItsCctvItem[]): ItsCctvItem[] {
-  const map = new Map<string, ItsCctvItem>();
-  for (const it of [...exList, ...itsList]) {
-    const url = it.cctvurl.trim();
-    const dedupeKey =
-      url ||
-      `${Number(it.coordx).toFixed(5)}_${Number(it.coordy).toFixed(5)}_${it.cctvname.trim()}`;
-    if (map.has(dedupeKey)) continue;
-    map.set(dedupeKey, { ...it, key: dedupeKey });
-  }
-  return [...map.values()];
-}
 
 async function fetchMergedCctvList(params: {
   minX: number;
@@ -63,22 +22,7 @@ async function fetchMergedCctvList(params: {
   minY: number;
   maxY: number;
 }): Promise<ItsCctvItem[]> {
-  const settled = await Promise.allSettled([
-    fetchCctvList({ ...params, type: 'ex', cctvType: CCTV_TYPE_HLS }),
-    fetchCctvList({ ...params, type: 'its', cctvType: CCTV_TYPE_HLS }),
-  ]);
-  const exList = settled[0].status === 'fulfilled' ? settled[0].value : [];
-  const itsList = settled[1].status === 'fulfilled' ? settled[1].value : [];
-  const merged = mergeExAndIts(exList, itsList);
-  if (merged.length === 0) {
-    const firstReject = settled.find((r): r is PromiseRejectedResult => r.status === 'rejected');
-    if (firstReject) {
-      const msg =
-        firstReject.reason instanceof Error ? firstReject.reason.message : String(firstReject.reason);
-      throw new Error(msg);
-    }
-  }
-  return merged;
+  return fetchMergedItsCctvListClient(params);
 }
 
 export function RoadCctvPanel({ onClose }: Props) {

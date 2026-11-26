@@ -154,7 +154,7 @@ export function SmallPublicPlanTransferModal({
                 <th className="min-w-[7rem]">시설명</th>
                 <th className="w-[3.75rem]">유형</th>
                 <th className="min-w-[9.5rem]">구분 변경</th>
-                <th className="w-[5.75rem] whitespace-nowrap">점검일</th>
+                <th className="w-[5.75rem] whitespace-nowrap">조사일</th>
               </tr>
             </thead>
             <tbody>

@@ -31,6 +31,7 @@ import * as privateLandAnalysisService from './privateLandAnalysisService';
 import * as roadLedgerService from './roadLedgerService';
 import * as roadVideoTrackService from './roadVideoTrackService';
 import * as roadNetworkService from './roadNetworkService';
+import * as bikeRoadNetService from './bikeRoadNetService';
 import * as wtlNetworkService from './wtlNetworkService';
 import * as wtlFacilityService from './wtlFacilityService';
 import * as wtlRequestService from './wtlRequestService';
@@ -61,6 +62,7 @@ import * as ocrMigrationService from './ocrMigrationService';
 import * as layerRowService from './layerRowService';
 import * as layerExtraService from './layerExtraService';
 import * as gcpService from './gcpService';
+import * as cadastralControlPointService from './cadastralControlPointService';
 import * as mapAnalyseService from './mapAnalyseService';
 import * as elevationService from './elevationService';
 import * as floodRiskService from './floodRiskService';
@@ -99,6 +101,8 @@ import * as digitalMapService from './digitalMapService';
 import * as drawingDisplayService from './drawingDisplayService';
 import * as landArchiveService from './landArchiveService';
 import * as individualLandPriceService from './individualLandPriceService';
+import * as odorSensorService from './odorSensorService';
+import * as realTransactionPriceService from './realTransactionPriceService';
 import * as smallPublicService from './smallPublicService';
 
 export {
@@ -134,6 +138,7 @@ export {
   roadLedgerService,
   roadVideoTrackService,
   roadNetworkService,
+  bikeRoadNetService,
   wtlNetworkService,
   wtlFacilityService,
   wtlRequestService,
@@ -164,6 +169,7 @@ export {
   layerRowService,
   layerExtraService,
   gcpService,
+  cadastralControlPointService,
   mapAnalyseService,
   elevationService,
   floodRiskService,
@@ -199,5 +205,7 @@ export {
   drawingDisplayService,
   landArchiveService,
   individualLandPriceService,
+  odorSensorService,
+  realTransactionPriceService,
   smallPublicService,
 };

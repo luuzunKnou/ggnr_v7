@@ -19,14 +19,32 @@ function propString(layer: BaseLayer, key: string): string | undefined {
   return typeof v === 'string' && v.length > 0 ? v : undefined;
 }
 
-/** factory·동적 공통 안정 키. name 우선, 없으면 id. */
+/**
+ * factory·동적 공통 안정 키.
+ * define_table_name(`layerTableName`) 우선 — 한글 name 충돌(상수/대진) 방지.
+ * 없으면 name → id.
+ */
 export function layerMirrorKey(layer: BaseLayer): string | null {
   if (shouldSkipMirror(layer)) return null;
+  const table = propString(layer, 'layerTableName');
+  if (table) return `table:${table}`;
   const name = propString(layer, 'name');
   if (name && name !== 'background') return `name:${name}`;
   const id = propString(layer, 'id');
   if (id) return `id:${id}`;
   return null;
+}
+
+/** 우측 native 레이어가 이미 있는지 판별할 때 쓰는 키 집합 */
+export function collectLayerMatchKeys(layer: BaseLayer): string[] {
+  const keys: string[] = [];
+  const table = propString(layer, 'layerTableName');
+  if (table) keys.push(`table:${table}`);
+  const name = propString(layer, 'name');
+  if (name && name !== 'background') keys.push(`name:${name}`);
+  const id = propString(layer, 'id');
+  if (id) keys.push(`id:${id}`);
+  return keys;
 }
 
 /**
@@ -46,6 +64,16 @@ export function shouldSkipMirror(layer: BaseLayer): boolean {
   return false;
 }
 
+function twinBaseProps(primary: BaseLayer, key: string): Record<string, unknown> {
+  return {
+    [MAP_SPLIT_MIRROR_TWIN]: true,
+    [MAP_SPLIT_MIRROR_OF]: key,
+    name: primary.get('name'),
+    id: primary.get('id'),
+    layerTableName: primary.get('layerTableName'),
+  };
+}
+
 function createVectorTwin(primary: VectorLayer<VectorSource>, key: string): VectorLayer<VectorSource> {
   return new VectorLayer({
     source: primary.getSource() ?? undefined,
@@ -56,12 +84,7 @@ function createVectorTwin(primary: VectorLayer<VectorSource>, key: string): Vect
     zIndex: primary.getZIndex(),
     opacity: primary.getOpacity(),
     visible: primary.getVisible(),
-    properties: {
-      [MAP_SPLIT_MIRROR_TWIN]: true,
-      [MAP_SPLIT_MIRROR_OF]: key,
-      name: primary.get('name'),
-      id: primary.get('id'),
-    },
+    properties: twinBaseProps(primary, key),
   });
 }
 
@@ -72,12 +95,7 @@ function createTileTwin(primary: TileLayer<TileSource>, key: string): TileLayer<
     opacity: primary.getOpacity(),
     visible: primary.getVisible(),
     extent: primary.getExtent() ?? undefined,
-    properties: {
-      [MAP_SPLIT_MIRROR_TWIN]: true,
-      [MAP_SPLIT_MIRROR_OF]: key,
-      name: primary.get('name'),
-      id: primary.get('id'),
-    },
+    properties: twinBaseProps(primary, key),
   });
 }
 
@@ -88,12 +106,7 @@ function createImageTwin(primary: ImageLayer<ImageSource>, key: string): ImageLa
     opacity: primary.getOpacity(),
     visible: primary.getVisible(),
     extent: primary.getExtent() ?? undefined,
-    properties: {
-      [MAP_SPLIT_MIRROR_TWIN]: true,
-      [MAP_SPLIT_MIRROR_OF]: key,
-      name: primary.get('name'),
-      id: primary.get('id'),
-    },
+    properties: twinBaseProps(primary, key),
   });
 }
 
@@ -129,10 +142,7 @@ export function syncDynamicLayerMirrors(
   const nativeSecondaryKeys = new Set<string>();
   for (const layer of secondary.getLayers().getArray()) {
     if (layer.get(MAP_SPLIT_MIRROR_TWIN)) continue;
-    const name = propString(layer, 'name');
-    if (name && name !== 'background') nativeSecondaryKeys.add(`name:${name}`);
-    const id = propString(layer, 'id');
-    if (id) nativeSecondaryKeys.add(`id:${id}`);
+    for (const k of collectLayerMatchKeys(layer)) nativeSecondaryKeys.add(k);
   }
 
   const seen = new Set<string>();
@@ -142,7 +152,7 @@ export function syncDynamicLayerMirrors(
     if (!key) continue;
     seen.add(key);
 
-    // 우측 factory 등에 이미 있으면 짝 불필요(기존 name 동기 경로)
+    // 우측 factory 등에 이미 있으면 짝 불필요(table/name 동기 경로)
     if (nativeSecondaryKeys.has(key)) {
       const stale = registry.get(key);
       if (stale) {

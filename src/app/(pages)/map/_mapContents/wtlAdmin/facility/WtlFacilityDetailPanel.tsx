@@ -22,20 +22,21 @@ import {
 } from 'lucide-react'
 import { call } from '@/lib/api'
 import {
+  booleanDraftValue,
+  formatBooleanYeobu,
+  shouldUseBooleanCheckbox,
+} from '@/lib/defineBooleanField'
+import {
   formatDefineFieldDisplayValue,
   isDefineFieldCodeType,
+  parseDefineBooleanValue,
 } from '@/lib/defineLayerCodeDisplay'
 import { cn } from '@/lib/utils'
 import { useSerWriteAccess } from '@/hooks/useSerWriteAccess'
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/app/shadcnComponents/ui/dialog'
 import { useResolvedThemeSafe } from '@/app/(pages)/(index)/theme-provider'
-import { MAP_UI_Z } from '@/lib/mapUiZIndex'
+import { MapFloatingPanel } from '../../../_mapComponents/MapFloatingPanel'
+import { useMapContext } from '../../../_mapComponents/MapContext'
+import { COMPLAINT_DETAIL_PANEL_DEFAULT_TOP } from '../../../_mapComponents/complaint/complaintPanelLayout'
 import {
   getDefineFieldDisplayLabel,
   getRowKey,
@@ -56,6 +57,11 @@ import {
 import type { WtlNetworkRow } from '../networkMap/wtlNetworkTypes'
 import { WtlFacilityDataHistoryTab } from './WtlFacilityDataHistoryTab'
 import type { WtlFacilityListRow } from './WtlFacilityListView'
+import {
+  buildFacilityInfoByFtrIdnTarget,
+  lookupFacilityByShowTitleValue,
+  shouldShowFacilityInfoSearch,
+} from '../../layerClickDetail/layerClickFacilityInfo'
 import {
   WtlFacilityRelatedDetailFloating,
   WtlMappedFacilityFloating,
@@ -133,7 +139,7 @@ type Props = {
   onDeleted?: (id: string) => void
   /** 이력 되돌리기 후 목록·상세 재조회 */
   onHistoryReverted?: () => void
-  /** 설비관리 기본정보 — 가압장명·정수장명 값 칸에 시설 정보 보기 */
+  /** 설비관리 기본정보 — 가압장명·정수장명·사업장명 값 칸에 시설 정보 보기 */
   showFacilityInfoLink?: boolean
   /** 설비관리 — data_history 이력 카드 탭 (추가·수정·삭제, agency 공개) */
   showHistoryCard?: boolean
@@ -209,35 +215,6 @@ function resolveParentFtrIdn(
   return String(row.name ?? '').trim()
 }
 
-function facilityInfoTarget(
-  fieldName: string,
-  korName: unknown,
-  ftrIdn: string,
-  schema: string
-): WtlMappedFacilityTarget | null {
-  const name = fieldName.trim().toLowerCase()
-  const kor = String(korName ?? '').trim()
-  if (name === 'prs_nam' || kor === '가압장명') {
-    return {
-      table: 'wtl_pres_ps',
-      schema,
-      title: '가압장',
-      fieldsTable: 'wtl_pres_ps',
-      ftrIdn,
-    }
-  }
-  if (name === 'pur_nam' || kor === '정수장명') {
-    return {
-      table: 'wtl_puri_as',
-      schema,
-      title: '정수장',
-      fieldsTable: 'wtl_puri_as',
-      ftrIdn,
-    }
-  }
-  return null
-}
-
 export function WtlFacilityDetailPanel({
   row: rowProp,
   onClose,
@@ -250,6 +227,8 @@ export function WtlFacilityDetailPanel({
 }: Props) {
   const canWrite = useSerWriteAccess(SER_ENG)
   const theme = useResolvedThemeSafe()
+  const mapContext = useMapContext()
+  const reportFloatingLeftPx = (mapContext?.mapPaddingLeft ?? 0) + 56
   const [localRow, setLocalRow] = useState(rowProp)
   const [bundle, setBundle] = useState<WtlDefineDisplayBundle | null>(null)
   const [activeTab, setActiveTab] = useState<ActiveTab>('')
@@ -261,6 +240,8 @@ export function WtlFacilityDetailPanel({
   const [relatedError, setRelatedError] = useState<string | null>(null)
   const [relatedDetail, setRelatedDetail] = useState<RelatedRow | null>(null)
   const [facilityInfo, setFacilityInfo] = useState<WtlMappedFacilityTarget | null>(null)
+  const [facilityLookupBusy, setFacilityLookupBusy] = useState(false)
+  const [facilityLookupError, setFacilityLookupError] = useState<string | null>(null)
   /** 상세 모달 접힘 — 다른 행을 열어도 유지 */
   const [detailCollapsed, setDetailCollapsed] = useState(false)
   const [editing, setEditing] = useState(false)
@@ -274,6 +255,9 @@ export function WtlFacilityDetailPanel({
   const [reportHtml, setReportHtml] = useState('')
   const [printing, setPrinting] = useState(false)
   const reportIframeRef = useRef<HTMLIFrameElement | null>(null)
+  /** 물리 컬럼명(소문자) → PG data_type — BOOLEAN 체크박스 판별 */
+  const [columnTypes, setColumnTypes] = useState<Record<string, string>>({})
+  const [columnTypesReady, setColumnTypesReady] = useState(false)
 
   const row = localRow
   const schema =
@@ -289,6 +273,51 @@ export function WtlFacilityDetailPanel({
     setSaving(false)
     setDeleting(false)
   }, [rowProp])
+
+  useEffect(() => {
+    const table = String(row.tableName || row.fieldsTable || '')
+      .trim()
+      .replace(/^.*\./, '')
+      .toLowerCase()
+    if (!table) {
+      setColumnTypes({})
+      setColumnTypesReady(false)
+      return
+    }
+    let cancelled = false
+    setColumnTypesReady(false)
+    void call('', 'POST', {
+      service: 'layerRowService',
+      action: 'listTableColumnTypes',
+      params: { table, schema },
+    })
+      .then((res) => {
+        if (cancelled) return
+        const data = (res?.data ?? res) as
+          | { columns?: Array<{ name?: string; dataType?: string }> }
+          | undefined
+        const next: Record<string, string> = {}
+        for (const c of Array.isArray(data?.columns) ? data.columns : []) {
+          const name = String(c?.name ?? '')
+            .trim()
+            .toLowerCase()
+          const dataType = String(c?.dataType ?? '')
+            .trim()
+            .toLowerCase()
+          if (name && dataType) next[name] = dataType
+        }
+        setColumnTypes(next)
+        setColumnTypesReady(true)
+      })
+      .catch(() => {
+        if (cancelled) return
+        setColumnTypes({})
+        setColumnTypesReady(true)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [row.tableName, row.fieldsTable, schema, row.id])
 
   const networkItem = useMemo(() => toNetworkItem(row), [row])
   const parentKey = String(row.relatedParentKey || row.layerKey || '')
@@ -323,10 +352,16 @@ export function WtlFacilityDetailPanel({
     setRelatedError(null)
     setRelatedDetail(null)
     setFacilityInfo(null)
+    setFacilityLookupBusy(false)
+    setFacilityLookupError(null)
     setActiveTab('')
     setTabSelectEpoch((n) => n + 1)
 
-    if (parentKey !== 'wtl_pres_ps' && parentKey !== 'wtl_puri_as') {
+    if (
+      parentKey !== 'wtl_pres_ps' &&
+      parentKey !== 'wtl_puri_as' &&
+      parentKey !== 'wtl_serv_ps'
+    ) {
       return
     }
 
@@ -382,6 +417,13 @@ export function WtlFacilityDetailPanel({
   )
   const keyFieldName = String(keyField?.define_field_name ?? '').trim() || null
   const ftrIdn = resolveParentFtrIdn(row, keyFieldName)
+  const parentBizName = useMemo(() => {
+    for (const field of ['pur_nam', 'srv_nam', 'prs_nam'] as const) {
+      const v = getRowValueByField(row.record, field)
+      if (v != null && String(v).trim()) return String(v).trim()
+    }
+    return String(row.name ?? '').trim()
+  }, [row.record, row.name])
 
   const titleField = useMemo(
     () => allFields.find((f) => isDefineFieldFlagTrue(f.define_field_show_title)) ?? null,
@@ -431,6 +473,51 @@ export function WtlFacilityDetailPanel({
 
   const codesByField = bundle?.codesByField ?? {}
   const fieldsLoading = Boolean(String(row.fieldsTable ?? '').trim()) && bundle == null
+  const sourceTableKey = String(row.tableName || row.fieldsTable || '')
+    .trim()
+    .replace(/^.*\./, '')
+    .toLowerCase()
+
+  const openFacilityInfoSearch = useCallback(
+    async (
+      kind: 'byFtrIdn' | 'byNameLookup',
+      fieldKey: string,
+      korName: unknown,
+      rawValue: unknown
+    ) => {
+      setFacilityLookupError(null)
+      if (kind === 'byFtrIdn') {
+        const target = buildFacilityInfoByFtrIdnTarget(
+          fieldKey,
+          korName,
+          ftrIdn,
+          schema
+        )
+        if (!target) {
+          setFacilityLookupError('시설 정보를 찾을 수 없습니다.')
+          return
+        }
+        setFacilityInfo(target)
+        return
+      }
+      const value = rawValue != null ? String(rawValue).trim() : ''
+      setFacilityLookupBusy(true)
+      try {
+        const { target, error } = await lookupFacilityByShowTitleValue({
+          value,
+          schema,
+        })
+        if (!target) {
+          setFacilityLookupError(error || '일치하는 시설을 찾을 수 없습니다.')
+          return
+        }
+        setFacilityInfo(target)
+      } finally {
+        setFacilityLookupBusy(false)
+      }
+    },
+    [ftrIdn, schema]
+  )
 
   const editTarget = useMemo(() => {
     const table = String(row.tableName || row.fieldsTable || '')
@@ -487,12 +574,30 @@ export function WtlFacilityDetailPanel({
       const key = String(f.define_field_name ?? '').trim()
       if (!key) continue
       const raw = getRowValueByField(row.record, key)
-      next[key] = raw == null ? '' : String(raw)
+      if (
+        shouldUseBooleanCheckbox(
+          f.define_field_type,
+          columnTypes[key.toLowerCase()],
+          columnTypesReady
+        )
+      ) {
+        next[key] = booleanDraftValue(raw)
+      } else {
+        next[key] = raw == null ? '' : String(raw)
+      }
     }
     setDraft(next)
     setEditError(null)
     setEditing(true)
-  }, [canWrite, editTarget, row.record, detailFields, isFieldEditable])
+  }, [
+    canWrite,
+    editTarget,
+    row.record,
+    detailFields,
+    isFieldEditable,
+    columnTypes,
+    columnTypesReady,
+  ])
 
   const cancelEdit = useCallback(() => {
     setEditing(false)
@@ -597,7 +702,7 @@ export function WtlFacilityDetailPanel({
   )
 
   useEffect(() => {
-    if (!activeRelated || !ftrIdn) {
+    if (!activeRelated || (!ftrIdn && !parentBizName)) {
       setRelatedRows([])
       setRelatedTotal(0)
       setRelatedBundle(null)
@@ -626,6 +731,7 @@ export function WtlFacilityDetailPanel({
           table: activeRelated.table,
           defineTable,
           ftrIdn,
+          parentBizName,
           limit: 200,
         },
       }),
@@ -666,7 +772,7 @@ export function WtlFacilityDetailPanel({
     return () => {
       cancelled = true
     }
-  }, [activeRelated, ftrIdn])
+  }, [activeRelated, ftrIdn, parentBizName])
 
   const relatedListFields = useMemo(() => {
     const all = relatedBundle?.fields ?? []
@@ -725,18 +831,175 @@ export function WtlFacilityDetailPanel({
     setReportHtml('')
     setReportOpen(true)
     try {
+      const loadColumnTypes = async (
+        table: string,
+        tableSchema: string
+      ): Promise<Record<string, string>> => {
+        const t = String(table ?? '')
+          .trim()
+          .replace(/^.*\./, '')
+          .toLowerCase()
+        if (!t) return {}
+        try {
+          const res = await call('', 'POST', {
+            service: 'layerRowService',
+            action: 'listTableColumnTypes',
+            params: { table: t, schema: tableSchema },
+          })
+          const data = (res?.data ?? res) as
+            | { columns?: Array<{ name?: string; dataType?: string }> }
+            | undefined
+          const next: Record<string, string> = {}
+          for (const c of Array.isArray(data?.columns) ? data.columns : []) {
+            const name = String(c?.name ?? '')
+              .trim()
+              .toLowerCase()
+            const dataType = String(c?.dataType ?? '')
+              .trim()
+              .toLowerCase()
+            if (name && dataType) next[name] = dataType
+          }
+          return next
+        } catch {
+          return {}
+        }
+      }
+
+      const formatReportFieldValue = (
+        raw: unknown,
+        defineFieldType: unknown,
+        codes: Parameters<typeof formatDefineFieldDisplayValue>[2],
+        pgTypes: Record<string, string>,
+        fieldKey: string
+      ): string => {
+        if (
+          shouldUseBooleanCheckbox(
+            defineFieldType,
+            pgTypes[fieldKey.toLowerCase()],
+            true
+          )
+        ) {
+          return formatBooleanYeobu(raw, '—')
+        }
+        return formatDefineFieldDisplayValue(raw, defineFieldType, codes, '—')
+      }
+
       const basicAttrs: FacilityReportAttrRow[] = detailFields.map((f) => {
         const key = String(f.define_field_name ?? '').trim()
         const label = getDefineFieldDisplayLabel(key, f.define_field_kor_name)
         const raw = getRowValueByField(row.record, key)
-        const value = formatDefineFieldDisplayValue(
+        const value = formatReportFieldValue(
           raw,
           f.define_field_type,
           codesByField[key.toLowerCase()],
-          '—'
+          columnTypes,
+          key
         )
         return { label, value }
       })
+
+      let relatedFacility: {
+        title: string
+        attrs: FacilityReportAttrRow[]
+      } | null = null
+      if (showFacilityInfoLink && sourceTableKey) {
+        for (const f of detailFields) {
+          const key = String(f.define_field_name ?? '').trim()
+          if (!key) continue
+          const kind = shouldShowFacilityInfoSearch({
+            sourceTableKey,
+            fieldName: key,
+            korName: f.define_field_kor_name,
+            fields: allFields,
+          })
+          if (kind !== 'byNameLookup' && kind !== 'byFtrIdn') continue
+          let target: Awaited<
+            ReturnType<typeof lookupFacilityByShowTitleValue>
+          >['target'] = null
+          if (kind === 'byFtrIdn') {
+            target = buildFacilityInfoByFtrIdnTarget(
+              key,
+              f.define_field_kor_name,
+              ftrIdn,
+              schema
+            )
+          } else {
+            const raw = getRowValueByField(row.record, key)
+            const value = raw != null ? String(raw).trim() : ''
+            if (!value) continue
+            const looked = await lookupFacilityByShowTitleValue({
+              value,
+              schema,
+            })
+            target = looked.target
+          }
+          if (!target) break
+          try {
+            const res = await call('', 'POST', {
+              service: 'wtlFacilityService',
+              action: 'listFacilityRows',
+              params: {
+                table: target.table,
+                schema: target.schema || schema,
+                ftrIdn: target.ftrIdn,
+                limit: 1,
+                offset: 0,
+              },
+            })
+            const data = (res?.data ?? res) as
+              | { rows?: Array<{ record?: Record<string, unknown> }> }
+              | undefined
+            const found = Array.isArray(data?.rows) ? data.rows[0] : undefined
+            const record = found?.record
+            if (!record) break
+            const fieldsTable =
+              String(target.fieldsTable ?? target.table).trim() || target.table
+            let facBundle = peekWtlDefineDisplayBundle(fieldsTable, null)
+            if (!facBundle) {
+              facBundle = await loadWtlDefineDisplayBundle(fieldsTable, null)
+            }
+            const facFieldsRaw = facBundle?.fields ?? []
+            const facDetail =
+              selectDefineLayerDetailFields(facFieldsRaw).length > 0
+                ? selectDefineLayerDetailFields(facFieldsRaw)
+                : uniqueDefineLayerFields(facFieldsRaw).filter((ff) => {
+                    const n = String(ff.define_field_name ?? '')
+                      .trim()
+                      .toLowerCase()
+                    return n && n !== 'geom'
+                  })
+            const facCodes = facBundle?.codesByField ?? {}
+            const facColTypes = await loadColumnTypes(
+              target.table,
+              target.schema || schema
+            )
+            relatedFacility = {
+              title: target.title,
+              attrs: facDetail.map((ff) => {
+                const fk = String(ff.define_field_name ?? '').trim()
+                const flabel = getDefineFieldDisplayLabel(
+                  fk,
+                  ff.define_field_kor_name
+                )
+                const fraw = getRowValueByField(record, fk)
+                return {
+                  label: flabel,
+                  value: formatReportFieldValue(
+                    fraw,
+                    ff.define_field_type,
+                    facCodes[fk.toLowerCase()],
+                    facColTypes,
+                    fk
+                  ),
+                }
+              }),
+            }
+          } catch {
+            relatedFacility = null
+          }
+          break
+        }
+      }
 
       const sections: FacilityReportTableSection[] = []
 
@@ -754,6 +1017,7 @@ export function WtlFacilityDetailPanel({
           )
         )
         const tabCodes = tabBundle?.codesByField ?? {}
+        const tabColumnTypes = await loadColumnTypes(tab.table, schema)
 
         if (!ftrIdn) {
           sections.push({
@@ -773,6 +1037,7 @@ export function WtlFacilityDetailPanel({
               table: tab.table,
               defineTable,
               ftrIdn,
+              parentBizName,
               limit: 200,
             },
           })
@@ -788,11 +1053,12 @@ export function WtlFacilityDetailPanel({
             return listFields.map((f) => {
               const key = String(f.define_field_name ?? '').trim()
               const raw = getRowValueByField(record, key)
-              return formatDefineFieldDisplayValue(
+              return formatReportFieldValue(
                 raw,
                 f.define_field_type,
                 tabCodes[key.toLowerCase()],
-                '—'
+                tabColumnTypes,
+                key
               )
             })
           })
@@ -953,6 +1219,7 @@ export function WtlFacilityDetailPanel({
         layerLabel: headerLayerLabel || headerTitle,
         basicAttrs,
         sections,
+        relatedFacility,
       })
       setReportHtml(html)
     } catch {
@@ -965,6 +1232,7 @@ export function WtlFacilityDetailPanel({
   }, [
     allFields,
     codesByField,
+    columnTypes,
     detailFields,
     ftrIdn,
     headerLayerLabel,
@@ -972,6 +1240,9 @@ export function WtlFacilityDetailPanel({
     historyCardEnabled,
     relatedTabs,
     row,
+    schema,
+    showFacilityInfoLink,
+    sourceTableKey,
   ])
 
   useEffect(() => {
@@ -1106,10 +1377,23 @@ export function WtlFacilityDetailPanel({
                     '—'
                   )
                   const editable = editing && isFieldEditable(f)
+                  const useBoolCheck = shouldUseBooleanCheckbox(
+                    f.define_field_type,
+                    columnTypes[key.toLowerCase()],
+                    columnTypesReady
+                  )
                   const codes = codesByField[key.toLowerCase()] ?? []
-                  const facilityLink = showFacilityInfoLink
-                    ? facilityInfoTarget(key, f.define_field_kor_name, ftrIdn, schema)
+                  const facilitySearch = showFacilityInfoLink
+                    ? shouldShowFacilityInfoSearch({
+                        sourceTableKey,
+                        fieldName: key,
+                        korName: f.define_field_kor_name,
+                        fields: allFields,
+                      })
                     : null
+                  const boolChecked = editable
+                    ? parseDefineBooleanValue(draft[key])
+                    : parseDefineBooleanValue(raw)
                   return (
                     <div key={key || `d-${i}`} className="contents">
                       <div className="standard-detail-attr-label standard-detail-attr-cell-border">
@@ -1118,17 +1402,38 @@ export function WtlFacilityDetailPanel({
                       <div
                         className={cn(
                           'standard-detail-attr-value standard-detail-attr-cell-border text-foreground',
-                          facilityLink && 'flex items-center gap-1',
+                          facilitySearch && 'flex items-center gap-1',
                           !editable &&
                             titleFieldName != null &&
                             key.toLowerCase() === titleFieldName.toLowerCase() &&
                             'standard-detail-attr-value-title'
                         )}
-                        title={editable ? label : value}
+                        title={
+                          editable
+                            ? label
+                            : useBoolCheck
+                              ? formatBooleanYeobu(raw, '—')
+                              : value
+                        }
                       >
                         {editable ? (
                           <div className="min-w-0 flex-1">
-                          {isDefineFieldCodeType(f.define_field_type) && codes.length > 0 ? (
+                          {useBoolCheck ? (
+                            <input
+                              type="checkbox"
+                              className="h-3.5 w-3.5"
+                              title={label}
+                              aria-label={label}
+                              disabled={saving}
+                              checked={boolChecked}
+                              onChange={(e) =>
+                                setDraft((prev) => ({
+                                  ...prev,
+                                  [key]: booleanDraftValue(e.target.checked),
+                                }))
+                              }
+                            />
+                          ) : isDefineFieldCodeType(f.define_field_type) && codes.length > 0 ? (
                             <select
                               className={editInputClass}
                               title={label}
@@ -1162,18 +1467,42 @@ export function WtlFacilityDetailPanel({
                             />
                           )}
                           </div>
+                        ) : useBoolCheck ? (
+                          <input
+                            type="checkbox"
+                            className="pointer-events-none h-3.5 w-3.5 accent-primary"
+                            title={formatBooleanYeobu(raw, '—')}
+                            aria-label={label}
+                            aria-readonly="true"
+                            checked={boolChecked}
+                            readOnly
+                            tabIndex={-1}
+                            onChange={() => {}}
+                          />
                         ) : (
                           <span className="min-w-0 flex-1 break-all">{value}</span>
                         )}
-                        {facilityLink ? (
+                        {facilitySearch ? (
                           <button
                             type="button"
                             title="시설 정보 보기"
                             aria-label="시설 정보 보기"
-                            className="ml-auto inline-flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center rounded text-primary hover:bg-primary/10"
-                            onClick={() => setFacilityInfo(facilityLink)}
+                            disabled={facilityLookupBusy}
+                            className="ml-auto inline-flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center rounded text-primary hover:bg-primary/10 disabled:opacity-50"
+                            onClick={() =>
+                              void openFacilityInfoSearch(
+                                facilitySearch,
+                                key,
+                                f.define_field_kor_name,
+                                raw
+                              )
+                            }
                           >
-                            <Search className="h-3.5 w-3.5" aria-hidden />
+                            {facilityLookupBusy ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                            ) : (
+                              <Search className="h-3.5 w-3.5" aria-hidden />
+                            )}
                           </button>
                         ) : null}
                       </div>
@@ -1182,6 +1511,11 @@ export function WtlFacilityDetailPanel({
                 })}
               </div>
             )}
+            {facilityLookupError ? (
+              <p className="mt-2 text-[11px] text-destructive" role="alert">
+                {facilityLookupError}
+              </p>
+            ) : null}
             {editError ? (
               <p className="mt-2 text-[11px] text-destructive" role="alert">
                 {editError}
@@ -1205,7 +1539,7 @@ export function WtlFacilityDetailPanel({
                   'inline-flex h-9 shrink-0 cursor-pointer items-center justify-center gap-1 px-2 text-[11px] font-medium transition-colors',
                   id === 'dataHistory' || id === 'historyCard'
                     ? 'min-w-[7.5rem]'
-                    : 'w-[5.5rem]',
+                    : 'w-22',
                   activeTab === id
                     ? 'border-b-2 border-primary bg-primary/5 text-primary'
                     : 'border-b-2 border-transparent text-muted-foreground hover:bg-muted/50 hover:text-foreground'
@@ -1358,6 +1692,8 @@ export function WtlFacilityDetailPanel({
           title={activeRelated.label || '현황'}
           row={relatedDetail}
           bundle={relatedBundle}
+          table={activeRelated.table}
+          schema={schema}
           onClose={() => setRelatedDetail(null)}
           collapsed={detailCollapsed}
           onToggleCollapsed={() => setDetailCollapsed((v) => !v)}
@@ -1372,83 +1708,99 @@ export function WtlFacilityDetailPanel({
         />
       ) : null}
 
-      <Dialog
-        open={reportOpen}
-        onOpenChange={(open) => {
-          if (!open) {
-            closeReportModal()
-            return
-          }
-          setReportOpen(true)
-        }}
-      >
-        <DialogContent
-          layerZIndex={MAP_UI_Z.nestedDialog}
-          className="flex max-h-[min(90vh,900px)] w-[min(56rem,calc(100vw-1.5rem))] max-w-none flex-col gap-0 overflow-hidden bg-background p-0 text-foreground scheme-light dark:scheme-dark sm:max-w-none sm:rounded-lg"
-        >
-          <DialogHeader className="shrink-0 border-b border-border px-4 py-3 text-left">
-            <DialogTitle className="text-base font-semibold text-foreground">
-              {headerTitle} 상세보고서
-            </DialogTitle>
-          </DialogHeader>
-          <div className="min-h-0 flex-1 bg-background">
-            {reportHtml ? (
-              <iframe
-                ref={reportIframeRef}
-                title={`${headerTitle} 상세보고서 미리보기`}
-                className="h-[min(70vh,720px)] w-full border-0 bg-background"
-                onLoad={(e) => {
-                  const doc = e.currentTarget.contentDocument
-                  if (!doc?.documentElement) return
-                  doc.documentElement.classList.toggle(
-                    'dark',
-                    document.documentElement.classList.contains('dark')
-                  )
-                }}
-                srcDoc={reportHtml}
-              />
-            ) : (
-              <div
-                className="flex h-[min(70vh,720px)] flex-col items-center justify-center gap-3 px-6"
-                aria-live="polite"
-              >
-                <p className="text-sm font-medium text-foreground">
-                  보고서 준비 중…
-                </p>
-                {printing ? (
-                  <p className="text-xs text-muted-foreground">
-                    탭 현황·이력을 불러오는 중입니다.
-                  </p>
-                ) : null}
+      {reportOpen ? (
+        <MapFloatingPanel
+          viewport
+          zLayer="detailFloating"
+          width="min(56rem, calc(100vw - 1.5rem))"
+          maxHeight="min(90vh, 900px)"
+          className="bg-background backdrop-blur-none"
+          defaultPosition={{
+            top: COMPLAINT_DETAIL_PANEL_DEFAULT_TOP,
+            left: reportFloatingLeftPx,
+          }}
+          header={
+            <>
+              <div className="standard-detail-float-heading pr-2">
+                <span
+                  className="standard-detail-float-title"
+                  title={`${headerTitle} 상세보고서`}
+                >
+                  {headerTitle} 상세보고서
+                </span>
               </div>
-            )}
+              <button
+                type="button"
+                title="닫기"
+                aria-label="닫기"
+                onClick={closeReportModal}
+                className="standard-panel-close cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </>
+          }
+        >
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
+            <div className="min-h-0 flex-1 bg-background">
+              {reportHtml ? (
+                <iframe
+                  ref={reportIframeRef}
+                  title={`${headerTitle} 상세보고서 미리보기`}
+                  className="h-[min(70vh,720px)] w-full border-0 bg-background"
+                  onLoad={(e) => {
+                    const doc = e.currentTarget.contentDocument
+                    if (!doc?.documentElement) return
+                    doc.documentElement.classList.toggle(
+                      'dark',
+                      document.documentElement.classList.contains('dark')
+                    )
+                  }}
+                  srcDoc={reportHtml}
+                />
+              ) : (
+                <div
+                  className="flex h-[min(70vh,720px)] flex-col items-center justify-center gap-3 px-6"
+                  aria-live="polite"
+                >
+                  <p className="text-sm font-medium text-foreground">
+                    보고서 준비 중…
+                  </p>
+                  {printing ? (
+                    <p className="text-xs text-muted-foreground">
+                      탭 현황·이력을 불러오는 중입니다.
+                    </p>
+                  ) : null}
+                </div>
+              )}
+            </div>
+            <div className="standard-detail-edit-footer gap-1">
+              <button
+                type="button"
+                title={
+                  printing || !reportHtml
+                    ? '준비가 끝난 뒤 인쇄할 수 있습니다'
+                    : '인쇄 / PDF 저장'
+                }
+                disabled={printing || !reportHtml}
+                className={cn(btnPrimary, 'cursor-pointer disabled:opacity-50')}
+                onClick={printReportFromModal}
+              >
+                <Printer className="h-3 w-3" aria-hidden />
+                {printing ? '준비 중…' : '인쇄 / PDF 저장'}
+              </button>
+              <button
+                type="button"
+                title="닫기"
+                className={cn(btnGhost, 'cursor-pointer')}
+                onClick={closeReportModal}
+              >
+                닫기
+              </button>
+            </div>
           </div>
-          <DialogFooter className="gap-1 border-t border-border px-4 py-2.5 sm:space-x-0">
-            <button
-              type="button"
-              title={
-                printing || !reportHtml
-                  ? '준비가 끝난 뒤 인쇄할 수 있습니다'
-                  : '인쇄 / PDF 저장'
-              }
-              disabled={printing || !reportHtml}
-              className={cn(btnPrimary, 'cursor-pointer disabled:opacity-50')}
-              onClick={printReportFromModal}
-            >
-              <Printer className="h-3 w-3" aria-hidden />
-              {printing ? '준비 중…' : '인쇄 / PDF 저장'}
-            </button>
-            <button
-              type="button"
-              title="닫기"
-              className={cn(btnGhost, 'cursor-pointer')}
-              onClick={closeReportModal}
-            >
-              닫기
-            </button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        </MapFloatingPanel>
+      ) : null}
     </div>
   )
 }

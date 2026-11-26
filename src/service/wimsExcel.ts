@@ -19,7 +19,7 @@ const COLUMNS: { key: keyof WimsHistoryRow; label: string; right?: boolean; wide
   { key: 'induty', label: '업종' },
   { key: 'diam', label: '구경', right: true },
   { key: 'useQty', label: '사용량', right: true },
-  { key: 'freeQty', label: '사용료', right: true },
+  { key: 'freeQty', label: '상수도 사용료', right: true },
   { key: 'delYn', label: '상태' },
 ];
 

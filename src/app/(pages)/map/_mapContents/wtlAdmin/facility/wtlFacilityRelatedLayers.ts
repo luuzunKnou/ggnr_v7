@@ -95,51 +95,32 @@ const PIPE_DISPLAY_ORDER = [
 
 /**
  * 시설 탭 → 연관 규칙(관련 시설·설비).
- * 관로는 PIPE_ALWAYS_RULES로 전 탭 공통. 직접 매칭은 Shell 자동 ON.
+ * 관로는 PIPE_ALWAYS_RULES로 전 탭 공통(버튼 숨김·자동 ON). 직접 매칭은 Shell 자동 ON.
  */
 export const FACILITY_RELATED_RULES: Record<string, readonly WtlFacilityRelatedRule[]> = {
-  wtl_gain_ps: [
-    { kind: 'name', pattern: '%wtl_valv_ps' },
-    { kind: 'name', pattern: '%wtl_flow_ps' },
-  ],
+  /** 취수장 — 관련 설비·시설 없음 */
+  wtl_gain_ps: [],
+  /** 정수장 — 관련 설비만(염소투입·수질계측·펌프). 관련 시설(유량계·수압계) 제외 */
   wtl_puri_as: [
     { kind: 'name', pattern: '%wtl_infeed_ps' },
     { kind: 'name', pattern: '%wtl_meter_ps' },
-    { kind: 'name', pattern: '%wtl_flow_ps' },
-    { kind: 'name', pattern: '%wtl_prga_ps' },
     { kind: 'name', pattern: '%wtl_puri_dt_ps' },
   ],
-  wtl_serv_ps: [
-    { kind: 'name', pattern: '%wtl_valv_ps' },
-    { kind: 'name', pattern: '%wtl_meter_ps' },
-    { kind: 'name', pattern: '%wtl_flow_ps' },
-    { kind: 'name', pattern: '%wtl_prga_ps' },
-  ],
+  /** 배수지 — 관련 없음 */
+  wtl_serv_ps: [],
+  /** 가압장 — 펌프·흡수정만 */
   wtl_pres_ps: [
     { kind: 'name', pattern: '%wtl_pres_pm_ps' },
     { kind: 'name', pattern: '%wtl_pres_hj_ps' },
-    { kind: 'name', pattern: '%wtl_valv_ps' },
-    { kind: 'name', pattern: '%wtl_flow_ps' },
-    { kind: 'name', pattern: '%wtl_prga_ps' },
   ],
-  wtl_rsrv_ps: [
-    { kind: 'name', pattern: '%wtl_meta_ps' },
-    { kind: 'name', pattern: '%wtl_valv_ps' },
-  ],
-  wtl_fire_ps: [
-    { kind: 'name', pattern: '%wtl_manh_ps' },
-    { kind: 'name', pattern: '%wtl_valv_ps' },
-  ],
-  wtl_flow_ps: [
-    { kind: 'name', pattern: '%wtl_manh_ps' },
-    { kind: 'name', pattern: '%wtl_valv_ps' },
-    { kind: 'name', pattern: '%wtl_prga_ps' },
-  ],
-  wtl_prga_ps: [
-    { kind: 'name', pattern: '%wtl_manh_ps' },
-    { kind: 'name', pattern: '%wtl_valv_ps' },
-    { kind: 'name', pattern: '%wtl_flow_ps' },
-  ],
+  /** 저수조 — 관련 없음 */
+  wtl_rsrv_ps: [],
+  /** 소방시설 — 관련 없음 */
+  wtl_fire_ps: [],
+  /** 유량계 — 관련 없음 */
+  wtl_flow_ps: [],
+  /** 수압계 — 관련 없음 */
+  wtl_prga_ps: [],
 }
 
 /**
@@ -150,10 +131,17 @@ export const EQUIPMENT_RELATED_RULES: Record<string, readonly WtlFacilityRelated
   wtl_pres_hj_ps: [{ kind: 'name', pattern: '%wtl_pres_ps' }],
   wtl_pres_pm_ps: [{ kind: 'name', pattern: '%wtl_pres_ps' }],
   wtl_puri_dt_ps: [{ kind: 'name', pattern: '%wtl_puri_as' }],
-  wtl_infeed_ps: [{ kind: 'name', pattern: '%wtl_puri_as' }],
+  /** 염소투입설비 — 관련 시설: 정수장·배수지·가압장 */
+  wtl_infeed_ps: [
+    { kind: 'name', pattern: '%wtl_puri_as' },
+    { kind: 'name', pattern: '%wtl_serv_ps' },
+    { kind: 'name', pattern: '%wtl_pres_ps' },
+  ],
+  /** 수질계측기 — 관련 시설: 정수장·배수지·가압장 */
   wtl_meter_ps: [
     { kind: 'name', pattern: '%wtl_puri_as' },
     { kind: 'name', pattern: '%wtl_serv_ps' },
+    { kind: 'name', pattern: '%wtl_pres_ps' },
   ],
   /** 관로만 — 망 전역 설비라 소속 시설 역매핑 없음 */
   wtl_valv_ps: [],
@@ -257,8 +245,27 @@ export function groupRelatedLayersByCategory(
 }
 
 /**
+ * 이름 규칙 매칭 후보 — 같은 그룹 우선, 없으면 전체에서 패턴 core 완전일치.
+ * (설비 그룹 염소·수질 ↔ 상수 그룹 정수장·배수지·가압장 등 교차 그룹)
+ */
+function rowsMatchingNameRule(
+  pattern: string,
+  groupScope: TablesJsonRow[]
+): TablesJsonRow[] {
+  const inGroup = groupScope.filter((row) =>
+    matchesNamePattern(String(row.define_table_name ?? ''), pattern)
+  )
+  if (inGroup.length > 0) return inGroup
+  const core = patternCore(pattern)
+  if (!core) return []
+  return ROWS.filter(
+    (row) => normalize(String(row.define_table_name ?? '')) === core
+  )
+}
+
+/**
  * 선택 탭·레이어 그룹 기준 연관 레이어 목록(직접 매칭 제외).
- * 그룹에 없는 후보는 제외(미표시).
+ * 관로는 선택 그룹 안만. 관련 시설·설비는 그룹에 없으면 테이블명 완전일치로 교차 그룹 허용.
  */
 export function resolveRelatedLayers(
   tab: string | null | undefined,
@@ -268,7 +275,7 @@ export function resolveRelatedLayers(
   const rules = relatedRulesForTab(tabKey)
   if (rules == null) return []
 
-  const scope = rowsForGroup(defineTableGroup)
+  const groupScope = rowsForGroup(defineTableGroup)
   const tabKor =
     String(
       ROWS.find((r) => normalize(String(r.define_table_name ?? '')) === tabKey)
@@ -287,17 +294,17 @@ export function resolveRelatedLayers(
     out.push(layer)
   }
 
-  const applyRules = (ruleList: readonly WtlFacilityRelatedRule[]) => {
+  const applyPipeRules = (ruleList: readonly WtlFacilityRelatedRule[]) => {
     for (const rule of ruleList) {
       if (rule.kind === 'parents') {
-        for (const row of scope) {
+        for (const row of groupScope) {
           const parents = String(row.define_table_parents_layer ?? '')
           if (!matchesParentsPattern(parents, rule.parentPattern)) continue
           pushRow(row)
         }
         continue
       }
-      for (const row of scope) {
+      for (const row of groupScope) {
         const name = String(row.define_table_name ?? '')
         if (!matchesNamePattern(name, rule.pattern)) continue
         pushRow(row)
@@ -305,9 +312,36 @@ export function resolveRelatedLayers(
     }
   }
 
-  // 관로 4종 공통 → 탭별 관련 시설·설비
-  applyRules(PIPE_ALWAYS_RULES)
-  if (rules.length > 0) applyRules(rules)
+  const applyRelatedRules = (ruleList: readonly WtlFacilityRelatedRule[]) => {
+    for (const rule of ruleList) {
+      if (rule.kind === 'parents') {
+        const inGroup = groupScope.filter((row) =>
+          matchesParentsPattern(
+            String(row.define_table_parents_layer ?? ''),
+            rule.parentPattern
+          )
+        )
+        const rows =
+          inGroup.length > 0
+            ? inGroup
+            : ROWS.filter((row) =>
+                matchesParentsPattern(
+                  String(row.define_table_parents_layer ?? ''),
+                  rule.parentPattern
+                )
+              )
+        for (const row of rows) pushRow(row)
+        continue
+      }
+      for (const row of rowsMatchingNameRule(rule.pattern, groupScope)) {
+        pushRow(row)
+      }
+    }
+  }
+
+  // 관로 4종 공통(선택 그룹) → 탭별 관련 시설·설비(교차 그룹 허용)
+  applyPipeRules(PIPE_ALWAYS_RULES)
+  if (rules.length > 0) applyRelatedRules(rules)
 
   return out
 }

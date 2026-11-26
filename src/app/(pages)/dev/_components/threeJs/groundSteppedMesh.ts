@@ -15,6 +15,30 @@ export function sampleHeight(field: GroundHeightField, i: number, j: number): nu
   return elevKey(h);
 }
 
+/** 로컬 XZ가 메시와 동일한 «네 모서리 유효» 셀 안인지 (면 없는 곳은 false) */
+export function hasValidSurfaceCell(
+  field: GroundHeightField,
+  localX: number,
+  localZ: number
+): boolean {
+  const size = field.size;
+  if (size < 2) return false;
+  const scale = GROUND_SCENE_M_PER_UNIT;
+  const stepU = field.stepM / scale;
+  const mid = (size - 1) / 2;
+  const fi = localX / stepU + mid;
+  const fj = -localZ / stepU + mid;
+  if (fi < 0 || fj < 0 || fi > size - 1 || fj > size - 1) return false;
+  const i0 = Math.min(size - 2, Math.max(0, Math.floor(fi)));
+  const j0 = Math.min(size - 2, Math.max(0, Math.floor(fj)));
+  return (
+    sampleHeight(field, i0, j0) != null &&
+    sampleHeight(field, i0 + 1, j0) != null &&
+    sampleHeight(field, i0, j0 + 1) != null &&
+    sampleHeight(field, i0 + 1, j0 + 1) != null
+  );
+}
+
 /**
  * 로컬 XZ에서 기울기 보간 지형 메시와 동일한 삼각형 보간 Y.
  * 셀 분할: (i,j)-(i+1,j)-(i,j+1) / (i+1,j)-(i+1,j+1)-(i,j+1)

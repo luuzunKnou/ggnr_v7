@@ -96,12 +96,12 @@ export function DetailWondoListPanel({
 
   return (
     <div className={cn('flex w-60 flex-col overflow-hidden', MAP_LAYER_PANEL_SURFACE_CLASS, MAP_LAYER_PANEL_MAX_H_CLASS)}>
-      <div className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-slate-50 px-3 py-2 dark:border-white/10 dark:bg-white/5">
-        <span className="text-[13px] font-medium text-slate-800 dark:text-white/90">세부원도</span>
+      <div className="standard-map-float-header shrink-0">
+        <span className="standard-map-float-header-title">세부원도</span>
         <button
           type="button"
           onClick={onClose}
-          className="cursor-pointer rounded px-1 text-xs text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-white/10 dark:hover:text-white"
+          className="standard-map-float-header-close px-1 text-xs"
           aria-label="닫기"
           title="닫기"
         >
@@ -210,7 +210,7 @@ export function DetailWondoListPanel({
               <label
                 key={item.id}
                 className={cn(
-                  'flex cursor-pointer items-center justify-between gap-2 py-1 pl-3 pr-4 transition-colors hover:bg-slate-50 dark:hover:bg-white/10',
+                  'standard-map-float-row-hover flex cursor-pointer items-center justify-between gap-2 py-1 pl-3 pr-4',
                   checked && 'bg-blue-50 dark:bg-white/20'
                 )}
                 title={detailWondoLabel(item)}

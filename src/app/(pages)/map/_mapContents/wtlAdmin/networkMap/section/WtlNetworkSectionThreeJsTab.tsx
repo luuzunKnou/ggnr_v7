@@ -40,6 +40,8 @@ const THREEJS_VIEW_BG_CLASS = {
 
 /** ThreeJs 데이터 범례 — 지형 토글 키 */
 const THREEJS_GROUND_FEATURE_ID = '__wtl_section_ground__'
+/** 초기 fit 거리 대비 축소(줌아웃) 허용 배수 — 체크리스트 참고 */
+const SECTION_3D_MAX_ZOOM_OUT = 1.5
 
 import {
   buildThreeJsHoverTipHtml,
@@ -860,7 +862,21 @@ export function WtlNetworkSectionThreeJsTab({
         orbit.mouseButtons.MIDDLE = THREE.MOUSE.ROTATE
         orbit.mouseButtons.RIGHT = THREE.MOUSE.DOLLY
         orbitRef.current = orbit
-        fitSectionLineView(camera, orbit, groundGroup, groundProps)
+        const fitDist = fitSectionLineView(
+          camera,
+          orbit,
+          groundGroup,
+          groundProps
+        )
+        const baseDist =
+          Number.isFinite(fitDist) && fitDist > 0
+            ? fitDist
+            : camera.position.distanceTo(orbit.target)
+        orbit.minDistance = Math.max(0.5, baseDist * 0.15)
+        orbit.maxDistance = Math.max(
+          orbit.minDistance + 0.1,
+          baseDist * SECTION_3D_MAX_ZOOM_OUT
+        )
         // 최초 화면 — 나침반 «북»과 동일하게 정북 방향
         faceNorthView(camera, orbit)
         renderer.domElement.style.cursor = 'grab'
@@ -915,27 +931,55 @@ export function WtlNetworkSectionThreeJsTab({
             if (obj.userData?.isGroundElevMarkers) obj.visible = visible
           })
         }
+        const matchesHoverFeature = (
+          ud: { featureId?: string; pipeId?: string },
+          featureId: string
+        ) => {
+          const fid = String(ud.featureId ?? '').trim()
+          const pid = String(ud.pipeId ?? '').trim()
+          return (
+            fid === featureId ||
+            pid === featureId ||
+            pid.startsWith(`${featureId}#`)
+          )
+        }
+        const dipWorldTmp = new THREE.Vector3()
+        /** 호버 관로: 토피 + 카메라에 가까운 쪽 관경만 */
         const setDepthBarsForFeature = (featureId: string | null) => {
-          if (hoverDepthFeatureId === featureId) return
           hoverDepthFeatureId = featureId
+          const dipCandidates: import('three').Object3D[] = []
           root.traverse((obj) => {
             const ud = obj.userData as {
               isDepthBar?: boolean
+              isDipDim?: boolean
               featureId?: string
               pipeId?: string
             }
-            if (!ud.isDepthBar) return
-            if (!featureId) {
-              obj.visible = false
+            if (ud.isDepthBar) {
+              obj.visible = Boolean(
+                featureId && matchesHoverFeature(ud, featureId)
+              )
               return
             }
-            const fid = String(ud.featureId ?? '').trim()
-            const pid = String(ud.pipeId ?? '').trim()
-            obj.visible =
-              fid === featureId ||
-              pid === featureId ||
-              pid.startsWith(`${featureId}#`)
+            if (ud.isDipDim) {
+              obj.visible = false
+              if (featureId && matchesHoverFeature(ud, featureId)) {
+                dipCandidates.push(obj)
+              }
+            }
           })
+          if (!featureId || dipCandidates.length === 0) return
+          let best = dipCandidates[0]!
+          let bestD = Infinity
+          for (const o of dipCandidates) {
+            o.getWorldPosition(dipWorldTmp)
+            const d = dipWorldTmp.distanceToSquared(camera.position)
+            if (d < bestD) {
+              bestD = d
+              best = o
+            }
+          }
+          best.visible = true
         }
         const hideTip = () => {
           tipGenRef.current += 1
@@ -1054,6 +1098,8 @@ export function WtlNetworkSectionThreeJsTab({
         const tick = () => {
           if (cancelled || !renderer) return
           orbit?.update()
+          // 카메라 회전 중에도 가까운 쪽 관경 유지
+          if (hoverDepthFeatureId) setDepthBarsForFeature(hoverDepthFeatureId)
           renderer.render(scene, camera)
           raf = requestAnimationFrame(tick)
         }
@@ -1127,7 +1173,7 @@ export function WtlNetworkSectionThreeJsTab({
     <div className="flex h-full min-h-0 gap-2">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-1">
         {error ? (
-          <p className="py-10 text-center text-[12px] text-destructive">{error}</p>
+          <p className="py-10 text-center text-xs text-destructive">{error}</p>
         ) : metaLine ? (
           <p className="shrink-0 text-[11px] text-muted-foreground">{metaLine}</p>
         ) : null}

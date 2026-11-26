@@ -1,6 +1,6 @@
 /**
  * 행정안전부 도로명주소 검색 API (addrLinkApi) + 좌표 API (addrCoordApi)
- * — VWorld 주소검색 실패 시 서버 폴백용
+ * — VWorld 주소검색 실패 시 폴백. 브라우저·서버 모두 호출 가능(juso CORS *).
  * @see https://business.juso.go.kr/addrlink/addrLinkApi.do
  */
 
@@ -187,13 +187,15 @@ async function fetchCoordFromNominatim(
       countrycodes: 'kr',
     });
     try {
+      const headers: Record<string, string> = { Accept: 'application/json' };
+      // User-Agent 는 브라우저에서 설정 불가. 서버 fetch 에만 붙인다.
+      if (typeof window === 'undefined') {
+        headers['User-Agent'] = 'ggnr_v7-address-fallback/1.0';
+      }
       const res = await fetch(`https://nominatim.openstreetmap.org/search?${params}`, {
         method: 'GET',
         cache: 'no-store',
-        headers: {
-          Accept: 'application/json',
-          'User-Agent': 'ggnr_v7-address-fallback/1.0',
-        },
+        headers,
       });
       if (!res.ok) continue;
       const rows = (await res.json()) as Array<{ lon?: string; lat?: string }>;

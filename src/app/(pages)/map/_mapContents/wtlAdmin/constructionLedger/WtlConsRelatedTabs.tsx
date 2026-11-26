@@ -586,6 +586,7 @@ export function WtlConsRelatedTabs({
   /**
    * 관련시설·필지·건물·공사이력과 동일 범위(parcelWkt = 화면 공사위치 합집합 1건).
    * areaWkts 배열 복수 전달 금지(서버 AND → 변류 등 시설 전부 탈락).
+   * 공사·범위가 있으면 탭 열기 전에도 조회(카운트용). 지도 표시는 탭 ON일 때만.
    */
   useEffect(() => {
     setFacilities([])
@@ -614,6 +615,7 @@ export function WtlConsRelatedTabs({
     return () => {
       cancelled = true
     }
+    // onRelatedFacilities는 setState라 안정. deps에 넣으면 콜백 교체 시 목록이 비워질 수 있음
     // eslint-disable-next-line react-hooks/exhaustive-deps -- parcelWkt만
   }, [parcelWkt])
 

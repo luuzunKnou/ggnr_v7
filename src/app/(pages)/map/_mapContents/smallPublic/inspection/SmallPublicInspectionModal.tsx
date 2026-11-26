@@ -160,16 +160,25 @@ export function SmallPublicInspectionViewModal({
     >
       <SmallPublicAttrTable
         entries={[
-          { key: 'date', label: '점검일', value: smallPublicDateLabel(inspection.date) },
-          { key: 'inspector', label: '점검자', value: inspection.inspector || '—' },
-          { key: 'score', label: '합계점수', value: `${inspection.score}점` },
-          { key: 'grade', label: '등급', value: <SmallPublicGradeBadge grade={inspection.grade} /> },
+          { key: 'date', label: '조사일', value: smallPublicDateLabel(inspection.date) },
+          { key: 'inspector', label: '조사자', value: inspection.inspector || '—' },
+          { key: 'score', label: '평가점수', value: `${inspection.score}점` },
+          { key: 'grade', label: '평가등급', value: <SmallPublicGradeBadge grade={inspection.grade} /> },
           {
             key: 'class',
             label: '평가구분',
             value: <SmallPublicClassBadge candidate={inspection.classResult} />,
           },
-          { key: 'remark', label: '기타의견', value: inspection.remark || '—', full: true },
+          {
+            key: 'remark',
+            label: '기타의견',
+            value: (
+              <span className="block min-h-[3.25rem] whitespace-pre-wrap break-words text-[11px] leading-relaxed text-foreground/80">
+                {inspection.remark || '—'}
+              </span>
+            ),
+            full: true,
+          },
         ]}
       />
       <div className="mt-3">

@@ -75,23 +75,24 @@ export function fitFrontView(
 
 /**
  * 단면도 — 절단선이 화면 가로(정면)가 되도록 라인 수직 방향에서 봄.
+ * @returns 초기 카메라 거리(축소 한도 계산용)
  */
 export function fitSectionLineView(
   camera: PerspectiveCamera,
   orbit: OrbitControls,
   object: THREE.Object3D,
   props: ShapeProps
-): void {
+): number {
   const field = props.groundHeightField;
   const line = props.groundSectionLine;
   if (!field || !line) {
     fitFrontView(camera, orbit, object);
-    return;
+    return camera.position.distanceTo(orbit.target);
   }
   const axes = sectionAxesFromField(field, line);
   if (!axes) {
     fitFrontView(camera, orbit, object);
-    return;
+    return camera.position.distanceTo(orbit.target);
   }
 
   const box = new THREE.Box3().setFromObject(object);
@@ -126,6 +127,7 @@ export function fitSectionLineView(
   orbit.target.copy(center);
   orbit.update();
   camera.lookAt(orbit.target);
+  return dist;
 }
 
 /** 지형 한 변이 화면에 들어오도록 — 초기에는 정북 정면도 + 약간 높은 시점 */

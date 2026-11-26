@@ -47,6 +47,8 @@ type Props = {
   onRedraw: () => void
   /** 데이터 범례 항목 — 시설목록 행 선택과 동일 */
   onLegendItemSelect?: (item: LongPipeLegendItem) => void
+  /** 범례 체크 해제로 선택 해제 시 지도 하이라이트도 끔 */
+  onLegendHighlightClear?: () => void
 }
 
 export function WtlNetworkSectionPanel({
@@ -73,6 +75,7 @@ export function WtlNetworkSectionPanel({
   onClose,
   onRedraw,
   onLegendItemSelect,
+  onLegendHighlightClear,
 }: Props) {
   /** 3D는 첫 진입 후 유지 — 탭 전환마다 씬·조회 재생성 방지 (횡·종단 캐시와 동일 의도) */
   const [keepThreeJs, setKeepThreeJs] = useState(tab === 'threejs')
@@ -133,7 +136,7 @@ export function WtlNetworkSectionPanel({
             type="button"
             title={t.label}
             className={cn(
-              'cursor-pointer border-b-2 px-3 py-1.5 text-[12px] font-medium',
+              'cursor-pointer border-b-2 px-3 py-1.5 text-xs font-medium',
               tab === t.id
                 ? 'border-primary text-primary'
                 : 'border-transparent text-muted-foreground hover:text-foreground'
@@ -150,18 +153,18 @@ export function WtlNetworkSectionPanel({
           loading ? (
             <div className="flex h-full min-h-0 gap-2 overflow-hidden rounded border-2 border-border bg-background p-2">
               <div className="flex min-h-0 min-w-0 flex-1 items-center justify-center">
-                <p className="text-center text-[12px] text-muted-foreground">
+                <p className="text-center text-xs text-muted-foreground">
                   등고·시설 조회 중…
                 </p>
               </div>
               <SectionFeatureLegendSkeleton />
             </div>
           ) : error ? (
-            <p className="py-10 text-center text-[12px] text-destructive">
+            <p className="py-10 text-center text-xs text-destructive">
               {error}
             </p>
           ) : !lineReady ? (
-            <p className="py-10 text-center text-[12px] text-muted-foreground">
+            <p className="py-10 text-center text-xs text-muted-foreground">
               절단선 데이터가 없습니다.
             </p>
           ) : (
@@ -175,10 +178,11 @@ export function WtlNetworkSectionPanel({
               supplyAreaBands={supplyAreaBands}
               supplyElevComposition={supplyElevComposition}
               onLegendItemSelect={onLegendItemSelect}
+              onLegendHighlightClear={onLegendHighlightClear}
             />
           )
         ) : !lineReady || !line3857 || line3857.length < 2 ? (
-          <p className="py-10 text-center text-[12px] text-muted-foreground">
+          <p className="py-10 text-center text-xs text-muted-foreground">
             절단선 데이터가 없습니다.
           </p>
         ) : null}

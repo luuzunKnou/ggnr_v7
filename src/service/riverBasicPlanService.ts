@@ -73,9 +73,12 @@ function planIdentityWhereParts(opts: {
   planLen?: string;
   rivpName?: string;
   rivpSuffix?: string;
+  riverCode?: string;
 }): string[] {
+  const riverCode = String(opts.riverCode ?? '').trim();
   const parts = [
     `river_name = '${esc(opts.riverName)}'`,
+    riverCode ? `COALESCE(river_code::text, '') = '${esc(riverCode)}'` : '',
     opts.planYear ? `COALESCE(plan_year, '') = '${esc(opts.planYear)}'` : '',
     opts.planName ? `COALESCE(plan_name, '') = '${esc(opts.planName)}'` : '',
   ];
@@ -775,6 +778,7 @@ export async function getRiverBasicPlanDetail(params?: {
   planLen?: string;
   rivpName?: string;
   rivpSuffix?: string;
+  riverCode?: string;
 }): Promise<{ row: Record<string, unknown> | null }> {
   const tab = normalizeTab(params?.tab);
   const riverName = String(params?.riverName ?? '').trim();
@@ -793,6 +797,7 @@ export async function getRiverBasicPlanDetail(params?: {
       params?.rivpName === undefined && params?.rivpSuffix !== undefined
         ? String(params.rivpSuffix)
         : undefined,
+    riverCode: params?.riverCode,
   }).join(' AND ');
 
   const res = await db.execute(
@@ -812,11 +817,16 @@ export async function getRiverBasicPlanDetail(params?: {
 export async function getRiverBasicPlanExtent(params?: {
   tab?: RiverType;
   riverName?: string;
+  riverCode?: string;
 }): Promise<{ extent3857: [number, number, number, number] | null }> {
   const tab = normalizeTab(params?.tab);
   const riverName = String(params?.riverName ?? '').trim();
+  const riverCode = String(params?.riverCode ?? '').trim();
   if (!riverName) return { extent3857: null };
   const tableName = await resolveLayerTableName(riverBasicPlanAsDefineTable(tab));
+  const riverCodeWhere = riverCode
+    ? ` AND COALESCE(river_code::text, '') = '${esc(riverCode)}'`
+    : '';
 
   const res = await db.execute(
     sql.raw(
@@ -828,7 +838,7 @@ export async function getRiverBasicPlanExtent(params?: {
        FROM (
          SELECT ST_Extent(ST_Transform(geom, 3857))::box2d AS ext
          FROM layer."${tableName.replace(/"/g, '""')}"
-         WHERE river_name = '${esc(riverName)}'
+         WHERE river_name = '${esc(riverName)}'${riverCodeWhere}
        ) s
        WHERE ext IS NOT NULL`
     )
@@ -897,11 +907,16 @@ export async function getJijukOwnGbnByPnus(params?: {
 export async function getRiverBasicPlanIndexExtent(params?: {
   tab?: RiverType;
   riverName?: string;
+  riverCode?: string;
 }): Promise<{ extent3857: [number, number, number, number] | null }> {
   const tab = normalizeTab(params?.tab);
   const riverName = String(params?.riverName ?? '').trim();
+  const riverCode = String(params?.riverCode ?? '').trim();
   if (!riverName) return { extent3857: null };
   const tableName = await resolveLayerTableName(riverBasicPlanIndexDefineTable(tab));
+  const riverCodeWhere = riverCode
+    ? ` AND COALESCE(river_code::text, '') = '${esc(riverCode)}'`
+    : '';
 
   const res = await db.execute(
     sql.raw(
@@ -913,7 +928,7 @@ export async function getRiverBasicPlanIndexExtent(params?: {
        FROM (
          SELECT ST_Extent(ST_Transform(geom, 3857))::box2d AS ext
          FROM layer."${tableName.replace(/"/g, '""')}"
-         WHERE COALESCE(river_name, '') = '${esc(riverName)}'
+         WHERE COALESCE(river_name, '') = '${esc(riverName)}'${riverCodeWhere}
            AND geom IS NOT NULL
        ) s
        WHERE ext IS NOT NULL`
@@ -1013,6 +1028,7 @@ export async function getRiverBasicPlanIndexList(params?: {
   planYear?: string;
   planName?: string;
   planLen?: string;
+  riverCode?: string;
 }): Promise<{
   indexes: {
     ogcFid: number;
@@ -1038,6 +1054,7 @@ export async function getRiverBasicPlanIndexList(params?: {
     planYear,
     planName,
     planLen: params?.planLen,
+    riverCode: params?.riverCode,
   }).join(' AND ');
 
   const res = await db.execute(
@@ -1298,6 +1315,7 @@ export async function getRiverBasicPlanIndexView(params?: {
   planYear?: string;
   planName?: string;
   planLen?: string;
+  riverCode?: string;
   /** 지도에서 클릭한 색인도 피처 ogc_fid — 주어지면 해당 건만(선택 기본계획 폴리곤과 교차할 때) 사용 */
   indexOgcFid?: number;
 }): Promise<{
@@ -1341,6 +1359,7 @@ export async function getRiverBasicPlanIndexView(params?: {
     planYear,
     planName,
     planLen: params?.planLen,
+    riverCode: params?.riverCode,
   }).join(' AND ');
 
   const pinnedIdx = Number(params?.indexOgcFid);
@@ -1601,15 +1620,20 @@ export async function getRiverBasicPlanIndexView(params?: {
 export async function getRiverBasicPlanJbList(params?: {
   tab?: RiverType;
   riverName?: string;
+  riverCode?: string;
 }) {
   const tab = normalizeTab(params?.tab);
   const riverName = String(params?.riverName ?? '').trim();
+  const riverCode = String(params?.riverCode ?? '').trim();
   if (!riverName) return { items: [] as const, table: '' };
 
   const logical = riverBasicPlanJbDefineTable(tab);
   const t = await resolveLayerTableName(logical.toLowerCase());
   const safeT = t.replace(/"/g, '""');
   const badge = riverBasicPlanJbLabel(tab);
+  const riverCodeWhere = riverCode
+    ? ` AND COALESCE(t.river_code::text, '') = '${esc(riverCode)}'`
+    : '';
   /** 라벨점은 가장 긴 선 길이의 50% 지점(서버). MultiLine이면 LineMerge 후 최장 파트로. */
   const q = `
     SELECT
@@ -1636,7 +1660,7 @@ export async function getRiverBasicPlanJbList(params?: {
       )::text AS label_geojson
     FROM layer."${safeT}" t
     WHERE t.geom IS NOT NULL
-      AND COALESCE(t.river_name, '') = '${esc(riverName)}'
+      AND COALESCE(t.river_name, '') = '${esc(riverName)}'${riverCodeWhere}
     ORDER BY t.ogc_fid ASC
   `;
   try {

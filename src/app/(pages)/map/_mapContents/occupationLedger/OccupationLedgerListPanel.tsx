@@ -34,7 +34,7 @@ import {
 } from '../river/usageDataAs/usageDataAsMapSync';
 import { USAGE_DATA_AS_SISUL_WMS_LAYER_ID } from '../river/usageDataAs/usageDataAsLayerId';
 import { occupationLayerToggleActiveStyle } from '@/lib/occupationLayerStyle';
-import { listHeaderMinPx } from './occupationLedgerListWidth';
+import { occupationLedgerListColumnWidthPx } from './occupationLedgerListWidth';
 
 type ListRow = {
   rowKey: string;
@@ -56,8 +56,6 @@ type SortKey = OccupationLedgerListSortKey;
 type SortSpec = OccupationLedgerListSortSpec;
 
 const STATUS_COLUMN = { key: 'status', label: '상태' } as const;
-/** 점용장소 도형 채우기 단추 — 당분간 숨김 */
-const SHOW_OCCUP_PLACE_GEOM_BUTTON = false;
 
 type Props = {
   serEng: string;
@@ -97,6 +95,11 @@ export function OccupationLedgerListPanel({
   const [listColumns, setListColumns] = useState<OccupationLedgerListColumn[]>([]);
   const [geomFillBusy, setGeomFillBusy] = useState(false);
   const [geomFillMsg, setGeomFillMsg] = useState<string | null>(null);
+  /** 점용장소 도형 반영 후 목록 다시 읽기 */
+  const [listReloadKey, setListReloadKey] = useState(0);
+
+  /** 점용장소 도형 채우기 단추 — 당분간 숨김 */
+  const showOccupPlaceGeomButton = false;
 
   const showSisulLayerButton =
     projectName.trim() === 'build_uj' && serEng === 'waterOccupationLedger';
@@ -163,11 +166,25 @@ export function OccupationLedgerListPanel({
       setGeomFillMsg(
         `본표 ${Number(main.filled) || 0}건 넣음 · ${Number(main.cleared) || 0}건 비움 / 필지 ${Number(jijuk.filled) || 0}건 넣음 · ${Number(jijuk.cleared) || 0}건 비움 / 상태 진행중 ${Number(state.inProgress) || 0} · 종료 ${Number(state.ended) || 0}`
       );
+      // 지도서버 레이어 범위 재맞춤 (영덕 등 선언범위 밖 도형 표시)
+      try {
+        await call('', 'POST', {
+          service: 'occupationLedgerService',
+          action: 'recalculateOccupationLedgerWmsBounds',
+          params: { serEng },
+        });
+      } catch {
+        /* 범위 갱신 실패해도 도형 DB 반영은 유지 */
+      }
       ensureOccupationLedgerWmsLayers(mapContext?.setVisibleLayerNames, { serEng });
       refreshServiceWmsLayer(mapContext?.mapInstanceRef?.current);
       requestAnimationFrame(() =>
         refreshServiceWmsLayer(mapContext?.mapInstanceRef?.current)
       );
+      window.setTimeout(() => {
+        refreshServiceWmsLayer(mapContext?.mapInstanceRef?.current);
+      }, 400);
+      setListReloadKey((k) => k + 1);
     } catch {
       setError('점용장소 도형을 넣지 못했습니다.');
     } finally {
@@ -266,16 +283,16 @@ export function OccupationLedgerListPanel({
       }
     }, 250);
     return () => clearTimeout(t);
-  }, [keyword, refreshKey, serEng]);
+  }, [keyword, refreshKey, serEng, listReloadKey]);
 
   const filteredItems = useMemo(() => {
     const byStatus = statusFilter ? items.filter((row) => row.status === statusFilter) : items;
     return sortOccupationLedgerListRows(byStatus, sorts, listColumns);
   }, [items, statusFilter, sorts, listColumns]);
 
-  /** 열 폭 — 기본 폭, 제목이 더 길면 제목이 다 보이는 폭 */
+  /** 열 폭 — 점용코드 좁게·점용장소 넓게, 제목이 더 길면 제목 폭 */
   const columnWidths = useMemo(
-    () => listColumns.map((c) => Math.max(c.edge ? 88 : 120, listHeaderMinPx(c.label))),
+    () => listColumns.map((c) => occupationLedgerListColumnWidthPx(c.field, c.label, c.edge)),
     [listColumns]
   );
 
@@ -360,7 +377,7 @@ export function OccupationLedgerListPanel({
             <Layers className="h-3 w-3 shrink-0" aria-hidden />
             점사용료
           </LayerRowPanelButton>
-          {SHOW_OCCUP_PLACE_GEOM_BUTTON ? (
+          {showOccupPlaceGeomButton ? (
             <LayerRowPanelButton
               type="button"
               title="점용장소로 지적 도형 넣기"
@@ -431,7 +448,7 @@ export function OccupationLedgerListPanel({
             {error}
           </div>
         )}
-        {SHOW_OCCUP_PLACE_GEOM_BUTTON && geomFillMsg && !error && (
+        {showOccupPlaceGeomButton && geomFillMsg && !error && (
           <div className="shrink-0 border-b border-border bg-muted/40 px-3 py-2 text-xs text-foreground">
             {geomFillMsg}
           </div>
@@ -548,11 +565,20 @@ export function OccupationLedgerListPanel({
                       </td>
                       {listColumns.map((c) => {
                         const v = String(row.values?.[c.field] ?? '').trim();
+                        const fl = c.field.toLowerCase();
+                        const isPeriod =
+                          Boolean(c.edge) ||
+                          fl === 'usage_pd' ||
+                          /기간|period|_pd$/.test(fl) ||
+                          /점용기간|허가기간/.test(c.label);
                         return (
                           <td
                             key={c.field}
                             className={cn(
-                              'max-w-0 truncate px-2 py-1.5 text-foreground/90',
+                              'px-2 py-1.5 text-foreground/90',
+                              isPeriod
+                                ? 'whitespace-nowrap tabular-nums'
+                                : 'max-w-0 truncate',
                               c.edge && 'tabular-nums'
                             )}
                             title={v || undefined}

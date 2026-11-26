@@ -59,6 +59,21 @@ export type AddressInfoDetailState = {
   buildingName?: string | null;
 } | null;
 
+/** 지도 우클릭 플로팅 메뉴 상태 */
+export type MapRightClickMenuState = {
+  coordinate: [number, number];
+  viewProjection: string;
+  screenX: number;
+  screenY: number;
+  /** 주소 API 조회 실패(네트워크·키 만료 등). 지번/도로명 없을 때 실패 안내 */
+  addressError?: boolean;
+  pnu?: string | null;
+  geomSeedAt?: number;
+  jibun: string | null;
+  road: string | null;
+  buildingName?: string | null;
+} | null;
+
 /** 민원 상세 (comp + compd 목록) */
 export type ComplaintDetail = {
   compKey: number;
@@ -126,7 +141,10 @@ export type MapContextValue = {
   setComplaintDetail: Dispatch<SetStateAction<ComplaintDetail>>;
   addressInfoDetail: AddressInfoDetailState;
   setAddressInfoDetail: Dispatch<SetStateAction<AddressInfoDetailState>>;
-  /** 현재 주소정보 하이라이트 필지 도형(3857). 같은 필지 우클릭 시 닫기 판단용 */
+  /** 지도 우클릭 플로팅 메뉴 */
+  mapRightClickMenu: MapRightClickMenuState;
+  setMapRightClickMenu: Dispatch<SetStateAction<MapRightClickMenuState>>;
+  /** 현재 주소정보 하이라이트 필지 도형(3857) */
   addressParcelGeometryRef: MutableRefObject<import('ol/geom').Geometry | null>;
   /** 우클릭 지적 조회 직후 시드 GeoJSON(4326) — API 응답 전 즉시 하이라이트 */
   addressParcelSeedGeom4326Ref: MutableRefObject<Record<string, unknown> | null>;
@@ -745,6 +763,7 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
   const [identifySelectedRow, setIdentifySelectedRow] = useState<Record<string, unknown> | null>(null);
   const [complaintDetail, setComplaintDetail] = useState<ComplaintDetail>(null);
   const [addressInfoDetail, setAddressInfoDetail] = useState<AddressInfoDetailState>(null);
+  const [mapRightClickMenu, setMapRightClickMenu] = useState<MapRightClickMenuState>(null);
   const addressParcelGeometryRef = useRef<import('ol/geom').Geometry | null>(null);
   const addressParcelSeedGeom4326Ref = useRef<Record<string, unknown> | null>(null);
   const [spatialFilterWkt, setSpatialFilterWkt] = useState<string | null>(null);
@@ -1047,6 +1066,8 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
         setComplaintDetail,
         addressInfoDetail,
         setAddressInfoDetail,
+        mapRightClickMenu,
+        setMapRightClickMenu,
         addressParcelGeometryRef,
         addressParcelSeedGeom4326Ref,
         allLayersOffRef,

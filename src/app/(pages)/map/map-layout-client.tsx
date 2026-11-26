@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo, Suspense } from "react"
 import { createPortal } from "react-dom"
-import { useRouter, useSearchParams } from "next/navigation"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { X } from "lucide-react"
 import Map3DDataPanel from "./_mapComponents/Map3DDataPanel"
 import { HangulSearchIme } from "./_mapComponents/hangulIme/HangulSearchIme"
@@ -15,12 +15,17 @@ import ComplaintDetail from "./_mapComponents/complaint/ComplaintDetail"
 import ComplaintAdd from "./_mapComponents/complaint/ComplaintAdd"
 import { MAP_FLOATING_DETAIL_CLOSE_EVENT } from "./_mapComponents/mapFloatingDetailEvent"
 import AddressInfoDetail from "./_mapComponents/AddressInfoDetail"
+import MapRightClickMenu from "./_mapComponents/mapRightClick/MapRightClickMenu"
 import { RiverBasicPlanListPanel } from "./_mapContents/river/riverBasicPlan/RiverBasicPlanListPanel"
 import {
   RiverBasicPlanDetailPanel,
   type RiverBasicPlanPreferredPlan,
 } from "./_mapContents/river/riverBasicPlan/RiverBasicPlanDetailPanel"
-import type { RiverBasicPlanListAxis } from "./_mapContents/river/riverBasicPlan/RiverBasicPlanScopeModal"
+import {
+  readRiverBasicPlanListAxis,
+  writeRiverBasicPlanListAxis,
+  type RiverBasicPlanListAxis,
+} from "./_mapContents/river/riverBasicPlan/RiverBasicPlanScopeModal"
 import { RiverBasicPlanMapDrawingFromMapHandler } from "./_mapContents/river/riverBasicPlan/RiverBasicPlanMapDrawingFromMapHandler"
 import { RoadLedgerListPanel } from "./_mapContents/road/roadLedger/RoadLedgerListPanel"
 import { RoadLedgerDetailPanel } from "./_mapContents/road/roadLedger/RoadLedgerDetailPanel"
@@ -28,6 +33,15 @@ import { RoadLedgerFacilityAttrModal } from "./_mapContents/road/roadLedger/Road
 import { RoadNetworkListPanel } from "./_mapContents/road/roadNetwork/RoadNetworkListPanel"
 import { RoadNetworkDetailPanel } from "./_mapContents/road/roadNetwork/RoadNetworkDetailPanel"
 import { clearRoadNetworkWmsLayers } from "./_mapContents/road/roadNetwork/roadNetworkMapSync"
+import { BikeRoadListPanel } from "./_mapContents/road/bikeRoad/BikeRoadListPanel"
+import { BikeRoadDetailPanel } from "./_mapContents/road/bikeRoad/BikeRoadDetailPanel"
+import { BikeRoadMapOverlay } from "./_mapContents/road/bikeRoad/BikeRoadMapOverlay"
+import {
+  BIKE_ROAD_MOCK_ROUTES,
+  createEmptyBikeRoadRoute,
+  isNewBikeRoadRouteId,
+  type BikeRoadRoute,
+} from "./_mapContents/road/bikeRoad/bikeRoadMock"
 import { SafetyMapLayerPanel } from "./_mapContents/safty/safetyMap/SafetyMapLayerPanel"
 import { SafetyInfoLayerPanel } from "./_mapContents/safty/safetyInfo/SafetyInfoLayerPanel"
 import { SafetyWaterShell } from "./_mapContents/safty/safetyWater/SafetyWaterShell"
@@ -120,6 +134,7 @@ import { clearUsageDataAsWmsLayers } from "./_mapContents/river/usageDataAs/usag
 import { RoadRewardListPanel } from "./_mapContents/road/roadReward/RoadRewardListPanel"
 import { RoadRewardDetailPanel } from "./_mapContents/road/roadReward/RoadRewardDetailPanel"
 import { type RoadRewardCase } from "./_mapContents/road/roadReward/roadRewardMock"
+import { UnpaidLandCompensationListPanel } from "./_mapContents/road/unpaidLandCompensation/UnpaidLandCompensationListPanel"
 import { RoadFrontageBuildingListPanel } from "./_mapContents/road/roadFrontageBuilding/RoadFrontageBuildingListPanel"
 import { RoadFrontageBuildingDetailPanel } from "./_mapContents/road/roadFrontageBuilding/RoadFrontageBuildingDetailPanel"
 import { ROAD_FRONTAGE_BUILDING_NEW_ID } from "./_mapContents/road/roadFrontageBuilding/roadFrontageBuildingMock"
@@ -210,6 +225,19 @@ import {
   WORKS_REGISTER_OPENED_KEY,
   WorksRegisterShell,
 } from "./_mapContents/worksRegister/WorksRegister.shell"
+import {
+  ODOR_ALERT_OPENED_KEY,
+} from "./_mapContents/odorAlert/odorAlertConfig"
+import { OdorAlertShell } from "./_mapContents/odorAlert/OdorAlert.shell"
+import { OdorAlertPopupHost } from "./_mapContents/odorAlert/OdorAlertPopupHost"
+import {
+  ODOR_DASHBOARD_OPENED_KEY,
+} from "./_mapContents/odorDashboard/odorDashboardConfig"
+import { OdorDashboardShell } from "./_mapContents/odorDashboard/OdorDashboard.shell"
+import {
+  ODOR_ALERT_VIEW2_OPENED_KEY,
+} from "./_mapContents/odorAlertView2/odorAlertView2Config"
+import { OdorAlertView2Shell } from "./_mapContents/odorAlertView2/OdorAlertView2.shell"
 import { FmsLinkageListPanel } from "./_mapContents/fmsLinkage/FmsLinkageListPanel"
 import { FmsLinkageDetailPanel } from "./_mapContents/fmsLinkage/FmsLinkageDetailPanel"
 import { isFmsOpenedToken } from "@/lib/fmsLinkage/fmsBinding"
@@ -291,6 +319,18 @@ import {
   INDIVIDUAL_LAND_PRICE_PANEL_MAX_WIDTH,
   INDIVIDUAL_LAND_PRICE_PANEL_MIN_WIDTH,
 } from "./_mapContents/individualLandPrice/individualLandPriceConfig"
+import { RealTransactionPriceListPanel } from "./_mapContents/realTransactionPrice/RealTransactionPriceListPanel"
+import { RealTransactionPriceDetailPanel } from "./_mapContents/realTransactionPrice/RealTransactionPriceDetailPanel"
+import {
+  REAL_TRANSACTION_PRICE_DETAIL_DEFAULT_WIDTH,
+  REAL_TRANSACTION_PRICE_DETAIL_MAX_WIDTH,
+  REAL_TRANSACTION_PRICE_DETAIL_MIN_WIDTH,
+  REAL_TRANSACTION_PRICE_OPENED_KEY,
+  REAL_TRANSACTION_PRICE_PANEL_DEFAULT_WIDTH,
+  REAL_TRANSACTION_PRICE_PANEL_MAX_WIDTH,
+  REAL_TRANSACTION_PRICE_PANEL_MIN_WIDTH,
+  defaultDealYmd,
+} from "./_mapContents/realTransactionPrice/realTransactionPriceConfig"
 import { DevelopmentChargeListPanel } from "./_mapContents/developmentCharge/DevelopmentChargeListPanel"
 import { DevelopmentChargeDetailPanel } from "./_mapContents/developmentCharge/DevelopmentChargeDetailPanel"
 import {
@@ -302,6 +342,17 @@ import {
   DEVELOPMENT_CHARGE_PANEL_MAX_WIDTH,
   DEVELOPMENT_CHARGE_PANEL_MIN_WIDTH,
 } from "./_mapContents/developmentCharge/developmentChargeConfig"
+import { CadastralControlPointListPanel } from "./_mapContents/cadastralControlPoint/CadastralControlPointListPanel"
+import { CadastralControlPointDetailPanel } from "./_mapContents/cadastralControlPoint/CadastralControlPointDetailPanel"
+import {
+  CADASTRAL_CONTROL_POINT_DETAIL_DEFAULT_WIDTH,
+  CADASTRAL_CONTROL_POINT_DETAIL_MAX_WIDTH,
+  CADASTRAL_CONTROL_POINT_DETAIL_MIN_WIDTH,
+  CADASTRAL_CONTROL_POINT_OPENED_KEY,
+  CADASTRAL_CONTROL_POINT_PANEL_DEFAULT_WIDTH,
+  CADASTRAL_CONTROL_POINT_PANEL_MAX_WIDTH,
+  CADASTRAL_CONTROL_POINT_PANEL_MIN_WIDTH,
+} from "./_mapContents/cadastralControlPoint/cadastralControlPointConfig"
 import { RiverIllegalOccupationListPanel } from "./_mapContents/river/riverIllegalOccupation/RiverIllegalOccupationListPanel"
 import { RiverIllegalOccupationDetailPanel } from "./_mapContents/river/riverIllegalOccupation/RiverIllegalOccupationDetailPanel"
 import {
@@ -363,6 +414,12 @@ const ROAD_NETWORK_DETAIL_DEFAULT_WIDTH = 420
 const ROAD_NETWORK_DETAIL_MIN_WIDTH = 340
 const ROAD_NETWORK_DETAIL_MAX_WIDTH = 720
 
+const BIKE_ROAD_LIST_DEFAULT_WIDTH = STANDARD_LIST_DEFAULT_WIDTH
+const BIKE_ROAD_LIST_MIN_WIDTH = STANDARD_LIST_MIN_WIDTH
+const BIKE_ROAD_LIST_MAX_WIDTH = 680
+const BIKE_ROAD_DETAIL_DEFAULT_WIDTH = 980
+const BIKE_ROAD_DETAIL_MIN_WIDTH = 800
+const BIKE_ROAD_DETAIL_MAX_WIDTH = 1200
 
 const SAFETY_MAP_PANEL_DEFAULT_WIDTH = 360
 const SAFETY_MAP_PANEL_MIN_WIDTH = 280
@@ -467,6 +524,7 @@ const MAP_3D_DATA_OPENED_KEY = "map3dData"
 const RIVER_BASIC_PLAN_OPENED_KEY = "riverBasicPlan"
 const ROAD_LEDGER_OPENED_KEY = "roadLedger"
 const ROAD_NETWORK_OPENED_KEY = "roadNetwork"
+const BIKE_ROAD_OPENED_KEY = "bikeRoad"
 const SAFETY_MAP_OPENED_KEY = "safetyMap"
 const SAFETY_INFO_OPENED_KEY = "safetyInfo"
 const SAFETY_WATER_OPENED_KEY = "safetyWater"
@@ -598,6 +656,12 @@ const ROAD_REWARD_PANEL_MAX_WIDTH = 480
 const ROAD_REWARD_DETAIL_DEFAULT_WIDTH = 480
 const ROAD_REWARD_DETAIL_MIN_WIDTH = 380
 const ROAD_REWARD_DETAIL_MAX_WIDTH = 720
+
+/** serviceList `ser_eng`: unpaidLandCompensation — 미지급용지 보상 지급대장(목업) */
+const UNPAID_LAND_COMPENSATION_OPENED_KEY = "unpaidLandCompensation"
+const UNPAID_LAND_COMPENSATION_PANEL_DEFAULT_WIDTH = 1120
+const UNPAID_LAND_COMPENSATION_PANEL_MIN_WIDTH = 800
+const UNPAID_LAND_COMPENSATION_PANEL_MAX_WIDTH = 1400
 
 /** serviceList `ser_eng`: roadFrontageBuilding — 접도구역 건축물 관리대장(목업) */
 const ROAD_FRONTAGE_BUILDING_OPENED_KEY = "roadFrontageBuilding"
@@ -732,6 +796,7 @@ function MapLayoutContent({
     roadNetworkOpen && Boolean(mapContext?.roadNetworkSelectedId)
   const roadNetworkSelectedRow =
     mapContext?.roadNetworkRows?.find((r) => r.id === mapContext?.roadNetworkSelectedId) ?? null
+  const bikeRoadOpen = openedWindows.includes(BIKE_ROAD_OPENED_KEY)
   const safetyMapOpen = openedWindows.includes(SAFETY_MAP_OPENED_KEY)
   const safetyInfoOpen = openedWindows.includes(SAFETY_INFO_OPENED_KEY)
   const safetyWaterOpen = openedWindows.includes(SAFETY_WATER_OPENED_KEY)
@@ -806,6 +871,7 @@ function MapLayoutContent({
   const occupationLedgerSerEng = findOpenedOccupationLedgerSerEng(openedWindows)
   const occupationLedgerOpen = Boolean(occupationLedgerSerEng)
   const roadRewardOpen = openedWindows.includes(ROAD_REWARD_OPENED_KEY)
+  const unpaidLandCompensationOpen = openedWindows.includes(UNPAID_LAND_COMPENSATION_OPENED_KEY)
   const roadFrontageBuildingOpen = openedWindows.includes(ROAD_FRONTAGE_BUILDING_OPENED_KEY)
   const roadFrontageMarkerOpen = openedWindows.includes(ROAD_FRONTAGE_MARKER_OPENED_KEY)
   const useFeeSerEng = findOpenedUseFeeSerEng(openedWindows)
@@ -818,6 +884,9 @@ function MapLayoutContent({
   const smallPublicInspectionOpen = openedWindows.includes(SMALL_PUBLIC_INSPECTION_OPENED_KEY)
   const smallPublicPlanOpen = openedWindows.includes(SMALL_PUBLIC_PLAN_OPENED_KEY)
   const smallPublicBudgetOpen = openedWindows.includes(SMALL_PUBLIC_BUDGET_OPENED_KEY)
+  const odorDashboardOpen = openedWindows.includes(ODOR_DASHBOARD_OPENED_KEY)
+  const odorAlertOpen = openedWindows.includes(ODOR_ALERT_OPENED_KEY)
+  const odorAlertView2Open = openedWindows.includes(ODOR_ALERT_VIEW2_OPENED_KEY)
   const worksRegisterOpen = openedWindows.includes(WORKS_REGISTER_OPENED_KEY)
   const wtlAdminEmptySerEng = findOpenedWtlAdminEmptySerEng(openedWindows)
   const wtlAdminEmptyOpen = Boolean(wtlAdminEmptySerEng)
@@ -863,6 +932,17 @@ function MapLayoutContent({
   const [individualLandPriceDetailWidth, setIndividualLandPriceDetailWidth] = useState(
     INDIVIDUAL_LAND_PRICE_DETAIL_DEFAULT_WIDTH
   )
+  const realTransactionPriceOpen = openedWindows.includes(REAL_TRANSACTION_PRICE_OPENED_KEY)
+  const [realTransactionPriceUmd, setRealTransactionPriceUmd] = useState<string | null>(null)
+  const [realTransactionPriceDealYmd, setRealTransactionPriceDealYmd] = useState(defaultDealYmd)
+  const realTransactionPriceDetailOpen =
+    realTransactionPriceOpen && Boolean(realTransactionPriceUmd)
+  const [realTransactionPricePanelWidth, setRealTransactionPricePanelWidth] = useState(
+    REAL_TRANSACTION_PRICE_PANEL_DEFAULT_WIDTH
+  )
+  const [realTransactionPriceDetailWidth, setRealTransactionPriceDetailWidth] = useState(
+    REAL_TRANSACTION_PRICE_DETAIL_DEFAULT_WIDTH
+  )
   const developmentChargeOpen = openedWindows.includes(DEVELOPMENT_CHARGE_OPENED_KEY)
   const [developmentChargeAreaId, setDevelopmentChargeAreaId] = useState<string | null>(null)
   const developmentChargeDetailOpen = developmentChargeOpen && Boolean(developmentChargeAreaId)
@@ -871,6 +951,16 @@ function MapLayoutContent({
   )
   const [developmentChargeDetailWidth, setDevelopmentChargeDetailWidth] = useState(
     DEVELOPMENT_CHARGE_DETAIL_DEFAULT_WIDTH
+  )
+  const cadastralControlPointOpen = openedWindows.includes(CADASTRAL_CONTROL_POINT_OPENED_KEY)
+  const [cadastralControlPointId, setCadastralControlPointId] = useState<string | null>(null)
+  const cadastralControlPointDetailOpen =
+    cadastralControlPointOpen && Boolean(cadastralControlPointId)
+  const [cadastralControlPointPanelWidth, setCadastralControlPointPanelWidth] = useState(
+    CADASTRAL_CONTROL_POINT_PANEL_DEFAULT_WIDTH
+  )
+  const [cadastralControlPointDetailWidth, setCadastralControlPointDetailWidth] = useState(
+    CADASTRAL_CONTROL_POINT_DETAIL_DEFAULT_WIDTH
   )
   const riverIllegalOccupationOpen = openedWindows.includes(RIVER_ILLEGAL_OCCUPATION_OPENED_KEY)
   const [riverIllegalOccupationPanelWidth, setRiverIllegalOccupationPanelWidth] = useState(
@@ -936,6 +1026,9 @@ function MapLayoutContent({
   const [smallPublicInspectionTotalWidth, setSmallPublicInspectionTotalWidth] = useState(0)
   const [smallPublicPlanTotalWidth, setSmallPublicPlanTotalWidth] = useState(0)
   const [smallPublicBudgetTotalWidth, setSmallPublicBudgetTotalWidth] = useState(0)
+  const [odorDashboardTotalWidth, setOdorDashboardTotalWidth] = useState(0)
+  const [odorAlertTotalWidth, setOdorAlertTotalWidth] = useState(0)
+  const [odorAlertView2TotalWidth, setOdorAlertView2TotalWidth] = useState(0)
   const [worksRegisterTotalWidth, setWorksRegisterTotalWidth] = useState(0)
   const [wtlAdminEmptyTotalWidth, setWtlAdminEmptyTotalWidth] = useState(0)
   const [protoUserAccountOpen, setProtoUserAccountOpen] = useState(false)
@@ -1005,6 +1098,15 @@ function MapLayoutContent({
   const [roadLedgerDetailWidth, setRoadLedgerDetailWidth] = useState(ROAD_LEDGER_DETAIL_DEFAULT_WIDTH)
   const [roadNetworkListWidth, setRoadNetworkListWidth] = useState(ROAD_NETWORK_LIST_DEFAULT_WIDTH)
   const [roadNetworkDetailWidth, setRoadNetworkDetailWidth] = useState(ROAD_NETWORK_DETAIL_DEFAULT_WIDTH)
+  const [bikeRoadListWidth, setBikeRoadListWidth] = useState(BIKE_ROAD_LIST_DEFAULT_WIDTH)
+  const [bikeRoadDetailWidth, setBikeRoadDetailWidth] = useState(BIKE_ROAD_DETAIL_DEFAULT_WIDTH)
+  const [bikeRoadSelectedId, setBikeRoadSelectedId] = useState<string | null>(null)
+  const [bikeRoadRoutes, setBikeRoadRoutes] = useState<BikeRoadRoute[]>(() => [
+    ...BIKE_ROAD_MOCK_ROUTES,
+  ])
+  const bikeRoadSelectedRoute =
+    bikeRoadRoutes.find((r) => r.id === bikeRoadSelectedId) ?? null
+  const bikeRoadDetailOpen = bikeRoadOpen && Boolean(bikeRoadSelectedRoute)
   const [safetyMapPanelWidth, setSafetyMapPanelWidth] = useState(SAFETY_MAP_PANEL_DEFAULT_WIDTH)
   const [safetyInfoPanelWidth, setSafetyInfoPanelWidth] = useState(SAFETY_INFO_PANEL_DEFAULT_WIDTH)
   const [safetyWaterPanelWidth, setSafetyWaterPanelWidth] = useState(SAFETY_WATER_PANEL_DEFAULT_WIDTH)
@@ -1093,6 +1195,9 @@ function MapLayoutContent({
   )
   const [roadRewardPanelWidth, setRoadRewardPanelWidth] = useState(ROAD_REWARD_PANEL_DEFAULT_WIDTH)
   const [roadRewardDetailWidth, setRoadRewardDetailWidth] = useState(ROAD_REWARD_DETAIL_DEFAULT_WIDTH)
+  const [unpaidLandCompensationPanelWidth, setUnpaidLandCompensationPanelWidth] = useState(
+    UNPAID_LAND_COMPENSATION_PANEL_DEFAULT_WIDTH
+  )
   const [roadFrontageBuildingPanelWidth, setRoadFrontageBuildingPanelWidth] = useState(
     ROAD_FRONTAGE_BUILDING_PANEL_DEFAULT_WIDTH
   )
@@ -1162,6 +1267,8 @@ function MapLayoutContent({
     (roadLedgerDetailOpen ? roadLedgerDetailWidth : 0) +
     (roadNetworkOpen ? roadNetworkListWidth : 0) +
     (roadNetworkDetailOpen ? roadNetworkDetailWidth : 0) +
+    (bikeRoadOpen ? bikeRoadListWidth : 0) +
+    (bikeRoadDetailOpen ? bikeRoadDetailWidth : 0) +
     (buildPublicLandOpen ? buildPublicLandPanelWidth : 0) +
     (buildPublicLandDetailOpen ? buildPublicLandDetailWidth : 0) +
     (roadUseLedgerOpen ? roadUseLedgerPanelWidth : 0) +
@@ -1182,6 +1289,7 @@ function MapLayoutContent({
     (occupationLedgerDetailOpen ? occupationLedgerDetailWidth : 0) +
     (roadRewardOpen ? roadRewardPanelWidth : 0) +
     (roadRewardDetailOpen ? roadRewardDetailWidth : 0) +
+    (unpaidLandCompensationOpen ? unpaidLandCompensationPanelWidth : 0) +
     (roadFrontageBuildingOpen ? roadFrontageBuildingPanelWidth : 0) +
     (roadFrontageBuildingDetailOpen ? roadFrontageBuildingDetailWidth : 0) +
     (roadFrontageMarkerOpen ? roadFrontageMarkerPanelWidth : 0) +
@@ -1234,10 +1342,17 @@ function MapLayoutContent({
     (landArchiveDetailOpen ? landArchiveDetailWidth : 0) +
     (individualLandPriceOpen ? individualLandPricePanelWidth : 0) +
     (individualLandPriceDetailOpen ? individualLandPriceDetailWidth : 0) +
+    (realTransactionPriceOpen ? realTransactionPricePanelWidth : 0) +
+    (realTransactionPriceDetailOpen ? realTransactionPriceDetailWidth : 0) +
     (developmentChargeOpen ? developmentChargePanelWidth : 0) +
     (developmentChargeDetailOpen ? developmentChargeDetailWidth : 0) +
+    (cadastralControlPointOpen ? cadastralControlPointPanelWidth : 0) +
+    (cadastralControlPointDetailOpen ? cadastralControlPointDetailWidth : 0) +
     (riverIllegalOccupationOpen ? riverIllegalOccupationPanelWidth : 0) +
-    (riverIllegalOccupationDetailOpen ? riverIllegalOccupationDetailWidth : 0)
+    (riverIllegalOccupationDetailOpen ? riverIllegalOccupationDetailWidth : 0) +
+    (odorDashboardOpen ? odorDashboardTotalWidth : 0) +
+    (odorAlertOpen ? odorAlertTotalWidth : 0) +
+    (odorAlertView2Open ? odorAlertView2TotalWidth : 0)
   const searchBarOffset = {
     leftPx: SIDEBAR_WIDTH + totalListPanelWidth + SEARCH_BAR_MARGIN,
     topPx: 16,
@@ -1267,8 +1382,12 @@ function MapLayoutContent({
   const roadNetworkListLeftPx = afterRoadLedgerPanelsLeftPx
   const roadNetworkDetailLeftPx =
     roadNetworkListLeftPx + (roadNetworkOpen ? roadNetworkListWidth : 0)
-  const buildPublicLandPanelLeftPx =
+  const bikeRoadListLeftPx =
     roadNetworkDetailLeftPx + (roadNetworkDetailOpen ? roadNetworkDetailWidth : 0)
+  const bikeRoadDetailLeftPx =
+    bikeRoadListLeftPx + (bikeRoadOpen ? bikeRoadListWidth : 0)
+  const buildPublicLandPanelLeftPx =
+    bikeRoadDetailLeftPx + (bikeRoadDetailOpen ? bikeRoadDetailWidth : 0)
   const buildPublicLandDetailLeftPx =
     buildPublicLandPanelLeftPx + (buildPublicLandOpen ? buildPublicLandPanelWidth : 0)
   const roadUseLedgerPanelLeftPx =
@@ -1310,8 +1429,11 @@ function MapLayoutContent({
     (occupationLedgerDetailOpen ? occupationLedgerDetailWidth : 0)
   const roadRewardDetailLeftPx =
     roadRewardPanelLeftPx + (roadRewardOpen ? roadRewardPanelWidth : 0)
-  const roadFrontageBuildingPanelLeftPx =
+  const unpaidLandCompensationPanelLeftPx =
     roadRewardDetailLeftPx + (roadRewardDetailOpen ? roadRewardDetailWidth : 0)
+  const roadFrontageBuildingPanelLeftPx =
+    unpaidLandCompensationPanelLeftPx +
+    (unpaidLandCompensationOpen ? unpaidLandCompensationPanelWidth : 0)
   const roadFrontageBuildingDetailLeftPx =
     roadFrontageBuildingPanelLeftPx +
     (roadFrontageBuildingOpen ? roadFrontageBuildingPanelWidth : 0)
@@ -1422,23 +1544,44 @@ function MapLayoutContent({
     landArchiveDetailLeftPx + (landArchiveDetailOpen ? landArchiveDetailWidth : 0)
   const individualLandPriceDetailLeftPx =
     individualLandPricePanelLeftPx + (individualLandPriceOpen ? individualLandPricePanelWidth : 0)
-  const developmentChargePanelLeftPx =
+  const realTransactionPricePanelLeftPx =
     individualLandPriceDetailLeftPx +
     (individualLandPriceDetailOpen ? individualLandPriceDetailWidth : 0)
+  const realTransactionPriceDetailLeftPx =
+    realTransactionPricePanelLeftPx +
+    (realTransactionPriceOpen ? realTransactionPricePanelWidth : 0)
+  const developmentChargePanelLeftPx =
+    realTransactionPriceDetailLeftPx +
+    (realTransactionPriceDetailOpen ? realTransactionPriceDetailWidth : 0)
   const developmentChargeDetailLeftPx =
     developmentChargePanelLeftPx + (developmentChargeOpen ? developmentChargePanelWidth : 0)
-  const riverIllegalOccupationPanelLeftPx =
+  const cadastralControlPointPanelLeftPx =
     developmentChargeDetailLeftPx +
     (developmentChargeDetailOpen ? developmentChargeDetailWidth : 0)
+  const cadastralControlPointDetailLeftPx =
+    cadastralControlPointPanelLeftPx +
+    (cadastralControlPointOpen ? cadastralControlPointPanelWidth : 0)
+  const riverIllegalOccupationPanelLeftPx =
+    cadastralControlPointDetailLeftPx +
+    (cadastralControlPointDetailOpen ? cadastralControlPointDetailWidth : 0)
   const riverIllegalOccupationDetailLeftPx =
     riverIllegalOccupationPanelLeftPx +
     (riverIllegalOccupationOpen ? riverIllegalOccupationPanelWidth : 0)
+  const odorDashboardPanelLeftPx =
+    riverIllegalOccupationDetailLeftPx +
+    (riverIllegalOccupationDetailOpen ? riverIllegalOccupationDetailWidth : 0)
+  const odorAlertPanelLeftPx =
+    odorDashboardPanelLeftPx + (odorDashboardOpen ? odorDashboardTotalWidth : 0)
+  const odorAlertView2PanelLeftPx =
+    odorAlertPanelLeftPx + (odorAlertOpen ? odorAlertTotalWidth : 0)
   const mapPaddingLeft = SIDEBAR_WIDTH + totalListPanelWidth
   /** 패딩은 useLayoutEffect — 자식 useEffect(도로대장 fit 등)보다 먼저 적용되어야 함.
    * 거리뷰 ON일 때만 맵 중심(A)을 새 센터마크 위치에 맞춤.
    * 상하 분할 override([0,0,0,0])가 있으면 왼쪽 패딩을 넣지 않음(스페이서와 이중 패딩 방지). */
   useLayoutEffect(() => {
     const apply = () => {
+      // 맵 미준비여도 최소화 독·축척 등 플로팅이 리스트/상세 폭을 따라가도록 먼저 반영
+      setMapPaddingLeft?.((prev) => (prev === mapPaddingLeft ? prev : mapPaddingLeft))
       const map = mapInstanceRef?.current
       if (!map) return
       const override = mapViewPaddingOverrideRef?.current
@@ -1449,7 +1592,6 @@ function MapLayoutContent({
       } else {
         map.getView().padding = padding
       }
-      setMapPaddingLeft?.((prev) => (prev === mapPaddingLeft ? prev : mapPaddingLeft))
     }
     if (applyMapViewPaddingRef) {
       applyMapViewPaddingRef.current = apply
@@ -1473,10 +1615,12 @@ function MapLayoutContent({
     setRiverBasicPlanSelectedRiver?.(selectedRiverName)
   }, [setRiverBasicPlanPanelOpen, setRiverBasicPlanSelectedRiver, riverBasicPlanOpen, selectedRiverName])
 
-  /** 기본계획 열릴 때 보고서 기준. 닫히면 초기화 */
+  /** 기본계획 열릴 때 마지막 기준(없으면 하천). 닫히면 초기화 */
   useEffect(() => {
     if (riverBasicPlanOpen) {
-      if (riverBasicPlanListAxis == null) setRiverBasicPlanListAxis("byPlan")
+      if (riverBasicPlanListAxis == null) {
+        setRiverBasicPlanListAxis(readRiverBasicPlanListAxis())
+      }
     } else {
       setRiverBasicPlanListAxis(null)
       setRiverPlanTab("river")
@@ -1854,6 +1998,7 @@ function MapLayoutContent({
 
   const handleRiverBasicPlanSelectAxis = (axis: RiverBasicPlanListAxis) => {
     setRiverBasicPlanListAxis(axis)
+    writeRiverBasicPlanListAxis(axis)
     setRiverBasicPlanPreferredPlan(null)
     setSelectedRiverName("")
   }
@@ -1874,6 +2019,54 @@ function MapLayoutContent({
     setOpened(next)
   }
 
+  const handleHideBikeRoad = () => {
+    setBikeRoadRoutes((prev) => prev.filter((r) => !isNewBikeRoadRouteId(r.id)))
+    setBikeRoadSelectedId(null)
+    const next = openedWindows.filter((w) => w !== BIKE_ROAD_OPENED_KEY)
+    setOpened(next)
+  }
+
+  useEffect(() => {
+    if (!bikeRoadOpen) {
+      setBikeRoadRoutes((prev) => prev.filter((r) => !isNewBikeRoadRouteId(r.id)))
+      setBikeRoadSelectedId(null)
+    }
+  }, [bikeRoadOpen])
+
+  const handleAddBikeRoad = () => {
+    const draft = createEmptyBikeRoadRoute()
+    setBikeRoadRoutes((prev) => [
+      ...prev.filter((r) => !isNewBikeRoadRouteId(r.id)),
+      draft,
+    ])
+    setBikeRoadSelectedId(draft.id)
+  }
+
+  const handleSaveBikeRoad = (next: BikeRoadRoute) => {
+    setBikeRoadRoutes((prev) => {
+      // 목록 순서 유지 — 맨 앞으로 끌어오지 않음
+      const byId = prev.findIndex((r) => r.id === next.id)
+      if (byId >= 0) {
+        const copy = [...prev]
+        copy[byId] = next
+        return copy
+      }
+      // 신규 저장: 임시 id 자리를 정식 id로 교체
+      const draftIdx = prev.findIndex((r) => isNewBikeRoadRouteId(r.id))
+      if (draftIdx >= 0) {
+        const copy = [...prev]
+        copy[draftIdx] = next
+        return copy.filter((r, i) => i === draftIdx || !isNewBikeRoadRouteId(r.id))
+      }
+      return [...prev, next]
+    })
+    setBikeRoadSelectedId(next.id)
+  }
+
+  const handleDeleteBikeRoad = (id: string) => {
+    setBikeRoadRoutes((prev) => prev.filter((r) => r.id !== id))
+    setBikeRoadSelectedId((cur) => (cur === id ? null : cur))
+  }
 
   const handleCloseRoadUseLedger = () => {
     setRoadUseLedgerDetailId(null)
@@ -1934,6 +2127,11 @@ function MapLayoutContent({
     setRoadRewardFocusParcelId(null)
     setRoadRewardAutoFitMap(true)
     const next = openedWindows.filter((w) => w !== ROAD_REWARD_OPENED_KEY)
+    setOpened(next)
+  }
+
+  const handleCloseUnpaidLandCompensation = () => {
+    const next = openedWindows.filter((w) => w !== UNPAID_LAND_COMPENSATION_OPENED_KEY)
     setOpened(next)
   }
 
@@ -2063,6 +2261,26 @@ function MapLayoutContent({
     setOpened(next)
   }
 
+  const handleCloseOdorDashboard = () => {
+    setOdorDashboardTotalWidth(0)
+    setOpened(openedWindows.filter((w) => w !== ODOR_DASHBOARD_OPENED_KEY))
+  }
+
+  const handleCloseOdorAlert = () => {
+    setOdorAlertTotalWidth(0)
+    setOpened(openedWindows.filter((w) => w !== ODOR_ALERT_OPENED_KEY))
+  }
+
+  const handleCloseOdorAlertView2 = () => {
+    setOdorAlertView2TotalWidth(0)
+    setOpened(openedWindows.filter((w) => w !== ODOR_ALERT_VIEW2_OPENED_KEY))
+  }
+
+  const handleOpenOdorAlertFromDashboard = () => {
+    setOdorDashboardTotalWidth(0)
+    setOpened([ODOR_ALERT_OPENED_KEY])
+  }
+
   const handleCloseFmsLinkage = () => {
     setFmsGeomToastMsg(null)
     setFmsLinkageSelectedId?.(null)
@@ -2098,9 +2316,19 @@ function MapLayoutContent({
     setOpened(openedWindows.filter((w) => w !== INDIVIDUAL_LAND_PRICE_OPENED_KEY))
   }
 
+  const handleCloseRealTransactionPrice = () => {
+    setRealTransactionPriceUmd(null)
+    setOpened(openedWindows.filter((w) => w !== REAL_TRANSACTION_PRICE_OPENED_KEY))
+  }
+
   const handleCloseDevelopmentCharge = () => {
     setDevelopmentChargeAreaId(null)
     setOpened(openedWindows.filter((w) => w !== DEVELOPMENT_CHARGE_OPENED_KEY))
+  }
+
+  const handleCloseCadastralControlPoint = () => {
+    setCadastralControlPointId(null)
+    setOpened(openedWindows.filter((w) => w !== CADASTRAL_CONTROL_POINT_OPENED_KEY))
   }
 
   const handleCloseRiverIllegalOccupation = () => {
@@ -2274,6 +2502,18 @@ function MapLayoutContent({
   }, [worksRegisterOpen])
 
   useEffect(() => {
+    if (!odorDashboardOpen) setOdorDashboardTotalWidth(0)
+  }, [odorDashboardOpen])
+
+  useEffect(() => {
+    if (!odorAlertOpen) setOdorAlertTotalWidth(0)
+  }, [odorAlertOpen])
+
+  useEffect(() => {
+    if (!odorAlertView2Open) setOdorAlertView2TotalWidth(0)
+  }, [odorAlertView2Open])
+
+  useEffect(() => {
     if (!cadastralResurveyOpen) setCadastralResurveyDistrictId(null)
   }, [cadastralResurveyOpen])
 
@@ -2290,8 +2530,20 @@ function MapLayoutContent({
   }, [individualLandPriceOpen])
 
   useEffect(() => {
+    if (!realTransactionPriceOpen) {
+      setRealTransactionPriceUmd(null)
+      return
+    }
+    setRealTransactionPricePanelWidth(REAL_TRANSACTION_PRICE_PANEL_DEFAULT_WIDTH)
+  }, [realTransactionPriceOpen])
+
+  useEffect(() => {
     if (!developmentChargeOpen) setDevelopmentChargeAreaId(null)
   }, [developmentChargeOpen])
+
+  useEffect(() => {
+    if (!cadastralControlPointOpen) setCadastralControlPointId(null)
+  }, [cadastralControlPointOpen])
 
   useEffect(() => {
     if (!riverIllegalOccupationOpen) setRiverIllegalOccupationSelectedId(null)
@@ -2839,6 +3091,57 @@ function MapLayoutContent({
               </MapSideListPanel>
             </div>
           )}
+          <BikeRoadMapOverlay
+            open={bikeRoadOpen}
+            selectedId={bikeRoadSelectedId}
+            routes={bikeRoadRoutes}
+          />
+          {bikeRoadOpen && (
+            <div className="pointer-events-auto flex h-full shrink-0 flex-col">
+              <MapSideListPanel
+                width={bikeRoadListWidth}
+                minWidth={BIKE_ROAD_LIST_MIN_WIDTH}
+                maxWidth={BIKE_ROAD_LIST_MAX_WIDTH}
+                leftOffsetPx={bikeRoadListLeftPx}
+                onWidthChange={setBikeRoadListWidth}
+                contentClassName="overflow-hidden"
+                serEng="bikeRoad"
+              >
+                <BikeRoadListPanel
+                  onClose={handleHideBikeRoad}
+                  selectedId={bikeRoadSelectedId}
+                  onSelect={(id) => {
+                    setBikeRoadRoutes((prev) =>
+                      prev.filter((r) => !isNewBikeRoadRouteId(r.id) || r.id === id)
+                    )
+                    setBikeRoadSelectedId(id)
+                  }}
+                  onAdd={handleAddBikeRoad}
+                  routes={bikeRoadRoutes}
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          {bikeRoadOpen && bikeRoadSelectedRoute && (
+            <div className="pointer-events-auto flex h-full shrink-0 flex-col">
+              <MapSideListPanel
+                width={bikeRoadDetailWidth}
+                minWidth={BIKE_ROAD_DETAIL_MIN_WIDTH}
+                maxWidth={BIKE_ROAD_DETAIL_MAX_WIDTH}
+                leftOffsetPx={bikeRoadDetailLeftPx}
+                onWidthChange={setBikeRoadDetailWidth}
+                contentClassName="overflow-hidden"
+                serEng="bikeRoad"
+              >
+                <BikeRoadDetailPanel
+                  route={bikeRoadSelectedRoute}
+                  onClose={() => setBikeRoadSelectedId(null)}
+                  onSave={handleSaveBikeRoad}
+                  onDelete={handleDeleteBikeRoad}
+                />
+              </MapSideListPanel>
+            </div>
+          )}
           {buildPublicLandOpen && (
             <div className="pointer-events-auto shrink-0">
               <MapSideListPanel
@@ -3297,6 +3600,22 @@ function MapLayoutContent({
                     roadRewardPanelWidth +
                     (roadRewardDetailOpen ? roadRewardDetailWidth : 0)
                   }
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          {unpaidLandCompensationOpen && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={unpaidLandCompensationPanelWidth}
+                minWidth={UNPAID_LAND_COMPENSATION_PANEL_MIN_WIDTH}
+                maxWidth={UNPAID_LAND_COMPENSATION_PANEL_MAX_WIDTH}
+                leftOffsetPx={unpaidLandCompensationPanelLeftPx}
+                onWidthChange={setUnpaidLandCompensationPanelWidth}
+                serEng="unpaidLandCompensation"
+              >
+                <UnpaidLandCompensationListPanel
+                  onClose={handleCloseUnpaidLandCompensation}
                 />
               </MapSideListPanel>
             </div>
@@ -4199,6 +4518,47 @@ function MapLayoutContent({
               </MapSideListPanel>
             </div>
           )}
+          {realTransactionPriceOpen && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={realTransactionPricePanelWidth}
+                minWidth={REAL_TRANSACTION_PRICE_PANEL_MIN_WIDTH}
+                maxWidth={REAL_TRANSACTION_PRICE_PANEL_MAX_WIDTH}
+                leftOffsetPx={realTransactionPricePanelLeftPx}
+                onWidthChange={setRealTransactionPricePanelWidth}
+                contentClassName="overflow-hidden"
+                serEng={REAL_TRANSACTION_PRICE_OPENED_KEY}
+              >
+                <RealTransactionPriceListPanel
+                  onClose={handleCloseRealTransactionPrice}
+                  selectedUmd={realTransactionPriceUmd}
+                  dealYmd={realTransactionPriceDealYmd}
+                  onDealYmdChange={setRealTransactionPriceDealYmd}
+                  onSelect={setRealTransactionPriceUmd}
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          {realTransactionPriceDetailOpen && realTransactionPriceUmd && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={realTransactionPriceDetailWidth}
+                minWidth={REAL_TRANSACTION_PRICE_DETAIL_MIN_WIDTH}
+                maxWidth={REAL_TRANSACTION_PRICE_DETAIL_MAX_WIDTH}
+                leftOffsetPx={realTransactionPriceDetailLeftPx}
+                onWidthChange={setRealTransactionPriceDetailWidth}
+                contentClassName="overflow-hidden"
+                serEng={REAL_TRANSACTION_PRICE_OPENED_KEY}
+              >
+                <RealTransactionPriceDetailPanel
+                  key={`${realTransactionPriceDealYmd}:${realTransactionPriceUmd}`}
+                  umdNm={realTransactionPriceUmd}
+                  dealYmd={realTransactionPriceDealYmd}
+                  onClose={() => setRealTransactionPriceUmd(null)}
+                />
+              </MapSideListPanel>
+            </div>
+          )}
           {developmentChargeOpen && (
             <div className="pointer-events-auto shrink-0">
               <MapSideListPanel
@@ -4232,6 +4592,43 @@ function MapLayoutContent({
                   key={developmentChargeAreaId}
                   areaId={developmentChargeAreaId}
                   onClose={() => setDevelopmentChargeAreaId(null)}
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          {cadastralControlPointOpen && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={cadastralControlPointPanelWidth}
+                minWidth={CADASTRAL_CONTROL_POINT_PANEL_MIN_WIDTH}
+                maxWidth={CADASTRAL_CONTROL_POINT_PANEL_MAX_WIDTH}
+                leftOffsetPx={cadastralControlPointPanelLeftPx}
+                onWidthChange={setCadastralControlPointPanelWidth}
+                serEng={CADASTRAL_CONTROL_POINT_OPENED_KEY}
+              >
+                <CadastralControlPointListPanel
+                  onClose={handleCloseCadastralControlPoint}
+                  selectedId={cadastralControlPointId}
+                  onSelect={setCadastralControlPointId}
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          {cadastralControlPointDetailOpen && cadastralControlPointId && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={cadastralControlPointDetailWidth}
+                minWidth={CADASTRAL_CONTROL_POINT_DETAIL_MIN_WIDTH}
+                maxWidth={CADASTRAL_CONTROL_POINT_DETAIL_MAX_WIDTH}
+                leftOffsetPx={cadastralControlPointDetailLeftPx}
+                onWidthChange={setCadastralControlPointDetailWidth}
+                contentClassName="overflow-hidden"
+                serEng={CADASTRAL_CONTROL_POINT_OPENED_KEY}
+              >
+                <CadastralControlPointDetailPanel
+                  key={cadastralControlPointId}
+                  pointId={cadastralControlPointId}
+                  onClose={() => setCadastralControlPointId(null)}
                 />
               </MapSideListPanel>
             </div>
@@ -4276,6 +4673,29 @@ function MapLayoutContent({
               </MapSideListPanel>
             </div>
           )}
+          {odorDashboardOpen && (
+            <OdorDashboardShell
+              leftOffsetPx={odorDashboardPanelLeftPx}
+              onTotalWidthChange={setOdorDashboardTotalWidth}
+              onClose={handleCloseOdorDashboard}
+              onOpenAlertList={handleOpenOdorAlertFromDashboard}
+            />
+          )}
+          {odorAlertOpen && (
+            <OdorAlertShell
+              leftOffsetPx={odorAlertPanelLeftPx}
+              onTotalWidthChange={setOdorAlertTotalWidth}
+              onClose={handleCloseOdorAlert}
+            />
+          )}
+          {odorAlertView2Open && (
+            <OdorAlertView2Shell
+              leftOffsetPx={odorAlertView2PanelLeftPx}
+              onTotalWidthChange={setOdorAlertView2TotalWidth}
+              onClose={handleCloseOdorAlertView2}
+            />
+          )}
+          <OdorAlertPopupHost enabled={systemKeyFromUrl === "odorAdmin"} />
           <div className="flex-1 min-w-0 relative">
             <div className="pointer-events-auto">
               <MapSearchBar
@@ -4418,6 +4838,7 @@ function MapLayoutContent({
               </SerWriteAccessProvider>
 
               <AddressInfoDetail />
+              <MapRightClickMenu />
             </div>
             <div className="pointer-events-auto">
               <UserAccountProtoPanel
@@ -4529,6 +4950,10 @@ function MapLayoutContent({
   )
 }
 
+function isLayerClickDetailBlankPath(pathname: string | null | undefined): boolean {
+  return String(pathname ?? "").includes("/map/layer-click-detail")
+}
+
 export default function MapLayoutClient({
   children,
   indexLogoSrc,
@@ -4538,6 +4963,11 @@ export default function MapLayoutClient({
   indexLogoSrc: string
   projectName?: string
 }) {
+  const pathname = usePathname()
+  if (isLayerClickDetailBlankPath(pathname)) {
+    return <>{children}</>
+  }
+
   return (
     <MapContextProvider>
       <ParcelAnalysisProvider>

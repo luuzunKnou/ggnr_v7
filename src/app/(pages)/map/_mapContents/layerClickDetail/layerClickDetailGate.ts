@@ -15,7 +15,6 @@ export const LAYER_CLICK_DETAIL_BLOCKED_OPENED = [
   'constructionLedger',
   'sewerConstructionLedger',
   'wtlConstructionLedger',
-  'wtlMeterLocation',
   'swlNetworkMap',
   'wtlComplaint',
   'wtlMemo',

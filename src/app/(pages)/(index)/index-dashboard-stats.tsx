@@ -9,6 +9,10 @@ import {
   SafetyWaterStatsChartOnly,
   type StatsKindBlock,
 } from '@/app/(pages)/map/_mapContents/safty/safetyWater/SafetyWaterStatsPanel';
+import {
+  fetchFloodObservationStats,
+  fetchFloodStations,
+} from '@/app/(pages)/map/_mapContents/safty/safetyWater/floodClientApi';
 import type { SafetyWaterStatPoint } from '@/app/(pages)/map/_mapContents/safty/safetyWater/safetyWaterTypes';
 import { call } from '@/lib/api';
 import { YONHAP_NEWS_HOME_URL } from '@/lib/yonhapNews';
@@ -400,15 +404,13 @@ export function IndexDashboardStats({ charts, systemColors = {} }: IndexDashboar
 
   const loadFloodStats = useCallback(async () => {
     if (!showWater) return;
-    const qs = new URLSearchParams({
-      minX: String(YEONGYANG_BBOX.minX),
-      maxX: String(YEONGYANG_BBOX.maxX),
-      minY: String(YEONGYANG_BBOX.minY),
-      maxY: String(YEONGYANG_BBOX.maxY),
+    const stRes = await fetchFloodStations({
+      minX: YEONGYANG_BBOX.minX,
+      maxX: YEONGYANG_BBOX.maxX,
+      minY: YEONGYANG_BBOX.minY,
+      maxY: YEONGYANG_BBOX.maxY,
     });
-    const stRes = await fetch(`/api/flood/stations?${qs.toString()}`);
-    const stJson = (await stRes.json().catch(() => ({}))) as { items?: FloodStation[] };
-    const stations = Array.isArray(stJson.items) ? stJson.items : [];
+    const stations = stRes.ok ? stRes.items : [];
     const waterStations = stations.filter((s) => s.kind === 'water');
     const rainStations = stations.filter((s) => s.kind === 'rain');
 
@@ -420,19 +422,14 @@ export function IndexDashboardStats({ charts, systemColors = {} }: IndexDashboar
 
     const fetchKindAverage = async (kind: 'water' | 'rain', list: FloodStation[]) => {
       if (list.length === 0) return [] as SafetyWaterStatPoint[];
-      const res = await fetch('/api/flood/observations/stats', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          kind,
-          time: '1D',
-          sdt,
-          edt,
-          stations: list.map((s) => ({ code: s.code })),
-        }),
+      const res = await fetchFloodObservationStats({
+        kind,
+        time: '1D',
+        sdt,
+        edt,
+        stations: list.map((s) => ({ code: s.code })),
       });
-      const json = (await res.json().catch(() => ({}))) as { items?: SafetyWaterStatPoint[] };
-      return Array.isArray(json.items) ? json.items : [];
+      return res.ok ? res.items : [];
     };
 
     const [water, rain] = await Promise.all([

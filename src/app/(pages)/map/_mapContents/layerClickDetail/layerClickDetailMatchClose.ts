@@ -130,11 +130,20 @@ export function collectLayerClickDetailMatchCloseOwnedNames(
   return out
 }
 
-function layerResultIsOwned(
+export function layerResultIsOwned(
   layer: IdentifyLayerResult,
   owned: Set<string>
 ): boolean {
   const names = [layer.tableName, layer.physicalTable].map(normName).filter(Boolean)
+  return names.some((n) => owned.has(n))
+}
+
+export function isIdentifyTableOwned(
+  tableName: string | null | undefined,
+  physicalTable: string | null | undefined,
+  owned: Set<string>
+): boolean {
+  const names = [tableName, physicalTable].map(normName).filter(Boolean)
   return names.some((n) => owned.has(n))
 }
 

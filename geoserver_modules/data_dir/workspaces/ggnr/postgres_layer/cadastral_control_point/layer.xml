@@ -1,0 +1,19 @@
+<layer>
+  <name>cadastral_control_point</name>
+  <id>LayerInfoImpl-6400de0b:1a1c9c079f9:-7bf2</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl-6400de0b:1a1c9c079f9:-7bf1</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl-6400de0b:1a1c9c079f9:-7bf3</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-11-16 04:22:29.449 UTC</dateCreated>
+  <dateModified>2026-11-16 04:22:32.232 UTC</dateModified>
+</layer>

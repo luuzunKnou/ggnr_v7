@@ -431,6 +431,9 @@ export function WtlTopologyPanel({
     status: WtlTopoChangeRequest['status'],
     message?: string
   ) => {
+    const requestUser = String(session?.user?.id ?? '').trim()
+    const requestUserName =
+      String(session?.user?.name ?? '').trim() || requestUser
     const row: WtlTopoChangeRequest = {
       id: `req-${Date.now()}`,
       at: nowStamp(),
@@ -442,6 +445,8 @@ export function WtlTopologyPanel({
       files,
       applyMode: applyMode,
       status,
+      requestUser,
+      requestUserName,
       message,
     }
     setRequests((prev) => [row, ...prev])

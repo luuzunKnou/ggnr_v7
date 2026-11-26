@@ -2,7 +2,11 @@
 
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Check, Copy, Loader2 } from 'lucide-react';
-import { COORDINATE_SYSTEM_OPTIONS, type AddressInfoPanelProps } from './shared';
+import {
+  COORDINATE_SYSTEM_OPTIONS,
+  openExternalMapByAddress,
+  type AddressInfoPanelProps,
+} from './shared';
 import { transformCoordinate } from '../services/coordinateService';
 import {
   fetchBuildingRegisterDetail,
@@ -64,25 +68,6 @@ function AddressCopyButton({ text }: { text: string }) {
       {copied ? <Check className="h-3 w-3 text-primary" aria-hidden /> : <Copy className="h-3 w-3" aria-hidden />}
     </button>
   );
-}
-
-/** 주소 문자열로 외부 지도 검색 */
-function openExternalMapByAddress(
-  provider: 'naver' | 'kakao' | 'google',
-  address: string
-) {
-  const q = String(address ?? '').trim();
-  if (!q || q === '-') {
-    window.alert('검색할 주소가 없습니다.');
-    return;
-  }
-  const enc = encodeURIComponent(q);
-  const urls = {
-    naver: `https://map.naver.com/p/search/${enc}`,
-    kakao: `https://map.kakao.com/?q=${enc}`,
-    google: `https://www.google.com/maps/search/?api=1&query=${enc}`,
-  } as const;
-  window.open(urls[provider], '_blank', 'noopener,noreferrer');
 }
 
 type TabId = 'parcel' | 'buildingLedger' | 'buildingPermit';
@@ -549,11 +534,11 @@ export function LandInfoPanelContent({
           </div>
           {buildingName ? <div>건물명: {buildingName}</div> : null}
         </div>
-        <div className="mt-2 flex items-center gap-2">
+        <div className="mt-2 flex items-center gap-2 min-w-0">
           <select
             value={selectedCrs}
             onChange={(e) => setSelectedCrs(e.target.value)}
-            className="text-[11px] border border-border bg-background text-foreground rounded px-1 py-0.5 max-w-[130px]"
+            className="text-[11px] border border-border bg-background text-foreground rounded px-1 py-0.5 max-w-[130px] shrink-0"
             title="좌표계"
           >
             {COORDINATE_SYSTEM_OPTIONS.map((opt) => (
@@ -562,9 +547,10 @@ export function LandInfoPanelContent({
               </option>
             ))}
           </select>
-          <span className="text-[11px] text-muted-foreground font-mono truncate">
+          <span className="min-w-0 flex-1 text-[11px] text-muted-foreground font-mono truncate">
             {xy ? `${xy.x.toFixed(4)}, ${xy.y.toFixed(4)}` : '-'}
           </span>
+          <AddressCopyButton text={xy ? `${xy.x.toFixed(4)}, ${xy.y.toFixed(4)}` : '-'} />
         </div>
       </section>
 

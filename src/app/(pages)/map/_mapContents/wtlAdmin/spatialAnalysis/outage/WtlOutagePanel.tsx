@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useSession } from 'next-auth/react'
 import { containsCoordinate } from 'ol/extent'
 import { transform } from 'ol/proj'
 import { call } from '@/lib/api'
@@ -80,6 +81,14 @@ export function WtlOutagePanel({
   onHandoffConsumed,
   mapLeftPx = 0,
 }: Props) {
+  const { data: session } = useSession()
+  const sessionAuthor = useMemo(
+    () => ({
+      userId: String(session?.user?.id ?? '').trim() || null,
+      userName: String(session?.user?.name ?? '').trim() || null,
+    }),
+    [session?.user?.id, session?.user?.name]
+  )
   const [history, setHistory] = useState<WtlOutageHistory[]>([])
   const [historyPage, setHistoryPage] = useState(1)
   const [historyId, setHistoryId] = useState<string | null>(null)
@@ -404,13 +413,13 @@ export function WtlOutagePanel({
     }
   }
 
-  /** 세션 이력에만 저장 (brief: 세션 이력만 유지) */
+  /** 세션 이력에만 저장 (brief: 세션 이력만 유지). 작성자는 로그인 세션 */
   const saveToSessionHistory = (
     gates: WtlOutageGate[],
     analyzed: WtlOutageResult,
     reason = ''
   ): WtlOutageHistory => {
-    const row = { ...buildOutageHistory(gates, analyzed), reason }
+    const row = { ...buildOutageHistory(gates, analyzed, sessionAuthor), reason }
     setHistory((prev) => [row, ...prev])
     setHistoryPage(1)
     setHistoryId(row.id)
@@ -832,9 +841,10 @@ export function WtlOutagePanel({
               <table className="w-full table-fixed border-collapse text-left text-[11px]">
                 <thead className="bg-muted">
                   <tr className="h-7 border-b border-border">
-                    <th className="w-[7rem] px-1.5 font-medium text-muted-foreground">일시</th>
-                    <th className="w-[5.5rem] px-1.5 font-medium text-muted-foreground">제수변</th>
+                    <th className="w-[7.25rem] px-1.5 font-medium text-muted-foreground">일시</th>
+                    <th className="w-[5rem] px-1.5 font-medium text-muted-foreground">제수변</th>
                     <th className="px-2 font-medium text-muted-foreground">사유</th>
+                    <th className="w-[4.75rem] px-1.5 font-medium text-muted-foreground">작성자</th>
                     <th className="w-[4.75rem] px-1.5 font-medium text-muted-foreground">상태</th>
                   </tr>
                 </thead>
@@ -860,6 +870,12 @@ export function WtlOutagePanel({
                         title={item.reason?.trim() ? item.reason : undefined}
                       >
                         {item.reason || '—'}
+                      </td>
+                      <td
+                        className="truncate px-1.5 text-muted-foreground"
+                        title={item.createUserName || item.createUser || undefined}
+                      >
+                        {item.createUserName || item.createUser || '—'}
                       </td>
                       <td className={cn('whitespace-nowrap px-1.5', statusClass(item.status))}>
                         {item.status}

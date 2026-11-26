@@ -102,6 +102,12 @@ export function WtlTopoRequestListPanel({ requests, onSelectIssue, hasIssue, onC
                     <span className="min-w-0 flex-1 truncate text-muted-foreground" title={r.issueTarget}>
                       {r.issueTarget}
                     </span>
+                    <span
+                      className="max-w-[3.5rem] shrink-0 truncate text-muted-foreground"
+                      title={r.requestUserName || r.requestUser || undefined}
+                    >
+                      {r.requestUserName || r.requestUser || '—'}
+                    </span>
                     {r.files.length > 0 && (
                       <span className="flex shrink-0 items-center gap-0.5 text-muted-foreground" title={`첨부 ${r.files.length}개`}>
                         <Paperclip className="h-3 w-3" aria-hidden />
@@ -112,6 +118,9 @@ export function WtlTopoRequestListPanel({ requests, onSelectIssue, hasIssue, onC
                   </button>
                   {open && (
                     <div className="space-y-1.5 bg-muted/30 px-3 pb-2.5 pt-1 text-[11px]">
+                      <p className="text-muted-foreground">
+                        작성자 · {r.requestUserName || r.requestUser || '—'}
+                      </p>
                       <p className="whitespace-pre-wrap text-foreground">{r.memo || '(메모 없음)'}</p>
                       {r.message && <p className="text-muted-foreground">{r.message}</p>}
                       {r.files.length > 0 && (

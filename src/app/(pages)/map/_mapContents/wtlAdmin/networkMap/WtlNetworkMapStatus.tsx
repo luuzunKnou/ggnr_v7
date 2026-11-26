@@ -4,7 +4,10 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNod
 import { createPortal } from 'react-dom'
 import { Download, Scaling, X } from 'lucide-react'
 import { call } from '@/lib/api'
+import { cn } from '@/lib/utils'
 import { CheckboxSelectDropdown } from './CheckboxSelectDropdown'
+import type { WtlNetworkStatsViewMode } from './WtlNetworkFullLayoutPanels'
+import { WtlNetworkStatusCombinedChart } from './WtlNetworkStatusCombinedChart'
 import type {
   WtlNetworkAxisMode,
   WtlNetworkDipFilterOption,
@@ -68,12 +71,21 @@ function risen(target: number, progress: number) {
 function SectionTitle({
   children,
   onExpand,
+  solidHeader = false,
 }: {
   children: string
   onExpand?: () => void
+  /** 플로팅 UI — 지도 플로팅 헤더와 동일 톤 */
+  solidHeader?: boolean
 }) {
   return (
-    <div className="flex items-center justify-between gap-1.5 border-b border-border bg-muted/50 px-2 py-1 text-xs font-medium text-foreground">
+    <div
+      className={
+        solidHeader
+          ? 'standard-map-float-header gap-1.5 px-2 py-1 text-xs'
+          : 'flex items-center justify-between gap-1.5 border-b border-border bg-muted/50 px-2 py-1 text-xs font-medium text-foreground'
+      }
+    >
       <div className="flex min-w-0 items-center gap-1.5">
         <span className="h-3 w-0.5 shrink-0 rounded-sm bg-primary" aria-hidden />
         <span className="truncate">{children}</span>
@@ -149,16 +161,20 @@ function LengthTable({
   progress,
   onExpand,
   pending = false,
+  solidHeader = false,
 }: {
   title: string
   rows: { label: string; meters: number }[]
   progress: number
   onExpand?: () => void
   pending?: boolean
+  solidHeader?: boolean
 }) {
   return (
     <section className="shrink-0 overflow-hidden rounded border border-border bg-background">
-      <SectionTitle onExpand={onExpand}>{title}</SectionTitle>
+      <SectionTitle onExpand={onExpand} solidHeader={solidHeader}>
+        {title}
+      </SectionTitle>
       {rows.length === 0 ? (
         <p className="px-2 py-2 text-[11px] text-muted-foreground">
           {pending ? '현황 집계 중…' : '해당 자료가 없습니다.'}
@@ -1088,11 +1104,22 @@ export function WtlNetworkMapStatus({
   mapSources = EMPTY_MAP_SOURCES,
   listFilter = EMPTY_LIST_FILTER,
   filterMeta = null,
+  className,
+  solidSectionHeader = false,
+  viewMode = 'table',
 }: {
   mapSources?: string[]
   listFilter?: WtlNetworkStatusListFilter
   filterMeta?: WtlNetworkFilterMeta | null
+  className?: string
+  /** 플로팅 UI — 관경/연도/관용도/시설개수 제목을 플로팅 헤더와 동일하게 */
+  solidSectionHeader?: boolean
+  /** 도표만 / 그래프만 / 그래프 및 도표 */
+  viewMode?: WtlNetworkStatsViewMode
 }) {
+  const showGraph = viewMode === 'graph' || viewMode === 'both'
+  const showTables = viewMode === 'table' || viewMode === 'both'
+  const showBoth = viewMode === 'both'
   const [stats, setStats] = useState<WtlNetworkStatusStats>(EMPTY_STATS)
   /** 첫 집계 전에 «해당 자료가 없습니다»가 먼저 뜨지 않도록 true로 시작 */
   const [loading, setLoading] = useState(true)
@@ -1345,29 +1372,27 @@ export function WtlNetworkMapStatus({
   const waitingViewBbox = Boolean(listFilterParam.onlyInView && !listFilterParam.bbox)
   const pending = loading || waitingViewBbox
 
-  return (
+  const lengthTablesBlock = showTables ? (
     <div
-      ref={rootRef}
-      className="min-h-0 flex-1 space-y-[13px] overflow-auto border-t border-border px-3 pb-2 pt-[13px]"
+      className={cn(
+        'flex min-h-0 min-w-0 flex-col gap-[13px]',
+        showBoth && 'flex-1 overflow-y-auto'
+      )}
     >
       <LengthTable
         title="관경별 관로 연장"
         rows={stats.byDiameter}
         progress={progress}
         pending={pending}
+        solidHeader={solidSectionHeader}
         onExpand={() => setExpandKind('byDiameter')}
       />
-      {/* <LengthTable
-        title="관재질별 관로 연장"
-        rows={stats.byMaterial}
-        progress={progress}
-        onExpand={() => setExpandKind('byMaterial')}
-      /> */}
       <LengthTable
         title="연도별 관로 연장"
         rows={stats.byYear}
         progress={progress}
         pending={pending}
+        solidHeader={solidSectionHeader}
         onExpand={() => setExpandKind('byYear')}
       />
       <LengthTable
@@ -1375,30 +1400,82 @@ export function WtlNetworkMapStatus({
         rows={stats.bySaa}
         progress={progress}
         pending={pending}
+        solidHeader={solidSectionHeader}
         onExpand={() => setExpandKind('bySaa')}
       />
-      <section className="shrink-0 overflow-hidden rounded border border-border bg-background">
-        <SectionTitle>시설 개수</SectionTitle>
-        {stats.facilityCounts.length === 0 ? (
-          <p className="px-2 py-2 text-[11px] text-muted-foreground">
-            {pending ? '현황 집계 중…' : '해당 자료가 없습니다.'}
-          </p>
-        ) : (
-          <div className="grid grid-cols-3 gap-1 p-1.5">
-            {stats.facilityCounts.map((item) => (
-              <div
-                key={item.label}
-                className="flex min-w-0 items-center justify-between gap-1 rounded border border-border px-1.5 py-1"
-              >
-                <span className="min-w-0 truncate text-xs text-muted-foreground">{item.label}</span>
-                <span className="shrink-0 text-xs font-semibold tabular-nums text-foreground">
-                  {risen(item.count, progress).toLocaleString()}
-                </span>
-              </div>
-            ))}
+    </div>
+  ) : null
+
+  /** 그래프만·도표만·둘 다 — 시설 개수 도표는 항상 표시 */
+  const facilityBlock = (
+    <section className="shrink-0 overflow-hidden rounded border border-border bg-background">
+      <SectionTitle solidHeader={solidSectionHeader}>시설 개수</SectionTitle>
+      {stats.facilityCounts.length === 0 ? (
+        <p className="px-2 py-2 text-[11px] text-muted-foreground">
+          {pending ? '현황 집계 중…' : '해당 자료가 없습니다.'}
+        </p>
+      ) : (
+        <div className="grid grid-cols-3 gap-1 p-1.5">
+          {stats.facilityCounts.map((item) => (
+            <div
+              key={item.label}
+              className="flex min-w-0 items-center justify-between gap-1 rounded border border-border px-1.5 py-1"
+            >
+              <span className="min-w-0 truncate text-xs text-muted-foreground">
+                {item.label}
+              </span>
+              <span className="shrink-0 text-xs font-semibold tabular-nums text-foreground">
+                {risen(item.count, progress).toLocaleString()}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  )
+
+  const graphBlock = showGraph ? (
+    <WtlNetworkStatusCombinedChart
+      mapSources={mapSourcesParam}
+      listFilter={listFilterParam}
+      filterMeta={filterMeta}
+      solidHeader={solidSectionHeader}
+      className={showBoth ? 'min-w-0 flex-1 self-start' : undefined}
+      onExpand={(chartKind) =>
+        setExpandKind(
+          chartKind === 'year'
+            ? 'byYear'
+            : chartKind === 'saa'
+              ? 'bySaa'
+              : 'byDiameter'
+        )
+      }
+    />
+  ) : null
+
+  return (
+    <div
+      ref={rootRef}
+      className={
+        className ??
+        'min-h-0 flex-1 space-y-[13px] overflow-auto border-t border-border px-3 pb-2 pt-[13px]'
+      }
+    >
+      {showBoth ? (
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-[13px] overflow-hidden">
+          <div className="flex min-h-0 min-w-0 flex-1 items-start gap-2 overflow-hidden">
+            {graphBlock}
+            {lengthTablesBlock}
           </div>
-        )}
-      </section>
+          {facilityBlock}
+        </div>
+      ) : (
+        <div className="flex min-h-0 min-w-0 flex-col gap-[13px]">
+          {graphBlock}
+          {lengthTablesBlock}
+          {facilityBlock}
+        </div>
+      )}
       <StatsExpandFloatingModal
         open={modalOpen}
         onClose={() => setExpandKind(null)}

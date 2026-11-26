@@ -851,7 +851,10 @@ function groupPortalByReason(apiResults: BuildingLedgerApiParcel[]) {
   return [...map.values()].sort((a, b) => b.count - a.count);
 }
 
-/** PNU 목록 건축물대장 — 세움터 묶음이 통째로 실패(예외·성공 0건)할 때만 공공데이터포털 전체 */
+/**
+ * PNU 목록 건축물대장 — 세움터만 조회.
+ * 포털(apis.data.go.kr)은 클라이언트 `buildingLedgerPortalClient`에서 직접 호출.
+ */
 export async function fetchBuildingLedgersByPnus(params: {
   parcels?: Array<{ pnu?: string; jibun?: string }>;
   concurrency?: number;
@@ -861,6 +864,8 @@ export async function fetchBuildingLedgersByPnus(params: {
   error?: string;
   notice?: string;
   portalQuotaExceeded?: boolean;
+  /** true면 클라이언트가 포털 폴백을 수행해야 함 */
+  needsPortalFallback?: boolean;
   debug?: BuildingLedgerFetchDebug;
 }> {
   const cfg = getLandLinkageConfig();
@@ -883,6 +888,7 @@ export async function fetchBuildingLedgersByPnus(params: {
     return {
       ok: true,
       rows: [],
+      needsPortalFallback: false,
       debug: {
         requested: 0,
         fromSeum: 0,
@@ -898,127 +904,58 @@ export async function fetchBuildingLedgersByPnus(params: {
     };
   }
 
-  // 우클릭 1건은 동시 1·간격 없음, 다건은 동시 3 + 시작 간격
-  const defaultConcurrency =
-    unique.length <= 1 ? 1 : (params.concurrency ?? PARCEL_ANALYSIS_BUILDING_CONCURRENCY);
-  const concurrency = Math.max(1, Math.min(PARCEL_ANALYSIS_BUILDING_CONCURRENCY, defaultConcurrency));
-  const gapMs = unique.length <= 1 ? 0 : PARCEL_ANALYSIS_BUILDING_GAP_MS;
-
   try {
     const fetchedRows: BuildingLedgerDisplayRow[] = [];
-    let remaining = unique;
-    let portalQuotaExceeded = false;
-    let portalTimeoutHit = false;
+    let needsPortalFallback = !cfg.useSeum;
     let seumError: string | undefined;
-    let apiResults: BuildingLedgerApiParcel[] = [];
 
     if (cfg.useSeum) {
       try {
         const { fetchSeumBuildingLedgersByPnus } = await import('@/service/seumService');
         const seumMap = await fetchSeumBuildingLedgersByPnus(unique);
-        for (const [pnu, row] of seumMap) {
+        for (const [, row] of seumMap) {
           fetchedRows.push({ ...row, source: 'seum' });
         }
-        // 1건이라도 성공하면 세움만. 빈 필지를 포털로 메우지 않음.
-        remaining = seumMap.size > 0 ? [] : unique;
+        // 1건이라도 성공하면 세움만. 전부 비면 클라이언트가 포털 폴백.
+        needsPortalFallback = seumMap.size === 0;
       } catch (e: unknown) {
         seumError = e instanceof Error ? e.message : String(e);
-        remaining = unique;
+        needsPortalFallback = true;
       }
     }
-
-    const skippedPortalNoKey = Boolean(remaining.length && !dataPortalKey);
-
-    if (remaining.length && dataPortalKey) {
-      const portal = await fetchBuildingLedgersFromApi(
-        remaining,
-        dataPortalKey,
-        concurrency,
-        gapMs
-      );
-      apiResults = portal.results;
-      portalQuotaExceeded = portal.portalQuotaExceeded;
-      portalTimeoutHit = portal.portalTimeoutHit;
-      for (const r of apiResults) {
-        if (r.row) fetchedRows.push({ ...r.row, source: 'portal' });
-      }
-    }
-
-    const portalOk = apiResults.filter((r) => r.portalOutcome === 'ok').length;
-    const portalEmpty = apiResults.filter((r) => r.portalOutcome === 'empty').length;
-    const portalQuota = apiResults.filter((r) => r.portalOutcome === 'quota').length;
-    const portalOtherError = apiResults.filter((r) => r.portalOutcome === 'error').length;
-    const byReason = groupPortalByReason(apiResults);
-
-    const samples = byReason
-      .filter((g) => g.outcome !== 'ok')
-      .map((g) => ({
-        pnu: g.samplePnus[0] ?? '',
-        outcome: g.outcome,
-        status: g.status,
-        resultCode: g.resultCode,
-        reason: g.reason,
-        bodyPreview: g.bodyPreview,
-        count: g.count,
-        samplePnus: g.samplePnus,
-      }));
 
     const debug: BuildingLedgerFetchDebug = {
       requested: unique.length,
       fromSeum: fetchedRows.filter((r) => r.source === 'seum').length,
-      portalAttempted: apiResults.length,
-      portalOk,
-      portalEmpty,
-      portalQuota,
-      portalOtherError,
+      portalAttempted: 0,
+      portalOk: 0,
+      portalEmpty: 0,
+      portalQuota: 0,
+      portalOtherError: 0,
       useSeum: cfg.useSeum,
       hasPortalKey: Boolean(dataPortalKey),
       seumError,
-      samples,
+      samples: [],
     };
-
-    const notice = portalQuotaExceeded
-      ? BUILDING_LEDGER_PORTAL_QUOTA_NOTICE
-      : portalTimeoutHit && !fetchedRows.length
-        ? BUILDING_LEDGER_PORTAL_TIMEOUT_NOTICE
-        : undefined;
 
     const logPayload = {
-      summary: byReason.map((g) => `${g.outcome}=${g.count}`).join(' ') || 'none',
       requested: debug.requested,
       fromSeum: debug.fromSeum,
-      portalOk,
-      portalEmpty,
-      portalQuota,
-      portalOtherError,
-      concurrency,
-      gapMs,
-      notice,
-      sample: samples[0]
-        ? {
-            outcome: samples[0].outcome,
-            count: samples[0].count,
-            resultCode: samples[0].resultCode,
-            bodyPreview: samples[0].bodyPreview?.slice(0, 160),
-          }
-        : undefined,
-      skippedPortalNoKey: skippedPortalNoKey || undefined,
+      needsPortalFallback,
       seumError,
     };
-    if (portalQuotaExceeded || portalOtherError > 0 || seumError || skippedPortalNoKey) {
-      console.warn('[건축물대장]', logPayload);
-    } else {
-      console.info('[건축물대장]', logPayload);
-    }
+    if (seumError) console.warn('[건축물대장·세움]', logPayload);
+    else console.info('[건축물대장·세움]', logPayload);
 
-    if (!fetchedRows.length) {
-      return { ok: true, rows: [], notice, portalQuotaExceeded, debug };
-    }
-
-    return { ok: true, rows: fetchedRows, notice, portalQuotaExceeded, debug };
+    return {
+      ok: true,
+      rows: fetchedRows,
+      needsPortalFallback,
+      debug,
+    };
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     console.error('[건축물대장]', { error: msg });
-    return { ok: false, rows: [], error: msg };
+    return { ok: false, rows: [], error: msg, needsPortalFallback: true };
   }
 }

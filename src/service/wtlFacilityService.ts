@@ -11,6 +11,7 @@ import {
   buildCodeLabelSortJoin,
   isDefineCodeFieldType,
 } from '@/lib/defineLayerCodeKeyword';
+import { exportLayerTableToShp } from '@/service/shpUploadService';
 
 export type WtlFacilitySource = {
   group: string;
@@ -275,10 +276,16 @@ async function listPhysicalColumns(schema: string, table: string): Promise<strin
     .filter(Boolean);
 }
 
+function isDefineFlagTrue(v: unknown): boolean {
+  if (v === true) return true;
+  const s = String(v ?? '')
+    .trim()
+    .toLowerCase();
+  return s === 'true' || s === '1';
+}
+
 function pickTitleField(fields: Record<string, unknown>[]): string | null {
-  const title = fields.find(
-    (f) => String(f.define_field_show_title ?? '').toLowerCase() === 'true'
-  );
+  const title = fields.find((f) => isDefineFlagTrue(f.define_field_show_title));
   const name = asStr(title?.define_field_name);
   return name || null;
 }
@@ -824,5 +831,81 @@ export async function getFacilityAtPoint(params: {
       relatedParentKey,
       layerKey: relatedParentKey || table,
     },
+  };
+}
+
+/**
+ * 시설·설비 목록 현재 필터(키워드·위치)에 맞는 행만 SHP zip.
+ * listFacilityRows로 식별자를 모은 뒤 ogr2ogr SQL로 보낸다.
+ */
+export async function exportFacilityShpZip(params: {
+  table?: string;
+  schema?: string;
+  keyword?: string;
+  areaWkts5181?: string[] | null;
+  targetSrs?: string | null;
+} = {}): Promise<{
+  success: boolean;
+  zipBuffer?: Buffer;
+  fileName?: string;
+  error?: string;
+}> {
+  const table = String(params.table ?? '')
+    .trim()
+    .toLowerCase();
+  const schemaRaw = String(params.schema ?? 'layer')
+    .trim()
+    .toLowerCase();
+  const schema = schemaRaw === 'public_layer' ? 'public_layer' : 'layer';
+  if (!table) return { success: false, error: 'table이 필요합니다.' };
+
+  const pageSize = 2000;
+  let offset = 0;
+  const ids: number[] = [];
+  let total = Number.POSITIVE_INFINITY;
+  while (offset < total) {
+    const page = await listFacilityRows({
+      table,
+      schema,
+      keyword: params.keyword,
+      areaWkts5181: params.areaWkts5181,
+      limit: pageSize,
+      offset,
+    });
+    total = page.total;
+    for (const row of page.rows) {
+      if (row.ogcFid != null && Number.isFinite(row.ogcFid)) ids.push(row.ogcFid);
+    }
+    if (page.rows.length === 0) break;
+    offset += page.rows.length;
+    if (offset >= total) break;
+  }
+  if (ids.length === 0) {
+    return { success: false, error: '내보낼 시설이 없습니다.' };
+  }
+
+  const safeSchema = schema.replace(/"/g, '""');
+  const safeTable = table.replace(/"/g, '""');
+  const idList = ids.join(',');
+  const sql = `SELECT * FROM "${safeSchema}"."${safeTable}" WHERE ogc_fid IN (${idList})`;
+  const result = await exportLayerTableToShp({
+    tableName: table,
+    schema,
+    sql,
+    layerName: table,
+    targetSrs: params.targetSrs,
+    output: 'zip',
+  });
+  if (!result.success || !result.zipBuffer) {
+    return { success: false, error: result.error ?? 'SHP 보내기 실패' };
+  }
+  const stamp = new Date()
+    .toISOString()
+    .replace(/[-:TZ.]/g, '')
+    .slice(0, 14);
+  return {
+    success: true,
+    zipBuffer: result.zipBuffer,
+    fileName: `시설목록_${table}_${stamp}.zip`,
   };
 }

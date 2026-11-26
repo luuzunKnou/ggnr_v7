@@ -1,8 +1,17 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
+import tablesJson from '@/config/defineLayer/tables.json';
+import {
+  buildIdentifyDefineSortMetaMap,
+  sortIdentifyLayersByDefineOrder,
+} from '@/lib/mapLayerGeometryOrder';
 import type { IdentifyPopupState } from './hooks/useFeatureIdentify';
 import { getLegendUrl } from './hooks/useFeatureIdentify';
+
+const IDENTIFY_DEFINE_SORT_META = buildIdentifyDefineSortMetaMap(
+  Array.isArray(tablesJson) ? tablesJson : []
+);
 
 interface Props {
   state: IdentifyPopupState;
@@ -13,7 +22,11 @@ interface Props {
 }
 
 export function FeatureIdentifyPopup({ state, portalTarget, onClose, onSelect, onHover }: Props) {
-  const totalCount = state.results.reduce((s, r) => s + r.features.length, 0);
+  const orderedResults = useMemo(
+    () => sortIdentifyLayersByDefineOrder(state.results, IDENTIFY_DEFINE_SORT_META),
+    [state.results]
+  );
+  const totalCount = orderedResults.reduce((s, r) => s + r.features.length, 0);
 
   const content = (
     <div
@@ -46,7 +59,7 @@ export function FeatureIdentifyPopup({ state, portalTarget, onClose, onSelect, o
         className="flex-1 overflow-y-auto py-1"
         onMouseLeave={() => onHover?.(null)}
       >
-        {state.results.map((layer) =>
+        {orderedResults.map((layer) =>
           layer.features.map((feat, fi) => (
             <button
               key={`${layer.tableName}-${fi}`}

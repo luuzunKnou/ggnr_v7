@@ -25,6 +25,7 @@ export type MapLayerClickDetailHighlightOwner =
   | 'layerClickDetail'
   | 'wtlNetwork'
   | 'wtlFacility'
+  | 'wtlMeterLocation'
 
 type MapEntry = {
   layer: VectorLayer<VectorSource>

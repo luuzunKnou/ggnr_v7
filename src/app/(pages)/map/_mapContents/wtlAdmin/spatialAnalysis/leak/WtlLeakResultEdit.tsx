@@ -4,10 +4,10 @@ import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Check, RotateCcw, Spline, Undo2, type LucideIcon } from 'lucide-react'
 import Feature from 'ol/Feature'
-import { LineString } from 'ol/geom'
+import { LineString, Point } from 'ol/geom'
 import VectorLayer from 'ol/layer/Vector'
 import VectorSource from 'ol/source/Vector'
-import { Stroke, Style } from 'ol/style'
+import { Fill, Stroke, Style, Text } from 'ol/style'
 import { unByKey } from 'ol/Observable'
 import { transform } from 'ol/proj'
 import { call } from '@/lib/api'
@@ -376,6 +376,8 @@ export function WtlLeakResultEdit({ active, mapLeftPx = 0, result, mode, onMode,
   const [undoCount, setUndoCount] = useState(0)
   /** 선 편집 중 Alt 누름 — 도구모음 안내를 제외 모드로 바꿈 */
   const [altHeld, setAltHeld] = useState(false)
+  /** Alt 호버: 결과 관로=제외 안내 / 미포함 관로=추가 유도 */
+  const [altHoverHint, setAltHoverHint] = useState<'exclude' | 'not-added' | null>(null)
   modeRef.current = mode
   resultRef.current = result
   onChangeRef.current = onChange
@@ -385,16 +387,25 @@ export function WtlLeakResultEdit({ active, mapLeftPx = 0, result, mode, onMode,
   useEffect(() => {
     if (!active || mode !== 'line') {
       setAltHeld(false)
+      setAltHoverHint(null)
       return
     }
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Alt') return
       // 브라우저 메뉴로 포커스 뺏기면 keyup이 빠져 안내문구가 멈춤
       e.preventDefault()
-      setAltHeld(e.type === 'keydown')
+      const down = e.type === 'keydown'
+      setAltHeld(down)
+      if (!down) setAltHoverHint(null)
     }
-    const syncPointer = (e: PointerEvent) => setAltHeld(e.altKey)
-    const clear = () => setAltHeld(false)
+    const syncPointer = (e: PointerEvent) => {
+      setAltHeld(e.altKey)
+      if (!e.altKey) setAltHoverHint(null)
+    }
+    const clear = () => {
+      setAltHeld(false)
+      setAltHoverHint(null)
+    }
     window.addEventListener('keydown', onKey)
     window.addEventListener('keyup', onKey)
     window.addEventListener('pointermove', syncPointer)
@@ -438,7 +449,7 @@ export function WtlLeakResultEdit({ active, mapLeftPx = 0, result, mode, onMode,
       return lines3857.some((line) => locate(x, y, line).dist <= VALVE_ON_M)
     })
     commitRef.current({ ...current, pipes, gates })
-    onNoticeRef.current(`${label} · 제수변 ${gates.length}개 · 관로 ${pipes.length}구간`)
+    onNoticeRef.current(label)
     refreshHandlesRef.current()
   }
 
@@ -472,7 +483,7 @@ export function WtlLeakResultEdit({ active, mapLeftPx = 0, result, mode, onMode,
       return
     }
     emit(prev)
-    onNoticeRef.current(`되돌리기 · 제수변 ${prev.gates.length}개 · 관로 ${prev.pipes.length}구간`)
+    onNoticeRef.current('되돌리기')
   }
   resetFn.current = () => {
     const base = baselineRef.current
@@ -482,7 +493,7 @@ export function WtlLeakResultEdit({ active, mapLeftPx = 0, result, mode, onMode,
     undoRef.current.push(current)
     setUndoCount(undoRef.current.length)
     emit(base)
-    onNoticeRef.current(`초기화 · 제수변 ${base.gates.length}개 · 관로 ${base.pipes.length}구간`)
+    onNoticeRef.current('초기화')
   }
 
   // 외부에서 결과가 바뀌면(새 분석·이력 불러오기) 그 결과를 새 기준으로
@@ -546,7 +557,7 @@ export function WtlLeakResultEdit({ active, mapLeftPx = 0, result, mode, onMode,
         const next = modeRef.current === action ? null : (action as LeakEditMode)
         onModeRef.current(next)
         if (next === 'line') {
-          onNoticeRef.current('선 편집 · 클릭하면 추가, Alt+클릭하면 제외')
+          onNoticeRef.current('관로 편집 · 클릭하면 추가, Alt+클릭하면 제외')
         } else if (next === 'follow') {
           onNoticeRef.current('따라 그리기 · 끝점을 끌어 늘이거나 줄입니다')
         }
@@ -640,18 +651,49 @@ export function WtlLeakResultEdit({ active, mapLeftPx = 0, result, mode, onMode,
     const previewLayer = new VectorLayer({
       source: previewSource,
       zIndex: 981,
-      style: (feature) =>
-        // 추가=빨강(탐색선과 동일). 제외=초록 점선 + 아래 결과 빨강을 가리는 바탕
-        String(feature.get('role')) === 'cut'
-          ? [
-              new Style({
-                stroke: new Stroke({ color: 'rgba(255, 255, 255, 0.95)', width: 9, lineCap: 'round' }),
-              }),
-              new Style({
-                stroke: new Stroke({ color: '#0f766e', width: 5, lineDash: [6, 6], lineCap: 'round' }),
-              }),
-            ]
-          : new Style({ stroke: new Stroke({ color: '#dc2626', width: 6, lineCap: 'round' }) }),
+      style: (feature) => {
+        // 추가=초록 실선 / 제외=앰버 점선 + 끝 × (빨간 결과선과 구분)
+        const cut = String(feature.get('role')) === 'cut'
+        const white = new Style({
+          stroke: new Stroke({ color: 'rgba(255, 255, 255, 0.95)', width: 9, lineCap: 'round' }),
+        })
+        if (!cut) {
+          return [
+            white,
+            new Style({
+              stroke: new Stroke({ color: '#0f766e', width: 6, lineCap: 'round' }),
+            }),
+          ]
+        }
+        const geom = feature.getGeometry()
+        const coords =
+          geom instanceof LineString ? (geom.getCoordinates() as [number, number][]) : []
+        const ends = coords.length >= 2 ? [coords[0]!, coords[coords.length - 1]!] : []
+        const mark = (xy: [number, number]) =>
+          new Style({
+            geometry: new Point(xy),
+            text: new Text({
+              text: '×',
+              font: 'bold 18px sans-serif',
+              fill: new Fill({ color: '#b45309' }),
+              stroke: new Stroke({ color: '#fff', width: 4 }),
+              textBaseline: 'middle',
+              offsetY: 1,
+            }),
+          })
+        return [
+          white,
+          new Style({
+            stroke: new Stroke({
+              color: '#d97706',
+              width: 5,
+              lineDash: [7, 6],
+              lineCap: 'round',
+            }),
+          }),
+          ...ends.map(mark),
+        ]
+      },
     })
     map.addLayer(previewLayer)
     const toView = (c: [number, number]) => lonLatToView(c, viewProj)
@@ -906,21 +948,42 @@ export function WtlLeakResultEdit({ active, mapLeftPx = 0, result, mode, onMode,
       el.style.cursor = hasTarget ? 'pointer' : ''
     }
 
+    const setAltHint = (next: 'exclude' | 'not-added' | null) => {
+      setAltHoverHint((prev) => (prev === next ? prev : next))
+    }
+
     const refreshHover = (alt: boolean) => {
       if (modeRef.current !== 'line' || !lastPixel) {
         paintHover(null, null)
         paintCursor(false)
+        setAltHint(null)
         return
       }
       const coord = map.getCoordinateFromPixel(lastPixel) as Pt
       const hit = hitTarget(coord, alt)
+      if (alt) {
+        if (hit) {
+          paintHover(hit.line, 'cut')
+          paintCursor(true)
+          setAltHint('exclude')
+          return
+        }
+        // 결과선이 아니면 미포함 관로인지 봐서 안내만 바꿈
+        const addHit = hitTarget(coord, false)
+        paintHover(null, null)
+        paintCursor(Boolean(addHit && addHit.kind === 'add'))
+        setAltHint(addHit?.kind === 'add' ? 'not-added' : null)
+        return
+      }
       if (!hit) {
         paintHover(null, null)
         paintCursor(false)
+        setAltHint(null)
         return
       }
       paintHover(hit.line, hit.kind === 'add' || hit.kind === 'already' ? 'add' : 'cut')
       paintCursor(true)
+      setAltHint(null)
     }
 
     const onToolbar = (evt: Event) => {
@@ -932,6 +995,7 @@ export function WtlLeakResultEdit({ active, mapLeftPx = 0, result, mode, onMode,
       lastPixel = null
       paintHover(null, null)
       paintCursor(false)
+      setAltHint(null)
     }
     clearHoverRef.current = clearHover
 
@@ -974,7 +1038,6 @@ export function WtlLeakResultEdit({ active, mapLeftPx = 0, result, mode, onMode,
         // 추가한 관로 위에 있고, 다른 물리 구간보다 이 관에 가까운 제수변만
         const gates = syncGates(current, nextLines, null, hit.line)
         commitRef.current({ ...current, pipes: nextLines.map((line) => line.map(toLonLat)), gates })
-        onNoticeRef.current(`관로 추가 · 제수변 ${gates.length}개 · 관로 ${nextLines.length}구간`)
         return
       }
 
@@ -995,9 +1058,6 @@ export function WtlLeakResultEdit({ active, mapLeftPx = 0, result, mode, onMode,
           pipes: preserved.lines.map((line) => line.map(toLonLat)),
           gates: preserved.gates,
         })
-        onNoticeRef.current(
-          `관로 제외 · 제수변 ${preserved.gates.length}개 · 관로 ${preserved.lines.length}구간`
-        )
       }
     }
 
@@ -1106,7 +1166,7 @@ export function WtlLeakResultEdit({ active, mapLeftPx = 0, result, mode, onMode,
           editHint ? 'pb-1.5' : 'pb-2'
         )}
       >
-        {toggleBtn('line', '선 편집', Spline, '선 편집 — 클릭 추가, Alt+클릭 제외')}
+        {toggleBtn('line', '관로 편집', Spline, '관로 편집 — 클릭 추가, Alt+클릭 제외')}
         {/* {toggleBtn('follow', '따라 그리기', Spline, '따라 그리기 — 끝점·분기 드래그')} */}
         <span className="h-5 w-px bg-border" aria-hidden />
         {iconBtn('undo', `되돌리기 (Ctrl+Z)${undoCount > 0 ? ` · ${undoCount}단계` : ''}`, Undo2, undoCount === 0)}
@@ -1130,7 +1190,11 @@ export function WtlLeakResultEdit({ active, mapLeftPx = 0, result, mode, onMode,
           )}
           role="status"
         >
-          {altHeld ? 'Alt+클릭으로 제외' : '클릭 추가 · Alt+클릭 제외'}
+          {altHeld
+            ? altHoverHint === 'not-added'
+              ? '아직 추가되지 않은 관로입니다.'
+              : 'Alt+클릭으로 제외'
+            : '클릭 추가 · Alt+클릭 제외'}
         </div>
       )}
       {/* {followMode && (
