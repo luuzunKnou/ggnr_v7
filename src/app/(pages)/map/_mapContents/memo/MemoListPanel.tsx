@@ -24,6 +24,7 @@ import { memoWmsLayerId, parseMemoRowKey } from "./memoConfig";
 import { useMemoMapHighlight } from "./useMemoMapHighlight";
 import { useMemoMapClick } from "./useMemoMapClick";
 import { useSerWriteAccess } from "@/hooks/useSerWriteAccess";
+import { ListPaginationBar } from "../../_mapComponents/ListPaginationBar";
 
 type ListRow = {
   rowKey: string;
@@ -38,11 +39,26 @@ type ListRow = {
 
 type TableOption = { tableName: string; label: string };
 
+const PAGE_SIZE = 50;
+
 /** 임시 UI 비교용. sessionStorage에 유지. 확정 후 제거 */
 const MEMO_UI_THEME_KEY = "ggnr.memoListUiTheme";
 type MemoUiTheme = "current" | "category";
 const MEMO_CATEGORY_OPTIONS = ["전체", "상수", "하수", "급수", "준설"] as const;
 type MemoCategory = (typeof MEMO_CATEGORY_OPTIONS)[number];
+
+function tablesForMemoCategory(
+  options: TableOption[],
+  category: MemoCategory,
+  useCategoryUi: boolean
+): string[] {
+  if (!useCategoryUi || category === "전체") {
+    return options.map((t) => t.tableName);
+  }
+  return options
+    .filter((t) => resolveMemoCategory(t.tableName, t.label) === category)
+    .map((t) => t.tableName);
+}
 
 function readMemoUiTheme(): MemoUiTheme {
   if (typeof window === "undefined") return "current";
@@ -90,12 +106,17 @@ export function MemoListPanel({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [items, setItems] = useState<ListRow[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
   const [navigatingId, setNavigatingId] = useState<string | null>(null);
   const [highlightGeom, setHighlightGeom] = useState<Record<string, unknown> | null>(null);
   const [filterCategory, setFilterCategory] = useState<MemoCategory>("전체");
   // SSR·첫 클라이언트 렌더는 동일하게 current. sessionStorage는 mount 후 반영 (hydration 방지)
   const [uiTheme, setUiTheme] = useState<MemoUiTheme>("current");
   const useCategoryUi = uiTheme === "category";
+  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE) || 1);
+  const listItemRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
+  const lastJumpedSelectionRef = useRef<string | null>(null);
 
   useEffect(() => {
     setUiTheme(readMemoUiTheme());
@@ -112,12 +133,13 @@ export function MemoListPanel({
       return next;
     });
     setFilterCategory("전체");
+    setPage(1);
   }, []);
 
-  const filteredItems = useMemo(() => {
-    if (!useCategoryUi || filterCategory === "전체") return items;
-    return items.filter((row) => resolveMemoCategory(row.tableName, row.tableLabel) === filterCategory);
-  }, [filterCategory, items, useCategoryUi]);
+  const queryTables = useMemo(
+    () => tablesForMemoCategory(tableOptions, filterCategory, useCategoryUi),
+    [tableOptions, filterCategory, useCategoryUi]
+  );
 
   useMemoMapHighlight(Boolean(mapContext?.mapReady), highlightGeom);
 
@@ -218,9 +240,21 @@ export function MemoListPanel({
     }
   }, [ensureLayerVisible]);
 
+  const mapClickTables = useMemo(
+    () =>
+      (fixedTables && fixedTables.length > 0
+        ? fixedTables
+        : queryTables.map((tableName) => ({
+            tableName,
+            label: tableOptions.find((t) => t.tableName === tableName)?.label ?? tableName,
+          }))
+      ).map((t) => ({ tableName: t.tableName })),
+    [fixedTables, queryTables, tableOptions]
+  );
+
   useMemoMapClick({
     enabled: true,
-    tables: fixedTables,
+    tables: mapClickTables,
     onSelectRowKey: (rowKey) => {
       fitOnFocusRef.current = false;
       onSelectDetailId(rowKey);
@@ -247,6 +281,7 @@ export function MemoListPanel({
     if (!selectedDetailId) {
       focusedIdRef.current = null;
       setHighlightGeom(null);
+      lastJumpedSelectionRef.current = null;
       return;
     }
     if (focusedIdRef.current === selectedDetailId) return;
@@ -272,28 +307,108 @@ export function MemoListPanel({
   }, [focusMemoOnMap, refreshKey, selectedDetailId]);
 
   useEffect(() => {
+    setPage(1);
+  }, [keyword, useCategoryUi]);
+
+  useEffect(() => {
+    if (tableOptions.length === 0) return;
+    const tables = queryTables;
+    if (tables.length === 0) {
+      setItems([]);
+      setTotal(0);
+      return;
+    }
     const t = setTimeout(async () => {
       setLoading(true);
       setError(null);
+      const offset = Math.max(0, (page - 1) * PAGE_SIZE);
       try {
-        const onlyTable = fixedTableKey.includes(",") || !fixedTableKey ? "" : fixedTableKey;
         const res = await call("", "POST", {
           service: "memoService",
           action: "getMemoList",
-          params: { keyword, limit: 200, ...(onlyTable ? { table: onlyTable } : {}) },
+          params: {
+            keyword,
+            limit: PAGE_SIZE,
+            offset,
+            tables,
+          },
         });
         const data = res?.data ?? res;
         if (data?.error) setError(String(data.error));
-        setItems(Array.isArray(data?.rows) ? data.rows : []);
+        const rows = Array.isArray(data?.rows) ? (data.rows as ListRow[]) : [];
+        const nextTotal = Number(data?.total ?? 0);
+        setItems(rows);
+        setTotal(nextTotal);
+        const maxPage = Math.max(1, Math.ceil(nextTotal / PAGE_SIZE) || 1);
+        if (page > maxPage) setPage(maxPage);
       } catch {
         setError("목록을 불러오지 못했습니다.");
         setItems([]);
+        setTotal(0);
       } finally {
         setLoading(false);
       }
     }, 250);
     return () => clearTimeout(t);
-  }, [fixedTableKey, keyword, refreshKey]);
+  }, [keyword, refreshKey, page, queryTables, tableOptions.length]);
+
+  /** 지도 선택 시 해당 건이 있는 페이지로 한 번 이동 */
+  useEffect(() => {
+    if (!selectedDetailId) {
+      lastJumpedSelectionRef.current = null;
+      return;
+    }
+    if (lastJumpedSelectionRef.current === selectedDetailId) return;
+    const parsed = parseMemoRowKey(selectedDetailId);
+    if (!parsed || queryTables.length === 0) return;
+    lastJumpedSelectionRef.current = selectedDetailId;
+    const cat = resolveMemoCategory(parsed.tableName, "");
+    if (useCategoryUi && cat && filterCategory !== "전체" && filterCategory !== cat) {
+      setFilterCategory(cat);
+      lastJumpedSelectionRef.current = null;
+      return;
+    }
+    void call("", "POST", {
+      service: "memoService",
+      action: "findMemoListRank",
+      params: {
+        keyword,
+        tables: queryTables,
+        tableName: parsed.tableName,
+        memoKey: parsed.memoKey,
+      },
+    }).then((res) => {
+      const data = res?.data ?? res;
+      const index = Number(data?.index ?? -1);
+      if (!Number.isInteger(index) || index < 0) return;
+      const nextPage = Math.floor(index / PAGE_SIZE) + 1;
+      setPage((prev) => (prev === nextPage ? prev : nextPage));
+    });
+  }, [
+    selectedDetailId,
+    queryTables,
+    keyword,
+    useCategoryUi,
+    filterCategory,
+  ]);
+
+  useEffect(() => {
+    if (!selectedDetailId) return;
+    let tries = 0;
+    let timer: number | undefined;
+    const scroll = () => {
+      const el = listItemRefs.current.get(selectedDetailId);
+      if (el) {
+        el.scrollIntoView({ block: "center", behavior: "smooth" });
+        return;
+      }
+      if (tries++ < 12) timer = window.setTimeout(scroll, 50);
+    };
+    requestAnimationFrame(() => requestAnimationFrame(scroll));
+    return () => {
+      if (timer != null) window.clearTimeout(timer);
+    };
+  }, [selectedDetailId, items, page]);
 
   const handleAdd = () => {
     const table = tableOptions[0]?.tableName;
@@ -316,11 +431,7 @@ export function MemoListPanel({
               <div>
                 <h1 className="text-sm font-semibold text-foreground/90">{title}</h1>
                 <p className="text-[11px] text-muted-foreground">
-                  {useCategoryUi && filterCategory !== "전체" ? "표시" : "전체"}{" "}
-                  <span className="font-medium text-foreground/80">
-                    {useCategoryUi ? filteredItems.length : items.length}
-                  </span>
-                  건
+                  전체 <span className="font-medium text-foreground/80">{total}</span>건
                   {useCategoryUi ? (
                     <span className="ml-1 text-muted-foreground/70">(분류 UI)</span>
                   ) : null}
@@ -377,7 +488,10 @@ export function MemoListPanel({
                       type="button"
                       role="tab"
                       aria-selected={isActive}
-                      onClick={() => setFilterCategory(cat)}
+                      onClick={() => {
+                        setFilterCategory(cat);
+                        setPage(1);
+                      }}
                       className={cn(
                         "h-7 min-w-0 flex-1 truncate border-b-2 px-0.5 text-center text-[11px] -mb-px",
                         isActive
@@ -419,7 +533,7 @@ export function MemoListPanel({
                 {error}
               </div>
             )}
-            {!loading && !error && filteredItems.length === 0 && (
+            {!loading && !error && items.length === 0 && (
               <div className="flex flex-col items-center justify-center py-16 pr-3 text-muted-foreground/80">
                 <Search className="mb-3 h-10 w-10 opacity-25" />
                 <p className="text-sm font-medium text-foreground/70">검색 결과가 없습니다</p>
@@ -427,7 +541,7 @@ export function MemoListPanel({
               </div>
             )}
             {!loading &&
-              filteredItems.map((row) => {
+              items.map((row) => {
                 const isSelected = selectedDetailId === row.rowKey;
                 const navigating = navigatingId === row.rowKey;
                 const category = useCategoryUi
@@ -437,6 +551,10 @@ export function MemoListPanel({
                   <button
                     key={row.rowKey}
                     type="button"
+                    ref={(el) => {
+                      if (el) listItemRefs.current.set(row.rowKey, el);
+                      else listItemRefs.current.delete(row.rowKey);
+                    }}
                     onClick={() => void handleRowClick(row)}
                     className={cn(
                       "w-full rounded-lg border px-3 py-2 text-left transition-colors",
@@ -495,6 +613,15 @@ export function MemoListPanel({
               })}
           </div>
         </div>
+
+        {total > 0 ? (
+          <ListPaginationBar
+            page={page}
+            pageCount={pageCount}
+            loading={loading}
+            onPageChange={setPage}
+          />
+        ) : null}
       </div>
     </div>
   );

@@ -1,9 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Plus, Search, X } from "lucide-react";
+import { unByKey } from "ol/Observable";
+import type { EventsKey } from "ol/events";
 import { cn } from "@/lib/utils";
 import { LayerRowPanelButton } from "../../../_mapComponents/layerRowEdit";
+import { useMapContext } from "../../../_mapComponents/MapContext";
+import { warmBikeRoadNetByBbox } from "./loadBikeRoadNet";
 import {
   BIKE_ROAD_MOCK_ROUTES,
   normalizeBikeRoadKind,
@@ -63,8 +67,33 @@ export function BikeRoadListPanel({
   onAdd,
   routes = BIKE_ROAD_MOCK_ROUTES,
 }: Props) {
+  const mapContext = useMapContext();
   const [keyword, setKeyword] = useState("");
   const [kindFilter, setKindFilter] = useState<KindFilter>("전체");
+
+  /** 목록만 열어도 현재 화면 통판 망 미리 받기 — 모달 즉시 표시 */
+  useEffect(() => {
+    const map = mapContext?.mapInstanceRef?.current;
+    if (!map || !mapContext?.mapReady) return;
+    const warm = () => {
+      const size = map.getSize();
+      if (!size) return;
+      const extent = map.getView().calculateExtent(size) as [
+        number,
+        number,
+        number,
+        number,
+      ];
+      void warmBikeRoadNetByBbox(extent, {
+        resolution: map.getView().getResolution() ?? undefined,
+      });
+    };
+    warm();
+    const key = map.on("moveend", warm) as EventsKey;
+    return () => {
+      unByKey(key);
+    };
+  }, [mapContext, mapContext?.mapReady]);
 
   const filtered = useMemo(() => {
     const q = keyword.trim().toLowerCase();
@@ -82,11 +111,6 @@ export function BikeRoadListPanel({
       );
     });
   }, [routes, keyword, kindFilter]);
-
-  const segmentTotal = useMemo(
-    () => filtered.reduce((sum, r) => sum + r.segments.length, 0),
-    [filtered]
-  );
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
@@ -169,7 +193,6 @@ export function BikeRoadListPanel({
         </div>
         <div className="text-[11px] text-muted-foreground">
           목록 {filtered.length}건
-          {segmentTotal > 0 ? ` · 구간 ${segmentTotal}개` : ""}
         </div>
       </div>
 
@@ -177,72 +200,44 @@ export function BikeRoadListPanel({
         {filtered.length === 0 ? (
           <p className="px-3 py-2.5 text-xs text-muted-foreground">검색 결과가 없습니다.</p>
         ) : (
-          <table className="w-full table-fixed border-collapse text-xs">
-            <colgroup>
-              <col />
-              <col className="w-[4.5rem]" />
-            </colgroup>
-            <tbody>
-              {filtered.map((r) => {
-                const active = r.id === selectedId;
-                const badge = kindBadge(r.kind);
-                const rightText =
-                  r.segments.length > 1 ? `${r.segments.length}구간` : "—";
-                return (
-                  <tr
-                    key={r.id}
-                    role="button"
-                    tabIndex={0}
+          <ul className="divide-y divide-border">
+            {filtered.map((r) => {
+              const active = r.id === selectedId;
+              const badge = kindBadge(r.kind);
+              return (
+                <li key={r.id}>
+                  <button
+                    type="button"
                     onClick={() => onSelect(r.id)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        onSelect(r.id);
-                      }
-                    }}
                     className={cn(
-                      "cursor-pointer border-b border-border align-middle transition-colors",
+                      "flex w-full items-center gap-2 border-l-[3px] px-3 py-1.5 text-left transition-colors",
                       active
-                        ? "border-l-[3px] border-l-primary bg-primary/[0.11] ring-1 ring-inset ring-primary/20 hover:bg-primary/[0.14]"
-                        : "border-l-[3px] border-l-transparent hover:bg-muted/50"
+                        ? "border-l-primary bg-primary/[0.11] ring-1 ring-inset ring-primary/20 hover:bg-primary/[0.14]"
+                        : "border-l-transparent hover:bg-muted/50"
                     )}
                   >
-                    <td className="min-w-0 overflow-hidden px-3 py-1.5">
-                      <div className="flex min-w-0 items-center gap-1.5">
-                        <span
-                          className={cn(
-                            "inline-flex w-[2.75rem] shrink-0 items-center justify-center whitespace-nowrap rounded border px-1.5 py-0.5 text-[10px] font-semibold leading-none",
-                            badge.bg,
-                            badge.text,
-                            badge.border
-                          )}
-                          title={normalizeBikeRoadKind(r.kind)}
-                        >
-                          {badge.short}
-                        </span>
-                        <p
-                          className="min-w-0 flex-1 truncate text-sm font-medium leading-tight text-foreground"
-                          title={r.title}
-                        >
-                          {r.title}
-                        </p>
-                      </div>
-                    </td>
-                    <td
-                      className="min-w-0 px-3 py-2.5 pl-1.5 text-right text-[11px] text-muted-foreground"
-                      title={
-                        r.segments.length > 1
-                          ? `구간 ${r.segments.length}개`
-                          : undefined
-                      }
+                    <p
+                      className="min-w-0 flex-1 truncate text-sm font-medium leading-tight text-foreground"
+                      title={r.title}
                     >
-                      <span className="block truncate">{rightText}</span>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                      {r.title}
+                    </p>
+                    <span
+                      className={cn(
+                        "inline-flex w-[2.75rem] shrink-0 items-center justify-center whitespace-nowrap rounded border px-1.5 py-0.5 text-[10px] font-semibold leading-none",
+                        badge.bg,
+                        badge.text,
+                        badge.border
+                      )}
+                      title={normalizeBikeRoadKind(r.kind)}
+                    >
+                      {badge.short}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
         )}
       </div>
     </div>

@@ -3,7 +3,11 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { useSearchParams } from 'next/navigation';
 import type { CompUI, CompdUI } from './types';
-import { ComplaintInfo, type ComplaintFormValues } from './complaint-info';
+import {
+  ComplaintInfo,
+  type ComplaintDefineFieldSave,
+  type ComplaintFormValues,
+} from './complaint-info';
 import { HistoryList } from './history-list';
 import { FileList } from './file-list';
 import { ClipboardList, Paperclip, Map, Building2, UserCircle, Gauge } from 'lucide-react';
@@ -12,6 +16,7 @@ import { isWaterSewerSystem } from '@/lib/waterSewerSystem';
 import { ComplaintLandProvider } from './land/ComplaintLandContext';
 import { ComplaintParcelTab } from './land/ComplaintParcelTab';
 import { ComplaintBuildingLedgerTab } from './land/ComplaintBuildingLedgerTab';
+import type { DefineFieldLike } from '../standard/defineLayerRowUtils';
 
 type DetailTab = 'history' | 'files' | 'parcel' | 'building' | 'consumer' | 'metering';
 
@@ -49,6 +54,11 @@ interface ComplaintDetailPanelProps {
   ) => Promise<void>;
   onDeleteHistory?: (compdKey: number) => Promise<void>;
   onSave?: (values: ComplaintFormValues) => void | Promise<void>;
+  /** 공통UI — 테이블 Field 상세 표시 */
+  defineFields?: DefineFieldLike[];
+  defineFieldValues?: Record<string, string>;
+  tableName?: string;
+  onSaveDefineFields?: (payload: ComplaintDefineFieldSave) => void | Promise<void>;
   onDelete?: () => void | Promise<void>;
   onClose?: () => void;
   saving?: boolean;
@@ -68,6 +78,10 @@ export function ComplaintDetailPanel({
   onEditHistory,
   onDeleteHistory,
   onSave,
+  defineFields,
+  defineFieldValues,
+  tableName,
+  onSaveDefineFields,
   onDelete,
   onClose,
   saving,
@@ -91,21 +105,37 @@ export function ComplaintDetailPanel({
 
   const landLookupEnabled = !isAdd && (activeTab === 'parcel' || activeTab === 'building');
 
+  const fieldFormMode = Boolean(defineFields);
+
   return (
-    <div className="flex flex-col h-full min-h-0 w-full bg-background">
-      <div className={isAdd ? 'flex-shrink-0 p-4 pb-4' : 'flex-shrink-0 p-4 pb-2'}>
+    <div className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-background">
+      <div
+        className={cn(
+          'p-4',
+          isAdd ? 'pb-4' : 'pb-2',
+          fieldFormMode && !isAdd
+            ? 'min-h-0 shrink overflow-y-auto'
+            : 'flex-shrink-0',
+          isAdd && fieldFormMode ? 'min-h-0 flex-1 overflow-y-auto' : null
+        )}
+      >
         <ComplaintInfo
           complaint={complaint}
           onSave={onSave}
+          defineFields={defineFields}
+          defineFieldValues={defineFieldValues}
+          tableName={tableName}
+          onSaveDefineFields={onSaveDefineFields}
           onDelete={isAdd ? undefined : onDelete}
           onClose={onClose}
           saving={saving}
           deleting={deleting}
+          isAdd={isAdd}
         />
       </div>
 
       {!isAdd && (
-        <div className="flex-1 min-h-0 flex flex-col px-4 pb-4">
+        <div className="flex min-h-[10rem] flex-1 flex-col px-4 pb-4">
           <div className="flex border-b border-border shrink-0 overflow-x-auto">
             <button
               type="button"

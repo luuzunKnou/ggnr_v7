@@ -1,23 +1,69 @@
 'use client'
 
+/**
+ * =============================================================================
+ * [공사대장 · 관련탭 UX 의도 — 임의로 바꾸지 말 것]
+ * =============================================================================
+ *
+ * ■ 맵무브 흐름 (지도 훅 useWtlConsMapLayer 와 한 세트)
+ * 1. 공사 선택 → 전체 줌아웃(맞춤)
+ * 2. 공사위치 선택 → (전체가 작으면) 줌인 / 이미 가까우면 유지
+ * 3. 관련시설·필지 등 클릭 → 맵무브·줌 없음(강조만)
+ *
+ * ■ 탭 6개 조회 범위 (필지·관련시설·건물·수용가·공사이력·공사위치 목록)
+ * - «선택한 공사위치 1개»가 아님.
+ * - «화면에 보이는 시설만» ON → 지금 지도에 겹치는 공사위치들의 합집합
+ * - OFF → 해당 공사 공사위치 전체
+ * - 공사위치 행 선택 = 줌·강조만. zoneId 를 지워 조회 범위를 바꾸지 말 것.
+ * - 예: 화면에 공사위치 4개가 보이면 탭도 그 4개 기준 (고른 1개만 조회 금지)
+ *
+ * ■ «화면에 보이는 시설만» 체크
+ * - UI는 공사이력 탭에서만 표시(다른 탭은 숨김, 로직 유지).
+ * - 공사이력 진입 시 기본 ON, 이탈 시 OFF. ON/OFF 즉시 배지·목록 반영. 휠 중엔 moveend 후 갱신.
+ *
+ * ■ 관련시설 API areaWkts5181
+ * - 구역 여러 개를 배열로 넣으면 서버가 AND(동시 교차) → 시설 전부 탈락.
+ * - 합친 WKT(컬렉션) 1건으로 넣을 것.
+ *
+ * ■ 관련시설 아이콘 (wtlConsRelatedStyle)
+ * - GeoServer 해당 레이어 SLD에 적힌 ExternalGraphic만 사용.
+ * - ftr_cde 마다 아이콘 파일이 있는 게 아님 → `{layer}_{ftr_cde}.svg` 임의 조합 금지.
+ * - SLD 조건에 코드가 있으면 styleCode로 고르고, 없으면 스타일 기본 심볼.
+ *
+ * 지도 맞춤 상세: useWtlConsMapLayer 파일 상단 주석.
+ * =============================================================================
+ */
+
 import { useEffect, useMemo, useState } from 'react'
+import type { Extent } from 'ol/extent'
+import OlGeoJSON from 'ol/format/GeoJSON'
+import WKT from 'ol/format/WKT'
 import { call } from '@/lib/api'
 import type { ConsLedgerKind } from '@/lib/consLedgerVariant'
+import { ownGbnLabel } from '@/lib/privateLandAnalysisLayers'
 import { cn } from '@/lib/utils'
 import { useMapContext } from '../../../_mapComponents/MapContext'
 import { getRowValueByField } from '../../../_mapComponents/standard/defineLayerRowUtils'
-import { prepareMapForPanelAwareNavigation } from '../../../_mapComponents/config/mapAutoNavigation'
+import { MAP_AUTO_NAV_MAX_ZOOM } from '../../../_mapComponents/config/mapDefaults'
+import { scheduleFitMapToExtent3857 } from '../../../_mapComponents/config/mapAutoNavigation'
 import { getParcelExtent3857 } from '../../../_mapComponents/layerRowEdit/layerRowParcelUtils'
 import { useLayerRowParcelHighlight } from '../../../_mapComponents/layerRowEdit/useLayerRowParcelHighlight'
 import type { LayerRowParcelItem } from '../../../_mapComponents/layerRowEdit/types'
-import { UsageDataAsAddressList } from '../../river/usageDataAs/UsageDataAsAddressList'
+import { WtlConsParcelListVariants } from './WtlConsParcelListVariants'
+import { useWtlConsParcelOwnGbnLayer } from './useWtlConsParcelOwnGbnLayer'
 import { getWtlNetLayerDef, WTL_NET_LAYER_DEFS, WTL_NET_ZONE_LAYER_KEYS } from '../networkMap/wtlNetworkLayerCatalog'
 import { wtlNetKorNameForTable } from '../networkMap/wtlNetworkMapSources'
 import type { WtlNetworkRow } from '../networkMap/wtlNetworkTypes'
 import { wkt5181ToRing4326 } from '../spatialAnalysis/outage/wtlOutageGeom'
 import { geom4326ToWkt5181, loadWtlConsIntersecting, type WtlConsGeom4326 } from './wtlConsLedgerApi'
-import { shortYearDate, workAmountLabel, type WtlConsWork } from './wtlConsSample'
-import type { WtlConsMapFocus, WtlConsRelatedFacility } from './useWtlConsMapLayer'
+import { shortYearDate, workAmountLabel, WTL_CONS_FIELD_LABEL, type WtlConsWork } from './wtlConsSample'
+import { WtlConsHistoryFocusFloating } from './WtlConsHistoryFocusFloating'
+import {
+  extentOfVisibleMap,
+  type WtlConsMapFocus,
+  type WtlConsMapFocusTooltip,
+  type WtlConsRelatedFacility,
+} from './useWtlConsMapLayer'
 
 export type ZoneMock = {
   id: string
@@ -38,6 +84,8 @@ type ParcelRow = {
   address: string
   pnu: string
   jimok?: string
+  /** 소유구분(개인·국유지 등) — 사유지분석 목록과 동일 */
+  ownGbn?: string
   areaSqm?: number
   geometry3857?: Record<string, unknown> | null
 }
@@ -84,10 +132,15 @@ const FACILITY_LAYER_KEYS = WTL_NET_LAYER_DEFS.filter(
 function facilityStyleCode(row: WtlNetworkRow): string | null {
   const record = row.record
   if (!record || typeof record !== 'object') return null
+  const lower: Record<string, unknown> = {}
+  for (const [k, v] of Object.entries(record)) {
+    lower[k.toLowerCase()] = v
+  }
   const raw =
     getRowValueByField(record, 'ftr_cde') ??
     record.ftr_cde ??
     record.FTR_CDE ??
+    lower.ftr_cde ??
     null
   const code = String(raw ?? '')
     .trim()
@@ -95,18 +148,22 @@ function facilityStyleCode(row: WtlNetworkRow): string | null {
   return code || null
 }
 
+/** GeoServer 스타일명 = layerKey (코드별 스타일명으로 치환하지 않음 — 파일 상단 아이콘 의도) */
+function facilityStyleName(row: WtlNetworkRow): string {
+  return String(row.layerKey ?? '').trim()
+}
+
 function facilitiesToMapItems(rows: WtlNetworkRow[]): WtlConsRelatedFacility[] {
   const items: WtlConsRelatedFacility[] = []
   for (const row of rows) {
     const geom = row.geom
     if (!geom || typeof geom !== 'object' || !('type' in geom)) continue
-    const styleName = String(row.layerKey ?? '').trim()
+    const styleName = facilityStyleName(row)
     if (!styleName) continue
     items.push({
       id: row.id,
       geom: geom as unknown as Record<string, unknown>,
       projection: 'EPSG:4326',
-      /** GeoServer 스타일명 — 관로 분할키(wtl_pipe_lm_saa003 등)와 동일 */
       styleName,
       styleCode: facilityStyleCode(row),
     })
@@ -131,18 +188,6 @@ const NAME_FIELD_LABEL: Record<string, string> = {
   met_num: '계량기기물번호',
   hom_num: '수용가번호',
 }
-
-const NAME_TITLE_ORDER = [
-  '관라벨',
-  '관리번호',
-  '행번호',
-  '취수장명',
-  '정수장명',
-  '배수지명',
-  '가압장명',
-  '계량기기물번호',
-  '수용가번호',
-]
 
 function nameFieldsInOrder(layerKey: string): string[] {
   const expr =
@@ -169,23 +214,56 @@ function facilityNameTitle(row: WtlNetworkRow): string {
   return '행번호'
 }
 
-function facilityNameHead(rows: WtlNetworkRow[]): string {
-  const labels = [...new Set(rows.map(facilityNameTitle))]
-  if (labels.length === 0) return '관리번호'
-  if (labels.length === 1) return labels[0]!
-  const ordered = NAME_TITLE_ORDER.filter((label) => labels.includes(label))
-  const rest = labels.filter((label) => !ordered.includes(label))
-  return [...ordered, ...rest].join(' · ')
-}
-
 const TABS: { id: RelatedTab; label: string }[] = [
-  { id: 'zone', label: '공사구역' },
+  { id: 'zone', label: '공사위치' },
   { id: 'facility', label: '관련시설' },
   { id: 'parcel', label: '필지목록' },
   { id: 'building', label: '관련건물' },
   { id: 'customer', label: '수용가' },
-  { id: 'cons', label: '공사대장' },
+  { id: 'cons', label: '공사이력' },
 ]
+
+const geoJsonFormat = new OlGeoJSON()
+const wktFormat = new WKT()
+
+function geomIntersectsView(
+  geom: Record<string, unknown> | GeoJSON.Geometry | null | undefined,
+  dataProjection: string,
+  viewExtent: Extent | null
+): boolean {
+  if (!viewExtent || !geom || typeof geom !== 'object' || !('type' in geom)) return false
+  try {
+    const geometry = geoJsonFormat.readGeometry(geom, {
+      dataProjection,
+      featureProjection: 'EPSG:3857',
+    })
+    // bbox끼리 비교하면 멀리 있는 큰 도형도 걸려 오탐 — 실제 교차만
+    return geometry.intersectsExtent(viewExtent)
+  } catch {
+    return false
+  }
+}
+
+function wkt5181IntersectsView(wkt: string | null | undefined, viewExtent: Extent | null): boolean {
+  if (!viewExtent || !wkt?.trim()) return false
+  try {
+    const geometry = wktFormat.readGeometry(wkt, {
+      dataProjection: 'EPSG:5181',
+      featureProjection: 'EPSG:3857',
+    })
+    return geometry.intersectsExtent(viewExtent)
+  } catch {
+    return false
+  }
+}
+
+/** 여러 공사위치 WKT(5181)를 한 검색 범위로 */
+function collectWkt5181(wkts: Array<string | null | undefined>): string | null {
+  const list = wkts.map((w) => String(w ?? '').trim()).filter(Boolean)
+  if (list.length === 0) return null
+  if (list.length === 1) return list[0]!
+  return `GEOMETRYCOLLECTION(${list.join(',')})`
+}
 
 type Tone = {
   tabWrap: string
@@ -226,12 +304,19 @@ type Props = {
   onFocus?: (focus: WtlConsMapFocus | null) => void
   /** 관련시설 도형 → 공사대장 전용 벡터(지하시설물 패널과 무관) */
   onRelatedFacilities?: (items: WtlConsRelatedFacility[]) => void
+  /** «화면에 보이는 시설만» — 부모(Shell)가 소유. 목록 필터·맵무브 억제 동기 */
+  onlyInView: boolean
+  onOnlyInViewChange: (onlyInView: boolean) => void
   /** 선택한 공사의 본표 도형. 필지·공사대장 겹침은 이 도형 기준 */
   workGeom4326?: WtlConsGeom4326 | null
   kind?: Extract<ConsLedgerKind, 'wtl' | 'swl'>
   consCode?: string | null
   activeZone: ZoneMock | null
   zoneLoading?: boolean
+  /** 공사이력 정보박스 «조회» → 해당 공사 패널 */
+  onOpenHistoryWork?: (consCode: string) => void
+  /** 외부에서 관련탭 강제(조회 후 공사위치 등) */
+  tabLand?: { tab: RelatedTab; token: number } | null
 }
 
 export function WtlConsRelatedTabs({
@@ -240,33 +325,208 @@ export function WtlConsRelatedTabs({
   onSelectZone,
   onFocus,
   onRelatedFacilities,
+  onlyInView,
+  onOnlyInViewChange,
   workGeom4326 = null,
   kind = 'wtl',
   consCode = null,
-  activeZone,
+  activeZone: _activeZone,
   zoneLoading = false,
+  onOpenHistoryWork,
+  tabLand = null,
 }: Props) {
+  void _activeZone // 선택=줌·강조만. 탭 조회 범위에는 쓰지 않음
   const tone = TONE_V0
   const mapContext = useMapContext()
   const [tab, setTab] = useState<RelatedTab>('zone')
   const [pickedId, setPickedId] = useState<string | null>(null)
   const [parcelIdx, setParcelIdx] = useState<number | null>(null)
   const [highlightParcel, setHighlightParcel] = useState<LayerRowParcelItem | null>(null)
-  useLayerRowParcelHighlight(highlightParcel, 'blue')
   const [facilities, setFacilities] = useState<WtlNetworkRow[]>([])
   const [parcels, setParcels] = useState<ParcelRow[]>([])
   const [buildings, setBuildings] = useState<BuildingRow[]>([])
   const [customers, setCustomers] = useState<CustomerRow[]>([])
   const [consRows, setConsRows] = useState<ConsRow[]>([])
+  const [viewExtent, setViewExtent] = useState<Extent | null>(null)
+  /** 공사이력 드래그 상세 창 */
+  const [historyFocus, setHistoryFocus] = useState<WtlConsMapFocus | null>(null)
 
-  const zoneWkt = activeZone?.geomWkt5181?.trim() || null
   const workWkt = useMemo(() => geom4326ToWkt5181(workGeom4326), [workGeom4326])
-  /** 필지·건물은 공사 도형 기준. 없으면 선택한 공사위치로 넘긴다 */
-  const parcelWkt = workWkt || zoneWkt
+
+  /** 지도 화면 범위 — 이동·줌·패널 패딩 변경 시 즉시 반영(체크 ON 카운트용) */
+  useEffect(() => {
+    const map = mapContext?.mapInstanceRef?.current
+    if (!map || !mapContext?.mapReady) return
+    const view = map.getView()
+    let raf = 0
+    const refresh = () => {
+      if (raf) cancelAnimationFrame(raf)
+      raf = requestAnimationFrame(() => {
+        raf = 0
+        const next = extentOfVisibleMap(map)
+        setViewExtent((prev) => {
+          if (!next) return null
+          if (
+            prev &&
+            prev[0] === next[0] &&
+            prev[1] === next[1] &&
+            prev[2] === next[2] &&
+            prev[3] === next[3]
+          ) {
+            return prev
+          }
+          return next as Extent
+        })
+      })
+    }
+    const onPadding = (evt: { key?: string }) => {
+      if (evt.key === 'padding') refresh()
+    }
+    refresh()
+    // 줌·드래그 중에는 갱신하지 않음 — 휠 조작 중 목록/조회가 끼어들면 맵이 다시 맞춰지는 것처럼 보임
+    map.on('moveend', refresh)
+    view.on('propertychange', onPadding)
+    return () => {
+      if (raf) cancelAnimationFrame(raf)
+      map.un('moveend', refresh)
+      view.un('propertychange', onPadding)
+    }
+  }, [mapContext?.mapInstanceRef, mapContext?.mapReady])
+
+  // 체크 ON으로 돌아올 때 현재 화면 범위로 한 번 더 맞춤
+  useEffect(() => {
+    if (!onlyInView) return
+    const map = mapContext?.mapInstanceRef?.current
+    if (!map || !mapContext?.mapReady) return
+    const next = extentOfVisibleMap(map)
+    setViewExtent(next ? (next as Extent) : null)
+  }, [onlyInView, mapContext?.mapInstanceRef, mapContext?.mapReady])
+
+  /**
+   * 탭 조회·목록 기준 공사위치 (파일 상단 UX 의도).
+   * ON → 화면 겹침 구역 / OFF → 공사 전체 구역. 행 선택(zoneId)과 무관.
+   */
+  const visibleZones = useMemo(() => {
+    if (!onlyInView) return zones
+    if (!viewExtent) return zones
+    return zones.filter((z) => wkt5181IntersectsView(z.geomWkt5181, viewExtent))
+  }, [onlyInView, viewExtent, zones])
+
+  const scopeWktList = useMemo(
+    () =>
+      visibleZones
+        .map((z) => z.geomWkt5181?.trim())
+        .filter((w): w is string => Boolean(w)),
+    [visibleZones]
+  )
+
+  /**
+   * 조회 WKT: 화면(또는 전체) 공사위치 합집합.
+   * 구역 데이터가 아예 없을 때만 공사 본표로 대체. 화면 안 0건이면 null(빈 목록).
+   */
+  const scopeWktLive = useMemo(() => {
+    const fromZones = collectWkt5181(scopeWktList)
+    if (fromZones) return fromZones
+    if (zones.length === 0) return workWkt
+    return null
+  }, [scopeWktList, workWkt, zones.length])
+
+  /**
+   * 수용가용 개별 WKT 목록(링 변환). 관련시설 API에는 넣지 않음 —
+   * 배열로 넘기면 서버가 AND(모든 구역에 동시 교차)로 묶어 시설이 전부 탈락함.
+   */
+  const customerWktsLive = useMemo(() => {
+    if (scopeWktList.length > 0) return scopeWktList
+    if (zones.length === 0 && workWkt) return [workWkt]
+    return [] as string[]
+  }, [scopeWktList, zones.length, workWkt])
+
+  const [parcelWkt, setParcelWkt] = useState<string | null>(scopeWktLive)
+  const [customerAreaWkts, setCustomerAreaWkts] = useState<string[]>(customerWktsLive)
+  const [consHistoryWkt, setConsHistoryWkt] = useState<string | null>(() =>
+    collectWkt5181(scopeWktList)
+  )
 
   useEffect(() => {
-    onRelatedFacilities?.(facilitiesToMapItems(facilities))
-  }, [facilities, onRelatedFacilities])
+    const timer = window.setTimeout(() => {
+      const nextParcel = scopeWktLive
+      const nextCust = customerWktsLive
+      const nextCons = collectWkt5181(scopeWktList)
+      setParcelWkt((prev) => (prev === nextParcel ? prev : nextParcel))
+      setCustomerAreaWkts((prev) =>
+        prev.length === nextCust.length && prev.every((w, i) => w === nextCust[i])
+          ? prev
+          : nextCust
+      )
+      setConsHistoryWkt((prev) => (prev === nextCons ? prev : nextCons))
+    }, 350)
+    return () => window.clearTimeout(timer)
+  }, [scopeWktLive, customerWktsLive, scopeWktList])
+
+  const visibleFacilities = useMemo(() => {
+    if (!onlyInView) return facilities
+    // 지도 extent 준비 전에는 전체 유지(탭 배지·목록이 0으로 고정되지 않게)
+    if (!viewExtent) return facilities
+    return facilities.filter((row) => geomIntersectsView(row.geom, 'EPSG:4326', viewExtent))
+  }, [facilities, onlyInView, viewExtent])
+
+  const visibleParcels = useMemo(() => {
+    if (!onlyInView) return parcels
+    if (!viewExtent) return parcels
+    return parcels.filter((row) => geomIntersectsView(row.geometry3857, 'EPSG:3857', viewExtent))
+  }, [onlyInView, parcels, viewExtent])
+
+  const visibleBuildings = useMemo(() => {
+    if (!onlyInView) return buildings
+    if (!viewExtent) return buildings
+    return buildings.filter((row) => geomIntersectsView(row.geometry3857, 'EPSG:3857', viewExtent))
+  }, [buildings, onlyInView, viewExtent])
+
+  const visibleCustomers = useMemo(() => {
+    if (!onlyInView) return customers
+    if (!viewExtent) return customers
+    return customers.filter((row) => {
+      if (!row.point) return false
+      return geomIntersectsView(
+        { type: 'Point', coordinates: row.point },
+        'EPSG:4326',
+        viewExtent
+      )
+    })
+  }, [customers, onlyInView, viewExtent])
+
+  const visibleConsRows = useMemo(() => {
+    if (!onlyInView) return consRows
+    if (!viewExtent) return consRows
+    return consRows.filter((row) => geomIntersectsView(row.geom, 'EPSG:4326', viewExtent))
+  }, [consRows, onlyInView, viewExtent])
+
+  const visibleParcelSelectedIdx = useMemo(() => {
+    if (parcelIdx == null) return null
+    const target = parcels[parcelIdx]
+    if (!target) return null
+    const i = visibleParcels.findIndex(
+      (row) => row.pnu === target.pnu && row.address === target.address
+    )
+    return i >= 0 ? i : null
+  }, [parcelIdx, parcels, visibleParcels])
+
+  /** 필지 탭은 소유구분 색 레이어 사용. 건물 등만 기존 파란 하이라이트 */
+  useLayerRowParcelHighlight(tab === 'parcel' ? null : highlightParcel, 'blue')
+  useWtlConsParcelOwnGbnLayer({
+    active: tab === 'parcel',
+    parcels: visibleParcels,
+    selectedIdx: visibleParcelSelectedIdx,
+  })
+
+  /** 관련시설 탭일 때만 지도에 그림. 다른 탭·탭 진입 전에는 그리지 않음 */
+  useEffect(() => {
+    if (tab !== 'facility') {
+      onRelatedFacilities?.([])
+      return
+    }
+    onRelatedFacilities?.(facilitiesToMapItems(visibleFacilities))
+  }, [visibleFacilities, onRelatedFacilities, tab])
 
   useEffect(() => {
     return () => onRelatedFacilities?.([])
@@ -286,12 +546,32 @@ export function WtlConsRelatedTabs({
           params: { wkt5181: parcelWkt, limit: 500, clipToSearchGeom: true },
         })
         const body = (res?.data ?? res) as { parcels?: ParcelRow[]; error?: string }
-        const nextParcels = (Array.isArray(body?.parcels) ? body.parcels : []).map((row) => ({
+        const baseParcels = (Array.isArray(body?.parcels) ? body.parcels : []).map((row) => ({
           address: row.address,
           pnu: row.pnu,
           jimok: row.jimok,
           areaSqm: row.areaSqm,
           geometry3857: row.geometry3857 ?? null,
+        }))
+        // 사유지분석과 동일 — PNU로 소유구분(own_gbn) 보강
+        let byPnu: Record<string, string> = {}
+        const pnus = baseParcels.map((row) => row.pnu).filter(Boolean)
+        if (pnus.length > 0) {
+          try {
+            const ownRes = await call('', 'POST', {
+              service: 'riverBasicPlanService',
+              action: 'getJijukOwnGbnByPnus',
+              params: { pnus },
+            })
+            const ownBody = (ownRes?.data ?? ownRes) as { byPnu?: Record<string, string> }
+            byPnu = ownBody?.byPnu && typeof ownBody.byPnu === 'object' ? ownBody.byPnu : {}
+          } catch {
+            byPnu = {}
+          }
+        }
+        const nextParcels = baseParcels.map((row) => ({
+          ...row,
+          ownGbn: ownGbnLabel(byPnu[row.pnu] || '미상'),
         }))
         if (!cancelled) setParcels(nextParcels)
       } catch {
@@ -303,16 +583,19 @@ export function WtlConsRelatedTabs({
     }
   }, [parcelWkt])
 
+  /**
+   * 관련시설·필지·건물·공사이력과 동일 범위(parcelWkt = 화면 공사위치 합집합 1건).
+   * areaWkts 배열 복수 전달 금지(서버 AND → 변류 등 시설 전부 탈락).
+   * 공사·범위가 있으면 탭 열기 전에도 조회(카운트용). 지도 표시는 탭 ON일 때만.
+   */
   useEffect(() => {
-    if (!parcelWkt) {
-      setFacilities([])
-      setCustomers([])
-      return
-    }
+    setFacilities([])
+    onRelatedFacilities?.([])
+    if (!parcelWkt) return
     let cancelled = false
     void (async () => {
-      const [facilityRes, customerRes] = await Promise.allSettled([
-        call('', 'POST', {
+      try {
+        const res = await call('', 'POST', {
           service: 'wtlNetworkService',
           action: 'getWtlNetworkList',
           params: {
@@ -321,68 +604,90 @@ export function WtlConsRelatedTabs({
             withGeom: true,
             limit: 600,
           },
-        }),
-        (async () => {
-          const ring = wkt5181ToRing4326(parcelWkt)
-          if (ring.length < 3) return { customers: [] as CustomerRow[] }
-          return call('', 'POST', {
-            service: 'wtlOutageService',
-            action: 'refreshWtlOutageZone',
-            params: { ring },
-          })
-        })(),
-      ])
-      if (cancelled) return
-      if (facilityRes.status === 'fulfilled') {
-        const body = (facilityRes.value?.data ?? facilityRes.value) as { rows?: WtlNetworkRow[] }
+        })
+        if (cancelled) return
+        const body = (res?.data ?? res) as { rows?: WtlNetworkRow[] }
         setFacilities(Array.isArray(body?.rows) ? body.rows : [])
-      } else {
-        setFacilities([])
-      }
-      if (customerRes.status === 'fulfilled') {
-        const body = (customerRes.value?.data ?? customerRes.value) as { customers?: CustomerRow[] }
-        setCustomers(
-          (Array.isArray(body?.customers) ? body.customers : []).map((row) => ({
-            id: row.id,
-            name: row.name,
-            address: row.address,
-            meterNo: row.meterNo,
-            point: row.point ?? null,
-          }))
-        )
-      } else {
-        setCustomers([])
+      } catch {
+        if (!cancelled) setFacilities([])
       }
     })()
     return () => {
       cancelled = true
     }
+    // onRelatedFacilities는 setState라 안정. deps에 넣으면 콜백 교체 시 목록이 비워질 수 있음
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- parcelWkt만
   }, [parcelWkt])
+
+  /** 수용가: 구역 WKT마다 조회 후 id 합침(컬렉션 ring 변환 불가) */
+  useEffect(() => {
+    if (customerAreaWkts.length === 0) {
+      setCustomers([])
+      return
+    }
+    let cancelled = false
+    void (async () => {
+      try {
+        const merged = new Map<string, CustomerRow>()
+        for (const wkt of customerAreaWkts) {
+          const ring = wkt5181ToRing4326(wkt)
+          if (ring.length < 3) continue
+          const res = await call('', 'POST', {
+            service: 'wtlOutageService',
+            action: 'refreshWtlOutageZone',
+            params: { ring },
+          })
+          if (cancelled) return
+          const body = (res?.data ?? res) as { customers?: CustomerRow[] }
+          for (const row of Array.isArray(body?.customers) ? body.customers : []) {
+            const id = String(row.id ?? '').trim()
+            if (!id || merged.has(id)) continue
+            merged.set(id, {
+              id: row.id,
+              name: row.name,
+              address: row.address,
+              meterNo: row.meterNo,
+              point: row.point ?? null,
+            })
+          }
+        }
+        if (!cancelled) setCustomers([...merged.values()])
+      } catch {
+        if (!cancelled) setCustomers([])
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [customerAreaWkts])
 
   useEffect(() => {
     const code = consCode?.trim() || ''
-    if (!parcelWkt || !code) {
+    if (!consHistoryWkt || !code) {
       setConsRows([])
       return
     }
     let cancelled = false
-    void loadWtlConsIntersecting(kind, code, parcelWkt).then((result) => {
+    void loadWtlConsIntersecting(kind, code, consHistoryWkt).then((result) => {
       if (cancelled) return
+      // 화면 안 공사구역과 겹치는 다른 공사대장만
       setConsRows(
-        result.rows.map((row) => ({
-          id: row.consCode,
-          name: row.consName || row.consCode,
-          location: row.consLocat || '—',
-          doneDate: shortYearDate(row.doneDate || row.sdoneDate),
-          amount: workAmountLabel({ amountAft: row.amountAft, amountPre: row.amountPre } as WtlConsWork),
-          geom: row.geom4326,
-        }))
+        result.rows
+          .filter((row) => row.geom4326 && typeof row.geom4326 === 'object' && 'type' in row.geom4326)
+          .map((row) => ({
+            id: row.consCode,
+            name: row.consName || row.consCode,
+            location: row.consLocat || '—',
+            doneDate: shortYearDate(row.doneDate || row.sdoneDate),
+            amount: workAmountLabel({ amountAft: row.amountAft, amountPre: row.amountPre } as WtlConsWork),
+            geom: row.geom4326,
+          }))
       )
     })
     return () => {
       cancelled = true
     }
-  }, [parcelWkt, kind, consCode])
+  }, [consHistoryWkt, kind, consCode])
 
   useEffect(() => {
     if (!parcelWkt) {
@@ -431,29 +736,26 @@ export function WtlConsRelatedTabs({
     }
   }, [parcelWkt])
 
-  const counts = useMemo(
-    () => ({
-      zone: zones.length,
-      facility: facilities.length,
-      parcel: parcels.length,
-      building: buildings.length,
-      customer: customers.length,
-      cons: consRows.length,
-    }),
-    [zones.length, facilities.length, parcels.length, buildings.length, customers.length, consRows.length]
-  )
-
+  /** 탭 배지 = 목록과 동일. onlyInView·viewExtent 변경 시 매 렌더 재계산 */
+  const counts = {
+    zone: visibleZones.length,
+    facility: visibleFacilities.length,
+    parcel: visibleParcels.length,
+    building: visibleBuildings.length,
+    customer: visibleCustomers.length,
+    cons: visibleConsRows.length,
+  }
 
   const parcelItems = useMemo<LayerRowParcelItem[]>(
     () =>
-      parcels.map((row) => ({
+      visibleParcels.map((row) => ({
         address: row.address || row.pnu || '—',
         pnu: row.pnu || undefined,
         geometry3857: row.geometry3857 ?? null,
         extent3857: null,
         showMapGeom: true,
       })),
-    [parcels]
+    [visibleParcels]
   )
 
   const changeTab = (next: RelatedTab) => {
@@ -461,45 +763,67 @@ export function WtlConsRelatedTabs({
     setPickedId(null)
     setParcelIdx(null)
     setHighlightParcel(null)
+    setHistoryFocus(null)
     onFocus?.(null)
+    // 공사이력: 체크 보이며 기본 ON. 다른 탭: 숨김 + OFF(조용히 ON 잔류 방지)
+    if (next === 'cons') onOnlyInViewChange(true)
+    else if (onlyInView) onOnlyInViewChange(false)
     setTab(next)
   }
 
   const panToParcel = (item: LayerRowParcelItem) => {
+    // 화면만 ON → 맵 고정(목록·카운트가 viewExtent에 묶여 있어 움직이면 결과가 흔들림)
+    if (onlyInView) return
     const map = mapContext?.mapInstanceRef?.current
     const extent = getParcelExtent3857(item)
     if (!map || !extent) return
-    const center: [number, number] = [(extent[0] + extent[2]) / 2, (extent[1] + extent[3]) / 2]
     const applyPadding = () => mapContext?.applyMapViewPaddingRef?.current?.()
-    queueMicrotask(() => {
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          prepareMapForPanelAwareNavigation(map, applyPadding)
-          map.getView().animate({ center, duration: 450 })
-        })
-      })
+    scheduleFitMapToExtent3857(map, extent, {
+      maxZoom: MAP_AUTO_NAV_MAX_ZOOM,
+      applyMapViewPadding: applyPadding,
     })
   }
 
-  const handleParcelClick = (item: LayerRowParcelItem, idx: number) => {
-    onFocus?.(null)
-    if (parcelIdx === idx) {
-      setParcelIdx(null)
-      setHighlightParcel(null)
+  /** 필지·건물도 mapFocus 로 올려 본표·공사위치 반짝이를 끈다(탭 간 배타) */
+  const focusFromHighlight = (id: string, item: LayerRowParcelItem | null) => {
+    const geom = item?.geometry3857
+    if (!geom || typeof geom !== 'object' || !('type' in geom)) {
+      onFocus?.(null)
       return
     }
-    setParcelIdx(idx)
+    onFocus?.({
+      id,
+      geom: geom as Record<string, unknown>,
+      projection: 'EPSG:3857',
+      skipFit: onlyInView,
+    })
+  }
+
+  const handleParcelClick = (item: LayerRowParcelItem, visibleIdx: number) => {
+    const visible = visibleParcels[visibleIdx]
+    const resolvedIdx = visible
+      ? parcels.findIndex((row) => row.pnu === visible.pnu && row.address === visible.address)
+      : -1
+    if (resolvedIdx < 0) return
+    if (parcelIdx === resolvedIdx) {
+      setParcelIdx(null)
+      setHighlightParcel(null)
+      onFocus?.(null)
+      return
+    }
+    setParcelIdx(resolvedIdx)
     setPickedId(null)
     setHighlightParcel(item)
+    focusFromHighlight(`parcel:${item.pnu ?? resolvedIdx}`, item)
     panToParcel(item)
   }
 
   const handleBuildingClick = (row: BuildingRow, index: number) => {
     const id = buildingRowId(row, index)
-    onFocus?.(null)
     if (pickedId === id) {
       setPickedId(null)
       setHighlightParcel(null)
+      onFocus?.(null)
       return
     }
     setPickedId(id)
@@ -516,6 +840,7 @@ export function WtlConsRelatedTabs({
     const parcel = own ? null : parcelForBuilding(row, parcels)
     const item = own ?? (parcel ? parcelToHighlightItem(parcel) : null)
     setHighlightParcel(item)
+    focusFromHighlight(`building:${id}`, item)
     if (item) panToParcel(item)
   }
 
@@ -524,31 +849,59 @@ export function WtlConsRelatedTabs({
     id: string,
     geom: Record<string, unknown> | GeoJSON.Geometry | null | undefined,
     projection: 'EPSG:4326' | 'EPSG:3857',
-    style?: { styleName?: string; styleCode?: string | null }
+    style?: { styleName?: string; styleCode?: string | null },
+    tooltip?: WtlConsMapFocusTooltip | null
   ) => {
     if (pickedId === id) {
       setPickedId(null)
+      setHistoryFocus(null)
       onFocus?.(null)
       return
     }
     setPickedId(id)
     if (!geom || typeof geom !== 'object' || !('type' in geom)) {
+      setHistoryFocus(null)
       onFocus?.(null)
       return
     }
-    onFocus?.({
+    const nextFocus: WtlConsMapFocus = {
+      id,
       geom: geom as unknown as Record<string, unknown>,
       projection,
       styleName: style?.styleName,
       styleCode: style?.styleCode,
-    })
+      // 화면만 ON → 맵 고정·강조만(목록 흔들림 방지). OFF → 맞춤 허용
+      skipFit: onlyInView,
+      tooltip: tooltip ?? null,
+    }
+    setHistoryFocus(tooltip?.consCode ? nextFocus : null)
+    onFocus?.(nextFocus)
   }
 
   useEffect(() => {
     setPickedId(null)
     setParcelIdx(null)
     setHighlightParcel(null)
+    setHistoryFocus(null)
   }, [zoneId])
+
+  useEffect(() => {
+    if (tab !== 'cons') setHistoryFocus(null)
+  }, [tab])
+
+  /** 공사이력 «조회» 등 — 관련탭을 지정 탭(기본 공사위치)으로 */
+  useEffect(() => {
+    if (!tabLand) return
+    const next = tabLand.tab
+    setPickedId(null)
+    setParcelIdx(null)
+    setHighlightParcel(null)
+    setHistoryFocus(null)
+    onFocus?.(null)
+    if (next !== 'cons' && onlyInView) onOnlyInViewChange(false)
+    setTab(next)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- tabLand.token
+  }, [tabLand?.token])
 
   return (
     <div className="flex min-h-0 flex-1 flex-col border-t border-border">
@@ -565,32 +918,60 @@ export function WtlConsRelatedTabs({
           </button>
         ))}
       </div>
+      {tab === 'cons' ? (
+        <label className="flex shrink-0 cursor-pointer items-center gap-1 border-b border-border px-2 py-1.5 text-[11px] text-foreground">
+          <input
+            type="checkbox"
+            className="cursor-pointer"
+            checked={onlyInView}
+            onChange={(e) => onOnlyInViewChange(e.target.checked)}
+          />
+          화면에 보이는 시설만 표시합니다
+        </label>
+      ) : null}
       <div className={cn(tone.body, tab === 'parcel' && 'flex flex-col overflow-hidden')}>
         {tab === 'zone' ? (
-          <ZoneTable tone={tone} zones={zones} zoneId={zoneId} onSelectZone={onSelectZone} loading={zoneLoading} />
+          <ZoneTable
+            tone={tone}
+            zones={visibleZones}
+            zoneId={zoneId}
+            onSelectZone={onSelectZone}
+            loading={zoneLoading}
+          />
         ) : tab === 'facility' ? (
-          <FacilityTable tone={tone} rows={facilities} pickedId={pickedId} onToggle={toggleRow} />
+          <FacilityTable tone={tone} rows={visibleFacilities} pickedId={pickedId} onToggle={toggleRow} />
         ) : tab === 'parcel' ? (
-          <UsageDataAsAddressList
-            className="mt-0 min-h-0 flex-1"
-            fillHeight
-            title="필지목록"
-            hideTitle
-            isEditing={false}
-            items={parcelItems}
-            selectedIdx={parcelIdx}
+          <WtlConsParcelListVariants
+            parcels={visibleParcels}
+            parcelItems={parcelItems}
+            selectedIdx={visibleParcelSelectedIdx}
             onClick={handleParcelClick}
-            clickTitle="클릭 시 위치 이동 및 선택"
-            emptyHintView="교차하는 필지가 없습니다."
           />
         ) : tab === 'building' ? (
-          <BuildingTable tone={tone} rows={buildings} pickedId={pickedId} onClick={handleBuildingClick} />
+          <BuildingTable
+            tone={tone}
+            rows={visibleBuildings}
+            pickedId={pickedId}
+            onClick={handleBuildingClick}
+          />
         ) : tab === 'customer' ? (
-          <CustomerTable tone={tone} rows={customers} pickedId={pickedId} onToggle={toggleRow} />
+          <CustomerTable tone={tone} rows={visibleCustomers} pickedId={pickedId} onToggle={toggleRow} />
         ) : (
-          <ConsTable tone={tone} rows={consRows} pickedId={pickedId} onToggle={toggleRow} />
+          <ConsTable tone={tone} rows={visibleConsRows} pickedId={pickedId} onToggle={toggleRow} />
         )}
       </div>
+      {kind === 'wtl' || kind === 'swl' ? (
+        <WtlConsHistoryFocusFloating
+          kind={kind}
+          focus={historyFocus}
+          onOpenWork={onOpenHistoryWork}
+          onClose={() => {
+            setPickedId(null)
+            setHistoryFocus(null)
+            onFocus?.(null)
+          }}
+        />
+      ) : null}
     </div>
   )
 }
@@ -634,7 +1015,8 @@ type RowToggle = (
   id: string,
   geom: Record<string, unknown> | GeoJSON.Geometry | null | undefined,
   projection: 'EPSG:4326' | 'EPSG:3857',
-  style?: { styleName?: string; styleCode?: string | null }
+  style?: { styleName?: string; styleCode?: string | null },
+  tooltip?: WtlConsMapFocusTooltip | null
 ) => void
 
 function ZoneTable({
@@ -658,7 +1040,7 @@ function ZoneTable({
       </div>
       <ul>
         {zones.length === 0 ? (
-          <li className={tone.empty}>{loading ? '공사구역을 불러오는 중…' : '공사구역이 없습니다.'}</li>
+          <li className={tone.empty}>{loading ? '공사위치를 불러오는 중…' : '공사위치가 없습니다.'}</li>
         ) : null}
         {zones.map((z) => {
           const on = zoneId === z.id
@@ -702,37 +1084,46 @@ function FacilityTable({
     <div className={tone.card}>
       <div className={tone.head}>
         <span className={cn('w-[5.5rem] shrink-0', tone.headPad)}>구분</span>
-        <span className={cn('min-w-0 flex-1', tone.headPad)}>{facilityNameHead(rows)}</span>
-        <span className={cn('w-14 shrink-0', tone.headPad)}>구경</span>
+        {/* 속성명+값 2칸을 헤더 «속성» 하나로 병합 */}
+        <span className={cn('min-w-0 flex-[2]', tone.headPad)}>속성</span>
         <span className={cn('w-14 shrink-0', tone.headPad)}>연도</span>
       </div>
       <ul>
-        {rows.map((r) => (
-          <li key={r.id}>
-            <button
-              type="button"
-              className={cn(tone.row, pickedId === r.id ? tone.rowOn : tone.rowOff)}
-              onClick={() =>
-                onToggle(r.id, r.geom, 'EPSG:4326', {
-                  styleName: String(r.layerKey ?? '').trim(),
-                  styleCode: facilityStyleCode(r),
-                })
-              }
-            >
-              <span
-                className={cn('w-[5.5rem] shrink-0 truncate text-slate-600', tone.cell)}
-                title={facilityKindLabel(r.layerKey)}
+        {rows.map((r) => {
+          const attrLabel = facilityNameTitle(r)
+          const attrValue = String(r.name ?? '').trim() || '—'
+          return (
+            <li key={r.id}>
+              <button
+                type="button"
+                className={cn(tone.row, pickedId === r.id ? tone.rowOn : tone.rowOff)}
+                onClick={() =>
+                  onToggle(r.id, r.geom, 'EPSG:4326', {
+                    styleName: facilityStyleName(r),
+                    styleCode: facilityStyleCode(r),
+                  })
+                }
               >
-                {facilityKindLabel(r.layerKey)}
-              </span>
-              <span className={cn('min-w-0 flex-1 truncate', tone.cell)} title={r.name}>
-                {r.name}
-              </span>
-              <span className={cn('w-14 shrink-0 truncate text-slate-600', tone.cell)}>{r.diameter}</span>
-              <span className={cn('w-14 shrink-0 truncate text-slate-600', tone.cell)}>{r.year}</span>
-            </button>
-          </li>
-        ))}
+                <span
+                  className={cn('w-[5.5rem] shrink-0 truncate text-slate-600', tone.cell)}
+                  title={facilityKindLabel(r.layerKey)}
+                >
+                  {facilityKindLabel(r.layerKey)}
+                </span>
+                <span
+                  className={cn('w-[4.25rem] shrink-0 truncate text-slate-500', tone.cell)}
+                  title={attrLabel}
+                >
+                  {attrLabel}
+                </span>
+                <span className={cn('min-w-0 flex-1 truncate', tone.cell)} title={attrValue}>
+                  {attrValue}
+                </span>
+                <span className={cn('w-14 shrink-0 truncate text-slate-600', tone.cell)}>{r.year}</span>
+              </button>
+            </li>
+          )
+        })}
       </ul>
     </div>
   )
@@ -840,7 +1231,7 @@ function ConsTable({
   onToggle: RowToggle
 }) {
   if (rows.length === 0) {
-    return <p className={tone.empty}>교차하는 공사대장이 없습니다.</p>
+    return <p className={tone.empty}>교차하는 공사이력이 없습니다.</p>
   }
   return (
     <div className={tone.card}>
@@ -855,7 +1246,18 @@ function ConsTable({
             <button
               type="button"
               className={cn(tone.row, pickedId === r.id ? tone.rowOn : tone.rowOff)}
-              onClick={() => onToggle(r.id, r.geom, 'EPSG:4326')}
+              onClick={() => {
+                onToggle(r.id, r.geom, 'EPSG:4326', undefined, {
+                  consCode: r.id,
+                  title: r.name || r.id || '공사이력',
+                  summary: [
+                    { label: WTL_CONS_FIELD_LABEL.name, value: r.name || '—' },
+                    { label: WTL_CONS_FIELD_LABEL.location, value: r.location || '—' },
+                    { label: WTL_CONS_FIELD_LABEL.doneDate, value: r.doneDate || '—' },
+                    { label: WTL_CONS_FIELD_LABEL.amountAft, value: r.amount || '—' },
+                  ],
+                })
+              }}
             >
               <span className={cn('min-w-0 flex-1 truncate', tone.cell)} title={r.name}>
                 {r.name}

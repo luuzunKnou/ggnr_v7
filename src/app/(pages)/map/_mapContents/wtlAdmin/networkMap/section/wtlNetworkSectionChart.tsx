@@ -96,6 +96,108 @@ const SECTION_CUT_COLOR = '#FF9100'
 /** 거리(시설 간) — 절단면과 동일 점선·끝캡 (밝은 회색) */
 const FACILITY_GAP_COLOR = '#6b7280'
 const GAP_LEGEND_LABEL = '거리'
+/** 데이터 범례 선택 — 빨간 테두리만 (fill 없음) */
+const CHART_SELECT_STROKE = '#ef4444'
+
+function featureChartPoint(
+  f: SectionFeatureMark,
+  ground: SectionGroundPt[]
+): { x: number; y: number } | null {
+  if (f.kind === 'pipe') {
+    const surf = f.surfaceElevM ?? groundElevAt(ground, f.distM)
+    if (surf == null) return null
+    return { x: f.distM, y: surf - (Number(f.depthM) || 0) }
+  }
+  const surf = f.surfaceElevM ?? groundElevAt(ground, f.distM)
+  if (surf == null) return null
+  return { x: f.distM, y: surf }
+}
+
+/** 범례 선택 피처 — Chart.js annotation 빨간 링만 (별도 scatter 데이터셋 없음) */
+function selectionHaloAnnotations(
+  selected: SectionFeatureMark | null,
+  ground: SectionGroundPt[],
+  opts?: { len?: number; markRadiusPx?: number }
+): Record<string, object> {
+  if (!selected) return {}
+  const ring = (x: number, y: number, radius: number) => ({
+    legendSelectHalo: {
+      type: 'point' as const,
+      xValue: x,
+      yValue: y,
+      radius,
+      pointStyle: 'circle' as const,
+      // 완전 투명이면 stroke가 스킵되는 경우가 있어 옅은 fill
+      backgroundColor: 'rgba(239,68,68,0.12)',
+      borderColor: CHART_SELECT_STROKE,
+      borderWidth: 3,
+      adjustScaleRange: false,
+      // 심볼 Image dataset 위에 그리기
+      drawTime: 'afterDraw' as const,
+      z: 20,
+    },
+  })
+  // 포인트 dataset과 동일 좌표 (surface 없으면 0) — null이면 annotation 자체가 빠지던 문제 방지
+  if (selected.kind === 'point') {
+    const surf =
+      selected.surfaceElevM ?? groundElevAt(ground, selected.distM) ?? 0
+    const radius =
+      opts?.markRadiusPx != null
+        ? Math.max(14, opts.markRadiusPx + 6)
+        : 14
+    return ring(selected.distM, surf, radius)
+  }
+  if (selected.kind === 'pipe' && opts?.len != null) {
+    const from = Math.max(0, selected.spanFromM ?? selected.distM - 0.5)
+    const to = Math.min(opts.len, selected.spanToM ?? selected.distM + 0.5)
+    const dep = Number(selected.depthM) || 0
+    // 종단 관로 dataset과 동일 — 지반고를 따라 꺾인 구간별 annotation 선
+    const pts: { x: number; y: number }[] = []
+    for (const g of ground) {
+      if (g.distM < from - 0.01 || g.distM > to + 0.01) continue
+      pts.push({ x: g.distM, y: g.elevM - dep })
+    }
+    if (pts.length < 2) {
+      const s0 = groundElevAt(ground, from) ?? 0
+      const s1 = groundElevAt(ground, to) ?? 0
+      pts.push({ x: from, y: s0 - dep }, { x: to, y: s1 - dep })
+    }
+    const out: Record<string, object> = {}
+    for (let i = 0; i < pts.length - 1; i++) {
+      const a = pts[i]!
+      const b = pts[i + 1]!
+      out[`legendSelectHalo_${i}`] = {
+        type: 'line' as const,
+        xMin: a.x,
+        xMax: b.x,
+        yMin: a.y,
+        yMax: b.y,
+        borderColor: CHART_SELECT_STROKE,
+        borderWidth: 5,
+        adjustScaleRange: false,
+        drawTime: 'afterDraw' as const,
+        z: 20,
+      }
+    }
+    return out
+  }
+  const pt = featureChartPoint(selected, ground)
+  if (!pt) {
+    // pipe fallback — dataset과 같이 0 폴백
+    const surf =
+      selected.surfaceElevM ?? groundElevAt(ground, selected.distM) ?? 0
+    return ring(
+      selected.distM,
+      surf - (Number(selected.depthM) || 0),
+      Math.max(10, bubbleRadiusPx(selected.diameterM) + 5)
+    )
+  }
+  const radius =
+    opts?.markRadiusPx != null
+      ? Math.max(12, opts.markRadiusPx + 5)
+      : Math.max(10, bubbleRadiusPx(selected.diameterM) + 5)
+  return ring(pt.x, pt.y, radius)
+}
 
 function isGapDatasetLabel(label: string): boolean {
   return label === GAP_LEGEND_LABEL
@@ -666,7 +768,7 @@ function SupplyAreaGanttChart({
         legend: { display: false },
         datalabels: {
           color: ink.ink,
-          font: { size: 9, weight: 600 },
+          font: { size: 12, weight: 600 },
           clamp: true,
           formatter: (v, ctx) => {
             const n = Number(v)
@@ -690,7 +792,7 @@ function SupplyAreaGanttChart({
           grid: { display: false },
           border: { display: false },
           ticks: {
-            font: { size: 10, weight: 'bold' },
+            font: { size: 12, weight: 'bold' },
             color: ink.tick,
             padding: 4,
           },
@@ -743,14 +845,19 @@ function CrossSectionChart({
   features,
   totalLengthM,
   supplyAreaBands,
+  onLegendItemSelect,
+  onLegendHighlightClear,
 }: {
   ground: SectionGroundPt[]
   features: SectionFeatureMark[]
   totalLengthM: number
   supplyAreaBands: SectionSupplyBandSegment[]
+  onLegendItemSelect?: (item: import('./wtlNetworkSectionLegend').LongPipeLegendItem) => void
+  onLegendHighlightClear?: () => void
 }) {
   const ink = sectionChartInk(useResolvedThemeSafe() === 'dark')
   const { plotInset, insetSyncPlugin } = usePlotInsetSync()
+  const chartRef = useRef<ChartJS | null>(null)
   const {
     stylesByKey,
     styleRevision,
@@ -760,6 +867,49 @@ function CrossSectionChart({
     toggleLegendItem,
     toggleLegendLayer,
   } = useSectionFeatureLegend(features)
+  const [selectedKey, setSelectedKey] = useState<string | null>(null)
+  const featuresSig = useMemo(
+    () => features.map((f) => f.id).join('|'),
+    [features]
+  )
+  useEffect(() => {
+    setSelectedKey(null)
+  }, [featuresSig])
+  const selectedFeature = useMemo(
+    () => features.find((f) => f.id === selectedKey) ?? null,
+    [features, selectedKey]
+  )
+  const clearHighlightIfNeeded = useCallback(
+    (keysBecomingHidden: string[]) => {
+      if (!selectedKey || !keysBecomingHidden.includes(selectedKey)) return
+      setSelectedKey(null)
+      onLegendHighlightClear?.()
+    },
+    [selectedKey, onLegendHighlightClear]
+  )
+  const handleToggleItem = useCallback(
+    (key: string) => {
+      const willHide = !hiddenKeys.has(key)
+      toggleLegendItem(key)
+      if (willHide) clearHighlightIfNeeded([key])
+    },
+    [hiddenKeys, toggleLegendItem, clearHighlightIfNeeded]
+  )
+  const handleToggleLayer = useCallback(
+    (group: import('./wtlNetworkSectionLegend').LongPipeLegendGroup) => {
+      const allHidden =
+        group.items.length > 0 &&
+        group.items.every((it) => hiddenKeys.has(it.key))
+      const keys = group.items.map((it) => it.key)
+      toggleLegendLayer(group)
+      if (!allHidden) clearHighlightIfNeeded(keys)
+    },
+    [hiddenKeys, toggleLegendLayer, clearHighlightIfNeeded]
+  )
+  // annotation 옵션 변경이 scatter 심볼 위에 바로 안 그려지는 경우 강제 갱신
+  useEffect(() => {
+    chartRef.current?.update('none')
+  }, [selectedKey])
   const pipes = visibleFeatures.filter((f) => f.kind === 'pipe')
   const points = visibleFeatures.filter((f) => f.kind === 'point')
   /** 높이 고정용 — 전체 feature 기준 (체크 토글과 무관) */
@@ -894,7 +1044,7 @@ function CrossSectionChart({
       },
     ]
 
-    // LINE(관) — SLD는 색만, 크기(관경)·두께는 기존
+    // LINE(관) — SLD는 색만, 크기(관경)·두께는 기존. 선택은 annotation만
     for (const [layerName, group] of groupFeaturesByLayer(pipes)) {
       const pipePts = group.map((p) => {
         const surf = p.surfaceElevM ?? groundElevAt(ground, p.distM) ?? 0
@@ -906,6 +1056,7 @@ function CrossSectionChart({
           y: elev,
           r: bubbleRadiusPx(p.diameterM),
           label: (p.label || '').trim(),
+          featureId: p.id,
           color,
           fill: color,
           stroke: color,
@@ -923,7 +1074,7 @@ function CrossSectionChart({
       })
     }
 
-    // POINT(시설) — 피처별 styleCode 조건 SVG / 없으면 Mark 채움·테두리
+    // POINT(시설) — 심볼은 fill/stroke 투명 유지. 선택은 annotation만
     for (const [layerName, group] of groupFeaturesByLayer(points)) {
       const pointPts = group.map((p) => {
         const surf = p.surfaceElevM ?? groundElevAt(ground, p.distM) ?? 0
@@ -932,6 +1083,7 @@ function CrossSectionChart({
           x: p.distM,
           y: surf,
           label: (p.label || '').trim(),
+          featureId: p.id,
           fill: st?.fillColor ?? normalizeStroke(p.color),
           stroke: st?.strokeColor ?? normalizeStroke(p.color),
           legendSrc: st?.legendSrc || '',
@@ -983,7 +1135,17 @@ function CrossSectionChart({
     }
 
     return { datasets }
-  }, [ground, pipes, points, elevBounds, facilityGapPts, stylesByKey, styleRevision, ink.ground, ink.groundFill])
+  }, [
+    ground,
+    pipes,
+    points,
+    elevBounds,
+    facilityGapPts,
+    stylesByKey,
+    styleRevision,
+    ink.ground,
+    ink.groundFill,
+  ])
 
   const options = useMemo((): ChartOptions => {
     const { ymin, ymax, xmax, bottomPad } = elevBounds
@@ -1008,7 +1170,7 @@ function CrossSectionChart({
           position: 'top',
           labels: {
             color: ink.ink,
-            font: { size: 11 },
+            font: { size: 12 },
             boxWidth: 12,
             usePointStyle: true,
             generateLabels: (chart) =>
@@ -1032,11 +1194,27 @@ function CrossSectionChart({
             label: (ctx) => {
               const raw = ctx.raw as MarkPt | undefined
               const legend = String(ctx.dataset.label || '')
-              if (legend === '지반고') return ['범례: 지반고']
+              const y = Number(ctx.parsed.y)
+              if (legend === '지반고') {
+                return Number.isFinite(y)
+                  ? [`범례: 지반고`, `EL ${y.toFixed(2)} m`]
+                  : ['범례: 지반고']
+              }
               const featureLabel = String(raw?.label ?? '').trim() || '—'
               return [`범례: ${legend}`, `라벨: ${featureLabel}`]
             },
           },
+        },
+        annotation: {
+          clip: false,
+          annotations: selectionHaloAnnotations(selectedFeature, ground, {
+            markRadiusPx:
+              selectedFeature?.kind === 'point'
+                ? pointRadiusFromMarkSize(
+                    styleForFeature(stylesByKey, selectedFeature)?.markSize
+                  )
+                : undefined,
+          }),
         },
       },
       scales: {
@@ -1057,17 +1235,27 @@ function CrossSectionChart({
           type: 'linear',
           min: ymin,
           max: ymax,
-          title: { display: true, text: '표고 (m)', color: ink.ink, font: { size: 11 } },
-          ticks: { font: { size: 10 }, color: ink.tick },
+          title: { display: true, text: '표고 (m)', color: ink.ink, font: { size: 12 } },
+          ticks: { font: { size: 12 }, color: ink.tick },
           grid: { color: ink.grid },
         },
       },
     }
-  }, [elevBounds, axisMarks, featureLayerNames, ink.grid, ink.ink, ink.tick])
+  }, [
+    elevBounds,
+    axisMarks,
+    featureLayerNames,
+    ink.grid,
+    ink.ink,
+    ink.tick,
+    selectedFeature,
+    ground,
+    stylesByKey,
+  ])
 
   if (!ground.length) {
     return (
-      <p className="py-10 text-center text-[12px] text-muted-foreground">
+      <p className="py-10 text-center text-xs text-muted-foreground">
         등고 지반고를 읽지 못했습니다. 절단선을 다시 그려 주세요.
       </p>
     )
@@ -1078,6 +1266,7 @@ function CrossSectionChart({
       <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
         <div className="relative z-[2] min-h-0 flex-1">
           <Chart
+            ref={chartRef}
             type="scatter"
             data={chartData}
             options={options}
@@ -1096,8 +1285,13 @@ function CrossSectionChart({
         groups={featureLegendGroups}
         stylesByKey={stylesByKey}
         hiddenKeys={hiddenKeys}
-        onToggleItem={toggleLegendItem}
-        onToggleLayer={toggleLegendLayer}
+        selectedKey={selectedKey}
+        onToggleItem={handleToggleItem}
+        onToggleLayer={handleToggleLayer}
+        onItemClick={(item) => {
+          setSelectedKey(item.key)
+          onLegendItemSelect?.(item)
+        }}
       />
     </div>
   )
@@ -1111,6 +1305,8 @@ function LongSectionChart({
   totalLengthM,
   supplyAreaBands,
   supplyElevComposition = [],
+  onLegendItemSelect,
+  onLegendHighlightClear,
 }: {
   ground: SectionGroundPt[]
   groundMin: SectionGroundPt[]
@@ -1119,8 +1315,11 @@ function LongSectionChart({
   totalLengthM: number
   supplyAreaBands: SectionSupplyBandSegment[]
   supplyElevComposition?: import('./useWtlNetworkSection').SectionSupplyElevRow[]
+  onLegendItemSelect?: (item: import('./wtlNetworkSectionLegend').LongPipeLegendItem) => void
+  onLegendHighlightClear?: () => void
 }) {
   const ink = sectionChartInk(useResolvedThemeSafe() === 'dark')
+  const chartRef = useRef<ChartJS | null>(null)
   const {
     stylesByKey,
     styleRevision,
@@ -1130,6 +1329,48 @@ function LongSectionChart({
     toggleLegendItem,
     toggleLegendLayer,
   } = useSectionFeatureLegend(features)
+  const [selectedKey, setSelectedKey] = useState<string | null>(null)
+  const featuresSig = useMemo(
+    () => features.map((f) => f.id).join('|'),
+    [features]
+  )
+  useEffect(() => {
+    setSelectedKey(null)
+  }, [featuresSig])
+  const selectedFeature = useMemo(
+    () => features.find((f) => f.id === selectedKey) ?? null,
+    [features, selectedKey]
+  )
+  const clearHighlightIfNeeded = useCallback(
+    (keysBecomingHidden: string[]) => {
+      if (!selectedKey || !keysBecomingHidden.includes(selectedKey)) return
+      setSelectedKey(null)
+      onLegendHighlightClear?.()
+    },
+    [selectedKey, onLegendHighlightClear]
+  )
+  const handleToggleItem = useCallback(
+    (key: string) => {
+      const willHide = !hiddenKeys.has(key)
+      toggleLegendItem(key)
+      if (willHide) clearHighlightIfNeeded([key])
+    },
+    [hiddenKeys, toggleLegendItem, clearHighlightIfNeeded]
+  )
+  const handleToggleLayer = useCallback(
+    (group: import('./wtlNetworkSectionLegend').LongPipeLegendGroup) => {
+      const allHidden =
+        group.items.length > 0 &&
+        group.items.every((it) => hiddenKeys.has(it.key))
+      const keys = group.items.map((it) => it.key)
+      toggleLegendLayer(group)
+      if (!allHidden) clearHighlightIfNeeded(keys)
+    },
+    [hiddenKeys, toggleLegendLayer, clearHighlightIfNeeded]
+  )
+  useEffect(() => {
+    chartRef.current?.update('none')
+  }, [selectedKey])
   const labelById = useMemo(
     () => legendLabelByFeatureId(featureLegendGroups),
     [featureLegendGroups]
@@ -1243,7 +1484,7 @@ function LongSectionChart({
         order: CHART_Z.polygon,
       })
     }
-    // 관로·점시설 — 켜진 레이어 전부 (범례는 우측 HTML)
+    // 관로·점시설 — 원색 유지. 선택은 annotation만
     for (const p of pipes) {
       const legendName = labelById.get(p.id) || layerLegendName(p)
       const layerName = layerLegendName(p)
@@ -1260,6 +1501,7 @@ function LongSectionChart({
         layerName?: string
         fill?: string
         stroke?: string
+        featureId?: string
       }
       const pts: LongMarkPt[] = []
       for (const g of ground) {
@@ -1271,6 +1513,7 @@ function LongSectionChart({
           layerName,
           fill: color,
           stroke: color,
+          featureId: p.id,
         })
       }
       if (pts.length < 2) {
@@ -1284,6 +1527,7 @@ function LongSectionChart({
             layerName,
             fill: color,
             stroke: color,
+            featureId: p.id,
           },
           {
             x: to,
@@ -1292,6 +1536,7 @@ function LongSectionChart({
             layerName,
             fill: color,
             stroke: color,
+            featureId: p.id,
           }
         )
       }
@@ -1317,6 +1562,7 @@ function LongSectionChart({
       const fill = st?.fillColor ?? normalizeStroke(p.color)
       const stroke = st?.strokeColor ?? normalizeStroke(p.color)
       const surf = p.surfaceElevM ?? groundElevAt(ground, p.distM) ?? 0
+      const baseR = symbolImg ? pointRadiusFromMarkSize(st?.markSize) : 5
       datasets.push({
         type: 'scatter' as const,
         label: legendName,
@@ -1329,6 +1575,7 @@ function LongSectionChart({
             fill,
             stroke,
             legendSrc: st?.legendSrc || '',
+            featureId: p.id,
           } as {
             x: number
             y: number
@@ -1337,12 +1584,13 @@ function LongSectionChart({
             fill?: string
             stroke?: string
             legendSrc?: string
+            featureId?: string
           },
         ],
         backgroundColor: symbolImg ? 'rgba(0,0,0,0)' : fill,
         borderColor: symbolImg ? 'rgba(0,0,0,0)' : stroke,
         borderWidth: symbolImg ? 0 : st?.strokeWidth ?? 1.5,
-        pointRadius: symbolImg ? pointRadiusFromMarkSize(st?.markSize) : 5,
+        pointRadius: baseR,
         pointHoverRadius: symbolImg
           ? pointRadiusFromMarkSize(st?.markSize) + 1
           : 6,
@@ -1387,7 +1635,7 @@ function LongSectionChart({
         legend: {
           position: 'top',
           labels: {
-            font: { size: 10 },
+            font: { size: 12 },
             color: ink.ink,
             boxWidth: 10,
             usePointStyle: true,
@@ -1422,8 +1670,16 @@ function LongSectionChart({
             label: (ctx) => {
               const name = String(ctx.dataset.label || '')
               const y = Number(ctx.parsed.y)
-              if (name === '지반고') return ['범례: 지반고']
-              if (name.startsWith('옆면')) return [`범례: ${name}`]
+              if (name === '지반고') {
+                return Number.isFinite(y)
+                  ? [`범례: 지반고`, `EL ${y.toFixed(2)} m`]
+                  : ['범례: 지반고']
+              }
+              if (name.startsWith('옆면')) {
+                return Number.isFinite(y)
+                  ? [`범례: ${name}`, `EL ${y.toFixed(2)} m`]
+                  : [`범례: ${name}`]
+              }
               if (featureLegendLabels.has(name)) {
                 const raw = ctx.raw as
                   | { label?: string; layerName?: string }
@@ -1445,7 +1701,7 @@ function LongSectionChart({
               yValue: ymax,
               content: `절단면(${cutLen}m)`,
               color: '#c2410c',
-              font: { size: 10, weight: '600' },
+              font: { size: 12, weight: '600' },
               backgroundColor: ink.labelBg,
               padding: { top: 2, bottom: 2, left: 4, right: 4 },
               borderRadius: 2,
@@ -1454,6 +1710,15 @@ function LongSectionChart({
               drawTime: 'afterDatasets',
               clip: false,
             },
+            ...selectionHaloAnnotations(selectedFeature, ground, {
+              len,
+              markRadiusPx:
+                selectedFeature?.kind === 'point'
+                  ? pointRadiusFromMarkSize(
+                      styleForFeature(stylesByKey, selectedFeature)?.markSize
+                    )
+                  : undefined,
+            }),
           } as Record<string, object>,
         },
       },
@@ -1462,25 +1727,36 @@ function LongSectionChart({
           type: 'linear',
           min: 0,
           max: len,
-          title: { display: true, text: '깊이축 (m)', color: ink.ink, font: { size: 11 } },
-          ticks: { font: { size: 10 }, color: ink.tick },
+          title: { display: true, text: '깊이축 (m)', color: ink.ink, font: { size: 12 } },
+          ticks: { font: { size: 12 }, color: ink.tick },
           grid: { color: ink.grid },
         },
         y: {
           type: 'linear',
           min: ymin,
           max: ymax,
-          title: { display: true, text: '표고 (m)', color: ink.ink, font: { size: 11 } },
-          ticks: { font: { size: 10 }, color: ink.tick },
+          title: { display: true, text: '표고 (m)', color: ink.ink, font: { size: 12 } },
+          ticks: { font: { size: 12 }, color: ink.tick },
           grid: { color: ink.grid },
         },
       },
     }
-  }, [elevRange, len, featureLegendLabels, ink.grid, ink.ink, ink.tick, ink.labelBg])
+  }, [
+    elevRange,
+    len,
+    featureLegendLabels,
+    ink.grid,
+    ink.ink,
+    ink.tick,
+    ink.labelBg,
+    selectedFeature,
+    ground,
+    stylesByKey,
+  ])
 
   if (!ground.length) {
     return (
-      <p className="py-10 text-center text-[12px] text-muted-foreground">
+      <p className="py-10 text-center text-xs text-muted-foreground">
         등고 지반고를 읽지 못했습니다. 절단선을 다시 그려 주세요.
       </p>
     )
@@ -1490,7 +1766,12 @@ function LongSectionChart({
     <div className="flex h-full min-h-0 gap-2 overflow-hidden rounded border-2 border-border bg-background p-2">
       <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
         <div className="relative z-[2] min-h-0 flex-1">
-          <Chart type="scatter" data={chartData} options={options} />
+          <Chart
+            ref={chartRef}
+            type="scatter"
+            data={chartData}
+            options={options}
+          />
         </div>
         <div className="relative z-[1] max-h-[40%] shrink-0 overflow-y-auto">
           <WtlNetworkLongSupplyElevCharts
@@ -1507,8 +1788,13 @@ function LongSectionChart({
         groups={featureLegendGroups}
         stylesByKey={stylesByKey}
         hiddenKeys={hiddenKeys}
-        onToggleItem={toggleLegendItem}
-        onToggleLayer={toggleLegendLayer}
+        selectedKey={selectedKey}
+        onToggleItem={handleToggleItem}
+        onToggleLayer={handleToggleLayer}
+        onItemClick={(item) => {
+          setSelectedKey(item.key)
+          onLegendItemSelect?.(item)
+        }}
       />
     </div>
   )
@@ -1523,6 +1809,8 @@ export function WtlNetworkSectionChart({
   totalLengthM,
   supplyAreaBands = [],
   supplyElevComposition = [],
+  onLegendItemSelect,
+  onLegendHighlightClear,
 }: {
   mode: 'crossChart' | 'longChart'
   ground?: SectionGroundPt[]
@@ -1532,6 +1820,8 @@ export function WtlNetworkSectionChart({
   totalLengthM: number
   supplyAreaBands?: SectionSupplyBandSegment[]
   supplyElevComposition?: import('./useWtlNetworkSection').SectionSupplyElevRow[]
+  onLegendItemSelect?: (item: import('./wtlNetworkSectionLegend').LongPipeLegendItem) => void
+  onLegendHighlightClear?: () => void
 }) {
   if (mode === 'crossChart') {
     return (
@@ -1541,6 +1831,8 @@ export function WtlNetworkSectionChart({
           features={features}
           totalLengthM={totalLengthM}
           supplyAreaBands={supplyAreaBands}
+          onLegendItemSelect={onLegendItemSelect}
+          onLegendHighlightClear={onLegendHighlightClear}
         />
       </div>
     )
@@ -1555,6 +1847,8 @@ export function WtlNetworkSectionChart({
         totalLengthM={totalLengthM}
         supplyAreaBands={supplyAreaBands}
         supplyElevComposition={supplyElevComposition}
+        onLegendItemSelect={onLegendItemSelect}
+        onLegendHighlightClear={onLegendHighlightClear}
       />
     </div>
   )

@@ -33,9 +33,97 @@ export type TablesJsonRow = {
 type TablesJsonKorRow = {
   define_table_name?: string
   define_table_kor_name?: string
+  define_table_group?: string
+  define_table_parents_layer?: string
+  define_table_idx?: string | number
 }
 
 const TABLES_ROWS = (Array.isArray(tablesJson) ? tablesJson : []) as TablesJsonKorRow[]
+
+/** tables.json 기준 — 상수/대진 등 관망 출처 그룹에 속한 테이블명인지 */
+export function isWtlNetMapGroupedTable(tableName: string): boolean {
+  const n = String(tableName ?? '')
+    .trim()
+    .toLowerCase()
+  if (!n) return false
+  for (const row of TABLES_ROWS) {
+    const name = String(row.define_table_name ?? '')
+      .trim()
+      .toLowerCase()
+    if (name !== n) continue
+    if (isWtlNetMapGroup(String(row.define_table_group ?? '').trim())) return true
+  }
+  return false
+}
+
+/** parents_layer LIKE '%wtl_pipe_lm' (상수·대진 부모) */
+export function isWtlPipeParentsLayer(parentsLayer: string | null | undefined): boolean {
+  return String(parentsLayer ?? '')
+    .trim()
+    .toLowerCase()
+    .endsWith('wtl_pipe_lm')
+}
+
+/** 관로 분할 카탈로그 논리키 (saa·기타) */
+export const WTL_PIPE_SPLIT_LOGICAL_KEYS = [
+  'wtl_pipe_lm_etc',
+  'wtl_pipe_lm_saa004',
+  'wtl_pipe_lm_saa003',
+] as const
+
+/** 그룹 물리명 → 관망 논리키 (d_wtl_pipe_lm_etc → wtl_pipe_lm_etc) */
+export function mapWtlPipeChildToLogicalKey(tableName: string): string | null {
+  const n = String(tableName ?? '')
+    .trim()
+    .toLowerCase()
+  if (!n) return null
+  for (const key of WTL_PIPE_SPLIT_LOGICAL_KEYS) {
+    if (n === key || n.endsWith(`_${key}`) || n.endsWith(key)) return key
+  }
+  const kor = KOR_BY_TABLE.get(n)
+  if (kor) {
+    for (const key of WTL_PIPE_SPLIT_LOGICAL_KEYS) {
+      if (KOR_BY_TABLE.get(key) === kor) return key
+    }
+  }
+  return null
+}
+
+/**
+ * 출처 그룹 테이블 중 parents_layer LIKE '%wtl_pipe_lm' 인 분할 레이어.
+ * 반환 key = 관망 논리키(카탈로그), kor = 그룹 테이블 한글명.
+ */
+export function listWtlPipeSplitItemsInGroup(groupTables: readonly string[]): {
+  key: string
+  table: string
+  kor: string
+  idx: number
+}[] {
+  const set = new Set(
+    groupTables.map((t) => String(t ?? '').trim().toLowerCase()).filter(Boolean)
+  )
+  const out: { key: string; table: string; kor: string; idx: number }[] = []
+  const seen = new Set<string>()
+  for (const row of TABLES_ROWS) {
+    const table = String(row.define_table_name ?? '')
+      .trim()
+      .toLowerCase()
+    if (!table || !set.has(table)) continue
+    if (!isWtlPipeParentsLayer(row.define_table_parents_layer)) continue
+    const key = mapWtlPipeChildToLogicalKey(table) ?? table
+    if (seen.has(key)) continue
+    seen.add(key)
+    const idxRaw = Number(row.define_table_idx)
+    out.push({
+      key,
+      table,
+      kor: String(row.define_table_kor_name ?? '').trim() || KOR_BY_TABLE.get(table) || key,
+      idx: Number.isFinite(idxRaw) ? idxRaw : 9999,
+    })
+  }
+  out.sort((a, b) => a.idx - b.idx || a.key.localeCompare(b.key, 'ko'))
+  return out
+}
 
 /** define_table_name → 한글명 */
 const KOR_BY_TABLE = (() => {

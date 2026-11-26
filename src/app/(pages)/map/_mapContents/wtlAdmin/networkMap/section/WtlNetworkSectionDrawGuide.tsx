@@ -78,7 +78,7 @@ function useGuideRightPadPx(
 }
 
 const PILL_SHELL =
-  'pointer-events-auto flex items-center gap-1.5 whitespace-nowrap rounded-full border border-border bg-background/95 py-1 pr-1 pl-3 text-[12px] leading-snug text-foreground shadow-md backdrop-blur'
+  'pointer-events-auto flex items-center gap-1.5 whitespace-nowrap rounded-full border border-border bg-background/95 py-1 pr-1 pl-3 text-xs leading-snug text-foreground shadow-md backdrop-blur'
 const NOTICE_SHELL =
   'pointer-events-none whitespace-nowrap rounded-full border border-border/80 bg-background/95 px-2.5 py-0.5 text-[11px] font-medium leading-snug text-muted-foreground shadow-sm backdrop-blur-md'
 const BTN_MUTED =

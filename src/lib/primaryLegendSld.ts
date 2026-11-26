@@ -114,9 +114,15 @@ export function buildPrimaryLegendSld(
   const graphic = rules.filter((rule) => !isAnnotationOnlyRule(rule));
   const symbolizer = graphic.map(firstGraphicSymbolizer).find((item) => item != null);
   if (!symbolizer) return null;
+  // 축척·속성 Filter만 있는 단일 규칙도 hideEmptyRules에 걸리면 투명 범례가 되므로 단순화
   const mixed =
     rules.length > 1 ||
-    rules.some((rule) => /TextSymbolizer/i.test(rule) || /shape:\/\/oarrow|shape:\/\/arrow/i.test(rule));
+    rules.some(
+      (rule) =>
+        /TextSymbolizer/i.test(rule) ||
+        /shape:\/\/oarrow|shape:\/\/arrow/i.test(rule) ||
+        /<(?:ogc:)?Filter[\s>]/i.test(rule)
+    );
   if (!mixed) return null;
   const simple = stripGeometry(
     flattenFunctionParams(resolveEnvLiterals(rewriteGraphicHref(withLegendPointSize(symbolizer), geoserverBase ?? '')))

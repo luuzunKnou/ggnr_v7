@@ -11,6 +11,10 @@ export type WaterComplaintColumns = {
   content: string
   state: string | null
   result: string | null
+  /** 세부분류 컬럼 (목록 #태그). 없으면 null */
+  cat: string | null
+  /** 통계분류 컬럼 (목록 #태그). 없으면 null */
+  stat: string | null
   /** 준설대상지처럼 접수번호에 붙는 하위 테이블 */
   hasChild: boolean
 }
@@ -26,12 +30,14 @@ const WTL_LIKE: WaterComplaintColumns = {
   content: 'comp_contents',
   state: 'comp_state',
   result: 'comp_req_contents',
+  cat: 'comp_cat',
+  stat: 'comp_stat_item',
   hasChild: false,
 }
 
 export const WATER_COMPLAINT_PROFILES: Record<string, WaterComplaintColumns> = {
   uiseong_complaint_wtl: WTL_LIKE,
-  complaint_sply: WTL_LIKE,
+  complaint_sply: { ...WTL_LIKE, stat: null },
   complaint_swl: {
     name: 'co_name',
     tel: 'co_tel',
@@ -43,6 +49,8 @@ export const WATER_COMPLAINT_PROFILES: Record<string, WaterComplaintColumns> = {
     content: 'co_contents',
     state: 'comp_state',
     result: 'co_result',
+    cat: null,
+    stat: null,
     hasChild: false,
   },
   complaint_dre: {
@@ -56,6 +64,8 @@ export const WATER_COMPLAINT_PROFILES: Record<string, WaterComplaintColumns> = {
     content: 'dre_remark',
     state: null,
     result: null,
+    cat: null,
+    stat: null,
     hasChild: true,
   },
 }
@@ -79,9 +89,28 @@ export type DreDetailFieldKey = (typeof DRE_DETAIL_FIELDS)[number]['key']
 
 export type WaterComplaintProfile = WaterComplaintColumns & { table: string }
 
+function resolveComplaintColumns(table: string): WaterComplaintColumns | null {
+  const exact = WATER_COMPLAINT_PROFILES[table]
+  if (exact) return exact
+  if (table.includes('_detail')) return null
+  // 레거시·마을민원(컬럼맵 다름) 제외. 상수는 uiseong_complaint_wtl
+  if (table === 'complaint_wtl' || table === 'complaint_village_wtl') return null
+  if (table.includes('complaint_sply') || table.endsWith('_sply')) return WTL_LIKE
+  if (table.includes('complaint_wtl') || (table.includes('complaint') && table.endsWith('_wtl'))) {
+    return WTL_LIKE
+  }
+  if (table.includes('complaint_swl') || (table.includes('complaint') && table.endsWith('_swl'))) {
+    return WATER_COMPLAINT_PROFILES.complaint_swl
+  }
+  if (table.includes('complaint_dre') && !table.includes('detail')) {
+    return WATER_COMPLAINT_PROFILES.complaint_dre
+  }
+  return null
+}
+
 export function waterComplaintProfile(tableName: string | null | undefined): WaterComplaintProfile | null {
   const table = String(tableName ?? '').trim().toLowerCase()
-  const columns = WATER_COMPLAINT_PROFILES[table]
+  const columns = resolveComplaintColumns(table)
   if (!columns) return null
   return { table, ...columns }
 }

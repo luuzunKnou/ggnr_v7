@@ -48,8 +48,11 @@ for (let z = 0; z <= 20; z++) {
   RESOLUTIONS_3857[z] = WEB_MERCATOR_MAX / Math.pow(2, z);
 }
 
-/** 지도 화면 최대 줌 — 타일 체계(20)보다 더 확대. 넘는 단계는 마지막 타일을 늘려 표시 */
-export const MAP_VIEW_MAX_ZOOM = 22;
+/**
+ * 지도 화면 최대 줌 — 타일 체계(20)보다 더 확대. 넘는 단계는 마지막 타일을 늘려 표시.
+ * 25 = 좌측 하단 축척 약 0.47m (배경 타일은 20 이후 늘어나 흐려지고, WMS·벡터 레이어는 선명)
+ */
+export const MAP_VIEW_MAX_ZOOM = 25;
 
 /**
  * 지도 화면(View)용 해상도. 타일 격자는 RESOLUTIONS_3857(20단계)을 그대로 써서

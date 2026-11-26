@@ -1,4 +1,5 @@
-<?xml version="1.0" encoding="UTF-8"?><sld:StyledLayerDescriptor xmlns="http://www.opengis.net/sld" xmlns:sld="http://www.opengis.net/sld" xmlns:gml="http://www.opengis.net/gml" xmlns:ogc="http://www.opengis.net/ogc" version="1.0.0">
+<?xml version='1.0' encoding='UTF-8'?>
+<sld:StyledLayerDescriptor xmlns="http://www.opengis.net/sld" xmlns:sld="http://www.opengis.net/sld" xmlns:gml="http://www.opengis.net/gml" xmlns:ogc="http://www.opengis.net/ogc" version="1.0.0">
   <sld:NamedLayer>
     <sld:Name>Default Styler</sld:Name>
     <sld:UserStyle>
@@ -14,10 +15,10 @@
           <sld:PointSymbolizer>
             <sld:Graphic>
               <sld:ExternalGraphic>
-                <sld:OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="/www/symbol/water/wtl_serv_ps.svg"/>
-                <sld:Format>image/svg+xml</sld:Format>
+                <sld:OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="/www/symbol/water/wtl_serv_ps.png"/>
+                <sld:Format>image/png</sld:Format>
               </sld:ExternalGraphic>
-              <sld:Size><ogc:Function name="if_then_else"><ogc:Function name="greaterThan"><ogc:Function name="env"><ogc:Literal>ignore_scale</ogc:Literal><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>18</ogc:Literal>
+              <sld:Size>
                 <ogc:Function name="if_then_else">
                   <ogc:Function name="greaterThan">
                     <ogc:Function name="env">
@@ -28,18 +29,26 @@
                   </ogc:Function>
                   <ogc:Function name="env">
                     <ogc:Literal>d_wtl_serv_ps_size</ogc:Literal>
-                    <ogc:Literal>16</ogc:Literal>
+                    <ogc:Literal>18</ogc:Literal>
                   </ogc:Function>
                   <ogc:Function name="Categorize">
                     <ogc:Function name="env">
                       <ogc:Literal>wms_scale_denominator</ogc:Literal>
                     </ogc:Function>
-                    <ogc:Literal>18</ogc:Literal>
-                    <ogc:Literal>8000</ogc:Literal>
+                    <ogc:Literal>22</ogc:Literal>
+                    <ogc:Literal>1500</ogc:Literal>
                     <ogc:Literal>16</ogc:Literal>
+                    <ogc:Literal>3000</ogc:Literal>
+                    <ogc:Literal>13</ogc:Literal>
+                    <ogc:Literal>5000</ogc:Literal>
+                    <ogc:Literal>9</ogc:Literal>
+                    <ogc:Literal>10000</ogc:Literal>
+                    <ogc:Literal>7</ogc:Literal>
+                    <ogc:Literal>30000</ogc:Literal>
+                    <ogc:Literal>5</ogc:Literal>
                   </ogc:Function>
                 </ogc:Function>
-              </ogc:Function></sld:Size>
+              </sld:Size>
             </sld:Graphic>
           </sld:PointSymbolizer>
         </sld:Rule>
@@ -52,7 +61,7 @@
               <ogc:Function name="strLength">
                 <ogc:Function name="env">
                   <ogc:Literal>d_wtl_serv_ps_label_property_name</ogc:Literal>
-                  <ogc:Literal>srv_nam</ogc:Literal>
+                  <ogc:Literal></ogc:Literal>
                 </ogc:Function>
               </ogc:Function>
               <ogc:Literal>0</ogc:Literal>
@@ -63,40 +72,23 @@
               <ogc:Function name="property">
                 <ogc:Function name="env">
                   <ogc:Literal>d_wtl_serv_ps_label_property_name</ogc:Literal>
-                  <ogc:Literal>srv_nam</ogc:Literal>
+                  <ogc:Literal/>
                 </ogc:Function>
               </ogc:Function>
             </sld:Label>
             <sld:Font>
               <sld:CssParameter name="font-family">Gulim</sld:CssParameter>
               <sld:CssParameter name="font-size">
-                <ogc:Function name="if_then_else">
-                  <ogc:Function name="greaterThan">
-                    <ogc:Function name="env">
-                      <ogc:Literal>d_wtl_serv_ps_label_size</ogc:Literal>
-                      <ogc:Literal>0</ogc:Literal>
-                    </ogc:Function>
-                    <ogc:Literal>0</ogc:Literal>
-                  </ogc:Function>
-                  <ogc:Function name="env">
-                    <ogc:Literal>d_wtl_serv_ps_label_size</ogc:Literal>
-                    <ogc:Literal>15</ogc:Literal>
-                  </ogc:Function>
-                  <ogc:Function name="Categorize">
-                    <ogc:Function name="env">
-                      <ogc:Literal>wms_scale_denominator</ogc:Literal>
-                    </ogc:Function>
-                    <ogc:Literal>15</ogc:Literal>
-                    <ogc:Literal>34088</ogc:Literal>
-                    <ogc:Literal>13</ogc:Literal>
-                  </ogc:Function>
+                <ogc:Function name="env">
+                  <ogc:Literal>d_wtl_serv_ps_label_size</ogc:Literal>
+                  <ogc:Literal>0</ogc:Literal>
                 </ogc:Function>
               </sld:CssParameter>
               <sld:CssParameter name="font-style">normal</sld:CssParameter>
               <sld:CssParameter name="font-weight">
                 <ogc:Function name="env">
                   <ogc:Literal>d_wtl_serv_ps_label_font_weight</ogc:Literal>
-                  <ogc:Literal>bold</ogc:Literal>
+                  <ogc:Literal>normal</ogc:Literal>
                 </ogc:Function>
               </sld:CssParameter>
             </sld:Font>
@@ -108,7 +100,7 @@
                 </sld:AnchorPoint>
                 <sld:Displacement>
                   <sld:DisplacementX>0</sld:DisplacementX>
-                  <sld:DisplacementY>-14</sld:DisplacementY>
+                  <sld:DisplacementY>-10</sld:DisplacementY>
                 </sld:Displacement>
               </sld:PointPlacement>
             </sld:LabelPlacement>
@@ -116,7 +108,7 @@
               <sld:Radius>
                 <ogc:Function name="env">
                   <ogc:Literal>d_wtl_serv_ps_label_halo_radius</ogc:Literal>
-                  <ogc:Literal>2</ogc:Literal>
+                  <ogc:Literal>1</ogc:Literal>
                 </ogc:Function>
               </sld:Radius>
               <sld:Fill>
@@ -125,7 +117,7 @@
                     <ogc:Literal>#</ogc:Literal>
                     <ogc:Function name="env">
                       <ogc:Literal>d_wtl_serv_ps_label_halo_color</ogc:Literal>
-                      <ogc:Literal>0000A0</ogc:Literal>
+                      <ogc:Literal>FFFFFF</ogc:Literal>
                     </ogc:Function>
                   </ogc:Function>
                 </sld:CssParameter>
@@ -137,18 +129,14 @@
                   <ogc:Literal>#</ogc:Literal>
                   <ogc:Function name="env">
                     <ogc:Literal>d_wtl_serv_ps_label_color</ogc:Literal>
-                    <ogc:Literal>FFFFFF</ogc:Literal>
+                    <ogc:Literal/>
                   </ogc:Function>
                 </ogc:Function>
               </sld:CssParameter>
             </sld:Fill>
-            <sld:VendorOption name="priority">1500</sld:VendorOption>
-            <sld:VendorOption name="conflictResolution">false</sld:VendorOption>
-            <sld:VendorOption name="goodnessOfFit">0</sld:VendorOption>
           </sld:TextSymbolizer>
         </sld:Rule>
       </sld:FeatureTypeStyle>
     </sld:UserStyle>
   </sld:NamedLayer>
 </sld:StyledLayerDescriptor>
-

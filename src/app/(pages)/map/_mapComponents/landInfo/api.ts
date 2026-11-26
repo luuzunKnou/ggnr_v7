@@ -2,7 +2,14 @@
 
 import { call } from '@/lib/api';
 import {
-  buildPnuQueryParams,
+  buildDataPortalBuildingUrl,
+  fetchDataPortalBuildingText,
+  fetchPortalBuildingFloorListClient,
+  fetchPortalBuildingRegisterByDongClient,
+  fetchPortalBuildingRegisterClient,
+  parsePortalRows as parseDataPortalRows,
+} from '@/lib/dataPortalBuildingClient';
+import {
   hasParcelLandInfoTabData,
   type HangmangCallLine,
 } from '@/lib/parcelLandNormalize';
@@ -72,54 +79,6 @@ export type BuildingPermitFetchResult = {
 export const BUILDING_PERMIT_PORTAL_TIMEOUT_NOTICE =
   '공공데이터포털 연결이 불안정합니다. 잠시 후 다시 조회해 주세요';
 
-const PERMIT_PORTAL_RETRY_MAX = 2;
-const PERMIT_PORTAL_RETRY_DELAY_MS = 500;
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function isPortalTransientFailure(status: number, text: string): boolean {
-  if (status === 502 || status === 503 || status === 504) return true;
-  const t = String(text ?? '').toLowerCase();
-  return (
-    t.includes('service_timeout') ||
-    t.includes('servicetimeout') ||
-    t.includes('연결실패') ||
-    t.includes('http_error') ||
-    /\breturnreasoncode["\s:]*["']?0[45]\b/.test(t)
-  );
-}
-
-async function fetchPortalTextOnce(url: string): Promise<{ status: number; text: string }> {
-  try {
-    const res = await fetch(url, { method: 'GET', credentials: 'include' });
-    const text = await res.text();
-    return { status: res.status, text };
-  } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : String(e);
-    return { status: 0, text: msg };
-  }
-}
-
-/** 연결실패·타임아웃(04/05, 502/503)만 재시도. 본문은 status가 비정상이어도 유지 */
-async function fetchPortalTextWithRetry(url: string): Promise<{
-  status: number;
-  text: string;
-  transient: boolean;
-}> {
-  let last = { status: 0, text: '' };
-  for (let attempt = 0; attempt <= PERMIT_PORTAL_RETRY_MAX; attempt++) {
-    if (attempt > 0) await sleep(PERMIT_PORTAL_RETRY_DELAY_MS * attempt);
-    last = await fetchPortalTextOnce(url);
-    const transient = isPortalTransientFailure(last.status, last.text);
-    if (!transient) {
-      return { ...last, transient: false };
-    }
-  }
-  return { ...last, transient: true };
-}
-
 export { fetchLandInfoConfig };
 
 function toStr(value: unknown): string {
@@ -127,71 +86,8 @@ function toStr(value: unknown): string {
   return String(value).trim();
 }
 
-function parseXmlRows(xmlText: string): BuildingLedgerRow[] {
-  if (!xmlText) return [];
-  const parser = new DOMParser();
-  const xml = parser.parseFromString(xmlText, 'text/xml');
-  const items = Array.from(xml.getElementsByTagName('item'));
-  return items.map((item) => {
-    const row: BuildingLedgerRow = {};
-    for (const child of Array.from(item.children)) {
-      row[child.tagName] = child.textContent?.trim() ?? '';
-    }
-    return row;
-  });
-}
-
-/** 공공데이터포털 JSON — `response` 래퍼 유무 모두 */
-function parseJsonRows(text: string): BuildingLedgerRow[] {
-  const trimmed = String(text ?? '').trim();
-  if (!trimmed.startsWith('{')) return [];
-  try {
-    type Envelope = {
-      header?: { resultCode?: string };
-      body?: { items?: unknown };
-    };
-    const json = JSON.parse(trimmed) as Envelope & {
-      response?: Envelope;
-      OpenAPI_ServiceResponse?: unknown;
-    };
-    if (json.OpenAPI_ServiceResponse) return [];
-    const root = json.response ?? json;
-    const code = String(root.header?.resultCode ?? '').trim();
-    if (code && code !== '00' && code !== '03') return [];
-    const rawItems = root.body?.items;
-    if (rawItems == null || rawItems === '') return [];
-
-    // items 가 배열이거나 { item: 단건|배열 } 모두 허용
-    let list: unknown[] = [];
-    if (Array.isArray(rawItems)) {
-      list = rawItems;
-    } else if (typeof rawItems === 'object') {
-      const item = (rawItems as { item?: unknown }).item;
-      if (item == null) return [];
-      list = Array.isArray(item) ? item : [item];
-    } else {
-      return [];
-    }
-
-    return list.map((row) => {
-      const out: BuildingLedgerRow = {};
-      if (!row || typeof row !== 'object') return out;
-      for (const [k, v] of Object.entries(row as Record<string, unknown>)) {
-        if (v == null) continue;
-        const s = String(v).trim();
-        if (s) out[k] = s;
-      }
-      return out;
-    });
-  } catch {
-    return [];
-  }
-}
-
 function parsePortalRows(text: string): BuildingLedgerRow[] {
-  const jsonRows = parseJsonRows(text);
-  if (jsonRows.length) return jsonRows;
-  return parseXmlRows(text);
+  return parseDataPortalRows(text);
 }
 
 export function normalizePnu(value: unknown): string | null {
@@ -483,24 +379,16 @@ export async function fetchBuildingRegisterDetail(args: {
   }
 
   try {
-    const res = await call('', 'POST', {
-      service: 'mapAnalyseService',
-      action: 'fetchPortalBuildingRegisterForLandInfo',
-      params: { pnu },
-    });
-    const payload = (res?.data ?? res) as {
-      ok?: boolean;
-      mode?: 'recap' | 'title' | null;
-      buildings?: BuildingRegisterRow[];
-      children?: BuildingRegisterRow[];
-      notice?: string;
-    };
-    if (payload?.ok === false) {
+    const cfg = await fetchLandInfoConfig();
+    const key = cfg.dataPortalKey;
+    if (!key) return { source: null, mode: null, buildings: [], children: [] };
+    const payload = await fetchPortalBuildingRegisterClient({ pnu, serviceKey: key });
+    if (payload.ok === false) {
       return { source: null, mode: null, buildings: [], children: [], notice: payload.notice };
     }
-    const buildings = Array.isArray(payload?.buildings) ? payload.buildings : [];
+    const buildings = Array.isArray(payload.buildings) ? payload.buildings : [];
     if (!buildings.length) {
-      return { source: null, mode: null, buildings: [], children: [], notice: payload?.notice };
+      return { source: null, mode: null, buildings: [], children: [], notice: payload.notice };
     }
     return {
       source: 'portal',
@@ -575,13 +463,28 @@ export async function fetchBuildingRegisterByDong(args: {
 }): Promise<{ buildings: BuildingRegisterRow[]; children: BuildingRegisterRow[] }> {
   const pnu = toStr(args.pnu);
   if (!pnu) return { buildings: [], children: [] };
-  const service = args.source === 'portal' ? 'mapAnalyseService' : 'seumService';
-  const action =
-    args.source === 'portal' ? 'fetchPortalBuildingRegisterByDong' : 'fetchSeumBuildingRegisterByDong';
+  if (args.source === 'portal') {
+    try {
+      const cfg = await fetchLandInfoConfig();
+      const key = cfg.dataPortalKey;
+      if (!key) return { buildings: [], children: [] };
+      const payload = await fetchPortalBuildingRegisterByDongClient({
+        pnu,
+        serviceKey: key,
+        bldNm: toStr(args.bldNm),
+      });
+      return {
+        buildings: Array.isArray(payload.buildings) ? payload.buildings : [],
+        children: Array.isArray(payload.children) ? payload.children : [],
+      };
+    } catch {
+      return { buildings: [], children: [] };
+    }
+  }
   try {
     const res = await call('', 'POST', {
-      service,
-      action,
+      service: 'seumService',
+      action: 'fetchSeumBuildingRegisterByDong',
       params: { pnu, bldNm: toStr(args.bldNm) },
     });
     const payload = (res?.data ?? res) as {
@@ -611,13 +514,15 @@ export async function fetchBuildingFloorList(args: {
     const pnu = toStr(args.pnu);
     if (!pnu) return [];
     try {
-      const res = await call('', 'POST', {
-        service: 'mapAnalyseService',
-        action: 'fetchPortalBuildingFloorList',
-        params: { pnu, seqNo },
+      const cfg = await fetchLandInfoConfig();
+      const key = cfg.dataPortalKey;
+      if (!key) return [];
+      const payload = await fetchPortalBuildingFloorListClient({
+        pnu,
+        serviceKey: key,
+        seqNo,
       });
-      const payload = (res?.data ?? res) as { ok?: boolean; children?: BuildingRegisterRow[] };
-      return Array.isArray(payload?.children) ? payload.children : [];
+      return Array.isArray(payload.children) ? payload.children : [];
     } catch {
       return [];
     }
@@ -666,18 +571,16 @@ export async function fetchPermitRows(args: {
   }
 
   if (!args.dataPortalKey) return { source: null, rows: [] };
-  const qs = buildPnuQueryParams(pnu);
-  qs.set('serviceKey', args.dataPortalKey);
 
-  const archUrl = `/api/public-data/building?kind=arch&${qs.toString()}`;
-  const arch = await fetchPortalTextWithRetry(archUrl);
+  const archUrl = buildDataPortalBuildingUrl('arch', pnu, args.dataPortalKey);
+  const arch = await fetchDataPortalBuildingText(archUrl);
   const apRows = parsePortalRows(arch.text);
   if (apRows.length > 0) {
     return { source: 'arch', permitKind: 'arch', rows: apRows };
   }
 
-  const housingUrl = `/api/public-data/building?kind=housing&${qs.toString()}`;
-  const housing = await fetchPortalTextWithRetry(housingUrl);
+  const housingUrl = buildDataPortalBuildingUrl('housing', pnu, args.dataPortalKey);
+  const housing = await fetchDataPortalBuildingText(housingUrl);
   const hpRows = parsePortalRows(housing.text);
   if (hpRows.length > 0) {
     return { source: 'housing', permitKind: 'housing', rows: hpRows };

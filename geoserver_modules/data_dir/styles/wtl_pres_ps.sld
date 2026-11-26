@@ -1,4 +1,5 @@
-<?xml version="1.0" encoding="UTF-8"?><sld:StyledLayerDescriptor xmlns="http://www.opengis.net/sld" xmlns:sld="http://www.opengis.net/sld" xmlns:gml="http://www.opengis.net/gml" xmlns:ogc="http://www.opengis.net/ogc" version="1.0.0">
+<?xml version="1.0" encoding="UTF-8"?>
+<sld:StyledLayerDescriptor xmlns="http://www.opengis.net/sld" xmlns:sld="http://www.opengis.net/sld" xmlns:gml="http://www.opengis.net/gml" xmlns:ogc="http://www.opengis.net/ogc" version="1.0.0">
   <sld:NamedLayer>
     <sld:Name>Default Styler</sld:Name>
     <sld:UserStyle>
@@ -18,7 +19,7 @@
                 <sld:OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="/www/symbol/water/wtl_pres_ps.svg"/>
                 <sld:Format>image/svg+xml</sld:Format>
               </sld:ExternalGraphic>
-              <sld:Size><ogc:Function name="if_then_else"><ogc:Function name="greaterThan"><ogc:Function name="env"><ogc:Literal>ignore_scale</ogc:Literal><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>18</ogc:Literal>
+              <sld:Size>
                 <ogc:Function name="if_then_else">
                   <ogc:Function name="greaterThan">
                     <ogc:Function name="env">
@@ -42,45 +43,7 @@
                     <ogc:Literal>0</ogc:Literal>
                   </ogc:Function>
                 </ogc:Function>
-              </ogc:Function></sld:Size>
-            </sld:Graphic>
-          </sld:PointSymbolizer>
-        </sld:Rule><sld:Rule>
-          <sld:Name>Name</sld:Name>
-          <sld:Title>wtl_pres_ps</sld:Title>
-          <sld:Abstract>Abstract</sld:Abstract>
-          <sld:MinScaleDenominator>256000.0</sld:MinScaleDenominator>
-          <ogc:Filter><ogc:PropertyIsEqualTo><ogc:Function name="env"><ogc:Literal>ignore_scale</ogc:Literal><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>1</ogc:Literal></ogc:PropertyIsEqualTo></ogc:Filter><sld:PointSymbolizer>
-            <sld:Graphic>
-              <sld:ExternalGraphic>
-                <sld:OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="/www/symbol/water/wtl_pres_ps.svg"/>
-                <sld:Format>image/svg+xml</sld:Format>
-              </sld:ExternalGraphic>
-              <sld:Size><ogc:Function name="if_then_else"><ogc:Function name="greaterThan"><ogc:Function name="env"><ogc:Literal>ignore_scale</ogc:Literal><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>18</ogc:Literal>
-                <ogc:Function name="if_then_else">
-                  <ogc:Function name="greaterThan">
-                    <ogc:Function name="env">
-                      <ogc:Literal>wtl_pres_ps_size</ogc:Literal>
-                      <ogc:Literal>0</ogc:Literal>
-                    </ogc:Function>
-                    <ogc:Literal>0</ogc:Literal>
-                  </ogc:Function>
-                  <ogc:Function name="env">
-                    <ogc:Literal>wtl_pres_ps_size</ogc:Literal>
-                    <ogc:Literal>16</ogc:Literal>
-                  </ogc:Function>
-                  <ogc:Function name="Categorize">
-                    <ogc:Function name="env">
-                      <ogc:Literal>wms_scale_denominator</ogc:Literal>
-                    </ogc:Function>
-                    <ogc:Literal>18</ogc:Literal>
-                    <ogc:Literal>8000</ogc:Literal>
-                    <ogc:Literal>16</ogc:Literal>
-                    <ogc:Literal>256000</ogc:Literal>
-                    <ogc:Literal>0</ogc:Literal>
-                  </ogc:Function>
-                </ogc:Function>
-              </ogc:Function></sld:Size>
+              </sld:Size>
             </sld:Graphic>
           </sld:PointSymbolizer>
         </sld:Rule>

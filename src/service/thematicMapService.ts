@@ -34,7 +34,6 @@ function loadDefineTables(): DefineTableRow[] {
 
 const THEMATIC_MAP_GROUP_ALLOW = new Set([
   '도시계획시설',
-  '등고선',
   '용도구역',
   '용도지구',
   '용도지역',
@@ -215,6 +214,7 @@ const UNDERGROUND_FACILITY_GROUP_ALLOW = new Set([
   '상수',
   '급수구역',
   '하수',
+  '배수설비',
   '광역상수',
   '가스',
   '도시가스',

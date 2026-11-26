@@ -37,10 +37,13 @@ import {
   type SmallPublicInspectionReport,
 } from './smallPublicInspectionReport'
 
-/** 목록·상세를 한 패널에서 전환 — 가로 공간 절약 */
-const PANEL_DEFAULT_WIDTH = 460
-const PANEL_MIN_WIDTH = 380
-const PANEL_MAX_WIDTH = 640
+/** 보고서 목록·개요는 넓게, 시설 점검은 후보지처럼 옆에 붙임 */
+const LIST_DEFAULT_WIDTH = 454
+const LIST_MIN_WIDTH = 440
+const LIST_MAX_WIDTH = 760
+const DETAIL_DEFAULT_WIDTH = 440
+const DETAIL_MIN_WIDTH = 380
+const DETAIL_MAX_WIDTH = 680
 
 type Props = {
   leftOffsetPx: number
@@ -60,8 +63,7 @@ function inspectionOfReport(
 }
 
 /**
- * 안전점검 — 한 패널에서 보고서 목록 ⇄ 상세(점검 대상).
- * 미점검·점검 완료는 목록을 가리지 않고 주소검색 아래 플로팅(메모·민원과 동일).
+ * 안전점검 — 보고서 목록(+대상) · 시설 점검 상세/등록은 후보지처럼 옆 패널.
  */
 export function SmallPublicInspectionShell({ leftOffsetPx, onTotalWidthChange, onClose, onOpenPlan }: Props) {
   const { facilities, inspections, reports } = useSmallPublicStore()
@@ -69,7 +71,8 @@ export function SmallPublicInspectionShell({ leftOffsetPx, onTotalWidthChange, o
   useEffect(() => {
     void ensureSmallPublicSeed()
   }, [])
-  const [panelWidth, setPanelWidth] = useState(PANEL_DEFAULT_WIDTH)
+  const [listWidth, setListWidth] = useState(LIST_DEFAULT_WIDTH)
+  const [detailWidth, setDetailWidth] = useState(DETAIL_DEFAULT_WIDTH)
   const [keyword, setKeyword] = useState('')
   const [year, setYear] = useState('')
   const [reportId, setReportId] = useState<string | null>(null)
@@ -83,10 +86,19 @@ export function SmallPublicInspectionShell({ leftOffsetPx, onTotalWidthChange, o
   const [transferOpen, setTransferOpen] = useState(false)
 
   const report = reportId ? (reports.find((r) => r.id === reportId) ?? null) : null
+  const facility = facilityId ? (facilities.find((f) => f.id === facilityId) ?? null) : null
+  const facilityYearInspection =
+    facility && report ? inspectionOfReport(inspections, facility.id, report.id) : null
+  /** 시설 선택 시 옆 패널 — 등록 폼 또는 점검 상세 */
+  const showFacilityPanel =
+    !!facility &&
+    !!report &&
+    (inspectionForm != null || !!facilityYearInspection)
+  const total = listWidth + (showFacilityPanel ? detailWidth : 0)
 
   useEffect(() => {
-    onTotalWidthChange(panelWidth)
-  }, [panelWidth, onTotalWidthChange])
+    onTotalWidthChange(total)
+  }, [total, onTotalWidthChange])
 
   useEffect(() => () => onTotalWidthChange(0), [onTotalWidthChange])
 
@@ -123,9 +135,9 @@ export function SmallPublicInspectionShell({ leftOffsetPx, onTotalWidthChange, o
   /** 이관·보고서 미리보기 등 — 패널 폭이 아니라 지도 남은 폭 전체 */
   const mapOverlay = useMemo(() => {
     const mapW =
-      typeof window !== 'undefined' ? Math.max(panelWidth, window.innerWidth - leftOffsetPx) : Math.max(panelWidth, 720)
+      typeof window !== 'undefined' ? Math.max(total, window.innerWidth - leftOffsetPx) : Math.max(total, 720)
     return { overlayLeftPx: leftOffsetPx, overlayWidthPx: mapW }
-  }, [leftOffsetPx, panelWidth])
+  }, [leftOffsetPx, total])
   const transferOverlay = mapOverlay
 
   /** 점검 완료 + 결과 위험 + 이전 구분 비위험 */
@@ -177,7 +189,7 @@ export function SmallPublicInspectionShell({ leftOffsetPx, onTotalWidthChange, o
   )
 
   const fitToRef = useRef<(fs: SmallPublicFacility[]) => void>(() => {})
-  /** 미점검 → 등록 플로팅, 점검 완료 → 상세 플로팅(등록 폼은 반드시 닫음) */
+  /** 미점검 → 옆 패널 등록, 점검 완료 → 옆 패널 상세(등록 폼은 닫음) */
   const openFacility = useCallback(
     (id: string) => {
       setFacilityId(id)
@@ -189,6 +201,11 @@ export function SmallPublicInspectionShell({ leftOffsetPx, onTotalWidthChange, o
     },
     [facilityById, report, inspections]
   )
+
+  const closeFacilityPanel = useCallback(() => {
+    setFacilityId(null)
+    setInspectionForm(null)
+  }, [])
 
   const { fitTo } = useSmallPublicFacilityLayer({
     facilities: layerFacilities,
@@ -216,9 +233,7 @@ export function SmallPublicInspectionShell({ leftOffsetPx, onTotalWidthChange, o
     if (fs.length) fitTo(fs)
   }
 
-  const facility = facilityId ? (facilityById.get(facilityId) ?? null) : null
-  const facilityYearInspection = facility && report ? inspectionOfReport(inspections, facility.id, report.id) : null
-  const overlay = { overlayLeftPx: leftOffsetPx, overlayWidthPx: panelWidth }
+  const overlay = { overlayLeftPx: leftOffsetPx, overlayWidthPx: listWidth }
   const pickable = report
     ? facilities.filter((f) => f.candidate !== '제외' && !report.rows.some((x) => x.facilityId === f.id))
     : []
@@ -227,11 +242,11 @@ export function SmallPublicInspectionShell({ leftOffsetPx, onTotalWidthChange, o
     <>
       <div className="pointer-events-auto shrink-0">
         <MapSideListPanel
-          width={panelWidth}
-          minWidth={PANEL_MIN_WIDTH}
-          maxWidth={PANEL_MAX_WIDTH}
+          width={listWidth}
+          minWidth={LIST_MIN_WIDTH}
+          maxWidth={LIST_MAX_WIDTH}
           leftOffsetPx={leftOffsetPx}
-          onWidthChange={setPanelWidth}
+          onWidthChange={setListWidth}
           contentClassName="overflow-hidden"
         >
           <div className="flex h-full min-h-0 flex-col bg-background">
@@ -300,6 +315,46 @@ export function SmallPublicInspectionShell({ leftOffsetPx, onTotalWidthChange, o
         </MapSideListPanel>
       </div>
 
+      {showFacilityPanel && facility && report ? (
+        <div className="pointer-events-auto shrink-0">
+          <MapSideListPanel
+            width={detailWidth}
+            minWidth={DETAIL_MIN_WIDTH}
+            maxWidth={DETAIL_MAX_WIDTH}
+            leftOffsetPx={leftOffsetPx + listWidth}
+            onWidthChange={setDetailWidth}
+            contentClassName="overflow-hidden"
+          >
+            {inspectionForm ? (
+              <SmallPublicInspectionFormModal
+                key={inspectionForm.initial?.id ?? `new-${facility.id}`}
+                facility={facility}
+                year={report.year}
+                reportId={report.id}
+                initial={inspectionForm.initial}
+                onCancel={() => {
+                  setInspectionForm(null)
+                  if (!inspectionForm.initial) setFacilityId(null)
+                }}
+                onSaved={() => {
+                  setInspectionForm(null)
+                  // 저장 후 상세로 남김
+                }}
+              />
+            ) : facilityYearInspection ? (
+              <SmallPublicFacilityInspectionModal
+                key={facilityYearInspection.id}
+                facility={facility}
+                inspection={facilityYearInspection}
+                year={report.year}
+                onEdit={(i) => setInspectionForm({ initial: i })}
+                onClose={closeFacilityPanel}
+              />
+            ) : null}
+          </MapSideListPanel>
+        </div>
+      ) : null}
+
       {reportForm ? (
         <SmallPublicInspectionReportForm
           {...overlay}
@@ -337,33 +392,6 @@ export function SmallPublicInspectionShell({ leftOffsetPx, onTotalWidthChange, o
           rows={transferRows}
           onCancel={() => setTransferOpen(false)}
           onConfirm={confirmTransfer}
-        />
-      ) : null}
-      {/* 점검 등록·상세는 유지 — 이관 등 오버레이(z nested)가 그 위+배경을 덮음 */}
-      {facility && report && facilityYearInspection && inspectionForm == null ? (
-        <SmallPublicFacilityInspectionModal
-          key={facilityYearInspection.id}
-          facility={facility}
-          inspection={facilityYearInspection}
-          year={report.year}
-          onEdit={(i) => setInspectionForm({ initial: i })}
-          onClose={() => setFacilityId(null)}
-        />
-      ) : null}
-      {inspectionForm && facility && report ? (
-        <SmallPublicInspectionFormModal
-          facility={facility}
-          year={report.year}
-          reportId={report.id}
-          initial={inspectionForm.initial}
-          onCancel={() => {
-            setInspectionForm(null)
-            if (!inspectionForm.initial) setFacilityId(null)
-          }}
-          onSaved={() => {
-            setInspectionForm(null)
-            setFacilityId(null)
-          }}
         />
       ) : null}
     </>

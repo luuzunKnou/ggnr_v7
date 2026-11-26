@@ -7,6 +7,46 @@ export function listHeaderMinPx(label: string, extraPx = 32): number {
   return Math.ceil(w + extraPx);
 }
 
+/**
+ * 점용대장 목록 열 폭(px).
+ * 점용코드·관리번호는 좁게, 점용기간·점용장소는 잘리지 않게 넓게.
+ */
+export function occupationLedgerListColumnWidthPx(
+  field: string,
+  label: string,
+  edge?: 'start' | 'end'
+): number {
+  const headerMin = listHeaderMinPx(label);
+  // 시작·종료 분리 열 — 날짜가 잘리지 않게
+  if (edge) return Math.max(118, headerMin);
+  const f = String(field ?? '').toLowerCase();
+  const l = String(label ?? '').trim();
+  if (
+    /^(cons_code|ftr_idn)$/.test(f) ||
+    /점용코드|관리번호/.test(l)
+  ) {
+    return Math.max(100, headerMin);
+  }
+  // 점용기간 한 칸(usage_pd 등) — 기간 문구가 잘리지 않게
+  if (
+    /^(usage_pd|perm_pd|occ_pd)$/.test(f) ||
+    /기간|period|_pd$/.test(f) ||
+    /점용기간|허가기간/.test(l)
+  ) {
+    return Math.max(240, headerMin);
+  }
+  if (
+    /^(usage_loc|occ_loc|occup_place)$/.test(f) ||
+    /점용장소|점용위치|주소|소재/.test(l)
+  ) {
+    return Math.max(200, headerMin);
+  }
+  if (/^(usage_name|occ_nam|work_name)$/.test(f) || /점용명/.test(l)) {
+    return Math.max(140, headerMin);
+  }
+  return Math.max(120, headerMin);
+}
+
 /** 필지·물건지 목록 — 약 7행(21.7rem)까지, 초과 시 세로 스크롤 */
 export const OCCUPATION_PARCEL_LIST_MAX_HEIGHT_CLASS = 'max-h-[21.7rem]';
 

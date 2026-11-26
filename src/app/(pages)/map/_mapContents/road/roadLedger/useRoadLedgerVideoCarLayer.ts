@@ -79,10 +79,48 @@ type Params = {
   viewFovDeg: number;
   /** 자동차 놓기·노선 누르기 → 노선 비율 */
   onPickFrac: (frac: number) => void;
+  /** 수동 기준점 찍기 모드 — 노선 클릭 시 onLandmarkPick */
+  landmarkPickMode?: boolean;
+  onLandmarkPick?: (frac: number) => void;
+  /** 저장된 수동 기준점 노선 비율 */
+  landmarkFracs?: number[];
+  /** 찍는 중 임시 위치 */
+  pendingLandmarkFrac?: number | null;
 };
 
 /**
  * 도로영상 재생 위치를 지도 노선 위 자동차와 보는 방향 부채꼴로 표시하고, 지도에서 위치를 골라 영상을 옮긴다. */
+const landmarkPinStyle = new Style({
+  image: new Icon({
+    src:
+      "data:image/svg+xml;charset=utf-8," +
+      encodeURIComponent(
+        `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="24" viewBox="0 0 18 24">` +
+          `<path d="M9 0 C4 0 0 4 0 9 C0 15 9 24 9 24 C9 24 18 15 18 9 C18 4 14 0 9 0 Z" fill="#dc2626" stroke="#fff" stroke-width="1.5"/>` +
+          `<circle cx="9" cy="9" r="3" fill="#fff"/>` +
+          `</svg>`
+      ),
+    anchor: [0.5, 1],
+    scale: 1,
+  }),
+  zIndex: 4,
+});
+const pendingPinStyle = new Style({
+  image: new Icon({
+    src:
+      "data:image/svg+xml;charset=utf-8," +
+      encodeURIComponent(
+        `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="24" viewBox="0 0 18 24">` +
+          `<path d="M9 0 C4 0 0 4 0 9 C0 15 9 24 9 24 C9 24 18 15 18 9 C18 4 14 0 9 0 Z" fill="#f59e0b" stroke="#fff" stroke-width="1.5"/>` +
+          `<circle cx="9" cy="9" r="3" fill="#fff"/>` +
+          `</svg>`
+      ),
+    anchor: [0.5, 1],
+    scale: 1,
+  }),
+  zIndex: 5,
+});
+
 export function useRoadLedgerVideoCarLayer({
   route,
   frac,
@@ -91,10 +129,16 @@ export function useRoadLedgerVideoCarLayer({
   viewRelDeg,
   viewFovDeg,
   onPickFrac,
+  landmarkPickMode = false,
+  onLandmarkPick,
+  landmarkFracs = [],
+  pendingLandmarkFrac = null,
 }: Params) {
   const mapContext = useMapContext();
   const mapContextRef = useRef(mapContext);
   const onPickFracRef = useRef(onPickFrac);
+  const onLandmarkPickRef = useRef(onLandmarkPick);
+  const landmarkPickModeRef = useRef(landmarkPickMode);
   const draggingRef = useRef(false);
   const partsRef = useRef<{
     route: Feature<LineString>;
@@ -102,6 +146,7 @@ export function useRoadLedgerVideoCarLayer({
     car: Feature<Point>;
     carStyle: Style;
     cone: Feature<Point>;
+    pinSource: VectorSource;
   } | null>(null);
   /** 창을 연 뒤 처음 한 번만 노선 전체로 맞춤 (상행·하행 전환 시 지도 유지) */
   const fittedRef = useRef(false);
@@ -109,7 +154,9 @@ export function useRoadLedgerVideoCarLayer({
   useEffect(() => {
     mapContextRef.current = mapContext;
     onPickFracRef.current = onPickFrac;
-  }, [mapContext, onPickFrac]);
+    onLandmarkPickRef.current = onLandmarkPick;
+    landmarkPickModeRef.current = landmarkPickMode;
+  }, [mapContext, onPickFrac, onLandmarkPick, landmarkPickMode]);
 
   useEffect(() => {
     const map = mapContext?.mapInstanceRef?.current;
@@ -130,14 +177,24 @@ export function useRoadLedgerVideoCarLayer({
     carFeature.setStyle(carStyle);
     const coneFeature = new Feature(new Point(route.coords[0]!));
     coneFeature.setStyle(viewConeStyle);
+    const pinSource = new VectorSource();
 
     const source = new VectorSource({ features: [routeFeature, passedFeature, coneFeature] });
     const carSource = new VectorSource({ features: [carFeature] });
     const lineLayer = new VectorLayer({ source, zIndex: 9700 });
     const carLayer = new VectorLayer({ source: carSource, zIndex: 9701 });
+    const pinLayer = new VectorLayer({ source: pinSource, zIndex: 9702 });
     map.addLayer(lineLayer);
     map.addLayer(carLayer);
-    partsRef.current = { route: routeFeature, passed: passedFeature, car: carFeature, carStyle, cone: coneFeature };
+    map.addLayer(pinLayer);
+    partsRef.current = {
+      route: routeFeature,
+      passed: passedFeature,
+      car: carFeature,
+      carStyle,
+      cone: coneFeature,
+      pinSource,
+    };
 
     const translate = new Translate({ layers: [carLayer], hitTolerance: 6 });
     const snapCar = () => {
@@ -149,12 +206,18 @@ export function useRoadLedgerVideoCarLayer({
       return hit.frac;
     };
     const onTranslateStart = () => {
+      if (landmarkPickModeRef.current) return;
       draggingRef.current = true;
     };
     const onTranslating = () => {
+      if (landmarkPickModeRef.current) return;
       snapCar();
     };
     const onTranslateEnd = () => {
+      if (landmarkPickModeRef.current) {
+        draggingRef.current = false;
+        return;
+      }
       const f = snapCar();
       draggingRef.current = false;
       if (f != null) onPickFracRef.current(f);
@@ -169,6 +232,10 @@ export function useRoadLedgerVideoCarLayer({
       const res = map.getView().getResolution() ?? 1;
       const hit = roadLedgerVideoNearestFrac(route, evt.coordinate as [number, number]);
       if (hit.dist / res > ROUTE_HIT_PX) return;
+      if (landmarkPickModeRef.current) {
+        onLandmarkPickRef.current?.(hit.frac);
+        return;
+      }
       onPickFracRef.current(hit.frac);
     };
     map.on("singleclick", onClick as never);
@@ -189,9 +256,29 @@ export function useRoadLedgerVideoCarLayer({
       map.removeInteraction(translate);
       map.removeLayer(lineLayer);
       map.removeLayer(carLayer);
+      map.removeLayer(pinLayer);
       partsRef.current = null;
     };
   }, [mapContext?.mapInstanceRef, route]);
+
+  useEffect(() => {
+    const parts = partsRef.current;
+    if (!parts || !route) return;
+    parts.pinSource.clear();
+    for (const f of landmarkFracs) {
+      if (!Number.isFinite(f)) continue;
+      const { coord } = roadLedgerVideoPointAtFrac(route, f, false);
+      const feat = new Feature(new Point(coord));
+      feat.setStyle(landmarkPinStyle);
+      parts.pinSource.addFeature(feat);
+    }
+    if (pendingLandmarkFrac != null && Number.isFinite(pendingLandmarkFrac)) {
+      const { coord } = roadLedgerVideoPointAtFrac(route, pendingLandmarkFrac, false);
+      const feat = new Feature(new Point(coord));
+      feat.setStyle(pendingPinStyle);
+      parts.pinSource.addFeature(feat);
+    }
+  }, [landmarkFracs, pendingLandmarkFrac, route]);
 
   useEffect(() => {
     const parts = partsRef.current;
@@ -209,5 +296,6 @@ export function useRoadLedgerVideoCarLayer({
       bearing: viewRelDeg == null ? undefined : heading + (viewRelDeg * Math.PI) / 180,
       fov: (Math.min(150, Math.max(20, viewFovDeg)) * Math.PI) / 180,
     });
+    parts.cone.changed();
   }, [frac, travelReverse, passedFromEnd, viewRelDeg, viewFovDeg, route, mapContext?.mapInstanceRef]);
 }

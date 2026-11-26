@@ -20,8 +20,6 @@ import {
   isDefineFieldFlagTrue,
   type DefineFieldLike,
 } from '../../../_mapComponents/standard/defineLayerRowUtils'
-import { WtlFacilityTableLoadingRow } from './WtlFacilityTableLoadingRow'
-
 const DEFAULT_SER_ENG = 'wtlFacility'
 
 type DetailAttr = {
@@ -298,7 +296,31 @@ export function WtlFacilityDataHistoryTab({
           </thead>
           <tbody>
             {loading ? (
-              <WtlFacilityTableLoadingRow colSpan={histColCount} />
+              Array.from({ length: 5 }, (_, ri) => (
+                <tr
+                  key={`sk-hist-${ri}`}
+                  className="pointer-events-none"
+                  aria-hidden
+                >
+                  {Array.from({ length: histColCount }, (_, ci) => (
+                    <td
+                      key={`sk-hist-${ri}-${ci}`}
+                      className="standard-detail-tab-td"
+                    >
+                      <div
+                        className={cn(
+                          'h-3 animate-pulse rounded bg-muted',
+                          ci === 0
+                            ? 'w-[72%]'
+                            : ci === 1
+                              ? 'w-[88%]'
+                              : 'w-[60%]'
+                        )}
+                      />
+                    </td>
+                  ))}
+                </tr>
+              ))
             ) : error ? (
               <tr>
                 <td colSpan={histColCount} className="standard-table-empty text-destructive">
@@ -414,22 +436,22 @@ export function WtlFacilityDataHistoryTab({
             ) : (
               <div className="overflow-hidden rounded border border-border">
                 <table className="w-full text-xs">
-                  <thead>
-                    <tr className="bg-muted">
-                      <th className="border-b border-border px-2 py-1.5 text-left font-medium">
+                  <thead className="standard-detail-table-thead">
+                    <tr>
+                      <th className="standard-detail-table-th standard-table-th-left">
                         속성
                       </th>
                       {isCompare ? (
                         <>
-                          <th className="border-b border-border px-2 py-1.5 text-left font-medium">
+                          <th className="standard-detail-table-th standard-table-th-left">
                             변경 전
                           </th>
-                          <th className="border-b border-border px-2 py-1.5 text-left font-medium">
+                          <th className="standard-detail-table-th standard-table-th-left">
                             변경 후
                           </th>
                         </>
                       ) : (
-                        <th className="border-b border-border px-2 py-1.5 text-left font-medium">
+                        <th className="standard-detail-table-th standard-table-th-left">
                           값
                         </th>
                       )}

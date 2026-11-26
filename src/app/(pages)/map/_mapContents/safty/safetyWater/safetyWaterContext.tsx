@@ -13,9 +13,16 @@ import {
 import type Map from 'ol/Map';
 import { fromLonLat } from 'ol/proj';
 import { call } from '@/lib/api';
-import { appFetch } from '@/lib/basePath';
 import { useMapContext } from '../../../_mapComponents/MapContext';
 import type { ItsCctvItem } from '../../road/roadCCTV/itsCctvTypes';
+import {
+  avgToObservation,
+  fetchFloodForecasts,
+  fetchFloodObservation,
+  fetchFloodObservationsBatch,
+  fetchFloodObservationStats,
+  fetchFloodStations,
+} from './floodClientApi';
 import {
   SAFETY_WATER_CCTV_NEAR_M,
   buildStationIdsWithCctv,
@@ -32,7 +39,6 @@ import {
 import type { StationListFilterChip } from './safetyWaterListFilter';
 import { fitStationsOverview } from './useSafetyWaterMapZoom';
 import type {
-  FloodBatchKindAvg,
   FloodTimeType,
   FloodUiError,
   SafetyWaterForecast,
@@ -88,36 +94,19 @@ function findNearestOpposite(from: SafetyWaterStation, all: SafetyWaterStation[]
 }
 
 async function fetchStationObservation(st: SafetyWaterStation, time: FloodTimeType) {
-  const qs = new URLSearchParams({ kind: st.kind, code: st.code, time });
-  const res = await appFetch(`/api/flood/observations?${qs.toString()}`);
-  const j = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  const res = await fetchFloodObservation({ kind: st.kind, code: st.code, time });
   if (!res.ok) {
-    const error = parseFloodError(j) ?? { errorClass: 'ours' as const, uiMessage: UI_MSG.ours };
-    if (isNoDataError(error) || Number(j.code) === 990) {
+    const error =
+      parseFloodError(res.body) ?? { errorClass: 'ours' as const, uiMessage: UI_MSG.ours };
+    if (isNoDataError(error) || res.noData || res.body.code === 990) {
       return { ok: true as const, item: null, noData: true as const };
     }
     return { ok: false as const, error, noData: false as const };
   }
-  const item = j.item as SafetyWaterObservation | null | undefined;
   return {
     ok: true as const,
-    item: item ? { ...item, stationName: st.name } : null,
+    item: res.item ? { ...res.item, stationName: st.name } : null,
     noData: false as const,
-  };
-}
-
-function avgToObservation(
-  kind: SafetyWaterStationKind,
-  avg: FloodBatchKindAvg | null | undefined
-): SafetyWaterObservation | null {
-  if (!avg) return null;
-  return {
-    code: '',
-    value: avg.average,
-    observedAt: avg.observedAt ?? '',
-    isAverage: true,
-    averageCount: avg.count,
-    stationName: kind === 'water' ? '평균 수위' : '평균 강수량',
   };
 }
 
@@ -130,22 +119,20 @@ async function fetchAverageObservations(stations: SafetyWaterStation[], time: Fl
     .filter((item) => item.kind === 'rain')
     .map((item) => ({ code: item.code, kind: 'rain' as const }));
 
-  const res = await appFetch('/api/flood/observations/batch', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ time, stations: [...waterStations, ...rainStations] }),
+  const res = await fetchFloodObservationsBatch({
+    time,
+    stations: [...waterStations, ...rainStations],
   });
-  const j = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   if (!res.ok) {
     return {
       ok: false as const,
-      error: parseFloodError(j) ?? { errorClass: 'ours' as const, uiMessage: UI_MSG.ours },
+      error: parseFloodError(res.body) ?? { errorClass: 'ours' as const, uiMessage: UI_MSG.ours },
     };
   }
   return {
     ok: true as const,
-    water: avgToObservation('water', j.water as FloodBatchKindAvg | undefined),
-    rain: avgToObservation('rain', j.rain as FloodBatchKindAvg | undefined),
+    water: avgToObservation('water', res.water),
+    rain: avgToObservation('rain', res.rain),
   };
 }
 
@@ -346,16 +333,9 @@ export function SafetyWaterProvider({ children, statsKinds, onStatsKindsChange }
         return;
       }
 
-      const qs = new URLSearchParams({
-        minX: String(minX),
-        maxX: String(maxX),
-        minY: String(minY),
-        maxY: String(maxY),
-      });
-      const stRes = await appFetch(`/api/flood/stations?${qs.toString()}`);
-      const stJson = (await stRes.json().catch(() => ({}))) as Record<string, unknown>;
+      const stRes = await fetchFloodStations({ minX, maxX, minY, maxY });
       if (!stRes.ok) {
-        setUiError(parseFloodError(stJson) ?? { errorClass: 'ours', uiMessage: UI_MSG.ours });
+        setUiError(parseFloodError(stRes.body) ?? { errorClass: 'ours', uiMessage: UI_MSG.ours });
         setStations([]);
         setWaterObs(null);
         setRainObs(null);
@@ -364,7 +344,7 @@ export function SafetyWaterProvider({ children, statsKinds, onStatsKindsChange }
         return;
       }
 
-      const items = Array.isArray(stJson.items) ? (stJson.items as SafetyWaterStation[]) : [];
+      const items = stRes.items;
       setStations(items);
       setSelectedStationId((prev) => (prev && items.some((item) => item.id === prev) ? prev : null));
       setLastRefresh(new Date());
@@ -372,19 +352,12 @@ export function SafetyWaterProvider({ children, statsKinds, onStatsKindsChange }
       const waterCodes = items.filter((s) => s.kind === 'water').map((s) => s.code);
       setForecastLoading(true);
       try {
-        const fcQs =
-          waterCodes.length > 0
-            ? `?codes=${encodeURIComponent(waterCodes.join(','))}`
-            : '';
-        const fcRes = await appFetch(`/api/flood/forecast${fcQs}`);
-        const fcJson = (await fcRes.json().catch(() => ({}))) as Record<string, unknown>;
+        const fcRes = await fetchFloodForecasts(waterCodes);
         if (!fcRes.ok) {
           setForecasts([]);
           setForecastOpen(false);
         } else {
-          const fcItems = Array.isArray(fcJson.items)
-            ? (fcJson.items as SafetyWaterForecast[])
-            : [];
+          const fcItems = fcRes.items as SafetyWaterForecast[];
           setForecasts(fcItems);
           setForecastOpen(fcItems.length > 0);
         }
@@ -661,24 +634,17 @@ export function SafetyWaterProvider({ children, statsKinds, onStatsKindsChange }
     const gen = ++waterLevelFetchGenRef.current;
     void (async () => {
       try {
-        const res = await appFetch('/api/flood/observations/batch', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            time: timeType,
-            stations: waterStations.map((s) => ({ kind: 'water' as const, code: s.code })),
-          }),
+        const res = await fetchFloodObservationsBatch({
+          time: timeType,
+          stations: waterStations.map((s) => ({ kind: 'water' as const, code: s.code })),
         });
-        const j = (await res.json().catch(() => ({}))) as {
-          items?: { kind?: string; code?: string; value?: number | null }[];
-        };
         if (cancelled || gen !== waterLevelFetchGenRef.current) return;
         if (!res.ok) {
           setWaterLevelByCode({});
           return;
         }
         const next: Record<string, number | null> = {};
-        for (const it of j.items ?? []) {
+        for (const it of res.items) {
           if (it.kind !== 'water' || !it.code) continue;
           next[it.code] =
             it.value != null && Number.isFinite(Number(it.value)) ? Number(it.value) : null;
@@ -721,25 +687,18 @@ export function SafetyWaterProvider({ children, statsKinds, onStatsKindsChange }
           const i = cursor++;
           const st = waterStations[i];
           try {
-            const res = await appFetch('/api/flood/observations/stats', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                kind: 'water',
-                time: timeType,
-                sdt,
-                edt,
-                stations: [{ code: st.code }],
-              }),
+            const res = await fetchFloodObservationStats({
+              kind: 'water',
+              time: timeType,
+              sdt,
+              edt,
+              stations: [{ code: st.code }],
             });
-            const j = (await res.json().catch(() => ({}))) as {
-              items?: { date?: string; value?: number | null }[];
-            };
-            if (!res.ok || !Array.isArray(j.items)) {
+            if (!res.ok || !Array.isArray(res.items)) {
               next[st.id] = null;
               continue;
             }
-            const vals = j.items
+            const vals = res.items
               .filter((it) => it.value != null && Number.isFinite(Number(it.value)))
               .map((it) => Number(it.value));
             if (vals.length < 2) {

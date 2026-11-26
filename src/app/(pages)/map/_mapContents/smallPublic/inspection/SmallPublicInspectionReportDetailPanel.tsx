@@ -184,31 +184,41 @@ export function SmallPublicInspectionReportDetailPanel({
 
       {tab === 'overview' ? (
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <div className="min-h-0 flex-1 overflow-auto py-2.5 pl-3 pr-0 scrollbar-thin">
-            <SmallPublicAttrTable
-              entries={[
-                { key: 'year', label: '연도', value: `${r.year}년` },
-                { key: 'agency', label: '점검 기관', value: r.agency || '—' },
-                { key: 'author', label: '작성자', value: r.author || '—' },
-                { key: 'created', label: '작성일', value: r.createdAt.slice(0, 10) },
-                {
-                  key: 'done',
-                  label: '점검 완료',
-                  value: `${inspectedCount}곳 / ${r.rows.length}곳 (${pct}%)`,
-                },
-                { key: 'types', label: '대상(유형별)', value: countText(r.rows, (x) => x.type), full: true },
-                { key: 'classes', label: '대상(구분별)', value: countText(r.rows, (x) => x.prevClass), full: true },
-                {
-                  key: 'diff',
-                  label: '전년 대비',
-                  value: changes
-                    ? `신규 ${changes.added.length} · 제외 ${changes.removed.length} · 구분 변경 ${changes.changed.length} (${prev!.year}년 기준)`
-                    : `${r.year - 1}년 보고서 없음`,
-                  full: true,
-                },
-                { key: 'summary', label: '개요', value: r.summary || '—', full: true },
-              ]}
-            />
+          <div className="min-h-0 flex-1 overflow-auto px-3 py-3 scrollbar-thin">
+            <div className="text-[12px] leading-relaxed [&_span.block]:text-[12px] [&_span.block]:leading-relaxed">
+              <SmallPublicAttrTable
+                stacked
+                entries={[
+                  { key: 'year', label: '연도', value: `${r.year}년` },
+                  { key: 'agency', label: '점검 기관', value: r.agency || '—' },
+                  { key: 'author', label: '작성자', value: r.author || '—' },
+                  { key: 'created', label: '작성일', value: r.createdAt.slice(0, 10) },
+                  {
+                    key: 'done',
+                    label: '점검 완료',
+                    value: `${inspectedCount}곳 / ${r.rows.length}곳 (${pct}%)`,
+                  },
+                  { key: 'types', label: '대상(유형별)', value: countText(r.rows, (x) => x.type) },
+                  { key: 'classes', label: '대상(구분별)', value: countText(r.rows, (x) => x.prevClass) },
+                  {
+                    key: 'diff',
+                    label: '전년 대비',
+                    value: changes
+                      ? `신규 ${changes.added.length} · 제외 ${changes.removed.length} · 구분 변경 ${changes.changed.length} (${prev!.year}년 기준)`
+                      : `${r.year - 1}년 보고서 없음`,
+                  },
+                  {
+                    key: 'summary',
+                    label: '개요',
+                    value: (
+                      <span className="block min-h-[4.5rem] whitespace-pre-wrap break-words text-[12px] leading-relaxed text-foreground/85">
+                        {r.summary || '—'}
+                      </span>
+                    ),
+                  },
+                ]}
+              />
+            </div>
           </div>
           <SmallPublicCrudBar onEdit={onEdit} onDelete={onDelete} />
         </div>
@@ -284,7 +294,7 @@ export function SmallPublicInspectionReportDetailPanel({
                 <tr className="[&>th]:whitespace-nowrap [&>th]:px-1.5 [&>th]:py-1.5 [&>th]:font-semibold [&>th]:text-foreground/90 [&>th]:[box-shadow:inset_0_-2px_0_0_var(--border)]">
                   <SmallPublicSortTh sort={sort} sortKey="name" label="시설명" className="px-1.5 py-1.5 pl-3" />
                   <SmallPublicSortTh sort={sort} sortKey="emd" label="읍면" className="px-1.5 py-1.5" />
-                  <SmallPublicSortTh sort={sort} sortKey="date" label="점검일" className="px-1.5 py-1.5" />
+                  <SmallPublicSortTh sort={sort} sortKey="date" label="조사일" className="px-1.5 py-1.5" />
                   <SmallPublicSortTh sort={sort} sortKey="grade" label="등급" align="center" className="px-1.5 py-1.5" />
                   <SmallPublicSortTh sort={sort} sortKey="class" label="구분" align="center" className="px-1.5 py-1.5" />
                 </tr>

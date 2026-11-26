@@ -1,6 +1,12 @@
 "use client"
 
-import React, { createContext, useContext, useEffect, useState } from "react"
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+} from "react"
 
 type Theme = "dark" | "light" | "system"
 
@@ -12,39 +18,56 @@ interface ThemeContextType {
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined)
 
-export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setTheme] = useState<Theme>("system")
-  const [resolvedTheme, setResolvedTheme] = useState<"dark" | "light">("light")
-  const [mounted, setMounted] = useState(false)
+function resolveTheme(theme: Theme): "dark" | "light" {
+  if (theme === "system") {
+    return window.matchMedia("(prefers-color-scheme: dark)").matches
+      ? "dark"
+      : "light"
+  }
+  return theme
+}
 
-  useEffect(() => {
-    setMounted(true)
-    const stored = localStorage.getItem("theme") as Theme | null
-    if (stored) {
-      setTheme(stored)
-    }
+/** html class·localStorage를 클릭 시점(동기)에 반영 — useEffect 지연으로 테마가 늦게 바뀌는 것 방지 */
+function applyDomTheme(theme: Theme): "dark" | "light" {
+  const root = window.document.documentElement
+  const resolved = resolveTheme(theme)
+  root.classList.remove("light", "dark")
+  root.classList.add(resolved)
+  try {
+    localStorage.setItem("theme", theme)
+  } catch {
+    /* ignore */
+  }
+  return resolved
+}
+
+export function ThemeProvider({ children }: { children: React.ReactNode }) {
+  const [theme, setThemeState] = useState<Theme>("system")
+  const [resolvedTheme, setResolvedTheme] = useState<"dark" | "light">("light")
+
+  const setTheme = useCallback((next: Theme) => {
+    const resolved = applyDomTheme(next)
+    setThemeState(next)
+    setResolvedTheme(resolved)
   }, [])
 
   useEffect(() => {
-    if (!mounted) return
-
-    const root = window.document.documentElement
-    root.classList.remove("light", "dark")
-
-    let resolved: "dark" | "light"
-
-    if (theme === "system") {
-      resolved = window.matchMedia("(prefers-color-scheme: dark)").matches
-        ? "dark"
-        : "light"
-    } else {
-      resolved = theme
-    }
-
+    const stored = localStorage.getItem("theme") as Theme | null
+    const initial = stored ?? "system"
+    const resolved = applyDomTheme(initial)
+    setThemeState(initial)
     setResolvedTheme(resolved)
-    root.classList.add(resolved)
-    localStorage.setItem("theme", theme)
-  }, [theme, mounted])
+
+    const mq = window.matchMedia("(prefers-color-scheme: dark)")
+    const onSystemChange = () => {
+      const current = (localStorage.getItem("theme") as Theme | null) ?? "system"
+      if (current !== "system") return
+      const nextResolved = applyDomTheme("system")
+      setResolvedTheme(nextResolved)
+    }
+    mq.addEventListener("change", onSystemChange)
+    return () => mq.removeEventListener("change", onSystemChange)
+  }, [])
 
   return (
     <ThemeContext.Provider value={{ theme, setTheme, resolvedTheme }}>
@@ -66,4 +89,3 @@ export function useResolvedThemeSafe(): "dark" | "light" {
   const context = useContext(ThemeContext)
   return context?.resolvedTheme ?? "light"
 }
-

@@ -368,7 +368,7 @@ export function LayerExtraManager({
                       <button
                         type="button"
                         onClick={() => selectTable(t)}
-                        title={label}
+                        title={key}
                         className={cn(
                           "w-full text-left px-2.5 py-1.5 text-sm border-l-2 transition-colors flex items-center min-w-0 outline-none",
                           "hover:bg-primary/10 focus-visible:bg-primary/10",

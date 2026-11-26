@@ -9,7 +9,10 @@ export async function POST(req: NextRequest) {
     if (!result.success || !result.zipBuffer) {
       console.error('[download/wtl-network-shp]', result.error);
       return NextResponse.json(
-        { error: result.error ?? 'SHP 보내기 실패' },
+        {
+          error: result.error ?? 'SHP 보내기 실패',
+          ...(result.errorCode ? { code: result.errorCode } : {}),
+        },
         { status: 500 }
       );
     }
@@ -29,12 +32,14 @@ export async function POST(req: NextRequest) {
       /[^\w가-힣._-]+/g,
       '_'
     );
-    return new NextResponse(new Uint8Array(result.zipBuffer), {
-      headers: {
-        'Content-Type': 'application/zip',
-        'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`,
-      },
-    });
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/zip',
+      'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`,
+    };
+    if (result.warning) {
+      headers['X-Wtl-Export-Warning'] = encodeURIComponent(result.warning);
+    }
+    return new NextResponse(new Uint8Array(result.zipBuffer), { headers });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     console.error('[download/wtl-network-shp] exception', msg);

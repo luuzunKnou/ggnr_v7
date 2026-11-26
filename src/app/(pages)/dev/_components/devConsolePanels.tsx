@@ -4,7 +4,6 @@ import { DbManagerContent } from "./DbManagerContent"
 import { SystemListManager } from "./SystemListManager"
 import { ServiceListManager } from "./ServiceListManager"
 import { LayerManagerContent } from "./LayerManagerContent"
-import { LayerCompareContent } from "./layerCompare/LayerCompareContent"
 import { DataHistoryManagerContent } from "./DataHistoryManagerContent"
 import { GeoserverManagerContent } from "./GeoserverManagerContent"
 import { LasFileUploaderContent } from "./LasFileUploaderContent"
@@ -61,7 +60,6 @@ export const DEV_MENU_GROUPS: readonly AdminConsoleMenuGroup[] = [
     icon: Database,
     menuIds: [
       "layerManager",
-      "layerCompare",
       "dataHistoryManager",
       "orthophotoManager",
       "indexOrientation",
@@ -111,7 +109,7 @@ export const DEV_MENU_GROUPS: readonly AdminConsoleMenuGroup[] = [
   },
   {
     id: "manualList",
-    label: "메뉴얼 목록",
+    label: "매뉴얼 목록",
     icon: Book,
     menuIds: ["installManual", "baseDataManual"],
   },
@@ -171,8 +169,6 @@ export function getDevMenuDescription(menuId: string): string {
       return "권한 부여·변경 이력 조회 (구현 예정)"
     case "layerManager":
       return "레이어 목록·SHP/Excel 업데이트 이력·설정(Layer/Field/Code)·오류수정 및 SHP·Excel 업로드 진입 화면입니다."
-    case "layerCompare":
-      return "기준 DB 레이어와 첨부 파일의 구조(컬럼·건수·도형·좌표계)를 비교하고, 맞춰진 데이터의 값 차이를 봅니다. 반영 없이 엑셀만 제공합니다."
     case "dataHistoryManager":
       return "지도·SHP·Excel 데이터 변경·조회·내보내기 이력을 한곳에서 검색·조회합니다."
     case "systemVar":
@@ -282,12 +278,6 @@ export function renderDevMenuContent(menuId: string): ReactNode {
       return (
         <div className="flex flex-col overflow-hidden min-h-0 h-[calc(100vh-14rem)]">
           <LayerManagerContent />
-        </div>
-      )
-    case "layerCompare":
-      return (
-        <div className="flex flex-col overflow-hidden min-h-0 h-[calc(100vh-14rem)]">
-          <LayerCompareContent />
         </div>
       )
     case "dataHistoryManager":

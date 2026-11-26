@@ -31,9 +31,10 @@ import * as privateLandAnalysisService from './privateLandAnalysisService';
 import * as roadLedgerService from './roadLedgerService';
 import * as roadVideoTrackService from './roadVideoTrackService';
 import * as roadNetworkService from './roadNetworkService';
+import * as bikeRoadNetService from './bikeRoadNetService';
 import * as wtlNetworkService from './wtlNetworkService';
 import * as wtlFacilityService from './wtlFacilityService';
-import * as swlNetworkService from './swlNetworkService';
+import * as wtlRequestService from './wtlRequestService';
 import * as wtlOutageService from './wtlOutageService';
 import * as wtlLeakService from './wtlLeakService';
 import * as wtlSupplyPathService from './wtlSupplyPathService';
@@ -58,7 +59,6 @@ import * as fileConverterService from './fileConverterService';
 import * as pdfToJpgService from './pdfToJpgService';
 import * as shpToDxfService from './shpToDxfService';
 import * as layerCadExportService from './layerCadExportService';
-import * as layerCompareService from './layerCompareService';
 import * as ocrMigrationService from './ocrMigrationService';
 import * as layerRowService from './layerRowService';
 import * as layerExtraService from './layerExtraService';
@@ -89,6 +89,7 @@ import * as fmsLinkageService from './fmsLinkageService';
 import * as groundwaterPermitService from './groundwaterPermitService';
 import * as waterAdminComplaintService from './waterAdminComplaintService';
 import * as bizNotifService from './bizNotifService';
+import * as consAlertService from './consAlertService';
 import * as thematicMapService from './thematicMapService';
 import * as roadWorkHandbookService from './roadWorkHandbookService';
 import * as qgisLayerControlService from './qgisLayerControlService';
@@ -101,6 +102,7 @@ import * as digitalMapService from './digitalMapService';
 import * as drawingDisplayService from './drawingDisplayService';
 import * as landArchiveService from './landArchiveService';
 import * as individualLandPriceService from './individualLandPriceService';
+import * as odorSensorService from './odorSensorService';
 import * as realTransactionPriceService from './realTransactionPriceService';
 import * as smallPublicService from './smallPublicService';
 
@@ -137,9 +139,10 @@ export {
   roadLedgerService,
   roadVideoTrackService,
   roadNetworkService,
+  bikeRoadNetService,
   wtlNetworkService,
   wtlFacilityService,
-  swlNetworkService,
+  wtlRequestService,
   wtlOutageService,
   wtlLeakService,
   wtlSupplyPathService,
@@ -164,7 +167,6 @@ export {
   pdfToJpgService,
   shpToDxfService,
   layerCadExportService,
-  layerCompareService,
   ocrMigrationService,
   layerRowService,
   layerExtraService,
@@ -193,6 +195,7 @@ export {
   groundwaterPermitService,
   waterAdminComplaintService,
   bizNotifService,
+  consAlertService,
   roadWorkHandbookService,
   qgisLayerControlService,
   userDataUploadService,
@@ -204,6 +207,7 @@ export {
   drawingDisplayService,
   landArchiveService,
   individualLandPriceService,
+  odorSensorService,
   realTransactionPriceService,
   smallPublicService,
 };

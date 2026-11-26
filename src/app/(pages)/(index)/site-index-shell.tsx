@@ -24,8 +24,10 @@ export function SiteIndexShell({ children, mainClassName, fillViewport = false }
   return (
     <div
       className={cn(
-        'min-h-screen bg-background pb-[20px]',
-        fillViewport && 'flex flex-col'
+        'bg-background',
+        fillViewport
+          ? 'flex h-svh max-h-svh flex-col overflow-hidden'
+          : 'min-h-screen pb-[20px]'
       )}
     >
       <BizNotifPrefetch />

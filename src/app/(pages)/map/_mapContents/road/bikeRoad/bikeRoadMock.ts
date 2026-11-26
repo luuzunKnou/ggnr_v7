@@ -130,13 +130,84 @@ export function pathStyleFromKind(
   return normalizeBikeRoadKind(kind) === "전용도로" ? "dedicated" : "sharedSep";
 }
 
+/** 구간 «자전거도로 종류» → 지도·위치도 선 색 */
+export function pathStyleFromPathType(
+  pathType: string
+): BikeRoadRoute["pathStyle"] {
+  const g = bikeRoadWidthGroup(pathType);
+  if (g === "dedicated") return "dedicated";
+  if (g === "sharedNonSep") return "sharedNonSep";
+  return "sharedSep";
+}
+
+/** 위치도·지도 범례와 동일 색 */
+export const BIKE_ROAD_PATH_STYLE_COLOR = {
+  dedicated: "#FF2D95",
+  sharedSep: "#00C853",
+  sharedNonSep: "#1E88E5",
+} as const;
+
+/** 단순 목록(호환) */
+export const BIKE_ROAD_PATH_STYLE_LEGEND: {
+  key: BikeRoadRoute["pathStyle"];
+  label: string;
+  color: string;
+}[] = [
+  { key: "dedicated", label: "전용도로", color: BIKE_ROAD_PATH_STYLE_COLOR.dedicated },
+  {
+    key: "sharedSep",
+    label: "겸용도로(분리)",
+    color: BIKE_ROAD_PATH_STYLE_COLOR.sharedSep,
+  },
+  {
+    key: "sharedNonSep",
+    label: "겸용도로(비분리)",
+    color: BIKE_ROAD_PATH_STYLE_COLOR.sharedNonSep,
+  },
+];
+
+/**
+ * 범례 표 구조 — 제목·구분·현황.
+ * 겸용은 대분류 rowspan + 분리/비분리.
+ */
+export const BIKE_ROAD_PATH_LEGEND_TABLE = {
+  title: "범례",
+  colGroup: "구분",
+  colStatus: "현황",
+  dedicated: {
+    group: "자전거전용도로",
+    color: BIKE_ROAD_PATH_STYLE_COLOR.dedicated,
+  },
+  sharedGroup: "자전거 보행자 겸용도로",
+  shared: [
+    {
+      key: "sharedSep" as const,
+      sub: "분리",
+      color: BIKE_ROAD_PATH_STYLE_COLOR.sharedSep,
+    },
+    {
+      key: "sharedNonSep" as const,
+      sub: "비분리",
+      color: BIKE_ROAD_PATH_STYLE_COLOR.sharedNonSep,
+    },
+  ],
+} as const;
+
+export function bikeRoadStrokeColor(
+  pathStyle: BikeRoadRoute["pathStyle"] | string
+): string {
+  if (pathStyle === "dedicated") return BIKE_ROAD_PATH_STYLE_COLOR.dedicated;
+  if (pathStyle === "sharedNonSep") return BIKE_ROAD_PATH_STYLE_COLOR.sharedNonSep;
+  return BIKE_ROAD_PATH_STYLE_COLOR.sharedSep;
+}
+
 export const BIKE_ROAD_NEW_ID_PREFIX = "bike-new-";
 
 export function isNewBikeRoadRouteId(id: string | null | undefined): boolean {
   return Boolean(id && String(id).startsWith(BIKE_ROAD_NEW_ID_PREFIX));
 }
 
-/** 프로토타입 — 속성만 채우는 신규 노선 (구간·도형은 비움) */
+/** 프로토타입 — 신규 노선. 구간 표에 빈 행 1개부터 표시 */
 export function createEmptyBikeRoadRoute(): BikeRoadRoute {
   return {
     id: `${BIKE_ROAD_NEW_ID_PREFIX}${Date.now()}`,
@@ -151,7 +222,7 @@ export function createEmptyBikeRoadRoute(): BikeRoadRoute {
     sidePath: "",
     remark: "",
     attachments: [],
-    segments: [],
+    segments: [createEmptyBikeRoadSegment({ routePrefix: "1", index1: 1 })],
     history: [],
     lineCoords: [],
     startLabel: "",
@@ -215,7 +286,57 @@ export function bikeRoadSerialPrefix(segments: BikeRoadSegment[]): string {
   return m?.[1] ?? "1";
 }
 
-export const BIKE_ROAD_MOCK_ROUTES: BikeRoadRoute[] = [
+/**
+ * 샘플 노선 — 구간별 좌표가 없으면 노선 lineCoords를
+ * 기점·종점 구간(양측 R/L 동일)에 나눠 넣어 위치도·오버레이가 찍히게 함.
+ */
+function assignMockSegmentCoords(route: BikeRoadRoute): BikeRoadRoute {
+  if (route.lineCoords.length < 2) return route;
+  if (
+    route.segments.some(
+      (s) =>
+        (s.centerLineCoords?.length ?? 0) >= 2 ||
+        (s.lineCoords?.length ?? 0) >= 2
+    )
+  ) {
+    return route;
+  }
+
+  const stretchKey = (s: BikeRoadSegment) => `${s.startName}|${s.endName}`;
+  const stretchKeys: string[] = [];
+  for (const s of route.segments) {
+    const k = stretchKey(s);
+    if (!stretchKeys.includes(k)) stretchKeys.push(k);
+  }
+  const n = Math.max(1, stretchKeys.length);
+  const pts = route.lineCoords;
+  const byStretch = new Map<string, [number, number][]>();
+  for (let i = 0; i < stretchKeys.length; i++) {
+    const start = Math.floor((i * (pts.length - 1)) / n);
+    const end = Math.floor(((i + 1) * (pts.length - 1)) / n);
+    let slice = pts.slice(start, end + 1) as [number, number][];
+    if (slice.length < 2) {
+      const a = pts[start]!;
+      const b = pts[Math.min(pts.length - 1, start + 1)]!;
+      slice = [a, b];
+    }
+    byStretch.set(stretchKeys[i]!, slice);
+  }
+
+  return {
+    ...route,
+    segments: route.segments.map((s) => {
+      const coords = byStretch.get(stretchKey(s)) ?? pts;
+      return {
+        ...s,
+        centerLineCoords: coords,
+        lineCoords: coords,
+      };
+    }),
+  };
+}
+
+const BIKE_ROAD_MOCK_ROUTES_RAW: BikeRoadRoute[] = [
   {
     id: "bike-route-1",
     title: "삼성현로(대구시계) ~ 대학로",
@@ -245,32 +366,11 @@ export const BIKE_ROAD_MOCK_ROUTES: BikeRoadRoute[] = [
         url: "/mock/bikeRoad/samsung_01.png",
       },
     ],
-    history: [
-      {
-        id: "hist-1-1",
-        action: "등록",
-        at: "2024-03-12 10:20",
-        user: "도로관리",
-        detail: "국가자전거구축사업 노선 등록",
-      },
-      {
-        id: "hist-1-2",
-        action: "속성 수정",
-        at: "2025-06-18 14:05",
-        user: "도로관리",
-        detail: "교량·지하철역 정보 보완",
-      },
-      {
-        id: "hist-1-3",
-        action: "정비",
-        at: "2025-09-02 11:30",
-        user: "도로관리",
-        detail: "남매로 구간 노면 보수",
-      },
-    ],
+    history: [],
     startLabel: "모레아장례식장",
     endLabel: "압량농협네거리",
     pathStyle: "sharedSep",
+    locationMapUrl: "/mock/bikeRoad/bike-route-1_location.png",
     /** 도심 도로처럼 꺾이는 대략 경로 (스크린 위치도 느낌) */
     lineCoords: [
       [128.702, 35.838],
@@ -445,32 +545,11 @@ export const BIKE_ROAD_MOCK_ROUTES: BikeRoadRoute[] = [
         url: "/mock/bikeRoad/geumho_01.png",
       },
     ],
-    history: [
-      {
-        id: "hist-2-1",
-        action: "등록",
-        at: "2023-11-02 09:40",
-        user: "도로관리",
-        detail: "금호강 전용도로 노선 등록",
-      },
-      {
-        id: "hist-2-2",
-        action: "구간 보완",
-        at: "2025-01-09 16:22",
-        user: "도로관리",
-        detail: "하양교 겸용 구간(2-8) 폭원 반영",
-      },
-      {
-        id: "hist-2-3",
-        action: "정비",
-        at: "2025-08-14 13:10",
-        user: "도로관리",
-        detail: "하양교 주변 안내표지 교체",
-      },
-    ],
+    history: [],
     startLabel: "대정동",
     endLabel: "와촌면 계당리",
     pathStyle: "dedicated",
+    locationMapUrl: "/mock/bikeRoad/bike-route-2_location.png",
     /** 하천 따라 구불구불한 대략 경로 (스크린 위치도 느낌) */
     lineCoords: [
       [128.736, 35.846],
@@ -628,3 +707,7 @@ export const BIKE_ROAD_MOCK_ROUTES: BikeRoadRoute[] = [
     ],
   },
 ];
+
+/** 샘플 2건 — 구간 좌표·위치도(mock 폴더 *_location.png). 저장 시 같은 파일 갱신 */
+export const BIKE_ROAD_MOCK_ROUTES: BikeRoadRoute[] =
+  BIKE_ROAD_MOCK_ROUTES_RAW.map(assignMockSegmentCoords);

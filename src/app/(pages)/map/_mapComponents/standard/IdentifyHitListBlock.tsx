@@ -1,6 +1,11 @@
 'use client';
 
 import type { RefObject } from 'react';
+import tablesJson from '@/config/defineLayer/tables.json';
+import {
+  buildIdentifyDefineSortMetaMap,
+  sortIdentifyLayersByDefineOrder,
+} from '@/lib/mapLayerGeometryOrder';
 import { cn } from '@/lib/utils';
 import type { IdentifyFeatureItem, IdentifyLayerResult } from '../hooks/useFeatureIdentify';
 import { getLegendUrl } from '../hooks/useFeatureIdentify';
@@ -11,10 +16,15 @@ export type IdentifyHitListFlatItem = {
   index: number;
 };
 
+const IDENTIFY_DEFINE_SORT_META = buildIdentifyDefineSortMetaMap(
+  Array.isArray(tablesJson) ? tablesJson : []
+);
+
 function flattenIdentifyResults(results: IdentifyLayerResult[]): IdentifyHitListFlatItem[] {
+  const ordered = sortIdentifyLayersByDefineOrder(results, IDENTIFY_DEFINE_SORT_META);
   const out: IdentifyHitListFlatItem[] = [];
   let index = 0;
-  for (const layer of results) {
+  for (const layer of ordered) {
     for (const feature of layer.features) {
       out.push({ layer: layer as IdentifyLayerResult, feature, index });
       index += 1;

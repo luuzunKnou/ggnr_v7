@@ -207,14 +207,54 @@ function parseEpsgFromBasename(basename: string): string | null {
   return matchEpsgFromLooseText(second);
 }
 
+/** 소스 CRS를 .prj·이름·범위 추정으로도 못 정했을 때 공통 한글 안내 */
+const SOURCE_SRS_UNKNOWN_KO =
+  '소스 좌표계를 알 수 없습니다. .prj 파일이 없고 파일명·폴더명·범위 추정으로도 EPSG를 확정하지 못했습니다. EPSG를 직접 지정하세요.';
+
+/**
+ * 읍면동 겹침 후보 중 자동 채택 여부.
+ * 1개면 최소 겹침만 확인하고, 2개 이상이면 1위가 2위보다 뚜렷할 때만 채택.
+ */
+function pickConfidentCrsCandidate(
+  candidates: Array<{ epsg: number; overlapRatio: number }>
+): { picked: { epsg: number; overlapRatio: number } | null; reason?: string } {
+  if (!candidates.length) {
+    return {
+      picked: null,
+      reason:
+        '대한민국 행정경계와 겹치는 좌표계 후보가 없습니다. .prj를 넣거나 EPSG를 직접 지정하세요.',
+    };
+  }
+  const sorted = [...candidates].sort((a, b) => b.overlapRatio - a.overlapRatio);
+  const top = sorted[0];
+  const second = sorted[1];
+  const minOverlap = 0.01;
+  const margin = 0.05;
+  if (top.overlapRatio < minOverlap) {
+    return {
+      picked: null,
+      reason: `추정 좌표계(EPSG:${top.epsg})의 경계 겹침이 너무 낮습니다(${(top.overlapRatio * 100).toFixed(1)}%). EPSG를 직접 지정하세요.`,
+    };
+  }
+  if (second && top.overlapRatio - second.overlapRatio < margin) {
+    return {
+      picked: null,
+      reason: `좌표계 추정이 애매합니다. EPSG:${top.epsg}(${(top.overlapRatio * 100).toFixed(1)}%)와 EPSG:${second.epsg}(${(second.overlapRatio * 100).toFixed(1)}%) 중 구분이 어렵습니다. EPSG를 직접 지정하세요.`,
+    };
+  }
+  return { picked: top };
+}
+
 /**
  * @param override 프런트에서 파일별로 확정한 EPSG(예: 'EPSG:5186' 또는 '5186'). 있으면 자동판별보다 우선.
+ * 우선순위: override → .prj → 파일명 → 폴더명 → 범위·행정경계 겹침 추정(신뢰도 충족 시).
+ * DB 적재 시 목표는 항상 EPSG:5181.
  */
 async function resolveShpSrs(
   dir: string,
   basename: string,
   override?: string | null
-): Promise<{ sourceSrs: string | null; targetSrs: string }> {
+): Promise<{ sourceSrs: string | null; targetSrs: string; sourceSrsError?: string }> {
   const trimmedOverride = override?.trim();
   if (trimmedOverride) {
     const normalized = /^EPSG:/i.test(trimmedOverride) ? trimmedOverride.toUpperCase() : `EPSG:${trimmedOverride}`;
@@ -234,8 +274,61 @@ async function resolveShpSrs(
   } catch {
     sourceSrs = parseEpsgFromBasename(basename) ?? parseEpsgFromBasename(folderName);
   }
-  /** 소스는 .prj → 파일명 → 폴더명 순으로만 결정. DB 적재 시에는 항상 5181로 변환 */
-  return { sourceSrs, targetSrs: SHP_UPLOAD_TARGET_SRS };
+  if (sourceSrs) {
+    return { sourceSrs, targetSrs: SHP_UPLOAD_TARGET_SRS };
+  }
+
+  if (isShpBundleEmptyOrUnreadable(dir, basename)) {
+    return {
+      sourceSrs: null,
+      targetSrs: SHP_UPLOAD_TARGET_SRS,
+      sourceSrsError:
+        '미리보기할 도형이 없어 좌표계를 추정할 수 없습니다. EPSG를 직접 지정하세요.',
+    };
+  }
+
+  try {
+    const shpPath = path.join(dir, `${basename}.shp`);
+    const box = await getShpRawExtent(shpPath);
+    if (!box) {
+      return {
+        sourceSrs: null,
+        targetSrs: SHP_UPLOAD_TARGET_SRS,
+        sourceSrsError:
+          'SHP 범위를 확인할 수 없어 좌표계를 추정하지 못했습니다. .prj를 넣거나 EPSG를 직접 지정하세요.',
+      };
+    }
+    const detected = await detectCrsCandidatesByExtent(box);
+    if (!detected.success) {
+      return {
+        sourceSrs: null,
+        targetSrs: SHP_UPLOAD_TARGET_SRS,
+        sourceSrsError: detected.error
+          ? `좌표계 추정 실패: ${detected.error}`
+          : SOURCE_SRS_UNKNOWN_KO,
+      };
+    }
+    const pick = pickConfidentCrsCandidate(detected.candidates ?? []);
+    if (!pick.picked) {
+      return {
+        sourceSrs: null,
+        targetSrs: SHP_UPLOAD_TARGET_SRS,
+        sourceSrsError: pick.reason ?? SOURCE_SRS_UNKNOWN_KO,
+      };
+    }
+    const auto = `EPSG:${pick.picked.epsg}`;
+    console.info(
+      `[shpUpload] 소스 CRS 자동 추정 ${basename}: ${auto} (겹침 ${(pick.picked.overlapRatio * 100).toFixed(1)}%)`
+    );
+    return { sourceSrs: auto, targetSrs: SHP_UPLOAD_TARGET_SRS };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return {
+      sourceSrs: null,
+      targetSrs: SHP_UPLOAD_TARGET_SRS,
+      sourceSrsError: `좌표계 추정 중 오류: ${msg}`,
+    };
+  }
 }
 
 /**
@@ -2185,7 +2278,16 @@ export async function createTableFromShp(params: {
   }
 
   const dir = path.dirname(absolutePath);
-  const { sourceSrs, targetSrs } = await resolveShpSrs(dir, basename, params.sourceSrsOverride);
+  const emptyBundle = isShpBundleEmptyOrUnreadable(dir, basename);
+  const { sourceSrs, targetSrs, sourceSrsError } = await resolveShpSrs(
+    dir,
+    basename,
+    params.sourceSrsOverride
+  );
+  const srsArgs = ogrSrsTransformArgs(sourceSrs, targetSrs);
+  if (!emptyBundle && !srsArgs) {
+    return { success: false, error: sourceSrsError ?? SOURCE_SRS_UNKNOWN_KO };
+  }
   let dbfEncoding = resolveShapefileDbfEncoding(dir, basename);
   const columnTypesLco = buildNumericColumnTypesLco(dir, basename);
 
@@ -2215,7 +2317,7 @@ export async function createTableFromShp(params: {
     return iconv.decode(buf, 'utf8');
   };
 
-  const runOgr2ogr = (encoding: string) =>
+  const runOgr2ogr = (encoding: string, transformArgs: string[]) =>
     new Promise<{ code: number; stderr: string }>((resolve) => {
       const ogr2ogrArgs = [
         '-f', 'PostgreSQL',
@@ -2224,8 +2326,7 @@ export async function createTableFromShp(params: {
         '-oo', `ENCODING=${encoding}`,
         '-nlt', 'PROMOTE_TO_MULTI',
         '-nln', layerTable,
-        ...(sourceSrs ? (['-s_srs', sourceSrs] as const) : []),
-        '-t_srs', targetSrs,
+        ...transformArgs,
         '-lco', 'GEOMETRY_NAME=geom',
         ...(params.spatialIndex === false ? (['-lco', 'SPATIAL_INDEX=NO'] as const) : []),
         // 깨진 Real(24.15) 등 → 폭 제거 + 자릿수 없는 NUMERIC
@@ -2250,22 +2351,28 @@ export async function createTableFromShp(params: {
     const notFound =
       /내부\s*또는\s*외부\s*명령|not recognized|not found|실행할 수 있는 프로그램|배치 파일이 아닙니다/i.test(raw);
     const noPgDriver = /Unable to find driver\s*[`']?PostgreSQL|PostgreSQL.*driver/i.test(raw);
+    const noSourceCrs =
+      /no coordinate system|Use -s_srs|Can't transform coordinates/i.test(raw);
     if (notFound) {
       return `ogr2ogr를 찾을 수 없습니다. 프로젝트 python/env에 GDAL이 설치되어 있어야 합니다(개발자 모드 > LAS 파이프라인 환경 생성 및 설치). 또는 env에 GGNR_GDAL_OGR2OGR로 ogr2ogr 실행 파일 경로를 지정하세요.`;
     }
     if (noPgDriver) {
       return `GDAL에 PostgreSQL 드라이버가 없습니다. 반드시 프로젝트 루트(예: D:\\ggnr_v7)에서 아래 명령을 실행하세요. python 폴더 안에서 실행하면 안 됩니다.\n\n  conda run --prefix python/env conda install -c conda-forge libpq -y`;
     }
+    if (noSourceCrs) {
+      return sourceSrsError ?? SOURCE_SRS_UNKNOWN_KO;
+    }
     return raw;
   };
 
   try {
-    const emptyBundle = isShpBundleEmptyOrUnreadable(dir, basename);
     let result: { code: number; stderr: string };
     if (emptyBundle) {
       result = { code: -1, stderr: 'empty or missing shp/shx/dbf' };
+    } else if (!srsArgs) {
+      return { success: false, error: sourceSrsError ?? SOURCE_SRS_UNKNOWN_KO };
     } else {
-      result = await runOgr2ogr(dbfEncoding);
+      result = await runOgr2ogr(dbfEncoding, srsArgs);
     }
 
     if (result.code !== 0) {
@@ -4675,12 +4782,16 @@ async function fetchShpFeatureGeoJsonByKey(params: {
 
   const dir = path.dirname(absolutePath);
   const basename = path.basename(pathOrResult, '.shp');
-  const { sourceSrs, targetSrs } = await resolveShpSrs(dir, basename, params.sourceSrsOverride);
+  const { sourceSrs, targetSrs, sourceSrsError } = await resolveShpSrs(
+    dir,
+    basename,
+    params.sourceSrsOverride
+  );
   const srsArgs = ogrSrsTransformArgs(sourceSrs, targetSrs);
   if (!srsArgs) {
     return {
       success: false,
-      error: '소스 좌표계를 알 수 없습니다. 비교 시 선택한 EPSG가 sync_log에 없거나 .prj가 없습니다.',
+      error: sourceSrsError ?? SOURCE_SRS_UNKNOWN_KO,
     };
   }
   const dbfEncoding = resolveShapefileDbfEncoding(dir, basename);
@@ -4775,12 +4886,16 @@ async function importShpToSyncTempForHydrate(params: {
       return { success: false, error: `빈 SHP 임시 테이블 생성 실패: ${msg}` };
     }
   } else {
-    const { sourceSrs, targetSrs } = await resolveShpSrs(dir, basename, params.sourceSrsOverride);
+    const { sourceSrs, targetSrs, sourceSrsError } = await resolveShpSrs(
+      dir,
+      basename,
+      params.sourceSrsOverride
+    );
     const srsArgs = ogrSrsTransformArgs(sourceSrs, targetSrs);
     if (!srsArgs) {
       return {
         success: false,
-        error: '소스 좌표계를 알 수 없습니다. 비교 시 선택한 EPSG가 sync_log에 없거나 .prj가 없습니다.',
+        error: sourceSrsError ?? SOURCE_SRS_UNKNOWN_KO,
       };
     }
     const dbfEncoding = resolveShapefileDbfEncoding(dir, basename);
@@ -5209,7 +5324,17 @@ async function compareShpWithTableImpl(params: {
   const dbSchema = await resolveDefineTableSchema(tableName);
 
   const dir = path.dirname(absolutePath);
-  const { sourceSrs, targetSrs } = await resolveShpSrs(dir, basename, params.sourceSrsOverride);
+  const { sourceSrs, targetSrs, sourceSrsError } = await resolveShpSrs(
+    dir,
+    basename,
+    params.sourceSrsOverride
+  );
+  const srsArgs = ogrSrsTransformArgs(sourceSrs, targetSrs);
+  const emptySyncBundle = isShpBundleEmptyOrUnreadable(dir, basename);
+  if (!emptySyncBundle && !srsArgs) {
+    timing.flush({ success: false, error: 'source_srs_unknown' });
+    return { ...empty, error: sourceSrsError ?? SOURCE_SRS_UNKNOWN_KO };
+  }
   const dbfEncoding = resolveShapefileDbfEncoding(dir, basename);
 
   const dbCfg = getDbConfig();
@@ -5225,7 +5350,7 @@ async function compareShpWithTableImpl(params: {
     await dropShpSyncTempTable(dbSchema, matchTableName);
     timing.mark('dropTemp');
 
-    if (isShpBundleEmptyOrUnreadable(dir, basename)) {
+    if (emptySyncBundle) {
       // 0바이트 SHP: 빈 sync로 비교 계속 → DB 기존 행은 전부 삭제 후보
       try {
         await createEmptySyncTempFromLayer(dbSchema, tableName, syncTableName);
@@ -5237,6 +5362,10 @@ async function compareShpWithTableImpl(params: {
       }
       syncImportAttempted = true;
       timing.mark('ogr2ogrImport');
+    } else if (!srsArgs) {
+      timing.flush({ success: false, error: 'source_srs_unknown' });
+      flushed = true;
+      return { ...empty, error: sourceSrsError ?? SOURCE_SRS_UNKNOWN_KO };
     } else {
       const columnTypesLco = buildNumericColumnTypesLco(dir, basename);
       const prepared = await prepareShpWithValidDbfFieldNames(absolutePath);
@@ -5247,8 +5376,7 @@ async function compareShpWithTableImpl(params: {
           '-oo', `ENCODING=${dbfEncoding}`,
           '-nlt', 'PROMOTE_TO_MULTI',
           '-nln', `${dbSchema}.${syncTableName}`,
-          ...(sourceSrs ? ['-s_srs', sourceSrs] as const : []),
-          '-t_srs', targetSrs,
+          ...srsArgs,
           '-lco', 'GEOMETRY_NAME=geom',
           // 깨진 Real(24.15) 등 → 폭 제거 + 자릿수 없는 NUMERIC (본 업로드와 동일)
           ...ogrBrokenNumericFieldArgs(columnTypesLco),
@@ -5263,7 +5391,15 @@ async function compareShpWithTableImpl(params: {
       if (importResult.code !== 0) {
         timing.flush({ success: false, error: 'ogr2ogr_import_failed' });
         flushed = true;
-        return { ...empty, error: `임시 테이블 import 실패: ${importResult.stderr}` };
+        const stderr = importResult.stderr ?? '';
+        const noSourceCrs =
+          /no coordinate system|Use -s_srs|Can't transform coordinates/i.test(stderr);
+        return {
+          ...empty,
+          error: noSourceCrs
+            ? (sourceSrsError ?? SOURCE_SRS_UNKNOWN_KO)
+            : `임시 테이블 import 실패: ${stderr}`,
+        };
       }
     }
 
@@ -7874,7 +8010,11 @@ export async function readShpValues(params: {
 
   const dir = path.dirname(absolutePath);
   const basename = path.basename(shpPath, '.shp');
-  const { sourceSrs, targetSrs } = await resolveShpSrs(dir, basename);
+  const { sourceSrs, targetSrs, sourceSrsError } = await resolveShpSrs(dir, basename);
+  const srsArgs = ogrSrsTransformArgs(sourceSrs, targetSrs);
+  if (!srsArgs) {
+    return { success: false, rows: {}, error: sourceSrsError ?? SOURCE_SRS_UNKNOWN_KO };
+  }
   const dbfEncoding = resolveShapefileDbfEncoding(dir, basename);
 
   const dbCfg = getDbConfig();
@@ -7890,8 +8030,7 @@ export async function readShpValues(params: {
         '-oo', `ENCODING=${dbfEncoding}`,
         '-nlt', 'PROMOTE_TO_MULTI',
         '-nln', `layer.${syncTableName}`,
-        ...(sourceSrs ? ['-s_srs', sourceSrs] as const : []),
-        '-t_srs', targetSrs,
+        ...srsArgs,
         '-lco', 'GEOMETRY_NAME=geom',
         '-overwrite',
       ]);
@@ -7901,7 +8040,16 @@ export async function readShpValues(params: {
     syncImportAttempted = true;
 
     if (importRes.code !== 0) {
-      return { success: false, rows: {}, error: `SHP import 실패: ${importRes.stderr}` };
+      const stderr = importRes.stderr ?? '';
+      const noSourceCrs =
+        /no coordinate system|Use -s_srs|Can't transform coordinates/i.test(stderr);
+      return {
+        success: false,
+        rows: {},
+        error: noSourceCrs
+          ? (sourceSrsError ?? SOURCE_SRS_UNKNOWN_KO)
+          : `SHP import 실패: ${stderr}`,
+      };
     }
 
     const { db } = await import('@/database/db');
@@ -7930,9 +8078,10 @@ export async function readShpValues(params: {
 }
 
 /**
- * layer 스키마 테이블을 EPSG:5181 Shapefile로 내보낸 뒤 zip 버퍼로 반환.
+ * layer 스키마 테이블을 Shapefile로 내보낸 뒤 zip 버퍼로 반환.
  * Excel 데이터 상태 탭·레이어 관리·관망조회 등에서 SHP 다운로드용.
  * `sql`이 있으면 해당 SELECT로 필터 내보내기(서버에서만 조립).
+ * 기본 출력 좌표계는 EPSG:5181. `targetSrs`로 변경 가능(관망조회 등).
  */
 export async function exportLayerTableToShp(params: {
   tableName: string;
@@ -7941,7 +8090,19 @@ export async function exportLayerTableToShp(params: {
   sql?: string | null;
   /** 출력 SHP 레이어명(-nln). 기본 tableName */
   layerName?: string | null;
-}): Promise<{ success: boolean; zipBuffer?: Buffer; error?: string }> {
+  /** ogr2ogr -t_srs. 미지정 시 EPSG:5181 */
+  targetSrs?: string | null;
+  /**
+   * `files`면 zip 대신 SHP 구성 파일 목록 반환(관망조회 다수 레이어 폴더 묶음용).
+   * 기본 `zip`.
+   */
+  output?: 'zip' | 'files';
+}): Promise<{
+  success: boolean;
+  zipBuffer?: Buffer;
+  files?: Array<{ name: string; buffer: Buffer }>;
+  error?: string;
+}> {
   const tableName = (params?.tableName ?? '').trim().replace(/[^a-zA-Z0-9_]/g, '_') || undefined;
   if (!tableName) return { success: false, error: 'tableName이 필요합니다.' };
   const schema = params?.schema === 'public_layer' ? 'public_layer' : 'layer';
@@ -7949,6 +8110,9 @@ export async function exportLayerTableToShp(params: {
   const nln = String(params?.layerName ?? tableName)
     .trim()
     .replace(/[^a-zA-Z0-9_]/g, '_') || tableName;
+  const rawTarget = String(params?.targetSrs ?? '').trim().toUpperCase();
+  const targetSrs =
+    /^EPSG:\d+$/.test(rawTarget) ? rawTarget : 'EPSG:5181';
 
   const tmpBase = path.join(getGgnrDataDir(), 'tmp');
   const tempDir = path.join(tmpBase, `shp_export_${schema}_${nln}_${Date.now()}`);
@@ -7987,7 +8151,7 @@ export async function exportLayerTableToShp(params: {
   if (schema === 'public_layer') {
     ogrBase.push('-s_srs', 'EPSG:5181');
   }
-  ogrBase.push('-t_srs', 'EPSG:5181', '-skipfailures', '-dim', '2');
+  ogrBase.push('-t_srs', targetSrs, '-skipfailures', '-dim', '2');
   const result = await runOgr2ogr(ogrBase, ogrEnv);
 
   let shpSize = 0;
@@ -8014,7 +8178,7 @@ export async function exportLayerTableToShp(params: {
     if (schema === 'public_layer') {
       retryArgs.push('-s_srs', 'EPSG:5181');
     }
-    retryArgs.push('-t_srs', 'EPSG:5181', '-skipfailures', '-dim', '2');
+    retryArgs.push('-t_srs', targetSrs, '-skipfailures', '-dim', '2');
     const result2 = await runOgr2ogr(retryArgs, ogrEnv);
     try {
       shpSize = (await fs.stat(outShp)).size;
@@ -8037,6 +8201,24 @@ export async function exportLayerTableToShp(params: {
   }
 
   await fs.writeFile(path.join(tempDir, `${nln}.cpg`), `${dbfEncoding}\n`, 'utf8');
+
+  if (params.output === 'files') {
+    const names = await fs.readdir(tempDir);
+    const files: Array<{ name: string; buffer: Buffer }> = [];
+    for (const name of names) {
+      const full = path.join(tempDir, name);
+      const st = await fs.stat(full);
+      if (!st.isFile()) continue;
+      files.push({ name, buffer: await fs.readFile(full) });
+    }
+    await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+    await fs.mkdir(tmpBase, { recursive: true }).catch(() => {});
+    if (files.length === 0) {
+      return { success: false, error: 'SHP 파일이 비어 있습니다.' };
+    }
+    console.log(`[exportLayerTableToShp] ${tableName} files ${files.length}`);
+    return { success: true, files };
+  }
 
   const chunks: Buffer[] = [];
   const archive = archiver('zip', { zlib: { level: 9 } });

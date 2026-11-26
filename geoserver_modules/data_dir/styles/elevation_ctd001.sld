@@ -5,6 +5,109 @@
       <sld:Name>Default Styler</sld:Name>
       <sld:FeatureTypeStyle>
         <sld:Rule>
+          <ogc:Filter>
+            <ogc:PropertyIsEqualTo>
+              <ogc:Function name="env">
+                <ogc:Literal>ignore_scale</ogc:Literal>
+                <ogc:Literal>0</ogc:Literal>
+              </ogc:Function>
+              <ogc:Literal>1</ogc:Literal>
+            </ogc:PropertyIsEqualTo>
+          </ogc:Filter>
+          <sld:MinScaleDenominator>50000.0</sld:MinScaleDenominator>
+          <sld:LineSymbolizer>
+            <sld:Stroke>
+              <sld:CssParameter name="stroke">#8B5A2B</sld:CssParameter>
+              <sld:CssParameter name="stroke-opacity">0.85</sld:CssParameter>
+              <sld:CssParameter name="stroke-width">1.8</sld:CssParameter>
+            </sld:Stroke>
+          </sld:LineSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:PropertyName>cont</ogc:PropertyName>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Nanum Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">11</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:LinePlacement>
+                <sld:PerpendicularOffset>0</sld:PerpendicularOffset>
+              </sld:LinePlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>1.5</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#8B5A2B</sld:CssParameter>
+            </sld:Fill>
+            <sld:VendorOption name="followLine">true</sld:VendorOption>
+            <sld:VendorOption name="repeat">400</sld:VendorOption>
+            <sld:VendorOption name="group">true</sld:VendorOption>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:PropertyName>cont</ogc:PropertyName>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">Malgun Gothic</sld:CssParameter>
+              <sld:CssParameter name="font-size">11</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:LinePlacement>
+                <sld:PerpendicularOffset>0</sld:PerpendicularOffset>
+              </sld:LinePlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>1.5</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#8B5A2B</sld:CssParameter>
+            </sld:Fill>
+            <sld:VendorOption name="followLine">true</sld:VendorOption>
+            <sld:VendorOption name="repeat">400</sld:VendorOption>
+            <sld:VendorOption name="group">true</sld:VendorOption>
+          </sld:TextSymbolizer>
+          <sld:TextSymbolizer>
+            <sld:Label>
+              <ogc:PropertyName>cont</ogc:PropertyName>
+            </sld:Label>
+            <sld:Font>
+              <sld:CssParameter name="font-family">SansSerif</sld:CssParameter>
+              <sld:CssParameter name="font-size">11</sld:CssParameter>
+              <sld:CssParameter name="font-style">normal</sld:CssParameter>
+              <sld:CssParameter name="font-weight">bold</sld:CssParameter>
+            </sld:Font>
+            <sld:LabelPlacement>
+              <sld:LinePlacement>
+                <sld:PerpendicularOffset>0</sld:PerpendicularOffset>
+              </sld:LinePlacement>
+            </sld:LabelPlacement>
+            <sld:Halo>
+              <sld:Radius>1.5</sld:Radius>
+              <sld:Fill>
+                <sld:CssParameter name="fill">#FFFFFF</sld:CssParameter>
+              </sld:Fill>
+            </sld:Halo>
+            <sld:Fill>
+              <sld:CssParameter name="fill">#8B5A2B</sld:CssParameter>
+            </sld:Fill>
+            <sld:VendorOption name="followLine">true</sld:VendorOption>
+            <sld:VendorOption name="repeat">400</sld:VendorOption>
+            <sld:VendorOption name="group">true</sld:VendorOption>
+          </sld:TextSymbolizer>
+        </sld:Rule>
+        <sld:Rule>
           <sld:MaxScaleDenominator>50000.0</sld:MaxScaleDenominator>
           <sld:LineSymbolizer>
             <sld:Stroke>

@@ -14,6 +14,7 @@ import {
   useLayerRowEdit,
   useLayerParcelNavigation,
   type LayerRowDetailAttr,
+  type LayerRowEditPreset,
   type LayerRowEditPresetKey,
   type LayerRowParcelItem,
 } from '../../_mapComponents/layerRowEdit';
@@ -148,18 +149,58 @@ export function OccupationLedgerDetailPanel({
   const hitOptions = mapContext?.occupationLedgerMapHitOptions ?? [];
   const binding = getOccupationLedgerBinding({ serEng });
   const presetKey = (binding?.editPresetKey ?? 'waterOccupationLedger') as LayerRowEditPresetKey;
-  const preset = LAYER_ROW_EDIT_PRESETS[presetKey] ?? LAYER_ROW_EDIT_PRESETS.waterOccupationLedger;
-  const mainTable = binding?.mainTable ?? preset.tableName;
-  const jijukTable = binding?.jijukTable ?? preset.childTableName ?? '';
-  const mgjTable = binding?.mgjTable ?? '';
-  const keyField = binding?.fields.keyField ?? preset.keyField;
+  /** as const 유니온에 선택 필드가 없는 항목이 있어 LayerRowEditPreset으로 본다 */
+  const preset = (LAYER_ROW_EDIT_PRESETS[presetKey] ??
+    LAYER_ROW_EDIT_PRESETS.waterOccupationLedger) as LayerRowEditPreset;
+  /** 서버가 DB 칸·필지 표 이름에 맞춰 준 값 (옛 cons_code / usage_data_as_solo 등) */
+  const [runtimeTables, setRuntimeTables] = useState<{
+    mainTable: string;
+    jijukTable: string;
+    mgjTable: string;
+    keyField: string;
+    childParentField: string;
+    childAddressField: string;
+    placeField: string;
+    permitField: string;
+  } | null>(null);
+  const mainTable = runtimeTables?.mainTable || binding?.mainTable || preset.tableName;
+  const jijukTable =
+    runtimeTables?.jijukTable || binding?.jijukTable || preset.childTableName || '';
+  const mgjTable = runtimeTables?.mgjTable || binding?.mgjTable || '';
+  const keyField =
+    runtimeTables?.keyField || binding?.fields.keyField || preset.keyField || 'id';
+  /** 저장·도형편집은 정적 프리셋(ftr_idn)이 아니라 서버가 맞춘 키를 써야 한다 */
+  const editPreset = useMemo(() => {
+    if (!runtimeTables?.keyField) return preset;
+    const key = runtimeTables.keyField;
+    return {
+      ...preset,
+      tableName: runtimeTables.mainTable || preset.tableName,
+      keyField: key,
+      childTableName: runtimeTables.jijukTable || preset.childTableName,
+      additionalChildTableNames: runtimeTables.mgjTable
+        ? [runtimeTables.mgjTable]
+        : preset.additionalChildTableNames,
+      childParentField: runtimeTables.childParentField || preset.childParentField,
+      childAddressField: runtimeTables.childAddressField || preset.childAddressField,
+      permitField: runtimeTables.permitField || preset.permitField,
+      autoGenerateKeyOnCreate:
+        key.toLowerCase() === 'cons_code' ? true : preset.autoGenerateKeyOnCreate,
+    };
+  }, [preset, runtimeTables]);
   const ledgerFields = binding?.fields;
-  const permitFieldLower = String(ledgerFields?.permitField ?? 'permit_no').toLowerCase();
+  const permitFieldLower = String(
+    runtimeTables?.permitField || ledgerFields?.permitField || 'permit_no'
+  ).toLowerCase();
   const startFieldLower = String(ledgerFields?.startField ?? '').toLowerCase();
   const endFieldLower = String(ledgerFields?.endField ?? '').toLowerCase();
   const stateFieldLower = String(ledgerFields?.stateField ?? 'state').toLowerCase();
-  const placeFieldLower = String(ledgerFields?.placeField ?? '').toLowerCase();
-  const autoCodeFieldLower = String(binding?.autoCodeField ?? '').toLowerCase();
+  const placeFieldLower = String(
+    runtimeTables?.placeField || ledgerFields?.placeField || ''
+  ).toLowerCase();
+  const autoCodeFieldLower = String(
+    runtimeTables?.keyField || binding?.autoCodeField || ''
+  ).toLowerCase();
   const isCreateMode = detailId === LAYER_ROW_NEW_ID;
 
   const [loading, setLoading] = useState(!isCreateMode);
@@ -204,6 +245,37 @@ export function OccupationLedgerDetailPanel({
   const [extraDefs, setExtraDefs] = useState<LayerExtraDefOption[]>([]);
   const [formAttributes, setFormAttributes] = useState<LayerRowDetailAttr[]>([]);
   const [formFieldsLoading, setFormFieldsLoading] = useState(false);
+
+  /** DB에 맞춰 키·필지 표 이름 확정 — 필지 선택 시 점용∩필지 교집합에 필요 */
+  useEffect(() => {
+    let cancelled = false;
+    void call('', 'POST', {
+      service: 'occupationLedgerService',
+      action: 'getOccupationLedgerBindingInfo',
+      params: { serEng },
+    })
+      .then((res) => {
+        if (cancelled) return;
+        const data = res?.data ?? res;
+        if (!data?.success) return;
+        setRuntimeTables({
+          mainTable: String(data.mainTable ?? '').trim(),
+          jijukTable: String(data.jijukTable ?? '').trim(),
+          mgjTable: String(data.mgjTable ?? '').trim(),
+          keyField: String(data.keyField ?? '').trim(),
+          childParentField: String(data.childParentField ?? '').trim(),
+          childAddressField: String(data.childAddressField ?? '').trim(),
+          placeField: String(data.placeField ?? '').trim(),
+          permitField: String(data.permitField ?? '').trim(),
+        });
+      })
+      .catch(() => {
+        if (!cancelled) setRuntimeTables(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [serEng]);
 
   useEffect(() => {
     extraItemsRef.current = extraItems;
@@ -673,7 +745,7 @@ export function OccupationLedgerDetailPanel({
     updateDraftParcel,
     removeDraftParcel,
   } = useLayerRowEdit({
-    preset,
+    preset: editPreset,
     rowKey: isCreateMode ? '' : detailId,
     attributes: formAttributesForEdit,
     initialParcels: parcels,
@@ -958,37 +1030,73 @@ export function OccupationLedgerDetailPanel({
     ]
   );
 
+  /** listValues·상세 칸 키가 대소문자만 달라도 맞춤 */
+  const pickCi = useCallback((src: Record<string, string> | undefined, field: string): string => {
+    if (!src) return '';
+    if (src[field] != null && String(src[field]).length > 0) return String(src[field]);
+    const fl = field.toLowerCase();
+    if (src[fl] != null && String(src[fl]).length > 0) return String(src[fl]);
+    const hit = Object.entries(src).find(([k]) => k.toLowerCase() === fl);
+    return hit ? String(hit[1] ?? '') : '';
+  }, []);
+
   const parcelValuesFromItem = useCallback(
     (item: LayerRowParcelItem, role: 'jijuk' | 'mgj') => {
       const defs = role === 'mgj' ? mgjFieldDefs : parcelFieldDefs;
-      const values: Record<string, string> = { ...(item.listValues ?? {}) };
+      const values: Record<string, string> = {};
       for (const def of defs) {
-        const fl = def.field.toLowerCase();
-        if (values[def.field] != null && String(values[def.field]).trim()) continue;
-        const fromList = item.listValues?.[def.field] ?? item.listValues?.[fl];
-        if (fromList != null && String(fromList).trim()) {
-          values[def.field] = String(fromList);
-        }
+        const fromList = pickCi(item.listValues, def.field);
+        if (fromList.trim()) values[def.field] = fromList;
       }
       const addrField = String(binding?.fields.childAddressField ?? '').toLowerCase();
-      if (addrField && !String(values[defs.find((d) => d.field.toLowerCase() === addrField)?.field ?? ''] ?? '').trim()) {
-        const key = defs.find((d) => d.field.toLowerCase() === addrField)?.field;
-        if (key) values[key] = item.address;
+      const addrKey = defs.find((d) => d.field.toLowerCase() === addrField)?.field;
+      if (addrKey && !String(values[addrKey] ?? '').trim()) {
+        values[addrKey] = item.address;
       }
       return values;
     },
-    [binding?.fields.childAddressField, mgjFieldDefs, parcelFieldDefs]
+    [binding?.fields.childAddressField, mgjFieldDefs, parcelFieldDefs, pickCi]
   );
 
   const openParcelEditModal = useCallback(
     (role: 'jijuk' | 'mgj', item: LayerRowParcelItem, idx: number) => {
-      setParcelEditModal({
-        role,
-        index: idx,
-        values: parcelValuesFromItem(item, role),
-      });
+      const base = parcelValuesFromItem(item, role);
+      setParcelEditModal({ role, index: idx, values: base });
+      const ogcFid = String(item.wmsRowKey?.keyValue ?? '').trim();
+      if (!/^\d+$/.test(ogcFid)) return;
+      // 조회 모달과 같이 상세 API로 기존 칸 값을 채운다 (목록 listValues만으로는 상세 칸이 비어 보임)
+      void call('', 'POST', {
+        service: 'occupationLedgerService',
+        action: 'getOccupationLedgerChildDetail',
+        params: { serEng, role, ogcFid },
+      })
+        .then((res) => {
+          const data = res?.data ?? res;
+          if (data?.error) return;
+          const attrs = Array.isArray(data?.attributes) ? data.attributes : [];
+          if (attrs.length === 0) return;
+          const defs = role === 'mgj' ? mgjFieldDefs : parcelFieldDefs;
+          const fromDetail: Record<string, string> = {};
+          for (const a of attrs) {
+            const field = String((a as { field?: unknown })?.field ?? '').trim();
+            if (!field) continue;
+            fromDetail[field] = String((a as { value?: unknown })?.value ?? '');
+          }
+          setParcelEditModal((m) => {
+            if (!m || m.role !== role || m.index !== idx) return m;
+            const next = { ...m.values };
+            for (const def of defs) {
+              const v = pickCi(fromDetail, def.field);
+              if (v.trim()) next[def.field] = v;
+            }
+            return { ...m, values: next };
+          });
+        })
+        .catch(() => {
+          /* 목록 값만으로라도 모달은 유지 */
+        });
     },
-    [parcelValuesFromItem]
+    [mgjFieldDefs, parcelFieldDefs, parcelValuesFromItem, pickCi, serEng]
   );
 
   /** 조회: 지도 + 읽기 모달. 수정: 지도 + 필지·물건지 편집 모달 */

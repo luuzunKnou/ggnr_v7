@@ -1,12 +1,15 @@
 'use client';
 
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { X } from 'lucide-react';
 import { useMapContext } from '../MapContext';
 import { MapFloatingPanel } from '../MapFloatingPanel';
 import { ComplaintDetailPanel } from './complaint-detail-panel';
 import type { CompUI, CompdUI } from './types';
-import type { ComplaintFormValues } from './complaint-info';
+import type {
+  ComplaintDefineFieldSave,
+  ComplaintFormValues,
+} from './complaint-info';
 import { call } from '@/lib/api';
 import {
   animateComplaintToCenter3857,
@@ -18,12 +21,17 @@ import {
   COMPLAINT_DETAIL_PANEL_WIDTH,
 } from './complaintPanelLayout';
 import { useSerWriteAccess } from '@/hooks/useSerWriteAccess';
+import { useSafetyLayerDetailColumns } from '../../_mapContents/safty/useSafetyLayerDetailColumns';
+
+const COMP_TABLE = 'comp';
 
 type Props = {
+  /** 상하수도 통합 민원관리(구 통합UI) 메뉴에서 열었는지 */
+  commonUi?: boolean;
   onListRefresh?: () => void;
 };
 
-export default function ComplaintDetail({ onListRefresh }: Props) {
+export default function ComplaintDetail({ commonUi = false, onListRefresh }: Props) {
   const mapContext = useMapContext();
   const canWrite = useSerWriteAccess('complaint');
   const complaintDetail = mapContext?.complaintDetail ?? null;
@@ -32,10 +40,52 @@ export default function ComplaintDetail({ onListRefresh }: Props) {
   const floatingLeftPx = (mapContext?.mapPaddingLeft ?? 0) + 20;
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [defineFieldValues, setDefineFieldValues] = useState<Record<string, string>>({});
+
+  const useDefineFields = commonUi;
+  const { columns: defineFields } = useSafetyLayerDetailColumns(
+    useDefineFields ? COMP_TABLE : ''
+  );
+
+  useEffect(() => {
+    if (!useDefineFields || !complaintDetail?.compKey) {
+      setDefineFieldValues({});
+      return;
+    }
+    let cancelled = false;
+    void call('', 'POST', {
+      service: 'complaintService',
+      action: 'getFieldDetail',
+      params: { compKey: complaintDetail.compKey },
+    }).then((res) => {
+      if (cancelled) return;
+      const data = res?.data ?? res;
+      const row = (data?.row ?? {}) as Record<string, string>;
+      setDefineFieldValues(row);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [useDefineFields, complaintDetail?.compKey]);
 
   const bumpList = useCallback(() => {
     onListRefresh?.();
   }, [onListRefresh]);
+
+  const reloadDetail = useCallback(
+    async (compKey: number) => {
+      if (!setComplaintDetail) return;
+      const res = await call('', 'POST', {
+        service: 'complaintService',
+        action: 'get',
+        params: { compKey },
+      });
+      if (res?.success && res?.data) {
+        setComplaintDetail(res.data as typeof complaintDetail);
+      }
+    },
+    [complaintDetail, setComplaintDetail]
+  );
 
   const handleAddHistory = useCallback(
     async (data: {
@@ -61,17 +111,10 @@ export default function ComplaintDetail({ onListRefresh }: Props) {
           compdExtra: {},
         },
       });
-      const res = await call('', 'POST', {
-        service: 'complaintService',
-        action: 'get',
-        params: { compKey: complaintDetail.compKey },
-      });
-      if (res?.success && res?.data) {
-        setComplaintDetail(res.data as typeof complaintDetail);
-        bumpList();
-      }
+      await reloadDetail(complaintDetail.compKey);
+      bumpList();
     },
-    [complaintDetail, setComplaintDetail, bumpList]
+    [complaintDetail, setComplaintDetail, bumpList, reloadDetail]
   );
 
   const handleEditHistory = useCallback(
@@ -101,17 +144,10 @@ export default function ComplaintDetail({ onListRefresh }: Props) {
           compdExtra: {},
         },
       });
-      const res = await call('', 'POST', {
-        service: 'complaintService',
-        action: 'get',
-        params: { compKey: complaintDetail.compKey },
-      });
-      if (res?.success && res?.data) {
-        setComplaintDetail(res.data as typeof complaintDetail);
-        bumpList();
-      }
+      await reloadDetail(complaintDetail.compKey);
+      bumpList();
     },
-    [complaintDetail, setComplaintDetail, bumpList]
+    [complaintDetail, setComplaintDetail, bumpList, reloadDetail]
   );
 
   const handleDeleteHistory = useCallback(
@@ -123,18 +159,11 @@ export default function ComplaintDetail({ onListRefresh }: Props) {
         params: { compdKey },
       });
       if (res?.success && res?.data?.deleted) {
-        const getRes = await call('', 'POST', {
-          service: 'complaintService',
-          action: 'get',
-          params: { compKey: complaintDetail.compKey },
-        });
-        if (getRes?.success && getRes?.data) {
-          setComplaintDetail(getRes.data as typeof complaintDetail);
-          bumpList();
-        }
+        await reloadDetail(complaintDetail.compKey);
+        bumpList();
       }
     },
-    [complaintDetail, setComplaintDetail, bumpList]
+    [complaintDetail, setComplaintDetail, bumpList, reloadDetail]
   );
 
   const handleSave = useCallback(
@@ -178,6 +207,47 @@ export default function ComplaintDetail({ onListRefresh }: Props) {
       }
     },
     [complaintDetail, setComplaintDetail, bumpList, mapContext]
+  );
+
+  const handleSaveDefineFields = useCallback(
+    async (payload: ComplaintDefineFieldSave) => {
+      if (!complaintDetail || !setComplaintDetail) return;
+      setSaving(true);
+      try {
+        const res = await call('', 'POST', {
+          service: 'complaintService',
+          action: 'saveFieldDetail',
+          params: {
+            compKey: complaintDetail.compKey,
+            values: payload.values,
+            lon: payload.lon,
+            lat: payload.lat,
+          },
+        });
+        const data = res?.data ?? res;
+        if (data?.error) throw new Error(String(data.error));
+        const raw = (data?.row ?? {}) as Record<string, string>;
+        setDefineFieldValues(raw);
+        await reloadDetail(complaintDetail.compKey);
+        bumpList();
+        const map = mapContext?.mapInstanceRef?.current;
+        const center = center3857FromExtent(
+          Array.isArray(data?.extent3857)
+            ? (data.extent3857 as [number, number, number, number])
+            : null
+        );
+        if (map && center) {
+          animateComplaintToCenter3857(map, center, () =>
+            mapContext?.applyMapViewPaddingRef?.current?.()
+          );
+        }
+      } catch (e: unknown) {
+        window.alert(e instanceof Error ? e.message : '민원 저장에 실패했습니다.');
+      } finally {
+        setSaving(false);
+      }
+    },
+    [bumpList, complaintDetail, mapContext, reloadDetail, setComplaintDetail]
   );
 
   const handleDelete = useCallback(async () => {
@@ -233,7 +303,9 @@ export default function ComplaintDetail({ onListRefresh }: Props) {
       defaultPosition={{ top: COMPLAINT_DETAIL_PANEL_DEFAULT_TOP, left: floatingLeftPx }}
       header={
         <>
-          <span className="text-xs font-medium text-muted-foreground">민원 #{complaintDetail.compKey}</span>
+          <span className="text-xs font-medium text-muted-foreground">
+            민원 #{complaintDetail.compKey}
+          </span>
           <button
             type="button"
             title="닫기"
@@ -246,14 +318,20 @@ export default function ComplaintDetail({ onListRefresh }: Props) {
         </>
       }
     >
-      <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <ComplaintDetailPanel
           complaint={compAsUI}
           histories={compdListAsUI}
           onAddHistory={canWrite ? handleAddHistory : undefined}
           onEditHistory={canWrite ? handleEditHistory : undefined}
           onDeleteHistory={canWrite ? handleDeleteHistory : undefined}
-          onSave={canWrite ? handleSave : undefined}
+          onSave={canWrite && !useDefineFields ? handleSave : undefined}
+          defineFields={useDefineFields ? defineFields : undefined}
+          defineFieldValues={useDefineFields ? defineFieldValues : undefined}
+          tableName={useDefineFields ? COMP_TABLE : undefined}
+          onSaveDefineFields={
+            canWrite && useDefineFields ? handleSaveDefineFields : undefined
+          }
           onDelete={canWrite ? handleDelete : undefined}
           onClose={handleClose}
           saving={saving}

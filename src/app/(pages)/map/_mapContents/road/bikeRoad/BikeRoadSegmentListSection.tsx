@@ -9,8 +9,6 @@ import {
   bikeFormTdClass,
   bikeFormThClass,
 } from "./bikeRoadFormUi";
-import { BikeRoadSegmentSidePick } from "./BikeRoadSegmentDrawBanner";
-import type { BikeRoadDrawSideMode } from "./useBikeRoadSegmentDraw";
 import {
   BIKE_ROAD_PATH_TYPE_OPTIONS,
   normalizeBikeRoadPathType,
@@ -24,7 +22,7 @@ type EditableKey = Exclude<keyof BikeRoadSegment, "id">;
 type Props = {
   segments: BikeRoadSegment[];
   isEditing?: boolean;
-  onAddPick?: (mode: BikeRoadDrawSideMode) => void;
+  onAdd?: () => void;
   onRemove?: (segmentId: string) => void;
   onChange?: (segmentId: string, key: EditableKey, value: string) => void;
   drawActive?: boolean;
@@ -54,7 +52,7 @@ function Th({
     <th
       rowSpan={rowSpan}
       colSpan={colSpan}
-      className={cn(bikeFormThClass, "px-0.5", className)}
+      className={cn(bikeFormThClass, "bg-muted pl-[5px] pr-0.5", className)}
     >
       {children}
     </th>
@@ -72,7 +70,7 @@ function Td({
 }) {
   return (
     <td
-      className={cn(bikeFormTdClass, "overflow-hidden px-0.5", className)}
+      className={cn(bikeFormTdClass, "overflow-hidden pl-[5px] pr-0.5", className)}
       title={title}
     >
       {children}
@@ -110,17 +108,16 @@ function ViewSpan({
   return <span className={cn("block truncate", className)}>{cellText(value)}</span>;
 }
 
-/** 구간 표 — 폭원 항상 표시, sticky 없음(선 이중·짤림 방지) */
+/** 구간 표 — sticky 헤더(제목 고정). 선은 formUi separate+한쪽 border로 스크롤 흔들림 방지 */
 export function BikeRoadSegmentListSection({
   segments,
   isEditing = false,
-  onAddPick,
+  onAdd,
   onRemove,
   onChange,
   drawActive = false,
 }: Props) {
   const [open, setOpen] = useState(true);
-  const [sidePickOpen, setSidePickOpen] = useState(false);
 
   const setField = (id: string, key: EditableKey, value: string) => {
     onChange?.(id, key, value);
@@ -144,63 +141,70 @@ export function BikeRoadSegmentListSection({
             ({segments.length})
           </span>
         </button>
-        {isEditing && onAddPick ? (
-          <div className="relative shrink-0">
-            <button
-              type="button"
-              className={cn(actionBtn)}
-              disabled={drawActive}
-              onClick={(e) => {
-                e.stopPropagation();
-                setSidePickOpen((v) => !v);
-              }}
-            >
-              <Plus className="h-3 w-3" />
-              추가
-            </button>
-            <BikeRoadSegmentSidePick
-              open={sidePickOpen}
-              onClose={() => setSidePickOpen(false)}
-              onPick={(m) => {
-                setSidePickOpen(false);
-                onAddPick(m);
-              }}
-            />
-          </div>
+        {isEditing && onAdd ? (
+          <button
+            type="button"
+            className={cn(actionBtn)}
+            disabled={drawActive}
+            onClick={(e) => {
+              e.stopPropagation();
+              onAdd();
+            }}
+          >
+            <Plus className="h-3 w-3" />
+            추가
+          </button>
         ) : null}
       </div>
       {open ? (
         <div className="px-3 pb-2.5">
-          {segments.length === 0 ? (
-            <p className="py-3 text-center text-[11px] text-muted-foreground">
-              {isEditing
-                ? "«추가»로 양측·편측을 고른 뒤 지도에서 점을 찍으세요."
-                : "구간이 없습니다."}
-            </p>
-          ) : (
-            <div className="map-side-detail-scroll max-h-[calc(3.5rem+8*1.875rem)] overflow-x-hidden overflow-y-auto overscroll-contain scrollbar-thin !mr-0">
-              <table className={cn(bikeFormTableClass, "w-full")}>
+          {/* 헤더+8행 높이 고정 — 행 수·빈 표와 무관하게 유지, 초과 시 스크롤 */}
+          <div className="map-side-detail-scroll h-[calc(3.5rem+8*1.875rem)] overflow-x-auto overflow-y-auto overscroll-contain scrollbar-thin !mr-0">
+            {segments.length === 0 ? (
+              <p className="flex h-full items-center justify-center text-center text-[11px] text-muted-foreground">
+                {isEditing
+                  ? "«추가»를 누르면 그리기 창에서 도로를 따라 구간을 넣을 수 있습니다."
+                  : "구간이 없습니다."}
+              </p>
+            ) : (
+              <>
+              {/* sticky 1px — 표 border-t는 스크롤 시 잘림. 위 선만 따로 고정 */}
+              <div
+                aria-hidden
+                className="sticky top-0 z-[3] h-px min-w-[56rem] bg-[var(--border)]"
+              />
+              <table
+                className={cn(
+                  bikeFormTableClass,
+                  "w-full min-w-[56rem] -mt-px border-t-0"
+                )}
+              >
                 <colgroup>
-                  <col style={{ width: "3%" }} />
+                  {/* 2-10·2-11 두 자리까지 — px 고정으로 table-fixed 축소 방지 */}
+                  <col style={{ width: "60px", minWidth: "60px" }} />
                   <col style={{ width: "7%" }} />
                   <col style={{ width: "9%" }} />
                   <col style={{ width: "9%" }} />
                   <col style={{ width: "3.5%" }} />
-                  <col style={{ width: "6.5%" }} />
+                  {/* 종점 열과 비슷한 폭 */}
+                  <col style={{ width: "85px", minWidth: "85px" }} />
                   <col style={{ width: "5%" }} />
                   <col style={{ width: "5.5%" }} />
                   <col style={{ width: "5.5%" }} />
                   <col style={{ width: "5.5%" }} />
                   <col style={{ width: "6.5%" }} />
                   <col style={{ width: "6.5%" }} />
-                  <col style={{ width: "9%" }} />
-                  <col style={{ width: "5.5%" }} />
                   <col style={{ width: "8%" }} />
+                  <col style={{ width: "5.5%" }} />
+                  <col style={{ width: "7.5%" }} />
                   {isEditing ? <col style={{ width: "2.5%" }} /> : null}
                 </colgroup>
-                <thead className="sticky top-0 z-[1] bg-muted">
+                <thead className="sticky top-0 z-[2] bg-muted shadow-[0_1px_0_0_var(--border)]">
                   <tr>
-                    <Th rowSpan={2}>
+                    <Th
+                      rowSpan={2}
+                      className="w-[60px] min-w-[60px] max-w-[60px] whitespace-nowrap"
+                    >
                       일련
                       <br />
                       번호
@@ -213,7 +217,12 @@ export function BikeRoadSegmentListSection({
                       <br />
                       연계
                     </Th>
-                    <Th rowSpan={2}>종류</Th>
+                    <Th
+                      rowSpan={2}
+                      className="w-[85px] min-w-[85px] max-w-[85px]"
+                    >
+                      종류
+                    </Th>
                     <Th rowSpan={2}>총 연장</Th>
                     <Th rowSpan={2}>전용도로</Th>
                     <Th rowSpan={2}>전용차로</Th>
@@ -241,15 +250,21 @@ export function BikeRoadSegmentListSection({
                       normalizeBikeRoadPathType(s.pathType) || s.pathType;
                     return (
                       <tr key={s.id}>
-                        <Td className="text-center tabular-nums" title={s.serialNo}>
+                        <Td
+                          className="w-[60px] min-w-[60px] max-w-[60px] overflow-visible whitespace-nowrap pl-[5px] pr-0.5 text-center tabular-nums"
+                          title={s.serialNo}
+                        >
                           {isEditing ? (
                             <CellInput
                               value={s.serialNo}
                               onChange={(v) => setField(s.id, "serialNo", v)}
                               center
+                              className="px-0 tabular-nums tracking-tight"
                             />
                           ) : (
-                            <ViewSpan value={s.serialNo} className="tabular-nums" />
+                            <span className="block overflow-visible whitespace-nowrap tabular-nums tracking-tight">
+                              {cellText(s.serialNo)}
+                            </span>
                           )}
                         </Td>
                         <Td title={s.routeName}>
@@ -293,10 +308,16 @@ export function BikeRoadSegmentListSection({
                             <ViewSpan value={s.roadLink} />
                           )}
                         </Td>
-                        <Td title={typeLabel}>
+                        <Td
+                          className="w-[85px] min-w-[85px] max-w-[85px] overflow-visible whitespace-nowrap pl-[5px] pr-0.5"
+                          title={typeLabel}
+                        >
                           {isEditing ? (
                             <select
-                              className={cn(bikeFormFieldClass, "cursor-pointer")}
+                              className={cn(
+                                bikeFormFieldClass,
+                                "cursor-pointer whitespace-nowrap pr-0"
+                              )}
                               value={pathValue}
                               onChange={(e) =>
                                 setField(s.id, "pathType", e.target.value)
@@ -310,11 +331,13 @@ export function BikeRoadSegmentListSection({
                               ))}
                             </select>
                           ) : (
-                            <ViewSpan value={typeLabel} />
+                            <span className="block whitespace-nowrap">
+                              {cellText(typeLabel)}
+                            </span>
                           )}
                         </Td>
                         <Td
-                          className="px-0 text-center tabular-nums"
+                          className="pl-[5px] pr-0 text-center tabular-nums"
                           title={s.totalLength}
                         >
                           {isEditing ? (
@@ -457,8 +480,9 @@ export function BikeRoadSegmentListSection({
                   })}
                 </tbody>
               </table>
-            </div>
-          )}
+              </>
+            )}
+          </div>
         </div>
       ) : null}
     </section>

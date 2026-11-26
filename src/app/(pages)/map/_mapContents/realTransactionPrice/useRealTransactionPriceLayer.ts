@@ -9,12 +9,11 @@ import type Geometry from 'ol/geom/Geometry'
 import VectorLayer from 'ol/layer/Vector'
 import VectorSource from 'ol/source/Vector'
 import { Fill, Stroke, Style, Text } from 'ol/style'
-import { call } from '@/lib/api'
+import { dongMapFeaturesClient } from '@/lib/realTransactionPriceClient'
 import '../../_mapComponents/config/projections'
 import { scheduleFitMapToExtent3857 } from '../../_mapComponents/config/mapAutoNavigation'
 import { useMapContext } from '../../_mapComponents/MapContext'
 import {
-  REAL_TRANSACTION_PRICE_SERVICE,
   formatMapPriceLabel,
   priceFillRgba,
   type DongMapFeature,
@@ -125,18 +124,11 @@ export function useRealTransactionPriceLayer({
 
     void (async () => {
       try {
-        const res = await call('', 'POST', {
-          service: REAL_TRANSACTION_PRICE_SERVICE,
-          action: 'dongMapFeatures',
-          params: { dealYmd: ymd },
-        })
+        const data = await dongMapFeaturesClient({ dealYmd: ymd })
         if (cancelled) return
-        if (!res?.success) {
-          source.clear()
-          return
-        }
-        const data = (res.data ?? res) as { features?: DongMapFeature[] }
-        const features = Array.isArray(data.features) ? data.features : []
+        const features = Array.isArray(data.features)
+          ? (data.features as DongMapFeature[])
+          : []
         const prices = features
           .map((f) => f.avgPerSqm)
           .filter((n): n is number => n != null && Number.isFinite(n))

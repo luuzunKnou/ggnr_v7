@@ -5,6 +5,10 @@ import { Bell } from 'lucide-react'
 import { call } from '@/lib/api'
 import {
   DEFAULT_CONS_ALERT,
+  defaultCycleEnd,
+  diffYmd,
+  offsetYmd,
+  parseYmd,
   type ConsAlertSettings,
 } from '@/lib/consAlertSchedule'
 import {
@@ -33,6 +37,25 @@ export function loadConsAlertSettings(workId: string): WtlConsAlertSettings {
   } catch {
     return { ...DEFAULT_CONS_ALERT }
   }
+}
+
+function failMessage(e: unknown, fallback: string): string {
+  if (e instanceof Error && e.message.trim()) return e.message
+  if (e && typeof e === 'object') {
+    const row = e as Record<string, unknown>
+    const error = typeof row.error === 'string' ? row.error.trim() : ''
+    const message = typeof row.message === 'string' ? row.message.trim() : ''
+    const detail = typeof row.detail === 'string' ? row.detail.trim() : ''
+    const head = error || message
+    if (head && detail && !head.includes(detail)) return `${head} (${detail})`
+    if (head) return head
+  }
+  return fallback
+}
+
+function withCycleEndPlaceholder(settings: WtlConsAlertSettings): WtlConsAlertSettings {
+  if (parseYmd(settings.cycleEnd)) return settings
+  return { ...settings, cycleEnd: defaultCycleEnd() }
 }
 
 function asBody(res: unknown): Record<string, unknown> {
@@ -119,7 +142,7 @@ export function WtlConsAlertSettingsDialog({
     if (!open) return
     let cancelled = false
     setSaveError(null)
-    setDraft(loadConsAlertSettings(workId))
+    setDraft(withCycleEndPlaceholder(loadConsAlertSettings(workId)))
     void call('', 'POST', {
       service: 'consAlertService',
       action: 'getSettings',
@@ -129,7 +152,12 @@ export function WtlConsAlertSettingsDialog({
         if (cancelled) return
         const body = asBody(res)
         if (body.settings && typeof body.settings === 'object') {
-          setDraft({ ...DEFAULT_CONS_ALERT, ...(body.settings as Partial<WtlConsAlertSettings>) })
+          setDraft(
+            withCycleEndPlaceholder({
+              ...DEFAULT_CONS_ALERT,
+              ...(body.settings as Partial<WtlConsAlertSettings>),
+            })
+          )
         }
       })
       .catch(() => undefined)
@@ -148,19 +176,30 @@ export function WtlConsAlertSettingsDialog({
   }
 
   const handleSave = () => {
+    const next = { ...draft }
+    if (next.cycleOn && next.cycleYears < 1) next.cycleYears = 1
+    if (next.cycleOn && !parseYmd(next.cycleEnd)) next.cycleEnd = defaultCycleEnd()
+    if (next.cycleOn) {
+      const end = parseYmd(next.cycleEnd)
+      const done = parseYmd(doneDate)
+      if (end && done && diffYmd(done, end) < 0) {
+        setSaveError('반복 종료일자는 준공일 이후여야 합니다.')
+        return
+      }
+    }
     setSaving(true)
     setSaveError(null)
-    void saveConsAlertSettings(workId, draft, kind)
+    void saveConsAlertSettings(workId, next, kind)
       .then(() => onOpenChange(false))
       .catch((e: unknown) => {
-        setSaveError(e instanceof Error ? e.message : '알림설정을 저장하지 못했습니다.')
+        setSaveError(failMessage(e, '알림설정을 저장하지 못했습니다.'))
       })
       .finally(() => setSaving(false))
   }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md gap-0 p-0 sm:max-w-md" layerZIndex={90}>
+      <DialogContent className="max-w-lg gap-0 p-0 sm:max-w-lg" layerZIndex={90}>
         <DialogHeader className="border-b border-border px-4 py-3">
           <DialogTitle className="flex items-center gap-1.5 text-sm font-semibold">
             <Bell className="h-4 w-4 text-primary" aria-hidden />
@@ -173,27 +212,58 @@ export function WtlConsAlertSettingsDialog({
 
         <div className="space-y-4 px-4 py-3 text-[12px]">
           <section className="space-y-2">
-            <h3 className="text-[11px] font-semibold text-slate-700">알림 주기</h3>
-            <label className="flex items-center gap-2 text-slate-700">
-              <NumInput
-                value={draft.cycleYears}
-                onChange={(v) => setNum('cycleYears', v)}
-                aria-label="알림 주기(년)"
+            <h3 className="text-[11px] font-semibold text-slate-700">알림 반복 주기</h3>
+            <label
+              className={cn(
+                'flex flex-wrap items-center gap-x-3 gap-y-2 text-slate-700',
+                !draft.cycleOn && 'opacity-55'
+              )}
+            >
+              <input
+                type="checkbox"
+                checked={draft.cycleOn}
+                aria-label="알림 반복 사용"
+                onChange={(e) => {
+                  const on = e.target.checked
+                  setDraft((prev) => ({
+                    ...prev,
+                    cycleOn: on,
+                    cycleYears: on && prev.cycleYears < 1 ? 1 : prev.cycleYears,
+                    cycleEnd: on && !parseYmd(prev.cycleEnd) ? defaultCycleEnd() : prev.cycleEnd,
+                  }))
+                }}
+                className="size-3.5 accent-primary"
               />
-              <span>년마다 알림</span>
+              <span className="flex items-center gap-2">
+                <NumInput
+                  value={draft.cycleYears}
+                  onChange={(v) => {
+                    const n = Math.max(1, Math.min(9999, Math.floor(Number(v) || 1)))
+                    setDraft((prev) => ({ ...prev, cycleYears: n }))
+                  }}
+                  aria-label="알림 반복 주기(년)"
+                />
+                <span>년마다 알림</span>
+              </span>
+              <span className="flex items-center gap-2">
+                <span>반복 종료일자</span>
+                <input
+                  type="date"
+                  value={draft.cycleEnd}
+                  aria-label="반복 종료일자"
+                  onChange={(e) => setDraft((prev) => ({ ...prev, cycleEnd: e.target.value }))}
+                  className="h-7 rounded border border-slate-200 bg-white px-1.5 text-[12px] outline-none focus:border-primary disabled:bg-slate-50 disabled:text-slate-400"
+                />
+              </span>
             </label>
-            <p className="text-[10px] text-slate-400">0년이면 주기 알림을 사용하지 않습니다.</p>
+            <p className="text-[10px] text-slate-400">종료일이 없으면 오늘로부터 5년까지 남습니다.</p>
           </section>
 
           <section className="space-y-2 border-t border-slate-100 pt-3">
-            <h3 className="text-[11px] font-semibold text-slate-700">
-              준공일 알림
-              {doneDate ? (
-                <span className="ml-1 font-normal text-slate-400">({doneDate || '—'})</span>
-              ) : null}
-            </h3>
+            <h3 className="text-[11px] font-semibold text-slate-700">준공일 알림</h3>
             <DayOffsetRow
               label="준공일"
+              baseDate={doneDate}
               beforeOn={draft.doneBeforeOn}
               beforeDays={draft.doneBeforeDays}
               afterOn={draft.doneAfterOn}
@@ -206,14 +276,10 @@ export function WtlConsAlertSettingsDialog({
           </section>
 
           <section className="space-y-2 border-t border-slate-100 pt-3">
-            <h3 className="text-[11px] font-semibold text-slate-700">
-              착수일 알림
-              {startDate ? (
-                <span className="ml-1 font-normal text-slate-400">({startDate || '—'})</span>
-              ) : null}
-            </h3>
+            <h3 className="text-[11px] font-semibold text-slate-700">착수일 알림</h3>
             <DayOffsetRow
               label="착수일"
+              baseDate={startDate}
               beforeOn={draft.startBeforeOn}
               beforeDays={draft.startBeforeDays}
               afterOn={draft.startAfterOn}
@@ -264,6 +330,7 @@ function NumInput({
 
 function DayOffsetRow({
   label,
+  baseDate,
   beforeOn,
   beforeDays,
   afterOn,
@@ -274,6 +341,7 @@ function DayOffsetRow({
   onAfterDays,
 }: {
   label: string
+  baseDate?: string
   beforeOn: boolean
   beforeDays: number
   afterOn: boolean
@@ -283,6 +351,8 @@ function DayOffsetRow({
   onAfterOn: (v: boolean) => void
   onAfterDays: (v: string) => void
 }) {
+  const beforeWhen = offsetYmd(baseDate, -beforeDays)
+  const afterWhen = offsetYmd(baseDate, afterDays)
   return (
     <div className="space-y-1.5">
       <label className={cn('flex flex-wrap items-center gap-1.5', !beforeOn && 'opacity-55')}>
@@ -295,6 +365,7 @@ function DayOffsetRow({
         <span>{label}</span>
         <NumInput value={beforeDays} onChange={onBeforeDays} aria-label={`${label} n일 전`} />
         <span>일 전 알림</span>
+        {beforeWhen ? <span className="text-slate-400">({beforeWhen})</span> : null}
       </label>
       <label className={cn('flex flex-wrap items-center gap-1.5', !afterOn && 'opacity-55')}>
         <input
@@ -306,6 +377,7 @@ function DayOffsetRow({
         <span>{label}</span>
         <NumInput value={afterDays} onChange={onAfterDays} aria-label={`${label} n일 후`} />
         <span>일 후 알림</span>
+        {afterWhen ? <span className="text-slate-400">({afterWhen})</span> : null}
       </label>
     </div>
   )

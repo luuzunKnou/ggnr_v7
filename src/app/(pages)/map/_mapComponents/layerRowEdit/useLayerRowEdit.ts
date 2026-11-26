@@ -108,8 +108,13 @@ function isOccupationLedgerTable(tableName: string): boolean {
   return isOccupationLedgerMainTableName(tableName);
 }
 
-/** 공통 점용대장 허가번호 칸 (하천·도로 prmt_no, 국공유지 permit_no) */
-function occupationPermitField(tableName: string): string {
+/** 공통 점용대장 허가번호 칸 (하천·도로 prmt_no, 국공유지 permit_no, 옛 표 perm_num) */
+function occupationPermitField(
+  tableName: string,
+  presetPermitField?: string
+): string {
+  const fromPreset = String(presetPermitField ?? "").trim();
+  if (fromPreset) return fromPreset;
   return getOccupationLedgerBindingByTable(tableName)?.binding.fields.permitField ?? "permit_no";
 }
 
@@ -623,7 +628,7 @@ export function useLayerRowEdit({
       }));
       // 공통 점용대장도 본표 고유키로 연결. 허가번호는 있으면 함께 적어 예전 행 찾기에 씀
       const extraValues: Record<string, string> = {};
-      const permitField = occupationPermitField(preset.tableName);
+      const permitField = occupationPermitField(preset.tableName, preset.permitField);
       const permitKey = Object.keys(draft).find((k) => k.toLowerCase() === permitField.toLowerCase());
       const permitVal = permitKey ? String(draft[permitKey] ?? "").trim() : "";
       // 국공유지 예전 필지(허가번호로만 묶임) 찾기용 — 필지 쪽 칸 이름은 permit_no
@@ -674,10 +679,11 @@ export function useLayerRowEdit({
       const changes = collectChanges();
       if (isCreateMode) {
         if (isOccupationLedgerTable(preset.tableName)) {
+          const permitName = occupationPermitField(preset.tableName, preset.permitField);
           const permitKey =
             Object.keys(draft).find(
-              (k) => k.toLowerCase() === occupationPermitField(preset.tableName).toLowerCase()
-            ) ?? occupationPermitField(preset.tableName);
+              (k) => k.toLowerCase() === permitName.toLowerCase()
+            ) ?? permitName;
           const permitVal = String(draft[permitKey] ?? "").trim();
           if (permitVal) changes[permitKey] = permitVal;
         }

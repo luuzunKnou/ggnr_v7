@@ -5,6 +5,25 @@
       <sld:Name>Default Styler</sld:Name>
       <sld:FeatureTypeStyle>
         <sld:Rule>
+          <ogc:Filter>
+            <ogc:PropertyIsEqualTo>
+              <ogc:Function name="env">
+                <ogc:Literal>ignore_scale</ogc:Literal>
+                <ogc:Literal>0</ogc:Literal>
+              </ogc:Function>
+              <ogc:Literal>1</ogc:Literal>
+            </ogc:PropertyIsEqualTo>
+          </ogc:Filter>
+          <sld:MinScaleDenominator>50000.0</sld:MinScaleDenominator>
+          <sld:LineSymbolizer>
+            <sld:Stroke>
+              <sld:CssParameter name="stroke">#A67C52</sld:CssParameter>
+              <sld:CssParameter name="stroke-opacity">0.85</sld:CssParameter>
+              <sld:CssParameter name="stroke-width">0.7</sld:CssParameter>
+            </sld:Stroke>
+          </sld:LineSymbolizer>
+        </sld:Rule>
+        <sld:Rule>
           <sld:MaxScaleDenominator>50000.0</sld:MaxScaleDenominator>
           <sld:LineSymbolizer>
             <sld:Stroke>

@@ -18,6 +18,8 @@ export interface IdentifyFeatureItem {
 
 export interface IdentifyLayerResult {
   tableName: string;
+  /** fields/CODE 키 — 분할이면 부모, 없으면 tableName */
+  physicalTable?: string;
   korName: string;
   titleField: string | null;
   /** 분할 레이어 식별 결과(부모 테이블+CQL). 목록·자동 패널에서 부모보다 우선 */
@@ -27,6 +29,11 @@ export interface IdentifyLayerResult {
 
 export interface IdentifyPopupState {
   coordinate: [number, number];
+  /**
+   * 실제 마우스 클릭 화면 좌표(client). 플로팅 모달 모서리 기준.
+   * 지도 피처 좌표→pixel 변환과 어긋날 수 있어 별도 보관.
+   */
+  screenPixel?: { left: number; top: number };
   results: IdentifyLayerResult[];
   /** 시설관리 검색 등 — 다중 식별 목록 헤더 문구 오버라이드 */
   listHeaderLabel?: string;
@@ -130,6 +137,20 @@ export function useFeatureIdentify(
       const coord = evt.coordinate as [number, number];
       const [x, y] = coord;
       const filters = tableFiltersRef.current;
+      const oe = evt.originalEvent as MouseEvent | PointerEvent | TouchEvent | undefined;
+      let screenPixel: { left: number; top: number } | undefined;
+      if (oe && 'clientX' in oe && Number.isFinite(oe.clientX) && Number.isFinite(oe.clientY)) {
+        screenPixel = { left: oe.clientX, top: oe.clientY };
+      } else if (Array.isArray(evt.pixel) && evt.pixel.length >= 2) {
+        const el = evt.map.getTargetElement?.() as HTMLElement | null | undefined;
+        const rect = el?.getBoundingClientRect?.();
+        if (rect) {
+          screenPixel = {
+            left: rect.left + evt.pixel[0],
+            top: rect.top + evt.pixel[1],
+          };
+        }
+      }
 
       try {
         const res = await call('', 'POST', {
@@ -144,11 +165,25 @@ export function useFeatureIdentify(
             ...(filters && Object.keys(filters).length > 0 ? { tableFilters: filters } : {}),
           },
         });
+        /** 측정·메모 등으로 비활성된 뒤 도착한 응답은 버림 */
+        if (disabledRef.current) {
+          closePopup();
+          return;
+        }
+        if (Date.now() < ignoreClickUntilRef.current) {
+          closePopup();
+          return;
+        }
+        const extUntilAfter = externalIgnoreRef.current?.current ?? 0;
+        if (Date.now() < extUntilAfter) {
+          closePopup();
+          return;
+        }
         const data = res?.data ?? res;
         const results: IdentifyLayerResult[] = Array.isArray(data?.results) ? data.results : [];
 
         if (results.length > 0) {
-          setPopupState({ coordinate: coord, results });
+          setPopupState({ coordinate: coord, screenPixel, results });
           overlayRef.current?.setPosition(coord);
         } else {
           closePopup();

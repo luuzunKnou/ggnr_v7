@@ -13,10 +13,15 @@
           <sld:Title>swl_pipe_lm_sba003</sld:Title>
           <sld:Abstract>Abstract</sld:Abstract>
           <ogc:Filter>
-            <ogc:PropertyIsLessThanOrEqualTo>
-              <ogc:PropertyName>std_dip</ogc:PropertyName>
-              <ogc:Literal>100</ogc:Literal>
-            </ogc:PropertyIsLessThanOrEqualTo>
+            <ogc:Or>
+              <ogc:PropertyIsNull>
+                <ogc:PropertyName>std_dip</ogc:PropertyName>
+              </ogc:PropertyIsNull>
+              <ogc:PropertyIsLessThanOrEqualTo>
+                <ogc:PropertyName>std_dip</ogc:PropertyName>
+                <ogc:Literal>100</ogc:Literal>
+              </ogc:PropertyIsLessThanOrEqualTo>
+            </ogc:Or>
           </ogc:Filter>
           <sld:LineSymbolizer>
             <sld:Stroke>
@@ -71,10 +76,15 @@
                 </ogc:Function>
                 <ogc:Literal>0</ogc:Literal>
               </ogc:PropertyIsGreaterThan>
-              <ogc:PropertyIsLessThanOrEqualTo>
-                <ogc:PropertyName>std_dip</ogc:PropertyName>
-                <ogc:Literal>100</ogc:Literal>
-              </ogc:PropertyIsLessThanOrEqualTo>
+              <ogc:Or>
+                <ogc:PropertyIsNull>
+                  <ogc:PropertyName>std_dip</ogc:PropertyName>
+                </ogc:PropertyIsNull>
+                <ogc:PropertyIsLessThanOrEqualTo>
+                  <ogc:PropertyName>std_dip</ogc:PropertyName>
+                  <ogc:Literal>100</ogc:Literal>
+                </ogc:PropertyIsLessThanOrEqualTo>
+              </ogc:Or>
             </ogc:And>
           </ogc:Filter>
           <sld:TextSymbolizer>
@@ -166,10 +176,15 @@
           <sld:Name>flow_arrow</sld:Name>
           <sld:Title>swl_pipe_lm_sba003_arrow</sld:Title>
           <ogc:Filter>
-            <ogc:PropertyIsLessThanOrEqualTo>
-              <ogc:PropertyName>std_dip</ogc:PropertyName>
-              <ogc:Literal>100</ogc:Literal>
-            </ogc:PropertyIsLessThanOrEqualTo>
+            <ogc:Or>
+              <ogc:PropertyIsNull>
+                <ogc:PropertyName>std_dip</ogc:PropertyName>
+              </ogc:PropertyIsNull>
+              <ogc:PropertyIsLessThanOrEqualTo>
+                <ogc:PropertyName>std_dip</ogc:PropertyName>
+                <ogc:Literal>100</ogc:Literal>
+              </ogc:PropertyIsLessThanOrEqualTo>
+            </ogc:Or>
           </ogc:Filter>
           <sld:MaxScaleDenominator>10000</sld:MaxScaleDenominator>
           <sld:PointSymbolizer>
@@ -244,7 +259,7 @@
                   </sld:CssParameter>
                 </sld:Stroke>
               </sld:Mark>
-              <sld:Size><ogc:Function name="if_then_else"><ogc:Function name="greaterThan"><ogc:Function name="env"><ogc:Literal>ignore_scale</ogc:Literal><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>18</ogc:Literal>
+              <sld:Size>
                 <ogc:Function name="if_then_else">
                   <ogc:Function name="greaterThan">
                     <ogc:Function name="env">
@@ -271,7 +286,7 @@
                     <ogc:Literal>0</ogc:Literal>
                   </ogc:Function>
                 </ogc:Function>
-              </ogc:Function></sld:Size>
+              </sld:Size>
               <sld:Rotation>
                 <ogc:Function name="endAngle">
                   <ogc:PropertyName>geom</ogc:PropertyName>
@@ -516,7 +531,7 @@
                   </sld:CssParameter>
                 </sld:Stroke>
               </sld:Mark>
-              <sld:Size><ogc:Function name="if_then_else"><ogc:Function name="greaterThan"><ogc:Function name="env"><ogc:Literal>ignore_scale</ogc:Literal><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>0</ogc:Literal></ogc:Function><ogc:Literal>18</ogc:Literal>
+              <sld:Size>
                 <ogc:Function name="if_then_else">
                   <ogc:Function name="greaterThan">
                     <ogc:Function name="env">
@@ -543,7 +558,7 @@
                     <ogc:Literal>0</ogc:Literal>
                   </ogc:Function>
                 </ogc:Function>
-              </ogc:Function></sld:Size>
+              </sld:Size>
               <sld:Rotation>
                 <ogc:Function name="endAngle">
                   <ogc:PropertyName>geom</ogc:PropertyName>

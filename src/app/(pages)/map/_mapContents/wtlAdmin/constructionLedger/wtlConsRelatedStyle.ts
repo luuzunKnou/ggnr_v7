@@ -1,6 +1,20 @@
 /**
- * 공사대장 관련시설 — GeoServer 레이어 스타일(조건 심볼 포함) → OL Style
- * 밸브 등 ftr_cde별 ExternalGraphic SLD는 단일 symbolUrl이 없어 조건 맵을 쓴다.
+ * =============================================================================
+ * [공사대장 · 관련시설 아이콘 의도 — 임의로 바꾸지 말 것]
+ * =============================================================================
+ *
+ * - 스타일 조회 키 = 레이어명(layerKey). 예: wtl_valv_ps, wtl_fire_ps
+ * - 심볼 URL = 그 레이어 GeoServer SLD에 적힌 ExternalGraphic만
+ *   · SLD에 ftr_cde/saa_cde 조건이 있으면 styleCode로 고름
+ *   · 조건에 없거나 코드가 없으면 해당 스타일 기본 심볼
+ *
+ * 금지:
+ * - ftr_cde로 `{layer}_{code}.svg` / `wtl_valv_ps_sa202` 스타일명을 임의 조립
+ *   (코드마다 아이콘·전용 스타일이 있는 게 아님. WMS/SLD가 진실)
+ * - SA202 등 특정 코드 하드코딩
+ *
+ * 목록·맵무브 의도: WtlConsRelatedTabs / useWtlConsMapLayer 상단 주석.
+ * =============================================================================
  */
 'use client'
 
@@ -22,6 +36,8 @@ type StyleBundle = {
   geometryType: GeometryType
   /** ftr_cde 등 → 절대/공개 심볼 URL */
   symbolByCode: Record<string, string>
+  /** ftr_cde 등 → 해당 Rule SLD Size(픽셀) */
+  sizeByCode: Record<string, number>
   defaultSymbolUrl: string | null
 }
 
@@ -29,6 +45,8 @@ const bundleCache = new Map<string, StyleBundle | null>()
 const bundleInflight = new Map<string, Promise<StyleBundle | null>>()
 const okIconUrls = new Set<string>()
 const missingIconUrls = new Set<string>()
+/** 로드된 심볼 원본 픽셀 — WMS Size와 맞추려면 scale = size / max(w,h) */
+const iconNaturalSize = new Map<string, { w: number; h: number }>()
 const styleInstanceCache = new Map<string, Style>()
 
 /** SLD·심볼 파일 변경 반영용. invalidate 시 증가 → URL ?v= */
@@ -44,6 +62,7 @@ export function invalidateRelatedFacilityStyleCache(): void {
   bundleInflight.clear()
   okIconUrls.clear()
   missingIconUrls.clear()
+  iconNaturalSize.clear()
   styleInstanceCache.clear()
 }
 
@@ -84,10 +103,13 @@ async function loadImage(src: string): Promise<HTMLImageElement> {
 }
 
 async function ensureIcon(src: string): Promise<boolean> {
-  if (okIconUrls.has(src)) return true
+  if (okIconUrls.has(src) && iconNaturalSize.has(src)) return true
   if (missingIconUrls.has(src)) return false
   try {
-    await loadImage(src)
+    const img = await loadImage(src)
+    const w = img.naturalWidth || img.width || 0
+    const h = img.naturalHeight || img.height || 0
+    if (w > 0 && h > 0) iconNaturalSize.set(src, { w, h })
     okIconUrls.add(src)
     return true
   } catch {
@@ -148,11 +170,14 @@ async function fetchStyleBundle(styleName: string): Promise<StyleBundle | null> 
       if (!geometryType) geometryType = 'POINT'
 
       const symbolByCode: Record<string, string> = {}
+      const sizeByCode: Record<string, number> = {}
       if (format !== 'css' && body) {
         for (const c of parseSldConditionalSymbols(body)) {
           const href = resolveHref(c.symbolUrl)
           if (!href) continue
-          symbolByCode[c.value.toUpperCase()] = withCacheBust(href)
+          const code = c.value.toUpperCase()
+          symbolByCode[code] = withCacheBust(href)
+          if (c.size != null && c.size > 0) sizeByCode[code] = c.size
         }
       }
 
@@ -174,6 +199,7 @@ async function fetchStyleBundle(styleName: string): Promise<StyleBundle | null> 
         styleProps,
         geometryType,
         symbolByCode,
+        sizeByCode,
         defaultSymbolUrl,
       }
       bundleCache.set(key, bundle)
@@ -190,7 +216,18 @@ async function fetchStyleBundle(styleName: string): Promise<StyleBundle | null> 
   return p
 }
 
-function pickSymbolUrl(bundle: StyleBundle, styleCode?: string | null): string | null {
+/**
+ * 아이콘 URL은 SLD에 적힌 것만 사용.
+ * - 조건 심볼(symbolByCode)에 styleCode가 있으면 그 ExternalGraphic
+ * - 없으면 스타일 기본 심볼
+ * ftr_cde로 `{layer}_{code}.svg` 를 임의 조합하지 않음(파일/스타일이 코드마다 있는 건 아님).
+ */
+function pickSymbolUrl(
+  bundle: StyleBundle,
+  styleCode?: string | null,
+  _styleName?: string
+): string | null {
+  void _styleName
   const code = String(styleCode ?? '')
     .trim()
     .toUpperCase()
@@ -228,21 +265,42 @@ function fallbackStyle(geomType: string | undefined): Style | Style[] {
   })
 }
 
-/** GeoServer SLD Size(기본 18)와 맞춤. scale(원본/24)은 SVG 실픽셀과 어긋남 */
+/**
+ * GeoServer SLD `<Size>` — 지도에 그릴 목표 픽셀(기본 18, 지하시설물 ignore_scale=1과 동일).
+ */
 function iconPixelSize(markSize: number | undefined): number {
   const n = Number.isFinite(markSize) && (markSize as number) > 0 ? (markSize as number) : 18
-  return Math.min(22, Math.max(16, Math.round(n)))
+  return Math.max(1, Math.round(n))
+}
+
+function pickMarkSize(bundle: StyleBundle, styleCode?: string | null): number {
+  const code = String(styleCode ?? '')
+    .trim()
+    .toUpperCase()
+  if (code && bundle.sizeByCode[code] > 0) return iconPixelSize(bundle.sizeByCode[code])
+  return iconPixelSize(bundle.styleProps.markSize)
+}
+
+/**
+ * WMS는 Size=N이면 N픽셀로 그림. OL은 SVG 원본이 크면 width/height만으로 어긋날 수 있어
+ * scale = Size / 원본픽셀 로 맞춘다. (변동이력·누수와 같은 계열)
+ */
+function iconScaleForSrc(src: string, markPx: number): number {
+  const nat = iconNaturalSize.get(src)
+  const dim = Math.max(nat?.w ?? 0, nat?.h ?? 0)
+  if (dim > 0) return markPx / dim
+  return markPx / 24
 }
 
 function buildStyle(
   styleName: string,
   bundle: StyleBundle,
   geomType: string | undefined,
-  iconSrc: string | null
+  iconSrc: string | null,
+  styleCode?: string | null
 ): Style {
   const p = bundle.styleProps
-  const markSize = p.markSize ?? 18
-  const iconPx = iconPixelSize(markSize)
+  const iconPx = pickMarkSize(bundle, styleCode)
   const strokeHex = p.strokeColor ?? p.fillColor ?? RELATED_STROKE
   const fillHex = p.fillColor ?? RELATED_STROKE
   const strokeW = Math.max(1, p.strokeWidth ?? 2)
@@ -260,7 +318,8 @@ function buildStyle(
               ? 'line'
               : 'polygon'
 
-  const cacheKey = `${styleName}|${kind}|${iconSrc ?? ''}|${strokeHex}|${iconPx}`
+  const scale = iconSrc ? iconScaleForSrc(iconSrc, iconPx) : 1
+  const cacheKey = `${styleName}|${kind}|${iconSrc ?? ''}|${styleCode ?? ''}|${strokeHex}|${iconPx}|${scale.toFixed(4)}`
   const cached = styleInstanceCache.get(cacheKey)
   if (cached) return cached
 
@@ -271,8 +330,7 @@ function buildStyle(
         zIndex: 2,
         image: new Icon({
           src: iconSrc,
-          width: iconPx,
-          height: iconPx,
+          scale,
           anchor: [0.5, 0.5],
           opacity: 1,
         }),
@@ -322,32 +380,34 @@ export function resolveRelatedFacilityOlStyle(
   }
 
   const isPoint = geomType === 'Point' || geomType === 'MultiPoint' || bundle.geometryType === 'POINT'
-  const symbolUrl = isPoint ? pickSymbolUrl(bundle, styleCode) : null
+  const symbolUrl = isPoint ? pickSymbolUrl(bundle, styleCode, name) : null
 
   if (symbolUrl && isPoint) {
     if (missingIconUrls.has(symbolUrl)) {
-      return buildStyle(key, bundle, geomType, null)
+      return buildStyle(key, bundle, geomType, null, styleCode)
     }
     if (okIconUrls.has(symbolUrl)) {
-      return buildStyle(key, bundle, geomType, symbolUrl)
+      return buildStyle(key, bundle, geomType, symbolUrl, styleCode)
     }
     void ensureIcon(symbolUrl).then(() => onReady())
-    return buildStyle(key, bundle, geomType, null)
+    return buildStyle(key, bundle, geomType, null, styleCode)
   }
 
-  return buildStyle(key, bundle, geomType, null)
+  return buildStyle(key, bundle, geomType, null, styleCode)
 }
 
-/** 선택 강조용 — 로드된 심볼 URL·표시 크기 (없으면 null) */
+/** 선택 강조용 — 로드된 심볼 URL·SLD Size 기준 scale (없으면 null) */
 export function peekRelatedFacilityIcon(
   styleName: string,
   styleCode?: string | null
-): { src: string; size: number } | null {
-  const bundle = bundleCache.get(styleName.trim().toLowerCase())
+): { src: string; size: number; scale: number } | null {
+  const name = styleName.trim()
+  const bundle = bundleCache.get(name.toLowerCase())
   if (!bundle) return null
-  const url = pickSymbolUrl(bundle, styleCode)
+  const url = pickSymbolUrl(bundle, styleCode, name)
   if (!url || missingIconUrls.has(url) || !okIconUrls.has(url)) return null
-  return { src: url, size: iconPixelSize(bundle.styleProps.markSize) }
+  const size = pickMarkSize(bundle, styleCode)
+  return { src: url, size, scale: iconScaleForSrc(url, size) }
 }
 
 /**
@@ -364,9 +424,10 @@ export async function prefetchRelatedFacilityStyles(
   await Promise.all(names.map((n) => fetchStyleBundle(n)))
   const urls = new Set<string>()
   for (const e of entries) {
-    const bundle = bundleCache.get(e.styleName.trim().toLowerCase())
+    const name = e.styleName.trim()
+    const bundle = bundleCache.get(name.toLowerCase())
     if (!bundle) continue
-    const url = pickSymbolUrl(bundle, e.styleCode)
+    const url = pickSymbolUrl(bundle, e.styleCode, name)
     if (url) urls.add(url)
   }
   await Promise.all([...urls].map((u) => ensureIcon(u)))

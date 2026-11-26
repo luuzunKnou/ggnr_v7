@@ -1,10 +1,17 @@
 'use client'
 
 import { Map, View } from 'ol'
+import Feature from 'ol/Feature'
+import Point from 'ol/geom/Point'
 import ImageLayer from 'ol/layer/Image'
+import VectorLayer from 'ol/layer/Vector'
 import ImageWMS from 'ol/source/ImageWMS'
+import VectorSource from 'ol/source/Vector'
 import type XYZ from 'ol/source/XYZ'
+import { Circle as CircleStyle, Fill, Stroke, Style, Text } from 'ol/style'
+import type { FeatureLike } from 'ol/Feature'
 import { defaults as defaultControls } from 'ol/control'
+import { fromLonLat } from 'ol/proj'
 import { fromString } from 'ol/transform'
 import type MapType from 'ol/Map'
 import { geoserverWmsImageLoadFunction } from '@/lib/geoserverWmsImageLoad'
@@ -15,18 +22,49 @@ import { SCALE_BAR_PX } from '../../../_mapComponents/hooks/mapScale'
 import { WORKSPACE } from '../../../_mapComponents/layerFactory/serviceLayerFactory'
 import { createPrintCaptureBackgroundLayer } from '../../mapPrint/mapPrintCapture'
 
-const CAPTURE_W = 560
-const CAPTURE_H = 320
-/** 구역 캡처 목표 축척막대(m) — 클러스터·화면 이동과 동일 */
+/** A4 세로 보고서용 — 인쇄 선명도 */
+const CAPTURE_W = 960
+const CAPTURE_H = 540
+/** 구역 캡처 목표 축척막대(m) — git 기존 밴드(30~40, 목표 35) */
 const ZONE_TARGET_SCALE_M = 35
 const ZONE_MIN_SCALE_M = 30
 const ZONE_MAX_SCALE_M = 40
-const METER_LABEL_ENV = 'wtl_meta_ps_show_label:1'
+/** 벡터 겹침 시 확대 하한(축척막대 m) — 이보다 더 확대하지 않음 */
+const ZONE_CAPTURE_OVERLAP_MIN_SCALE_M = 15
+/** 번호 마커 원 반지름(px) — 겹침·화면 안 판정 */
+const METER_MARKER_RADIUS_PX = 12
+const MARKER_EDGE_PAD_PX = METER_MARKER_RADIUS_PX + 8
+
+const CAPTURE_BUILDING_LAYERS = [
+  { tableName: 'tl_sgco_rnadr_mst', zIndex: 8 },
+  { tableName: 'tl_sgco_rnadr_dong', zIndex: 9 },
+] as const
 
 export type MeterZoneCapturePoint = {
   label: string
   point4326: [number, number]
   pnu?: string | null
+  /** 보고서 표 번호(1부터) — 지도 벡터 마커에 표시 */
+  index: number
+}
+
+function meterIndexStyle(feature: FeatureLike): Style {
+  const idx = String(feature.get('index') ?? '')
+  return new Style({
+    image: new CircleStyle({
+      radius: 12,
+      fill: new Fill({ color: '#2563eb' }),
+      stroke: new Stroke({ color: '#ffffff', width: 2.5 }),
+    }),
+    text: new Text({
+      text: idx,
+      font: 'bold 12px "Malgun Gothic","Apple SD Gothic Neo",sans-serif',
+      fill: new Fill({ color: '#ffffff' }),
+      textAlign: 'center',
+      textBaseline: 'middle',
+    }),
+    zIndex: 30,
+  })
 }
 
 export type MeterZoneCaptureResult = {
@@ -74,6 +112,12 @@ async function raceUntil(
   await Promise.race([work, whenAborted(signal)])
 }
 
+function waitMs(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms)
+  })
+}
+
 function waitRenderComplete(map: MapType, timeoutMs: number): Promise<void> {
   return new Promise((resolve) => {
     let done = false
@@ -83,23 +127,28 @@ function waitRenderComplete(map: MapType, timeoutMs: number): Promise<void> {
       resolve()
     }
     map.once('rendercomplete', finish)
-    map.render()
+    map.renderSync()
     window.setTimeout(finish, timeoutMs)
   })
 }
 
 type ArmedWait = {
   promise: Promise<void>
-  /** 렌더를 건 뒤에 호출. 그 전에 끝나면 타일 요청 전에 통과한다. */
+  /** 뷰·파라미터 갱신·render 직후 호출. 타일 요청이 큐에 잡힐 여유를 둔다. */
   arm: () => void
 }
 
-/** 타일 대기. arm 이후 요청이 없으면 캐시로 보고 바로 통과. */
-function watchTiles(source: XYZ, timeoutMs: number): ArmedWait {
+/**
+ * XYZ 타일 대기.
+ * arm 직후 바로 통과하지 않고, OL이 타일 요청을 걸 여유(grace)를 둔 뒤
+ * pending==0일 때만 통과 — 미로드 격자(뿌연 칸) 캡처 방지.
+ */
+function watchTiles(source: XYZ, timeoutMs: number, graceMs = 280): ArmedWait {
   let pending = 0
   let settled = false
   let armed = false
   let idleTimer: number | null = null
+  let graceTimer: number | null = null
   let capTimer: number | null = null
   let resolveFn: () => void = () => {}
   const promise = new Promise<void>((resolve) => {
@@ -109,6 +158,7 @@ function watchTiles(source: XYZ, timeoutMs: number): ArmedWait {
     if (settled) return
     settled = true
     if (idleTimer != null) window.clearTimeout(idleTimer)
+    if (graceTimer != null) window.clearTimeout(graceTimer)
     if (capTimer != null) window.clearTimeout(capTimer)
     source.un('tileloadstart', onStart)
     source.un('tileloadend', onEnd)
@@ -120,11 +170,15 @@ function watchTiles(source: XYZ, timeoutMs: number): ArmedWait {
     if (idleTimer != null) window.clearTimeout(idleTimer)
     idleTimer = window.setTimeout(() => {
       if (pending === 0) finish()
-    }, 30)
+    }, 120)
   }
   const onStart = () => {
     pending += 1
     if (idleTimer != null) window.clearTimeout(idleTimer)
+    if (graceTimer != null) {
+      window.clearTimeout(graceTimer)
+      graceTimer = null
+    }
   }
   const onEnd = () => {
     pending = Math.max(0, pending - 1)
@@ -138,13 +192,18 @@ function watchTiles(source: XYZ, timeoutMs: number): ArmedWait {
     promise,
     arm() {
       armed = true
-      scheduleIdle()
+      if (graceTimer != null) window.clearTimeout(graceTimer)
+      // 뷰 변경 직후 타일 요청이 오기 전에 idle로 통과하지 않도록 유예
+      graceTimer = window.setTimeout(() => {
+        graceTimer = null
+        if (pending === 0) scheduleIdle()
+      }, graceMs)
     },
   }
 }
 
-/** WMS 한 장. 로드가 시작되지 않으면 캐시로 보고 곧 통과. */
-function watchImageWms(source: ImageWMS, timeoutMs: number): ArmedWait {
+/** WMS 한 장. arm 후 요청이 없으면 캐시로 보고 통과(유예 후). */
+function watchImageWms(source: ImageWMS, timeoutMs: number, graceMs = 320): ArmedWait {
   let settled = false
   let armed = false
   let started = false
@@ -185,9 +244,10 @@ function watchImageWms(source: ImageWMS, timeoutMs: number): ArmedWait {
         finish()
         return
       }
+      if (idleTimer != null) window.clearTimeout(idleTimer)
       idleTimer = window.setTimeout(() => {
         if (!started) finish()
-      }, 40)
+      }, graceMs)
     },
   }
 }
@@ -216,13 +276,6 @@ function buildJijukPnuCql(pnus: string[]): string | undefined {
   if (unique.length === 0) return undefined
   const list = unique.map((p) => `'${p.replace(/'/g, "''")}'`).join(',')
   return `pnu IN (${list})`
-}
-
-function buildMetNumCql(labels: string[]): string | undefined {
-  const unique = [...new Set(labels.map((n) => String(n ?? '').trim()).filter(Boolean))]
-  if (unique.length === 0) return undefined
-  const list = unique.map((n) => `'${n.replace(/'/g, "''")}'`).join(',')
-  return `met_num IN (${list})`
 }
 
 function compositeOffscreenToCanvas(map: MapType, target: HTMLCanvasElement): boolean {
@@ -287,7 +340,7 @@ function applyViewToExtent(
     resolution = ZONE_TARGET_SCALE_M / SCALE_BAR_PX
   }
 
-  // 작은 구역도 35m 근처로 — fit만 쓰면 과도 확대됨
+  // 작은 구역도 35m 근처로 — fit만 쓰면 과도 확대됨 (git 기존 로직)
   const scaleAtFit = resolution * SCALE_BAR_PX
   const targetRes = ZONE_TARGET_SCALE_M / SCALE_BAR_PX
   const maxRes = ZONE_MAX_SCALE_M / SCALE_BAR_PX
@@ -303,6 +356,78 @@ function applyViewToExtent(
   view.setCenter([(extent[0] + extent[2]) / 2, (extent[1] + extent[3]) / 2])
   view.setResolution(resolution)
   return extent
+}
+
+/** 마커 중심이 화면 가장자리 패딩 안에 있는지 */
+function allMarkersInsideFrame(
+  map: MapType,
+  points: MeterZoneCapturePoint[]
+): boolean {
+  const pad = MARKER_EDGE_PAD_PX
+  for (const p of points) {
+    const lon = Number(p.point4326[0])
+    const lat = Number(p.point4326[1])
+    if (!Number.isFinite(lon) || !Number.isFinite(lat)) continue
+    const pixel = map.getPixelFromCoordinate(fromLonLat([lon, lat]))
+    if (!pixel || !Number.isFinite(pixel[0]) || !Number.isFinite(pixel[1])) {
+      return false
+    }
+    if (
+      pixel[0] < pad ||
+      pixel[1] < pad ||
+      pixel[0] > CAPTURE_W - pad ||
+      pixel[1] > CAPTURE_H - pad
+    ) {
+      return false
+    }
+  }
+  return true
+}
+
+/** 번호 마커 스크린 좌표 기준 원 겹침 여부 */
+function meterMarkersOverlap(
+  map: MapType,
+  points: MeterZoneCapturePoint[]
+): boolean {
+  const coords: Array<[number, number]> = []
+  for (const p of points) {
+    const lon = Number(p.point4326[0])
+    const lat = Number(p.point4326[1])
+    if (!Number.isFinite(lon) || !Number.isFinite(lat)) continue
+    const pixel = map.getPixelFromCoordinate(fromLonLat([lon, lat]))
+    if (!pixel || !Number.isFinite(pixel[0]) || !Number.isFinite(pixel[1])) continue
+    coords.push([pixel[0], pixel[1]])
+  }
+  const minDist = METER_MARKER_RADIUS_PX * 2
+  for (let i = 0; i < coords.length; i++) {
+    for (let j = i + 1; j < coords.length; j++) {
+      const dx = coords[i]![0] - coords[j]![0]
+      const dy = coords[i]![1] - coords[j]![1]
+      if (Math.hypot(dx, dy) < minDist) return true
+    }
+  }
+  return false
+}
+
+/** 타일 해상도 1단계 확대(스냅). 15m 미만 금지 */
+function zoomInOneResolutionStep(view: View): boolean {
+  const current = Number(view.getResolution())
+  if (!Number.isFinite(current) || current <= 0) return false
+  const floorRes = ZONE_CAPTURE_OVERLAP_MIN_SCALE_M / SCALE_BAR_PX
+  if (current <= floorRes + 1e-12) return false
+
+  let next: number | null = null
+  const idx = RESOLUTIONS_3857.findIndex((r) => Math.abs(r - current) < r * 1e-6)
+  if (idx >= 0 && idx < RESOLUTIONS_3857.length - 1) {
+    next = RESOLUTIONS_3857[idx + 1]!
+  } else {
+    const tighter = RESOLUTIONS_3857.filter((r) => r < current - 1e-12)
+    next = tighter.length > 0 ? Math.max(...tighter) : null
+  }
+  if (next == null || next < floorRes - 1e-12) return false
+  if (next >= current - 1e-12) return false
+  view.setResolution(next)
+  return true
 }
 
 /**
@@ -350,27 +475,38 @@ export function createMeterZoneCaptureSession(
     visible: false,
   })
 
-  // 구역 선택과 동일 — 해당 구역 급수전만 WMS
-  const meterSource = new ImageWMS({
-    url: `${geoServerBase}/${WORKSPACE}/wms`,
-    params: {
-      LAYERS: `${WORKSPACE}:wtl_meta_ps`,
-      STYLES: 'wtl_meta_ps',
-      TRANSPARENT: true,
-      FORMAT: 'image/png',
-      ENV: METER_LABEL_ENV,
-    },
-    serverType: 'geoserver',
-    ratio: 1,
-    imageLoadFunction: geoserverWmsImageLoadFunction,
-    crossOrigin: 'anonymous',
-  })
-  const meterLayer = new ImageLayer({
-    source: meterSource,
-    zIndex: 15,
-    visible: false,
+  const buildingEntries = CAPTURE_BUILDING_LAYERS.map(({ tableName, zIndex }) => {
+    const source = new ImageWMS({
+      url: `${geoServerBase}/${WORKSPACE}/wms`,
+      params: {
+        LAYERS: `${WORKSPACE}:${tableName}`,
+        STYLES: tableName,
+        TRANSPARENT: true,
+        FORMAT: 'image/png',
+      },
+      serverType: 'geoserver',
+      ratio: 1,
+      imageLoadFunction: geoserverWmsImageLoadFunction,
+      crossOrigin: 'anonymous',
+    })
+    const layer = new ImageLayer({
+      source,
+      zIndex,
+      visible: true,
+    })
+    return { source, layer }
   })
 
+  // 보고서 캡처: 계량기 WMS 미사용 — 번호 벡터만 표시
+  const indexSource = new VectorSource()
+  const indexLayer = new VectorLayer({
+    source: indexSource,
+    style: meterIndexStyle,
+    zIndex: 40,
+    visible: true,
+  })
+
+  // git 기존: 확대 스냅(constrainResolution)
   const view = new View({
     resolutions: RESOLUTIONS_3857,
     minZoom: 0,
@@ -380,7 +516,7 @@ export function createMeterZoneCaptureSession(
 
   const map = new Map({
     target: host,
-    layers: [bg, jijukLayer, meterLayer],
+    layers: [bg, ...buildingEntries.map((e) => e.layer), jijukLayer, indexLayer],
     view,
     controls: defaultControls({ attribution: false, zoom: false }),
     interactions: [],
@@ -391,26 +527,51 @@ export function createMeterZoneCaptureSession(
   let disposed = false
   let captureCount = 0
 
+  async function waitLayersReady(signal?: AbortSignal): Promise<void> {
+    const tileCap = captureCount === 0 ? 7000 : 5000
+    const wmsCap = captureCount === 0 ? 6000 : 4500
+    const tileWait = tileSource ? watchTiles(tileSource, tileCap) : null
+    const wmsWaits = [
+      ...(jijukLayer.getVisible()
+        ? [watchImageWms(jijukSource, wmsCap)]
+        : []),
+      ...buildingEntries
+        .filter((e) => e.layer.getVisible())
+        .map((e) => watchImageWms(e.source, wmsCap)),
+    ]
+    map.renderSync()
+    tileWait?.arm()
+    for (const w of wmsWaits) w.arm()
+    throwIfAborted(signal)
+    await raceUntil(
+      Promise.all([
+        tileWait?.promise ?? Promise.resolve(),
+        ...wmsWaits.map((w) => w.promise),
+      ]).then(() => undefined),
+      signal
+    )
+    throwIfAborted(signal)
+    // 타일 그린 뒤 한 프레임 더 안정화 — 미로드·빈 지도 캡처 방지
+    await raceUntil(waitRenderComplete(map, 2500), signal)
+    await raceUntil(waitMs(220), signal)
+    await raceUntil(waitRenderComplete(map, 1800), signal)
+  }
+
   return {
     async captureZone(extent3857, points, signal) {
       if (disposed || signal?.aborted) {
         return { dataUrl: null, status: 'failed', reason: '캡처 취소됨' }
       }
       try {
-        // 화면은 35m 기준으로 칸 전체 채움 — 레이어만 해당 구역
+        // git 기존 맞춤(30~40m 밴드 + 스냅) — 구역 fit 우선
+        map.setSize([CAPTURE_W, CAPTURE_H])
+        map.updateSize()
         applyViewToExtent(view, extent3857)
 
         const pnus = points
           .map((p) => String(p.pnu ?? '').replace(/\D/g, '').slice(0, 19))
           .filter(Boolean)
         const jijukCql = buildJijukPnuCql(pnus)
-        const meterCql = buildMetNumCql(points.map((p) => p.label))
-        // 첫 구역만 타일 워밍 여유. 이후·캐시는 로드가 끝나는 즉시 통과.
-        const tileCap = captureCount === 0 ? 1600 : 700
-        const wmsCap = captureCount === 0 ? 1200 : 600
-        const tileWait = tileSource ? watchTiles(tileSource, tileCap) : null
-        const jijukWait = jijukCql ? watchImageWms(jijukSource, wmsCap) : null
-        const meterWait = meterCql ? watchImageWms(meterSource, wmsCap) : null
 
         if (jijukCql) {
           jijukLayer.setVisible(true)
@@ -418,40 +579,52 @@ export function createMeterZoneCaptureSession(
             LAYERS: `${WORKSPACE}:jijuk`,
             STYLES: 'jijuk',
             CQL_FILTER: jijukCql,
+            _: String(Date.now()),
           })
         } else {
           jijukLayer.setVisible(false)
           jijukSource.updateParams({ CQL_FILTER: undefined })
         }
 
-        if (meterCql) {
-          meterLayer.setVisible(true)
-          meterSource.updateParams({
-            LAYERS: `${WORKSPACE}:wtl_meta_ps`,
-            STYLES: 'wtl_meta_ps',
-            ENV: METER_LABEL_ENV,
-            CQL_FILTER: meterCql,
-          })
-        } else {
-          meterLayer.setVisible(false)
-          meterSource.updateParams({ CQL_FILTER: undefined })
+        for (const { source, layer } of buildingEntries) {
+          layer.setVisible(true)
+          source.updateParams({ _: String(Date.now()) })
         }
 
-        map.renderSync()
-        tileWait?.arm()
-        jijukWait?.arm()
-        meterWait?.arm()
-        throwIfAborted(signal)
-        await raceUntil(
-          Promise.all([
-            tileWait?.promise ?? Promise.resolve(),
-            jijukWait?.promise ?? Promise.resolve(),
-            meterWait?.promise ?? Promise.resolve(),
-          ]).then(() => undefined),
-          signal
-        )
-        throwIfAborted(signal)
-        await raceUntil(waitRenderComplete(map, 200), signal)
+        // 계량기 WMS 대신 표 번호 벡터 마커만
+        indexSource.clear()
+        for (const p of points) {
+          const lon = Number(p.point4326[0])
+          const lat = Number(p.point4326[1])
+          if (!Number.isFinite(lon) || !Number.isFinite(lat)) continue
+          const feature = new Feature({
+            geometry: new Point(fromLonLat([lon, lat])),
+            index: p.index,
+          })
+          indexSource.addFeature(feature)
+        }
+
+        // 타일·WMS 로드 완료 후 캡처 (미로드 격자·빈 지도 방지)
+        await waitLayersReady(signal)
+
+        // 옵션: 마커 겹치면 타일 단계 확대. 벡터가 잘리면 그 단계 취소
+        let guard = 0
+        while (meterMarkersOverlap(map, points) && guard < 8) {
+          const before = Number(view.getResolution())
+          if (!zoomInOneResolutionStep(view)) break
+          guard += 1
+          map.renderSync()
+          if (!allMarkersInsideFrame(map, points)) {
+            if (Number.isFinite(before) && before > 0) {
+              view.setResolution(before)
+              map.renderSync()
+            }
+            break
+          }
+          // 줌 변경 후 타일 재대기 — 미로드 상태로 찍히는 것 방지
+          throwIfAborted(signal)
+          await waitLayersReady(signal)
+        }
 
         const canvas = document.createElement('canvas')
         if (!compositeOffscreenToCanvas(map, canvas) || canvas.width < 2) {
@@ -490,6 +663,7 @@ export function createMeterZoneCaptureSession(
     dispose() {
       if (disposed) return
       disposed = true
+      indexSource.clear()
       map.setTarget(undefined)
       host.remove()
     },

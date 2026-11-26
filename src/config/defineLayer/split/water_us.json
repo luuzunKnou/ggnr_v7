@@ -61,5 +61,23 @@
       "group": "하수",
       "idx": "510"
     }
+  },
+  "wtl_pipe_lm": {
+    "items": [
+      {
+        "code": "SAA003",
+        "korName": "송수관",
+        "group": "상수"
+      },
+      {
+        "code": "SAA004",
+        "korName": "배수관",
+        "group": "상수"
+      }
+    ],
+    "etc": {
+      "korName": "상수관로(기타)",
+      "group": "상수"
+    }
   }
 }
