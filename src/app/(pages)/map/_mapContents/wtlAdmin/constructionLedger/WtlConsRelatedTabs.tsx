@@ -18,7 +18,8 @@
  * - 예: 화면에 공사위치 4개가 보이면 탭도 그 4개 기준 (고른 1개만 조회 금지)
  *
  * ■ «화면에 보이는 시설만» 체크
- * - ON/OFF 즉시 배지·목록 반영. 지도 휠 중엔 범위 갱신하지 말고 moveend 후.
+ * - UI는 공사이력 탭에서만 표시(다른 탭은 숨김, 로직 유지).
+ * - 공사이력 진입 시 기본 ON, 이탈 시 OFF. ON/OFF 즉시 배지·목록 반영. 휠 중엔 moveend 후 갱신.
  *
  * ■ 관련시설 API areaWkts5181
  * - 구역 여러 개를 배열로 넣으면 서버가 AND(동시 교차) → 시설 전부 탈락.
@@ -188,18 +189,6 @@ const NAME_FIELD_LABEL: Record<string, string> = {
   hom_num: '수용가번호',
 }
 
-const NAME_TITLE_ORDER = [
-  '관라벨',
-  '관리번호',
-  '행번호',
-  '취수장명',
-  '정수장명',
-  '배수지명',
-  '가압장명',
-  '계량기기물번호',
-  '수용가번호',
-]
-
 function nameFieldsInOrder(layerKey: string): string[] {
   const expr =
     getWtlNetLayerDef(layerKey)?.nameExpr ??
@@ -223,15 +212,6 @@ function facilityNameTitle(row: WtlNetworkRow): string {
     if (text) return NAME_FIELD_LABEL[field] ?? '관리번호'
   }
   return '행번호'
-}
-
-function facilityNameHead(rows: WtlNetworkRow[]): string {
-  const labels = [...new Set(rows.map(facilityNameTitle))]
-  if (labels.length === 0) return '관리번호'
-  if (labels.length === 1) return labels[0]!
-  const ordered = NAME_TITLE_ORDER.filter((label) => labels.includes(label))
-  const rest = labels.filter((label) => !ordered.includes(label))
-  return [...ordered, ...rest].join(' · ')
 }
 
 const TABS: { id: RelatedTab; label: string }[] = [
@@ -333,6 +313,10 @@ type Props = {
   consCode?: string | null
   activeZone: ZoneMock | null
   zoneLoading?: boolean
+  /** 공사이력 정보박스 «조회» → 해당 공사 패널 */
+  onOpenHistoryWork?: (consCode: string) => void
+  /** 외부에서 관련탭 강제(조회 후 공사위치 등) */
+  tabLand?: { tab: RelatedTab; token: number } | null
 }
 
 export function WtlConsRelatedTabs({
@@ -348,6 +332,8 @@ export function WtlConsRelatedTabs({
   consCode = null,
   activeZone: _activeZone,
   zoneLoading = false,
+  onOpenHistoryWork,
+  tabLand = null,
 }: Props) {
   void _activeZone // 선택=줌·강조만. 탭 조회 범위에는 쓰지 않음
   const tone = TONE_V0
@@ -777,6 +763,9 @@ export function WtlConsRelatedTabs({
     setHighlightParcel(null)
     setHistoryFocus(null)
     onFocus?.(null)
+    // 공사이력: 체크 보이며 기본 ON. 다른 탭: 숨김 + OFF(조용히 ON 잔류 방지)
+    if (next === 'cons') onOnlyInViewChange(true)
+    else if (onlyInView) onOnlyInViewChange(false)
     setTab(next)
   }
 
@@ -793,8 +782,22 @@ export function WtlConsRelatedTabs({
     })
   }
 
+  /** 필지·건물도 mapFocus 로 올려 본표·공사위치 반짝이를 끈다(탭 간 배타) */
+  const focusFromHighlight = (id: string, item: LayerRowParcelItem | null) => {
+    const geom = item?.geometry3857
+    if (!geom || typeof geom !== 'object' || !('type' in geom)) {
+      onFocus?.(null)
+      return
+    }
+    onFocus?.({
+      id,
+      geom: geom as Record<string, unknown>,
+      projection: 'EPSG:3857',
+      skipFit: onlyInView,
+    })
+  }
+
   const handleParcelClick = (item: LayerRowParcelItem, visibleIdx: number) => {
-    onFocus?.(null)
     const visible = visibleParcels[visibleIdx]
     const resolvedIdx = visible
       ? parcels.findIndex((row) => row.pnu === visible.pnu && row.address === visible.address)
@@ -803,20 +806,22 @@ export function WtlConsRelatedTabs({
     if (parcelIdx === resolvedIdx) {
       setParcelIdx(null)
       setHighlightParcel(null)
+      onFocus?.(null)
       return
     }
     setParcelIdx(resolvedIdx)
     setPickedId(null)
     setHighlightParcel(item)
+    focusFromHighlight(`parcel:${item.pnu ?? resolvedIdx}`, item)
     panToParcel(item)
   }
 
   const handleBuildingClick = (row: BuildingRow, index: number) => {
     const id = buildingRowId(row, index)
-    onFocus?.(null)
     if (pickedId === id) {
       setPickedId(null)
       setHighlightParcel(null)
+      onFocus?.(null)
       return
     }
     setPickedId(id)
@@ -833,6 +838,7 @@ export function WtlConsRelatedTabs({
     const parcel = own ? null : parcelForBuilding(row, parcels)
     const item = own ?? (parcel ? parcelToHighlightItem(parcel) : null)
     setHighlightParcel(item)
+    focusFromHighlight(`building:${id}`, item)
     if (item) panToParcel(item)
   }
 
@@ -857,6 +863,7 @@ export function WtlConsRelatedTabs({
       return
     }
     const nextFocus: WtlConsMapFocus = {
+      id,
       geom: geom as unknown as Record<string, unknown>,
       projection,
       styleName: style?.styleName,
@@ -880,6 +887,20 @@ export function WtlConsRelatedTabs({
     if (tab !== 'cons') setHistoryFocus(null)
   }, [tab])
 
+  /** 공사이력 «조회» 등 — 관련탭을 지정 탭(기본 공사위치)으로 */
+  useEffect(() => {
+    if (!tabLand) return
+    const next = tabLand.tab
+    setPickedId(null)
+    setParcelIdx(null)
+    setHighlightParcel(null)
+    setHistoryFocus(null)
+    onFocus?.(null)
+    if (next !== 'cons' && onlyInView) onOnlyInViewChange(false)
+    setTab(next)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- tabLand.token
+  }, [tabLand?.token])
+
   return (
     <div className="flex min-h-0 flex-1 flex-col border-t border-border">
       <div className={tone.tabWrap}>
@@ -895,15 +916,17 @@ export function WtlConsRelatedTabs({
           </button>
         ))}
       </div>
-      <label className="flex shrink-0 cursor-pointer items-center gap-1 border-b border-border px-2 py-1.5 text-[11px] text-foreground">
-        <input
-          type="checkbox"
-          className="cursor-pointer"
-          checked={onlyInView}
-          onChange={(e) => onOnlyInViewChange(e.target.checked)}
-        />
-        화면에 보이는 시설만 표시합니다
-      </label>
+      {tab === 'cons' ? (
+        <label className="flex shrink-0 cursor-pointer items-center gap-1 border-b border-border px-2 py-1.5 text-[11px] text-foreground">
+          <input
+            type="checkbox"
+            className="cursor-pointer"
+            checked={onlyInView}
+            onChange={(e) => onOnlyInViewChange(e.target.checked)}
+          />
+          화면에 보이는 시설만 표시합니다
+        </label>
+      ) : null}
       <div className={cn(tone.body, tab === 'parcel' && 'flex flex-col overflow-hidden')}>
         {tab === 'zone' ? (
           <ZoneTable
@@ -939,6 +962,7 @@ export function WtlConsRelatedTabs({
         <WtlConsHistoryFocusFloating
           kind={kind}
           focus={historyFocus}
+          onOpenWork={onOpenHistoryWork}
           onClose={() => {
             setPickedId(null)
             setHistoryFocus(null)
@@ -1058,37 +1082,46 @@ function FacilityTable({
     <div className={tone.card}>
       <div className={tone.head}>
         <span className={cn('w-[5.5rem] shrink-0', tone.headPad)}>구분</span>
-        <span className={cn('min-w-0 flex-1', tone.headPad)}>{facilityNameHead(rows)}</span>
-        <span className={cn('w-14 shrink-0', tone.headPad)}>구경</span>
+        {/* 속성명+값 2칸을 헤더 «속성» 하나로 병합 */}
+        <span className={cn('min-w-0 flex-[2]', tone.headPad)}>속성</span>
         <span className={cn('w-14 shrink-0', tone.headPad)}>연도</span>
       </div>
       <ul>
-        {rows.map((r) => (
-          <li key={r.id}>
-            <button
-              type="button"
-              className={cn(tone.row, pickedId === r.id ? tone.rowOn : tone.rowOff)}
-              onClick={() =>
-                onToggle(r.id, r.geom, 'EPSG:4326', {
-                  styleName: facilityStyleName(r),
-                  styleCode: facilityStyleCode(r),
-                })
-              }
-            >
-              <span
-                className={cn('w-[5.5rem] shrink-0 truncate text-slate-600', tone.cell)}
-                title={facilityKindLabel(r.layerKey)}
+        {rows.map((r) => {
+          const attrLabel = facilityNameTitle(r)
+          const attrValue = String(r.name ?? '').trim() || '—'
+          return (
+            <li key={r.id}>
+              <button
+                type="button"
+                className={cn(tone.row, pickedId === r.id ? tone.rowOn : tone.rowOff)}
+                onClick={() =>
+                  onToggle(r.id, r.geom, 'EPSG:4326', {
+                    styleName: facilityStyleName(r),
+                    styleCode: facilityStyleCode(r),
+                  })
+                }
               >
-                {facilityKindLabel(r.layerKey)}
-              </span>
-              <span className={cn('min-w-0 flex-1 truncate', tone.cell)} title={r.name}>
-                {r.name}
-              </span>
-              <span className={cn('w-14 shrink-0 truncate text-slate-600', tone.cell)}>{r.diameter}</span>
-              <span className={cn('w-14 shrink-0 truncate text-slate-600', tone.cell)}>{r.year}</span>
-            </button>
-          </li>
-        ))}
+                <span
+                  className={cn('w-[5.5rem] shrink-0 truncate text-slate-600', tone.cell)}
+                  title={facilityKindLabel(r.layerKey)}
+                >
+                  {facilityKindLabel(r.layerKey)}
+                </span>
+                <span
+                  className={cn('w-[4.25rem] shrink-0 truncate text-slate-500', tone.cell)}
+                  title={attrLabel}
+                >
+                  {attrLabel}
+                </span>
+                <span className={cn('min-w-0 flex-1 truncate', tone.cell)} title={attrValue}>
+                  {attrValue}
+                </span>
+                <span className={cn('w-14 shrink-0 truncate text-slate-600', tone.cell)}>{r.year}</span>
+              </button>
+            </li>
+          )
+        })}
       </ul>
     </div>
   )

@@ -11,6 +11,9 @@ export const LAYER_CLICK_DETAIL_BLOCKED_OPENED = [
   'wtlFacility',
   'wtlEquipment',
   // 공간분석은 관로·제수변·계량기 속성조회 허용 (차단하지 않음)
+  // 상·하수 공사대장 opened 키(consLedgerVariant) — 기존 플로팅은 유지, 신규만 막음
+  'constructionLedger',
+  'sewerConstructionLedger',
   'wtlConstructionLedger',
   'wtlMeterLocation',
   'swlNetworkMap',

@@ -55,6 +55,22 @@ function flattenIdentifyHits(popup: IdentifyPopupState): LayerClickHit[] {
   return out
 }
 
+/** OpenLayersMap 리마운트·메뉴 전환 후에도 지하시설물 클릭 상세 유지 */
+type LayerClickDetailRetain = {
+  hits: LayerClickHit[]
+  selectedKey: string | null
+  minimized: boolean
+  focusToken: number
+  placementToken: number
+  anchor: LayerClickScreenAnchor | null
+}
+let layerClickDetailRetain: LayerClickDetailRetain | null = null
+
+/** 하이라이트 cleanup 등 — 메뉴 전환 중 선택 유지 여부 */
+export function peekLayerClickDetailRetain(): LayerClickDetailRetain | null {
+  return layerClickDetailRetain
+}
+
 export function useLayerClickDetail(opts?: {
   /** true면 상세를 강제로 닫음 (측정·메뉴 전환 등) */
   forceClosed?: boolean
@@ -63,16 +79,48 @@ export function useLayerClickDetail(opts?: {
   const forceClosedRef = useRef(forceClosed)
   forceClosedRef.current = forceClosed
 
-  const [hits, setHits] = useState<LayerClickHit[]>([])
-  const [selectedKey, setSelectedKey] = useState<string | null>(null)
-  const [minimized, setMinimized] = useState(false)
-  const [focusToken, setFocusToken] = useState(0)
+  const retained = layerClickDetailRetain
+  const [hits, setHits] = useState<LayerClickHit[]>(() => retained?.hits ?? [])
+  const [selectedKey, setSelectedKey] = useState<string | null>(
+    () => retained?.selectedKey ?? null
+  )
+  const [minimized, setMinimized] = useState(() => retained?.minimized ?? false)
+  const [focusToken, setFocusToken] = useState(() => retained?.focusToken ?? 0)
   /** 클릭마다 증가 — 플로팅 재마운트로 클릭 위치 반영 */
-  const [placementToken, setPlacementToken] = useState(0)
+  const [placementToken, setPlacementToken] = useState(
+    () => retained?.placementToken ?? 0
+  )
   /** 클릭 화면 좌표 — 플로팅 초기 위치 */
-  const [anchor, setAnchor] = useState<LayerClickScreenAnchor | null>(null)
+  const [anchor, setAnchor] = useState<LayerClickScreenAnchor | null>(
+    () => retained?.anchor ?? null
+  )
+
+  useEffect(() => {
+    layerClickDetailRetain = {
+      hits,
+      selectedKey,
+      minimized,
+      focusToken,
+      placementToken,
+      anchor,
+    }
+  }, [hits, selectedKey, minimized, focusToken, placementToken, anchor])
+
+  /** 메뉴 전환 등으로 hits가 비어도 retain이 있으면 복구 (X로 닫으면 retain=null) */
+  useEffect(() => {
+    if (hits.length > 0) return
+    const kept = layerClickDetailRetain
+    if (!kept?.hits.length) return
+    setHits(kept.hits)
+    setSelectedKey(kept.selectedKey)
+    setMinimized(kept.minimized)
+    setFocusToken(kept.focusToken)
+    setPlacementToken(kept.placementToken)
+    setAnchor(kept.anchor)
+  }, [hits.length])
 
   const close = useCallback(() => {
+    layerClickDetailRetain = null
     setHits([])
     setSelectedKey(null)
     setMinimized(false)
@@ -89,10 +137,8 @@ export function useLayerClickDetail(opts?: {
       if (forceClosedRef.current) return
       const nextHits = flattenIdentifyHits(popup)
       if (nextHits.length === 0) {
-        setHits([])
-        setSelectedKey(null)
-        setMinimized(false)
-        setAnchor(null)
+        // 빈 식별으로 기존 선택을 닫지 않음.
+        // (사이드바 메뉴 클릭이 지도로 새어 빈 identify가 오면 선택이 꺼지던 문제)
         return
       }
       setHits(nextHits)

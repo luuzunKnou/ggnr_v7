@@ -152,14 +152,16 @@ type Props = {
   kind: Extract<ConsLedgerKind, 'wtl' | 'swl'>
   focus: WtlConsMapFocus | null
   onClose: () => void
+  /** «조회» — 해당 공사코드로 좌측 공사 상세 패널 열기 */
+  onOpenWork?: (consCode: string) => void
 }
 
 /**
  * 공사이력 행 선택 시 지도 위 드래그 가능 상세 창.
- * 요약 표 → «자세히» 시 본표 전체. 닫기 X.
+ * 요약 표 → «자세히» 시 본표 전체. «조회» 시 해당 공사 패널. 닫기 X.
  * 위치: 화면∩도형 앵커 + 패딩 고려, 좌·우 하단 영점 자동 선택.
  */
-export function WtlConsHistoryFocusFloating({ kind, focus, onClose }: Props) {
+export function WtlConsHistoryFocusFloating({ kind, focus, onClose, onOpenWork }: Props) {
   const mapContext = useMapContext()
   const tip = focus?.tooltip
   const open = Boolean(focus?.geom && tip?.consCode)
@@ -321,24 +323,41 @@ export function WtlConsHistoryFocusFloating({ kind, focus, onClose }: Props) {
           </table>
         )}
       </div>
-      <div className="standard-detail-edit-footer justify-between gap-2">
-        {expanded ? (
-          <button
-            type="button"
-            className="standard-detail-hdr-btn cursor-pointer"
-            onClick={() => setExpanded(false)}
-          >
-            요약
-          </button>
-        ) : (
-          <button
-            type="button"
-            className="standard-detail-hdr-btn cursor-pointer text-primary"
-            onClick={() => setExpanded(true)}
-          >
-            자세히
-          </button>
-        )}
+      <div className="standard-detail-edit-footer flex items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-1.5">
+          {expanded ? (
+            <button
+              type="button"
+              className="standard-detail-hdr-btn cursor-pointer"
+              onClick={() => setExpanded(false)}
+            >
+              요약
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="standard-detail-hdr-btn cursor-pointer text-primary"
+              onClick={() => setExpanded(true)}
+            >
+              자세히
+            </button>
+          )}
+          {onOpenWork ? (
+            <button
+              type="button"
+              className="standard-detail-hdr-btn cursor-pointer text-primary"
+              title="해당 공사 상세 패널 열기"
+              onClick={() => {
+                const code = tip.consCode.trim()
+                if (!code) return
+                onOpenWork(code)
+                onClose()
+              }}
+            >
+              조회
+            </button>
+          ) : null}
+        </div>
       </div>
     </MapDetailFloatingPanel>
   )

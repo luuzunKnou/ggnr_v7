@@ -260,6 +260,36 @@ export async function loadWtlConsIntersecting(
   }
 }
 
+/** 지금 지도 화면(extent 3857)과 공사위치가 겹치는 공사코드 — 사업목록 «화면만» 필터 */
+export async function loadWtlConsInMapView(
+  kind: Extract<ConsLedgerKind, 'wtl' | 'swl'>,
+  extent3857: number[]
+): Promise<{ consCodes: string[]; error?: string }> {
+  const extent = Array.isArray(extent3857) ? extent3857.map(Number) : []
+  if (
+    extent.length < 4 ||
+    !extent.slice(0, 4).every((n) => Number.isFinite(n)) ||
+    extent[2]! <= extent[0]! ||
+    extent[3]! <= extent[1]!
+  ) {
+    return { consCodes: [] }
+  }
+  const res = await call('', 'POST', {
+    service: 'consDataAsService',
+    action: 'listConsCodesBySoloView',
+    params: { kind, extent3857: extent.slice(0, 4), limit: 2000 },
+  })
+  const body = asBody(res)
+  const raw = Array.isArray(body.consCodes) ? (body.consCodes as unknown[]) : []
+  const consCodes = [
+    ...new Set(raw.map((code) => String(code ?? '').trim()).filter(Boolean)),
+  ]
+  return {
+    consCodes,
+    error: typeof body.error === 'string' ? body.error : undefined,
+  }
+}
+
 export async function loadWtlConsZones(
   consCode: string,
   kind: Extract<ConsLedgerKind, 'wtl' | 'swl'> = 'wtl'

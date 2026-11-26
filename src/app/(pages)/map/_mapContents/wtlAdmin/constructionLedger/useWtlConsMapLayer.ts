@@ -5,17 +5,21 @@
  * [공사대장 · 지도 맞춤 UX 의도 — 임의로 바꾸지 말 것]
  * =============================================================================
  *
- * 1) 공사목록에서 공사 선택
- *    → 해당 공사 전체 범위로 맞춤 (필요하면 줌아웃). «화면만» 체크와 무관.
+ * 1) 사업·공사 목록 선택
+ *    → 사업만 선택: 그 사업의 보이는 본표 도형 전부 반짝이(스타일 펄스).
+ *    → 공사 선택: 그 공사 본표만 반짝이(공사위치가 가리지 않게). 본표 없으면 공사위치 반짝이.
+ *    → 맞춤 대상 shp가 바뀔 때만 지도 이동. 단건 사업→공사(같은 shp)는 재맞춤 없음.
  *
  * 2) 공사위치 행 선택 («화면에 보이는 시설만» ON 일 때)
- *    - 전체공사 축척처럼 대상이 화면에 걸치지만 너무 작음 → 줌인 (의도된 진입)
- *    - 이미 가까이 보고 있음(걸침 + 줌인 불필요) → 맵무브·줌 없음 (휠은 사용자)
- *    - 화면 밖 → 그쪽으로 이동 (줌아웃만 금지)
+ *    → 선택한 공사위치만 반짝이 (본표 반짝이는 끔).
+ *    → 미선택 공사위치는 펄스 없이 항상 그림.
+ *    - 전체가 작으면 줌인 / 이미 가까우면 유지 / 화면 밖이면 이동(줌아웃 금지)
  *    ※ «화면에 보이면 무조건 줌 금지»로 바꾸면 1→2 줌인이 사라짐. 금지.
  *
- * 3) 관련시설·필지·수용가 등 목록 선택
- *    → 강조만. 맵무브·줌인·줌아웃 없음 («화면만» ON).
+ * 3) 관련시설·필지·수용가·공사이력 등 목록 선택
+ *    → 반짝이는 선택한 행만(포커스 레이어 opacity). 본표·공사위치 반짝이 끔.
+ *    → 미선택 관련시설·공사위치 도형은 그대로 표시.
+ *    → 맵무브·줌 없음 («화면만» ON).
  *
  * 4) 사용자가 휠·드래그로 보는 중
  *    → 자동 fit 으로 가로채지 말 것. 목록 범위 갱신은 moveend 이후.
@@ -44,10 +48,7 @@ import '../../../_mapComponents/config/projections'
 import { MAP_AUTO_NAV_MAX_ZOOM } from '../../../_mapComponents/config/mapDefaults'
 import { scheduleFitMapToExtent3857 } from '../../../_mapComponents/config/mapAutoNavigation'
 import { useMapContext } from '../../../_mapComponents/MapContext'
-import {
-  createDataQueryIdentifyHoverStyle,
-  createDataQuerySelectionRowHighlightStyle,
-} from '@/lib/mapDataQueryMapHighlight'
+import { createDataQuerySelectionRowHighlightStyle } from '@/lib/mapDataQueryMapHighlight'
 import { LAYER_GEOM_STACK_SKIP_KEY } from '@/lib/mapLayerGeometryOrder'
 import type { WtlConsGeom4326 } from './wtlConsLedgerApi'
 import {
@@ -59,15 +60,17 @@ import {
 /** 공사대장 포커스(공사이력·시설 등) 펄스 — 공용 0.08보다 약간 빠르게 */
 const WTL_CONS_FOCUS_PULSE_STEP = 0.11
 
-const MAIN_FILL = 'rgba(37, 99, 235, 0.18)'
+/** 미선택(형제) 본표 — 전체도형 ON 시에도 보이도록 채우기·선 강화 (예전 0.18은 너무 연함) */
+const MAIN_FILL = 'rgba(37, 99, 235, 0.32)'
 const MAIN_STROKE = '#1d4ed8'
 /** 관련시설 강조 — 도로·하천 선택 강조와 같은 최상단대 */
 const FOCUS_LAYER_Z = 9999
 /** 관련시설 전체(미선택) — 공사·구역 위, 선택 강조 아래 */
 const RELATED_LAYER_Z = 892
-/** 관련시설 선택 시 공사·구역 면이 강조를 가리지 않도록 */
+/** 관련시설 선택 시 공사 본표만 살짝 죽임. 공사위치(미선택)는 그대로 보이게 */
 const WORK_DIM_OPACITY = 0.38
-const ZONE_DIM_OPACITY = 0.45
+/** 관련행·필지 포커스 중에도 공사위치는 또렷이 — 연하게만 살짝 */
+const ZONE_DIM_OPACITY = 0.95
 
 function withZIndex(styled: void | Style | Style[], zIndex: number): Style | Style[] | undefined {
   if (!styled) return undefined
@@ -93,74 +96,53 @@ function workBaseStyle(emphasized: boolean): Style[] {
   }
   return [
     new Style({
-      fill: new Fill({ color: MAIN_FILL }),
-      stroke: new Stroke({ color: MAIN_STROKE, width: 1.5 }),
+      stroke: new Stroke({ color: 'rgba(255, 255, 255, 0.7)', width: 5 }),
       zIndex: 1,
+    }),
+    new Style({
+      fill: new Fill({ color: MAIN_FILL }),
+      stroke: new Stroke({ color: MAIN_STROKE, width: 2.2 }),
+      zIndex: 2,
     }),
   ]
 }
 
-function featureStyle(feature: Feature, selectionStyle: StyleFunction): Style | Style[] | undefined {
+function featureStyle(feature: Feature, pulseStyle: StyleFunction): Style | Style[] | undefined {
+  // 본표 반짝이 — 데이터조회와 같은 스타일 펄스(투명도만으로는 잘 안 보임)
   if (feature.get('workOn')) {
-    return withZIndex(selectionStyle(feature, 1) as Style | Style[] | undefined, 12)
+    return (
+      withZIndex(pulseStyle(feature, 1) as Style | Style[] | undefined, 12) ??
+      workBaseStyle(true)
+    )
   }
   return workBaseStyle(Boolean(feature.get('rim')))
 }
 
-/** 미선택 공사위치 — 고정 빨간 테두리 */
+/** 미선택 공사위치 — 고정 빨간 테두리(펄스 없음, 항상 보이게) */
 function zoneIdleStyle(feature: Feature, zIndex = 20): Style | Style[] {
   const geomType = feature.getGeometry()?.getType()
   if (geomType === 'LineString' || geomType === 'MultiLineString') {
     return [
-      new Style({ stroke: new Stroke({ color: 'rgba(255, 255, 255, 0.45)', width: 4.5 }), zIndex }),
-      new Style({ stroke: new Stroke({ color: 'rgba(220, 38, 38, 0.4)', width: 2.8 }), zIndex }),
+      new Style({ stroke: new Stroke({ color: 'rgba(255, 255, 255, 0.9)', width: 6.5 }), zIndex }),
+      new Style({ stroke: new Stroke({ color: 'rgba(220, 38, 38, 0.88)', width: 3.8 }), zIndex }),
     ]
   }
   if (geomType === 'Polygon' || geomType === 'MultiPolygon') {
     return [
       new Style({
-        stroke: new Stroke({ color: 'rgba(255, 255, 255, 0.4)', width: 3.5 }),
-        fill: new Fill({ color: 'rgba(220, 38, 38, 0.08)' }),
+        stroke: new Stroke({ color: 'rgba(255, 255, 255, 0.88)', width: 5.5 }),
+        fill: new Fill({ color: 'rgba(220, 38, 38, 0.28)' }),
         zIndex,
       }),
       new Style({
-        stroke: new Stroke({ color: 'rgba(220, 38, 38, 0.35)', width: 2 }),
+        stroke: new Stroke({ color: 'rgba(220, 38, 38, 0.85)', width: 2.8 }),
         zIndex,
       }),
     ]
   }
   return new Style({
-    stroke: new Stroke({ color: 'rgba(220, 38, 38, 0.35)', width: 3 }),
-    fill: new Fill({ color: 'rgba(220, 38, 38, 0.08)' }),
-    zIndex,
-  })
-}
-
-/** 선택 공사위치 — 흰 테두리 + 검정선 (공사 빨간 강조와 구분) */
-function zoneSelectedStyle(feature: Feature, zIndex = 30): Style | Style[] {
-  const geomType = feature.getGeometry()?.getType()
-  if (geomType === 'LineString' || geomType === 'MultiLineString') {
-    return [
-      new Style({ stroke: new Stroke({ color: '#ffffff', width: 9 }), zIndex }),
-      new Style({ stroke: new Stroke({ color: '#111827', width: 5 }), zIndex }),
-    ]
-  }
-  if (geomType === 'Polygon' || geomType === 'MultiPolygon') {
-    return [
-      new Style({
-        stroke: new Stroke({ color: '#ffffff', width: 8 }),
-        fill: new Fill({ color: 'rgba(17, 24, 39, 0.12)' }),
-        zIndex,
-      }),
-      new Style({
-        stroke: new Stroke({ color: '#111827', width: 3.5 }),
-        zIndex,
-      }),
-    ]
-  }
-  return new Style({
-    stroke: new Stroke({ color: '#111827', width: 4 }),
-    fill: new Fill({ color: 'rgba(17, 24, 39, 0.15)' }),
+    stroke: new Stroke({ color: 'rgba(220, 38, 38, 0.88)', width: 4 }),
+    fill: new Fill({ color: 'rgba(220, 38, 38, 0.28)' }),
     zIndex,
   })
 }
@@ -181,9 +163,8 @@ function relatedFacilityStyle(feature: Feature, onStyleReady: () => void): Style
 }
 
 /**
- * 관련시설 포커스.
- * - 심볼(점): SLD 크기 유지 + 데이터조회와 같은 레이더/펄스
- * - 관(선): 원래 심볼 + 얇은 흰·검정 테두리
+ * 선택 행 포커스(관련시설 등) — 심볼 위에 스타일 펄스(깜빡임).
+ * 펄스를 아래에 두면 관 심볼에 가려져 안 보임 → zIndex 를 심볼보다 높게.
  */
 function focusFeatureStyle(
   feature: Feature,
@@ -193,13 +174,15 @@ function focusFeatureStyle(
   const geomType = feature.getGeometry()?.getType()
   const styleName = String(feature.get('styleName') ?? '').trim()
   const styleCode = String(feature.get('styleCode') ?? '').trim() || null
+  const pulse = pulseStyle(feature, 1) as Style | Style[] | undefined
+  const pulseList = pulse ? (Array.isArray(pulse) ? pulse : [pulse]) : []
+  for (const style of pulseList) style.setZIndex(FOCUS_LAYER_Z + 2)
+
   if ((geomType === 'Point' || geomType === 'MultiPoint') && styleName) {
     const icon = peekRelatedFacilityIcon(styleName, styleCode)
-    const pulse = pulseStyle(feature, 1) as Style | Style[] | undefined
-    const pulseList = pulse ? (Array.isArray(pulse) ? pulse : [pulse]) : []
-    for (const style of pulseList) style.setZIndex(FOCUS_LAYER_Z)
     if (icon) {
       return [
+        ...pulseList,
         new Style({
           zIndex: FOCUS_LAYER_Z + 1,
           image: new Icon({
@@ -209,41 +192,29 @@ function focusFeatureStyle(
             opacity: 1,
           }),
         }),
-        ...pulseList,
       ]
     }
-    return withZIndex(pulse, FOCUS_LAYER_Z)
+    return pulseList.length ? pulseList : undefined
   }
   if (geomType === 'LineString' || geomType === 'MultiLineString') {
-    const base = relatedFacilityStyle(feature, onStyleReady)
-    const baseList = Array.isArray(base) ? base : [base]
-    let coreW: number | null = null
-    for (const style of baseList) {
-      const stroke = style.getStroke()
-      const w = stroke?.getWidth()
-      if (typeof w === 'number') coreW = coreW == null ? w : Math.min(coreW, w)
-      style.setZIndex(FOCUS_LAYER_Z + 1)
+    if (styleName) {
+      const base = relatedFacilityStyle(feature, onStyleReady)
+      const baseList = Array.isArray(base) ? base : [base]
+      for (const style of baseList) style.setZIndex(FOCUS_LAYER_Z + 1)
+      // 관 심볼 위 + 반짝이(펄스)
+      return [...baseList, ...pulseList]
     }
-    const pipeW = coreW ?? 2.5
-    return [
-      new Style({
-        stroke: new Stroke({ color: '#ffffff', width: pipeW + 5 }),
-        zIndex: FOCUS_LAYER_Z,
-      }),
-      new Style({
-        stroke: new Stroke({ color: '#111827', width: pipeW + 2.5 }),
-        zIndex: FOCUS_LAYER_Z,
-      }),
-      ...baseList,
-    ]
+    return pulseList.length ? pulseList : undefined
   }
-  const styled = pulseStyle(feature, 1) as Style | Style[] | undefined
-  if (!styled) return undefined
-  return withZIndex(styled, FOCUS_LAYER_Z)
+  if (!pulse) return undefined
+  return withZIndex(pulse, FOCUS_LAYER_Z + 2)
 }
 
-function zoneFeatureStyle(feature: Feature): Style | Style[] {
-  if (feature.get('zoneOn')) return zoneSelectedStyle(feature, 30)
+function zoneFeatureStyle(feature: Feature, pulseStyle: StyleFunction): Style | Style[] {
+  // 선택 공사위치만 스타일 펄스. 미선택은 idle(항상 그림)
+  if (feature.get('zoneOn')) {
+    return withZIndex(pulseStyle(feature, 1) as Style | Style[] | undefined, 30) ?? zoneIdleStyle(feature, 20)
+  }
   return zoneIdleStyle(feature, 20)
 }
 
@@ -268,6 +239,8 @@ export type WtlConsMapFocusTooltip = {
 export type WtlConsMapFocus = {
   geom: Record<string, unknown>
   projection: 'EPSG:4326' | 'EPSG:3857'
+  /** 관련시설·공사이력 행 id — 목록 레이어와 겹치지 않게 제외 */
+  id?: string
   /** 관련시설 선택 시 심볼 유지용 */
   styleName?: string
   styleCode?: string | null
@@ -451,13 +424,17 @@ export function useWtlConsMapLayer(input: WtlConsMapInput) {
     focusKey: string
     zoneId: string | null
   } | null>(null)
-  /** 공사 선택 — 고정 강조(깜빡임 없음) */
-  const selectionStyleRef = useRef(createDataQueryIdentifyHoverStyle())
-  /** 관련시설 포커스 — 데이터조회와 동일 레이더/펄스 */
+  /** 선택 반짝이(공사·공사위치·관련행) — 데이터조회 선택 행과 동일 펄스 */
   const focusPhaseRef = useRef(0)
   const focusPulseStyleRef = useRef(
     createDataQuerySelectionRowHighlightStyle(() => focusPhaseRef.current)
   )
+  /** 본표 선택 반짝이(스타일 펄스) 활성 */
+  const workOpacityPulseRef = useRef(false)
+  const workDimRef = useRef(false)
+  const zoneOpacityPulseRef = useRef(false)
+  const zoneDimRef = useRef(false)
+  const focusOpacityPulseRef = useRef(false)
   const bottomRef = mapContext?.mapPaddingBottomRef
   if (bottomRef) bottomRef.current = Math.max(0, input.bottomInset ?? 0)
 
@@ -473,15 +450,20 @@ export function useWtlConsMapLayer(input: WtlConsMapInput) {
   const suppressListFitRef = useRef(Boolean(input.suppressListFit))
   suppressListFitRef.current = Boolean(input.suppressListFit)
   const projectKey = input.projectGeoms.map((item) => `${item.id}:${item.geom4326 ? 1 : 0}`).join(',')
-  /** 맵무브 조건용. 사업 전체 도형 ON으로 형제 도형만 추가될 때는 변하지 않음 */
-  const selectedGeomKey = input.selectedId
-    ? `${input.selectedId}|${
-        input.projectGeoms.some((item) => item.id === input.selectedId && item.geom4326) ? 1 : 0
-      }`
-    : `*|${input.projectGeoms.filter((item) => item.geom4326).length}`
+  /**
+   * 맞춤 대상 본표 id 목록. 사업(전체)→단건 공사로 바꿔도 같은 shp면 키가 같아 재맞춤 안 함.
+   */
+  const selectedGeomKey = (
+    input.selectedId
+      ? input.projectGeoms.filter((item) => item.id === input.selectedId && item.geom4326)
+      : input.projectGeoms.filter((item) => item.geom4326)
+  )
+    .map((item) => item.id)
+    .sort()
+    .join(',')
   const zoneKey = `${input.zoneId ?? ''}|${input.zones.map((zone) => `${zone.id}:${zone.geometry3857 ? 1 : 0}`).join(',')}`
   const focusKey = input.focus
-    ? `${input.focus.projection}:${JSON.stringify(input.focus.geom).slice(0, 180)}|${input.focus.tooltip?.consCode ?? ''}`
+    ? `${input.focus.id ?? ''}|${input.focus.projection}:${JSON.stringify(input.focus.geom).slice(0, 180)}|${input.focus.tooltip?.consCode ?? ''}`
     : ''
   const relatedKey = (input.relatedFacilities ?? [])
     .map(
@@ -498,7 +480,7 @@ export function useWtlConsMapLayer(input: WtlConsMapInput) {
     sourceRef.current = source
     const layer = new VectorLayer({
       source,
-      style: (feature) => featureStyle(feature as Feature, selectionStyleRef.current),
+      style: (feature) => featureStyle(feature as Feature, focusPulseStyleRef.current),
       zIndex: 890,
     })
     layer.set('wtlConsWork', true)
@@ -508,7 +490,7 @@ export function useWtlConsMapLayer(input: WtlConsMapInput) {
     zoneSourceRef.current = zoneSource
     const zoneLayer = new VectorLayer({
       source: zoneSource,
-      style: (feature) => zoneFeatureStyle(feature as Feature),
+      style: (feature) => zoneFeatureStyle(feature as Feature, focusPulseStyleRef.current),
       zIndex: 891,
     })
     zoneLayer.set('wtlConsZone', true)
@@ -561,14 +543,35 @@ export function useWtlConsMapLayer(input: WtlConsMapInput) {
     }
   }, [mapContext?.mapInstanceRef, mapContext?.mapReady])
 
-  /** 관련시설 포커스만 펄스(공사·구역 깜빡임은 유지하지 않음) */
+  /**
+   * 선택 반짝이 프레임.
+   * 본표·공사위치·관련행: 스타일 펄스 + layer.changed (박자 공유).
+   */
   useEffect(() => {
     let rafId = 0
     const loop = () => {
       focusPhaseRef.current += WTL_CONS_FOCUS_PULSE_STEP
-      focusSourceRef.current?.forEachFeature((feature) => {
-        if (feature.get('focus')) feature.changed()
-      })
+
+      const workLayer = workLayerRef.current
+      if (workLayer) {
+        if (workDimRef.current) workLayer.setOpacity(WORK_DIM_OPACITY)
+        else workLayer.setOpacity(1)
+        if (workOpacityPulseRef.current) workLayer.changed()
+      }
+
+      const zoneLayer = zoneLayerRef.current
+      if (zoneLayer) {
+        if (zoneDimRef.current) zoneLayer.setOpacity(ZONE_DIM_OPACITY)
+        else zoneLayer.setOpacity(1)
+        if (zoneOpacityPulseRef.current) zoneLayer.changed()
+      }
+
+      const focusLayer = focusLayerRef.current
+      if (focusLayer) {
+        focusLayer.setOpacity(1)
+        // 관련시설·수용가 등 — 스타일 펄스(심볼 위). opacity 만 쓰면 안 보임
+        if (focusOpacityPulseRef.current) focusLayer.changed()
+      }
       rafId = requestAnimationFrame(loop)
     }
     rafId = requestAnimationFrame(loop)
@@ -592,9 +595,23 @@ export function useWtlConsMapLayer(input: WtlConsMapInput) {
     const zoneLayer = zoneLayerRef.current
     const relatedLayer = relatedLayerRef.current
     const focusLayer = focusLayerRef.current
-    if (workLayer) workLayer.setOpacity(hasFocus ? WORK_DIM_OPACITY : 1)
+    // 반짝이 우선순위: 관련행 focus > 공사위치 > 공사본표 (동시에 하나만)
+    const hasZonePulse = Boolean(current.zoneId) && !hasFocus
+    workDimRef.current = hasFocus || hasZonePulse
+    workOpacityPulseRef.current = false
+    zoneDimRef.current = hasFocus
+    zoneOpacityPulseRef.current = hasZonePulse
+    focusOpacityPulseRef.current = hasFocus
+    if (workLayer) {
+      workLayer.setOpacity(workDimRef.current ? WORK_DIM_OPACITY : 1)
+      // 기본 890 — 본표 펄스 중에는 공사위치(891) 위로 올려 가리지 않게
+      workLayer.setZIndex(890)
+    }
     if (zoneLayer) zoneLayer.setOpacity(hasFocus ? ZONE_DIM_OPACITY : 1)
-    if (relatedLayer) relatedLayer.setOpacity(hasFocus ? 0.55 : 1)
+    if (relatedLayer) {
+      relatedLayer.setOpacity(1)
+      relatedLayer.setVisible(true)
+    }
     if (focusLayer) {
       focusLayer.setZIndex(FOCUS_LAYER_Z)
       focusLayer.set(LAYER_GEOM_STACK_SKIP_KEY, true)
@@ -610,6 +627,8 @@ export function useWtlConsMapLayer(input: WtlConsMapInput) {
     let zoneFeature: Feature | null = null
     // 도형 1건 실패로 공사·공사위치 전체를 지우지 않음
     const hasWorkSelection = Boolean(current.selectedId)
+    const focusRowId = String(current.focus?.id ?? '').trim()
+    let workOnCount = 0
     for (const item of current.projectGeoms) {
       if (!item.geom4326) continue
       try {
@@ -617,30 +636,55 @@ export function useWtlConsMapLayer(input: WtlConsMapInput) {
         const feature = new Feature(geometry)
         feature.setId(item.id)
         const selectedWork = item.id === current.selectedId
-        if (selectedWork) feature.set('workOn', true)
-        else if (!hasWorkSelection) feature.set('rim', true)
+        // 본표 반짝이: 관련행/공사위치 없을 때
+        // - 공사 선택 → 해당 1건만
+        // - 사업만 선택(공사 없음) → 보이는 본표 전부
+        const pulseWork =
+          !hasFocus &&
+          !hasZonePulse &&
+          (selectedWork || !hasWorkSelection)
+        if (pulseWork) {
+          feature.set('workOn', true)
+          workOnCount += 1
+        }
         source.addFeature(feature)
         if (selectedWork) selectedFeature = feature
       } catch {
         /* 잘못된 본표 도형 스킵 */
       }
     }
+    // 본표 반짝이 켜짐 → 스타일 펄스 프레임
+    const workPulsing = workOnCount > 0 && !workDimRef.current
+    workOpacityPulseRef.current = workPulsing
+    if (workLayer && workPulsing) workLayer.setZIndex(896)
+    // 공사 선택인데 본표 도형이 없으면 공사위치 전부 반짝이 (가장 작은 단위)
+    const pulseZonesForSelectedWork =
+      !hasFocus &&
+      !hasZonePulse &&
+      hasWorkSelection &&
+      workOnCount === 0 &&
+      current.zones.some((z) => Boolean(z.geometry3857))
     for (const zone of current.zones) {
       if (!zone.geometry3857) continue
+      const selected = zone.id === current.zoneId
+      // 공사 본표가 펄스 중이면 미선택 공사위치는 그리지 않음(본표를 가려 펄스가 안 보임)
+      if (workPulsing && !selected && !pulseZonesForSelectedWork) continue
       try {
         const feature = new Feature(readGeom(format, zone.geometry3857, 'EPSG:3857'))
-        const selected = zone.id === current.zoneId
         feature.setId(`zone:${zone.id}`)
-        // 관련시설 등 포커스 중엔 검정 선택 스타일만 끔(zoneId·조회 범위는 유지)
-        feature.set('zoneOn', selected && !hasFocus)
+        // 공사위치 반짝이: 행 선택 / 또는 공사 선택·본표 없을 때 전부
+        feature.set('zoneOn', (selected && !hasFocus) || pulseZonesForSelectedWork)
         zoneSource.addFeature(feature)
         if (selected) zoneFeature = feature
       } catch {
         /* 잘못된 공사위치 도형 스킵 */
       }
     }
+    zoneOpacityPulseRef.current = hasZonePulse || pulseZonesForSelectedWork
     for (const item of current.relatedFacilities ?? []) {
       if (!item.geom) continue
+      // 선택 행은 focus 레이어에서만 반짝이 — 목록 레이어에 중복 그리지 않음
+      if (focusRowId && item.id === focusRowId) continue
       try {
         const feature = new Feature(readGeom(format, item.geom, item.projection))
         feature.setId(`related:${item.id}`)
@@ -656,6 +700,7 @@ export function useWtlConsMapLayer(input: WtlConsMapInput) {
       try {
         focusFeature = new Feature(readGeom(format, current.focus.geom, current.focus.projection))
         focusFeature.set('focus', true)
+        if (focusRowId) focusFeature.setId(`focus:${focusRowId}`)
         if (current.focus.styleName) {
           focusFeature.set('styleName', current.focus.styleName)
           focusFeature.set('styleCode', current.focus.styleCode ?? '')
@@ -681,10 +726,10 @@ export function useWtlConsMapLayer(input: WtlConsMapInput) {
         Boolean(prev?.zoneId) && !current.zoneId && !focusKey
       const focusWantsFit = focusAcquired
       const zoneWantsFit = zoneAcquired
+      // selectedId만 바뀌고 맞춤 대상 shp가 같으면(단건 사업→공사) 재맞춤하지 않음
       const shouldFit =
         !prev ||
         prev.fitToken !== current.fitToken ||
-        prev.selectedId !== current.selectedId ||
         prev.selectedGeomKey !== selectedGeomKey ||
         focusWantsFit ||
         zoneWantsFit ||

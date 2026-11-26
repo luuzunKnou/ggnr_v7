@@ -7,7 +7,9 @@ import { call } from '@/lib/api'
 import { getConsLedgerVariant, type ConsLedgerKind } from '@/lib/consLedgerVariant'
 import { cn } from '@/lib/utils'
 import { Switch } from '@/app/shadcnComponents/ui/switch'
+import { claimMapLayerClickDetailHighlight } from '@/lib/mapLayerClickDetailHighlight'
 import { MapSideListPanel } from '../../../_mapComponents/MapSideListPanel'
+import { useMapContext } from '../../../_mapComponents/MapContext'
 import {
   groupWtlConsProjects,
   matchProjectFilters,
@@ -21,8 +23,18 @@ import {
   type WtlConsProject,
   type WtlConsWork,
 } from './wtlConsSample'
-import { geom4326ToWkt5181, loadWtlConsGeoms, loadWtlConsLedger, loadWtlConsZones, type WtlConsGeom4326, type WtlConsLedgerItem, type WtlConsZoneItem } from './wtlConsLedgerApi'
 import {
+  geom4326ToWkt5181,
+  loadWtlConsGeoms,
+  loadWtlConsInMapView,
+  loadWtlConsLedger,
+  loadWtlConsZones,
+  type WtlConsGeom4326,
+  type WtlConsLedgerItem,
+  type WtlConsZoneItem,
+} from './wtlConsLedgerApi'
+import {
+  extentOfVisibleMap,
   useWtlConsMapLayer,
   type WtlConsMapFocus,
   type WtlConsRelatedFacility,
@@ -44,7 +56,8 @@ import {
   ServiceFilePdfPreview,
   type ServiceFilePdfPreviewItem,
 } from '../../../_mapComponents/standard/ServiceFilePdfPreview'
-import { WtlConsRelatedTabs } from './WtlConsRelatedTabs'
+import { WtlConsRelatedTabs, type RelatedTab } from './WtlConsRelatedTabs'
+import { WtlConsWorkAttrTable } from './WtlConsWorkAttrTable'
 
 const LIST_DEFAULT = 460
 const LIST_MIN = 380
@@ -131,48 +144,6 @@ function AttrRow({ label, value }: { label: string; value: string }) {
   )
 }
 
-/** 한 줄 말줄임 */
-function AttrRowEllipsis({ label, value }: { label: string; value: string }) {
-  const text = value?.trim() ? value : '—'
-  return (
-    <div className="grid grid-cols-[96px_1fr] border-b border-slate-100 text-[11px] last:border-b-0">
-      <div className="bg-slate-50 px-2 py-1.5 font-medium text-slate-600">{label}</div>
-      <div className="truncate px-2 py-1.5 text-slate-800" title={text}>
-        {text}
-      </div>
-    </div>
-  )
-}
-
-/** 날짜 등 2열 — 라벨 폭은 AttrRow(96px)와 동일하게 맞춤 */
-function AttrPairRow({
-  leftLabel,
-  leftValue,
-  rightLabel,
-  rightValue,
-}: {
-  leftLabel: string
-  leftValue: string
-  rightLabel: string
-  rightValue: string
-}) {
-  return (
-    <div className="grid grid-cols-2 border-b border-slate-100 text-[11px] last:border-b-0">
-      <div className="grid min-w-0 grid-cols-[96px_1fr] border-r border-slate-100">
-        <div className="bg-slate-50 px-2 py-1.5 font-medium text-slate-600">{leftLabel}</div>
-        <div className="truncate px-2 py-1.5 text-slate-800" title={leftValue || undefined}>
-          {leftValue?.trim() ? leftValue : '—'}
-        </div>
-      </div>
-      <div className="grid min-w-0 grid-cols-[96px_1fr]">
-        <div className="bg-slate-50 px-2 py-1.5 font-medium text-slate-600">{rightLabel}</div>
-        <div className="truncate px-2 py-1.5 text-slate-800" title={rightValue || undefined}>
-          {rightValue?.trim() ? rightValue : '—'}
-        </div>
-      </div>
-    </div>
-  )
-}
 
 function workMatchesConsQuery(work: WtlConsWork, query: string): boolean {
   const q = query.trim().toLowerCase()
@@ -186,6 +157,7 @@ export function WtlConstructionLedgerShell({
   onTotalWidthChange,
   onClose,
 }: Props) {
+  const mapContext = useMapContext()
   const [rows, setRows] = useState<WtlConsLedgerItem[]>([])
   const [listLoading, setListLoading] = useState(true)
   const [listError, setListError] = useState<string | null>(null)
@@ -201,8 +173,11 @@ export function WtlConstructionLedgerShell({
   const [alertFitToken, setAlertFitToken] = useState(0)
   const [alertJump, setAlertJump] = useState(0)
   const pinProjectRef = useRef<string | null>(null)
-  /** 사업 다시 눌러 해제했을 때, 필터 effect가 첫 사업을 다시 고르지 않게 함 */
-  const skipAutoProjectRef = useRef(false)
+  /**
+   * 첫 행 자동 선택 금지 플래그.
+   * 진입·해제·필터로 목록 이탈 시 true → 사업행을 직접 누를 때만 선택·shp 맞춤.
+   */
+  const skipAutoProjectRef = useRef(true)
   const keepWorkRef = useRef<string | null>(null)
   const [emdOptions, setEmdOptions] = useState<{ code: string; name: string }[]>([])
   const [riOptions, setRiOptions] = useState<{ code: string; name: string }[]>([])
@@ -228,6 +203,12 @@ export function WtlConstructionLedgerShell({
   const [supplyZoneText, setSupplyZoneText] = useState<Record<string, string>>({})
   const [showAllProjectGeoms, setShowAllProjectGeoms] = useState(false)
   const [workScrollToken, setWorkScrollToken] = useState(0)
+  /** 공사이력 «조회» 후 관련탭을 공사위치로 강제 */
+  const [relatedTabLand, setRelatedTabLand] = useState<{ tab: RelatedTab; token: number } | null>(
+    null
+  )
+  /** 조회 직후 구역 목록이 오면 첫 행(가능하면) 선택 */
+  const pendingSelectZoneFromHistoryRef = useRef(false)
   const activeProjectRef = useRef<HTMLButtonElement>(null)
 
   /** 공사대장 패널을 열 때마다 이전 세션 스타일·심볼 캐시 비움 */
@@ -237,6 +218,13 @@ export function WtlConstructionLedgerShell({
       invalidateRelatedFacilityStyleCache()
     }
   }, [])
+
+  /** 지하시설물 클릭 선택 하이라이트를 공사대장 레이어보다 위로 다시 올림 */
+  useEffect(() => {
+    const map = mapContext?.mapInstanceRef?.current
+    if (!map || !mapContext?.mapReady) return
+    claimMapLayerClickDetailHighlight(map, 'layerClickDetail')
+  }, [mapContext?.mapInstanceRef, mapContext?.mapReady])
 
   const startAttachResize = useCallback((event: React.MouseEvent) => {
     event.preventDefault()
@@ -335,18 +323,86 @@ export function WtlConstructionLedgerShell({
 
   const projects = useMemo(() => groupWtlConsProjects(rows), [rows])
 
-  const filteredProjects = useMemo(
-    () =>
-      projects.filter((project) =>
-        matchProjectFilters(project, {
-          query: projectQuery,
-          emdName,
-          riName,
-          supplyBlock,
-        })
-      ),
-    [projects, projectQuery, emdName, riName, supplyBlock]
-  )
+  /** 사업목록 «화면에 보이는 사업만» — 기본 ON (공사위치 기준) */
+  const [projectOnlyInView, setProjectOnlyInView] = useState(true)
+  /** null = 조회 전·OFF / Set = 화면과 겹치는 공사코드 */
+  const [inViewConsCodes, setInViewConsCodes] = useState<Set<string> | null>(null)
+  const [inViewLoading, setInViewLoading] = useState(false)
+
+  /** 화면만 ON → 지도 이동 끝마다 공사위치 교차 공사코드 갱신 */
+  useEffect(() => {
+    if (!projectOnlyInView) {
+      setInViewConsCodes(null)
+      setInViewLoading(false)
+      return
+    }
+    const map = mapContext?.mapInstanceRef?.current
+    if (!map || !mapContext?.mapReady) return
+
+    let cancelled = false
+    let timer = 0
+    let seq = 0
+
+    const run = () => {
+      window.clearTimeout(timer)
+      timer = window.setTimeout(() => {
+        const extent = extentOfVisibleMap(map)
+        if (!extent || extent.length < 4) {
+          if (!cancelled) {
+            setInViewConsCodes(new Set())
+            setInViewLoading(false)
+          }
+          return
+        }
+        const my = ++seq
+        setInViewLoading(true)
+        void loadWtlConsInMapView(kind, extent)
+          .then((result) => {
+            if (cancelled || my !== seq) return
+            setInViewConsCodes(new Set(result.consCodes))
+          })
+          .catch(() => {
+            if (cancelled || my !== seq) return
+            setInViewConsCodes(new Set())
+          })
+          .finally(() => {
+            if (cancelled || my !== seq) return
+            setInViewLoading(false)
+          })
+      }, 280)
+    }
+
+    run()
+    map.on('moveend', run)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+      map.un('moveend', run)
+    }
+  }, [projectOnlyInView, kind, mapContext?.mapInstanceRef, mapContext?.mapReady])
+
+  const filteredProjects = useMemo(() => {
+    const base = projects.filter((project) =>
+      matchProjectFilters(project, {
+        query: projectQuery,
+        emdName,
+        riName,
+        supplyBlock,
+      })
+    )
+    if (!projectOnlyInView || !inViewConsCodes) return base
+    return base.filter((project) =>
+      project.works.some((workItem) => inViewConsCodes.has(workItem.consCode))
+    )
+  }, [
+    projects,
+    projectQuery,
+    emdName,
+    riName,
+    supplyBlock,
+    projectOnlyInView,
+    inViewConsCodes,
+  ])
 
   const project = projects.find((item) => item.id === projectId) ?? null
   /** 검색·필터와 무관. 클릭으로 연 공사만 우측 패널에 유지 */
@@ -506,11 +562,10 @@ export function WtlConstructionLedgerShell({
   }, [projectGeoms, work, showAllProjectGeoms])
 
   /**
-   * «화면에 보이는 시설만»
-   * - 목록 필터 + 맵무브 억제(suppressListFit) 공통 상태
-   * - 의도 전문: WtlConsRelatedTabs / useWtlConsMapLayer 파일 상단
+   * «화면에 보이는 시설만» — 로직 유지.
+   * 체크 UI·기본 ON은 공사이력 탭 진입 시(RelatedTabs). 그 외 탭은 OFF.
    */
-  const [onlyInView, setOnlyInView] = useState(true)
+  const [onlyInView, setOnlyInView] = useState(false)
 
   useWtlConsMapLayer({
     projectGeoms: visibleProjectGeoms,
@@ -562,14 +617,13 @@ export function WtlConstructionLedgerShell({
       if (projectId !== pinned) setProjectId(pinned)
       return
     }
-    if (projectId && filteredProjects.some((item) => item.id === projectId)) {
-      skipAutoProjectRef.current = false
-      return
+    // 현재 선택이 필터 목록에 있으면 유지 (사업행 클릭으로만 선택됨)
+    if (projectId && filteredProjects.some((item) => item.id === projectId)) return
+    // 진입·필터로 목록에서 빠짐·해제: 첫 행 자동 선택·shp 맞춤 금지
+    if (projectId) {
+      skipAutoProjectRef.current = true
+      setProjectId(null)
     }
-    // 사용자가 사업 선택을 해제한 상태 유지
-    if (!projectId && skipAutoProjectRef.current) return
-    skipAutoProjectRef.current = false
-    setProjectId(filteredProjects[0]?.id ?? null)
   }, [filteredProjects, projectId, projects, workId])
 
   useEffect(() => {
@@ -603,6 +657,41 @@ export function WtlConstructionLedgerShell({
     setAlertFitToken((token) => token + 1)
   }, [alertJump, projects, projectId, kind])
 
+  /** 공사이력 정보박스 «조회» — 해당 공사 패널 + 관련탭 공사위치 */
+  const openHistoryWork = useCallback(
+    (codeRaw: string) => {
+      const code = codeRaw.trim()
+      if (!code || projects.length === 0) return
+      const hit = projects.find((item) =>
+        item.works.some((workItem) => workItem.consCode === code || workItem.id === code)
+      )
+      const workItem = hit?.works.find((item) => item.consCode === code || item.id === code)
+      if (!hit || !workItem) return
+      pinProjectRef.current = hit.id
+      skipAutoProjectRef.current = false
+      setMapFocus(null)
+      setZoneId(null)
+      pendingSelectZoneFromHistoryRef.current = true
+      setRelatedTabLand({ tab: 'zone', token: Date.now() })
+      if (projectId !== hit.id) {
+        keepWorkRef.current = workItem.id
+        setProjectId(hit.id)
+      } else if (workId === workItem.id) {
+        // 이미 같은 공사 — 구역 재로드 없음 → 현재 목록 첫 행 선택
+        pendingSelectZoneFromHistoryRef.current = false
+        setZoneId(zones[0]?.id ?? null)
+        setFitToken((token) => token + 1)
+        setWorkScrollToken((token) => token + 1)
+        return
+      } else {
+        setWorkId(workItem.id)
+      }
+      setFitToken((token) => token + 1)
+      setWorkScrollToken((token) => token + 1)
+    },
+    [projects, projectId, workId, zones]
+  )
+
   const searchText = projectQuery.trim()
   const searchActive = searchText.length > 0
   const listedWorks = useMemo(() => {
@@ -628,9 +717,18 @@ export function WtlConstructionLedgerShell({
       .then((zoneResult) => {
         if (cancelled) return
         setZones(zoneResult.zones)
+        // 공사이력 «조회»로 들어온 경우 → 공사위치 첫 행 선택(지도·목록 맞춤)
+        if (pendingSelectZoneFromHistoryRef.current) {
+          pendingSelectZoneFromHistoryRef.current = false
+          const firstId = zoneResult.zones[0]?.id ?? null
+          setZoneId(firstId)
+        }
       })
       .catch(() => {
-        if (!cancelled) setZones([])
+        if (!cancelled) {
+          setZones([])
+          pendingSelectZoneFromHistoryRef.current = false
+        }
       })
       .finally(() => {
         if (!cancelled) setZoneLoading(false)
@@ -660,7 +758,21 @@ export function WtlConstructionLedgerShell({
             <div className="flex min-h-0 flex-1 flex-col">
               <div className="flex min-h-0 flex-[0.95] flex-col border-b border-border">
                 <div className="shrink-0 space-y-1.5 border-b border-border px-3 py-2">
-                  <div className="text-[11px] font-semibold text-slate-700">사업목록</div>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="text-[11px] font-semibold text-slate-700">사업목록</div>
+                    {projectOnlyInView && inViewLoading ? (
+                      <span className="text-[10px] text-slate-400">화면 조회 중…</span>
+                    ) : null}
+                  </div>
+                  <label className="flex cursor-pointer items-center gap-1.5 text-[11px] text-foreground">
+                    <input
+                      type="checkbox"
+                      className="cursor-pointer"
+                      checked={projectOnlyInView}
+                      onChange={(e) => setProjectOnlyInView(e.target.checked)}
+                    />
+                    화면에 보이는 사업만 표시합니다
+                  </label>
                   <div className="flex items-center gap-1.5">
                     <div className="relative min-w-0 flex-1">
                       <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
@@ -735,8 +847,14 @@ export function WtlConstructionLedgerShell({
                     <li className="px-3 py-8 text-center text-xs text-slate-400">사업 목록을 불러오는 중…</li>
                   ) : listError ? (
                     <li className="px-3 py-8 text-center text-xs text-slate-400">{listError}</li>
+                  ) : projectOnlyInView && inViewConsCodes == null ? (
+                    <li className="px-3 py-8 text-center text-xs text-slate-400">화면 범위 조회 중…</li>
                   ) : filteredProjects.length === 0 ? (
-                    <li className="px-3 py-8 text-center text-xs text-slate-400">검색 결과가 없습니다.</li>
+                    <li className="px-3 py-8 text-center text-xs text-slate-400">
+                      {projectOnlyInView
+                        ? '화면에 보이는 사업이 없습니다.'
+                        : '검색 결과가 없습니다.'}
+                    </li>
                   ) : (
                     filteredProjects.map((item) => (
                       <ProjectRow
@@ -805,10 +923,17 @@ export function WtlConstructionLedgerShell({
                         // 같은 공사 다시 선택 → 공사 해제, 사업만 남은 상태
                         if (item.id === workId) {
                           setWorkId(null)
-                          setFitToken((token) => token + 1)
+                          // 여러 공사 사업만 사업 전체 범위로 다시 맞춤. 단건은 shp 동일
+                          if ((project?.works.length ?? 0) > 1) {
+                            setFitToken((token) => token + 1)
+                          }
                           return
                         }
+                        const fromProjectOnly = !workId
+                        const singleWork = (project?.works.length ?? 0) === 1
                         setWorkId(item.id)
+                        // 단건 사업: 사업 선택 때 이미 같은 shp로 맞춤 → 공사행에서 또 안 옮김
+                        if (fromProjectOnly && singleWork) return
                         setFitToken((token) => token + 1)
                       }}
                     />
@@ -879,47 +1004,24 @@ export function WtlConstructionLedgerShell({
                       </button>
                     </div>
                   </div>
-                  <div className="overflow-hidden rounded border border-slate-200">
-                    <AttrRowEllipsis label={WTL_CONS_FIELD_LABEL.name} value={work.name} />
-                    <AttrRow label={WTL_CONS_FIELD_LABEL.location} value={work.location} />
-                    <AttrRowEllipsis label={WTL_CONS_FIELD_LABEL.volume} value={work.volume} />
-                    <AttrRow label={WTL_CONS_FIELD_LABEL.amountPre} value={work.amountPre} />
-                    <AttrRow label={WTL_CONS_FIELD_LABEL.amountVar} value={work.amountVar} />
-                    <AttrRow label={WTL_CONS_FIELD_LABEL.amountCha} value={work.amountCha} />
-                    <AttrRow label={WTL_CONS_FIELD_LABEL.amountAft} value={work.amountAft} />
-                    <AttrPairRow
-                      leftLabel={WTL_CONS_FIELD_LABEL.contDate}
-                      leftValue={work.contDate}
-                      rightLabel={WTL_CONS_FIELD_LABEL.startDate}
-                      rightValue={work.startDate}
-                    />
-                    <AttrPairRow
-                      leftLabel={WTL_CONS_FIELD_LABEL.doneDate}
-                      leftValue={work.doneDate}
-                      rightLabel={WTL_CONS_FIELD_LABEL.sdoneDate}
-                      rightValue={work.sdoneDate}
-                    />
-                    <AttrRow label={WTL_CONS_FIELD_LABEL.company} value={work.company} />
-                    <AttrRow label={WTL_CONS_FIELD_LABEL.ceo} value={work.ceo} />
-                    <AttrRowEllipsis label={WTL_CONS_FIELD_LABEL.companyAddr} value={work.companyAddr} />
-                    <AttrRow label={WTL_CONS_FIELD_LABEL.companyPhone} value={work.companyPhone} />
-                    <AttrRow label={WTL_CONS_FIELD_LABEL.directorPos} value={work.directorPos} />
-                    <AttrRow label={WTL_CONS_FIELD_LABEL.directorName} value={work.directorName} />
-                    <AttrRow label={WTL_CONS_FIELD_LABEL.reason} value={work.reason} />
-                    <AttrRow label={WTL_CONS_FIELD_LABEL.descript} value={work.descript} />
-                    {kind !== 'swl' ? (
-                      <div className="grid grid-cols-3 border-t border-slate-100 text-[11px]">
-                        {SUPPLY_ZONE_COLUMNS.map((col) => (
-                          <div key={col.key} className="min-w-0 border-r border-slate-100 last:border-r-0">
-                            <div className="bg-slate-50 px-2 py-1.5 font-medium text-slate-600">{col.label}</div>
-                            <div className="break-words px-2 py-1.5 text-slate-800">
-                              {supplyZoneText[col.key]?.trim() ? supplyZoneText[col.key] : '—'}
+                  <WtlConsWorkAttrTable
+                    work={work}
+                    kind={kind}
+                    footer={
+                      kind !== 'swl' ? (
+                        <div className="grid grid-cols-3 border-t border-slate-100 text-[11px]">
+                          {SUPPLY_ZONE_COLUMNS.map((col) => (
+                            <div key={col.key} className="min-w-0 border-r border-slate-100 last:border-r-0">
+                              <div className="bg-slate-50 px-2 py-1.5 font-medium text-slate-600">{col.label}</div>
+                              <div className="break-words px-2 py-1.5 text-slate-800">
+                                {supplyZoneText[col.key]?.trim() ? supplyZoneText[col.key] : '—'}
+                              </div>
                             </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
+                          ))}
+                        </div>
+                      ) : null
+                    }
+                  />
                 </div>
                 <WtlConsRelatedTabs
                   zones={zones}
@@ -941,6 +1043,8 @@ export function WtlConstructionLedgerShell({
                   consCode={work?.consCode ?? null}
                   activeZone={activeZone}
                   zoneLoading={zoneLoading}
+                  onOpenHistoryWork={openHistoryWork}
+                  tabLand={relatedTabLand}
                 />
               </div>
             </div>
