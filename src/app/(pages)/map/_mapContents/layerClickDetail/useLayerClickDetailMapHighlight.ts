@@ -42,11 +42,11 @@ export function useLayerClickDetailMapHighlight(selected: LayerClickHit | null) 
   }, [selected, mapContext?.mapInstanceRef, mapContext?.mapReady])
 
   useEffect(() => {
-    const mapRef = mapContext?.mapInstanceRef
+    // cleanup 시점에 ref.current가 새 지도로 바뀌어도, 이 effect가 붙였던 옛 인스턴스만 지운다
+    const map = mapContext?.mapInstanceRef?.current ?? null
     return () => {
       // X로 닫힌 경우(retain 없음)만 하이라이트 제거
       if (peekLayerClickDetailRetain()?.hits.length) return
-      const map = mapRef?.current
       if (map) clearMapLayerClickDetailHighlight(map, 'layerClickDetail')
     }
   }, [mapContext?.mapInstanceRef])
