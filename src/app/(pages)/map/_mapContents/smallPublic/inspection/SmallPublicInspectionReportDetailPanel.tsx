@@ -1,8 +1,9 @@
 'use client'
 
-import { useMemo, useRef, useState } from 'react'
-import { FileSpreadsheet, FileText, FolderInput, Plus, Search } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { FileSpreadsheet, FileText, FolderInput, Loader2, Plus, Search } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { ListPaginationBar } from '../../../_mapComponents/ListPaginationBar'
 import { LayerRowPanelButton } from '../../../_mapComponents/layerRowEdit/LayerRowPanelButton'
 import { SMALL_PUBLIC_FAC_TYPES, type SmallPublicFacType } from '../smallPublicConfig'
 import type { SmallPublicInspection } from '../smallPublicMock'
@@ -40,7 +41,8 @@ type Props = {
   onOpenFacility: (facilityId: string) => void
   onAddFacility: () => void
   onOpenReport: () => void
-  onExcel: () => void
+  /** 선택한 읍면(빈 값은 전체)으로 엑셀 내려받기 */
+  onExcel: (emd: string) => void
   /** 정비계획 이관 — 위험으로 바뀐 시설 선택 모달 */
   onTransferToPlan: () => void
   onEdit: () => void
@@ -49,7 +51,12 @@ type Props = {
   onClose: () => void
   /** 상단 패널 헤더를 셸이 그릴 때 true */
   embedded?: boolean
+  /** 보고서 대상·점검을 불러오는 중 */
+  loading?: boolean
 }
+
+/** 점검 대상 목록 한 페이지 건수 */
+const TARGET_PAGE_SIZE = 100
 
 function countText(rows: SmallPublicReportRow[], key: (r: SmallPublicReportRow) => string): string {
   const m = new Map<string, number>()
@@ -75,6 +82,7 @@ export function SmallPublicInspectionReportDetailPanel({
   onDelete,
   onClose,
   embedded = false,
+  loading = false,
 }: Props) {
   const [tab, setTab] = useState<DetailTab>('targets')
   const [type, setType] = useState<SmallPublicFacType | ''>('')
@@ -86,7 +94,6 @@ export function SmallPublicInspectionReportDetailPanel({
   const [keyword, setKeyword] = useState('')
   const [done, setDone] = useState<'' | 'done' | 'todo'>('')
   const scrollRef = useRef<HTMLDivElement>(null)
-  useSmallPublicScrollSelectedIntoView(scrollRef, selectedFacilityId)
   const sort = useSmallPublicSort<SortKey>(initialSortDir)
 
   const inspectedCount = targets.filter((t) => t.yearLatest).length
@@ -108,6 +115,26 @@ export function SmallPublicInspectionReportDetailPanel({
       return t.yearLatest ? t.yearLatest.classResult : t.row.prevClass
     })
   }, [targets, type, emd, done, keyword, sort.sorts])
+
+  const [page, setPage] = useState(1)
+  const pageCount = Math.max(1, Math.ceil(shown.length / TARGET_PAGE_SIZE))
+  const safePage = Math.min(page, pageCount)
+  const pageRows = useMemo(
+    () => shown.slice((safePage - 1) * TARGET_PAGE_SIZE, safePage * TARGET_PAGE_SIZE),
+    [shown, safePage]
+  )
+  /** 지도 등에서 시설을 고르면 그 시설이 있는 페이지로 이동한 뒤 스크롤 */
+  useEffect(() => {
+    if (!selectedFacilityId) return
+    const idx = shown.findIndex((t) => t.row.facilityId === selectedFacilityId)
+    if (idx >= 0) setPage(Math.floor(idx / TARGET_PAGE_SIZE) + 1)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedFacilityId])
+  useSmallPublicScrollSelectedIntoView(scrollRef, selectedFacilityId, `${safePage}:${pageRows.length}`)
+  /** 검색·필터·정렬이 바뀌면 첫 페이지로 */
+  useEffect(() => {
+    setPage(1)
+  }, [type, emd, done, keyword, sort.sorts, targets.length])
 
   const tabs: { key: DetailTab; label: string }[] = [
     { key: 'overview', label: '개요' },
@@ -136,7 +163,7 @@ export function SmallPublicInspectionReportDetailPanel({
       <div className="flex shrink-0 items-center gap-1.5 border-b border-border px-3 py-1.5">
         {[
           { label: '보고서', icon: FileText, onClick: onOpenReport, title: '보고서 미리보기·인쇄·한글 다운로드' },
-          { label: '엑셀', icon: FileSpreadsheet, onClick: onExcel, title: '점검 대상 목록 엑셀' },
+          { label: '엑셀', icon: FileSpreadsheet, onClick: () => onExcel(emd), title: '점검 대상 읍면 필터 기준 목록 엑셀' },
           {
             label: '정비계획 이관',
             icon: FolderInput,
@@ -300,14 +327,23 @@ export function SmallPublicInspectionReportDetailPanel({
                 </tr>
               </thead>
               <tbody>
-                {shown.length === 0 ? (
+                {loading && targets.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-3 py-10 text-center text-muted-foreground">
+                      <span className="inline-flex items-center gap-2 text-[12px]">
+                        <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                        점검 대상을 불러오는 중…
+                      </span>
+                    </td>
+                  </tr>
+                ) : shown.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="px-3 py-10 text-center text-muted-foreground">
                       조건에 맞는 시설이 없습니다.
                     </td>
                   </tr>
                 ) : (
-                  shown.map(({ row, yearLatest }) => {
+                  pageRows.map(({ row, yearLatest }) => {
                     const active = selectedFacilityId === row.facilityId
                     return (
                       <tr
@@ -352,8 +388,17 @@ export function SmallPublicInspectionReportDetailPanel({
             </table>
           </div>
 
-          <div className="flex shrink-0 items-center border-t border-border px-3 py-1.5 text-[12px] text-muted-foreground">
-            {shown.length}곳 표시 · 점검 완료 {inspectedCount}곳
+          <div className="flex shrink-0 items-center justify-between gap-2 border-t border-border px-3 text-[12px] text-muted-foreground">
+            <span className="py-1.5">
+              {shown.length}곳 · 점검 완료 {inspectedCount}곳
+            </span>
+            <ListPaginationBar
+              page={safePage}
+              pageCount={pageCount}
+              loading={loading}
+              onPageChange={setPage}
+              className="border-0 px-0"
+            />
           </div>
         </div>
       )}

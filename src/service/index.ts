@@ -104,6 +104,7 @@ import * as individualLandPriceService from './individualLandPriceService';
 import * as odorSensorService from './odorSensorService';
 import * as realTransactionPriceService from './realTransactionPriceService';
 import * as smallPublicService from './smallPublicService';
+import * as smallPublicPlanService from './smallPublicPlanService';
 
 export {
   configService,
@@ -208,4 +209,5 @@ export {
   odorSensorService,
   realTransactionPriceService,
   smallPublicService,
+  smallPublicPlanService,
 };

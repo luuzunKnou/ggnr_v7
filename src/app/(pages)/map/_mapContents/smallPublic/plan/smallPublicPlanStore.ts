@@ -176,13 +176,98 @@ const EXCLUDED_PLAN_UNIT_NAMES = new Set(['봉평리_세천_002', '온정리_소
  * 예시 — 기존 계획(보고서 4장) 최종순위 50위까지.
  * 기존 계획 시설명과 후보지 시설명이 같으면 시설에 연결한다(소교량은 보고서가 리 단위 통합이라 연결 안 됨).
  */
+/** 프로토 — 명세서 작성 예시(정비된·중기 연차·효과·5개년 후). 정비율은 사업량으로 자동 계산 */
+function applySheetProtoSamples(units: PlanUnit[]): PlanUnit[] {
+  const samples: {
+    match: (u: PlanUnit) => boolean
+    done: { qty: number; costWon: number }
+    midYears: { qty: number; costWon: number }[]
+    after: { qty: number; costWon: number }
+    sheetEffect: { people: number; farmHa: number; buildings: number }
+  }[] = [
+    {
+      match: (u) => u.unitName === '온양리_마을진입로_007',
+      done: { qty: 120, costWon: 80_000_000 },
+      midYears: [
+        { qty: 200, costWon: 150_000_000 },
+        { qty: 180, costWon: 120_000_000 },
+        { qty: 0, costWon: 0 },
+        { qty: 100, costWon: 70_000_000 },
+        { qty: 0, costWon: 0 },
+      ],
+      after: { qty: 50, costWon: 40_000_000 },
+      sheetEffect: { people: 42, farmHa: 3.2, buildings: 4 },
+    },
+    {
+      match: (u) => u.unitName === '정림리_마을진입로_017',
+      done: { qty: 80, costWon: 45_000_000 },
+      midYears: [
+        { qty: 0, costWon: 0 },
+        { qty: 220, costWon: 160_000_000 },
+        { qty: 180, costWon: 130_000_000 },
+        { qty: 0, costWon: 0 },
+        { qty: 90, costWon: 65_000_000 },
+      ],
+      after: { qty: 0, costWon: 0 },
+      sheetEffect: { people: 25, farmHa: 0, buildings: 1 },
+    },
+    {
+      match: (u) => u.unitName === '구산리1_마을진입로_002',
+      done: { qty: 0, costWon: 0 },
+      midYears: [
+        { qty: 150, costWon: 95_000_000 },
+        { qty: 150, costWon: 95_000_000 },
+        { qty: 100, costWon: 60_000_000 },
+        { qty: 0, costWon: 0 },
+        { qty: 0, costWon: 0 },
+      ],
+      after: { qty: 80, costWon: 55_000_000 },
+      sheetEffect: { people: 18, farmHa: 1.5, buildings: 2 },
+    },
+    {
+      match: (u) => u.unitName === '봉평리_마을진입로_038',
+      done: { qty: 40, costWon: 25_000_000 },
+      midYears: [
+        { qty: 90, costWon: 55_000_000 },
+        { qty: 0, costWon: 0 },
+        { qty: 110, costWon: 70_000_000 },
+        { qty: 70, costWon: 48_000_000 },
+        { qty: 0, costWon: 0 },
+      ],
+      after: { qty: 30, costWon: 20_000_000 },
+      sheetEffect: { people: 12, farmHa: 0.8, buildings: 0 },
+    },
+  ]
+
+  return units.map((u) => {
+    const sample = samples.find((s) => s.match(u))
+    if (!sample) return u
+    const cur = u.versions[u.versions.length - 1]!
+    const next = {
+      ...cur,
+      done: sample.done,
+      midYears: sample.midYears,
+      after: sample.after,
+      sheetEffect: sample.sheetEffect,
+      sheetRates: null,
+    }
+    return {
+      ...u,
+      versions: [...u.versions.slice(0, -1), next],
+      history: [...u.history, { at: nowStamp(), by: '프로토', text: '명세서 작성 예시' }],
+    }
+  })
+}
+
 function initialState(): State {
   const facilities = createSmallPublicMockFacilities()
   const facilityByName = new Map(facilities.map((f) => [f.name, f]))
   const emdByRi = new Map(facilities.map((f) => [f.ri, f.emd]))
-  const units = SMALL_PUBLIC_PLAN_REPORT_ROWS.filter(
-    (row) => row[8] <= REPORT_SAMPLE_RANK_LIMIT && !EXCLUDED_PLAN_UNIT_NAMES.has(String(row[0]))
-  ).map((row) => reportUnit(row, facilityByName, emdByRi))
+  const units = applySheetProtoSamples(
+    SMALL_PUBLIC_PLAN_REPORT_ROWS.filter(
+      (row) => row[8] <= REPORT_SAMPLE_RANK_LIMIT && !EXCLUDED_PLAN_UNIT_NAMES.has(String(row[0]))
+    ).map((row) => reportUnit(row, facilityByName, emdByRi))
+  )
   return { units, analyzeRequest: null }
 }
 
@@ -276,6 +361,111 @@ export const smallPublicPlanActions = {
       versions: replaceCurrent(u, v),
       history: [...u.history, { at: nowStamp(), by, text }],
     }))
+  },
+
+  /** 중기 1~5년차 사업량·사업비 직접 입력 */
+  setMidYears(unitId: string, midYears: { qty: number; costWon: number }[]) {
+    updateUnit(unitId, (u) => {
+      const cur = currentVersion(u)
+      return {
+        ...u,
+        versions: replaceCurrent(u, { ...cur, midYears }),
+      }
+    })
+  },
+
+  /** 정비된 부분(사업량·사업비) */
+  setDone(unitId: string, done: { qty: number; costWon: number }) {
+    updateUnit(unitId, (u) => {
+      const cur = currentVersion(u)
+      return {
+        ...u,
+        versions: replaceCurrent(u, { ...cur, done }),
+      }
+    })
+  },
+
+  /** 5개년 후 정비대상 */
+  setAfter(unitId: string, after: { qty: number; costWon: number }) {
+    updateUnit(unitId, (u) => {
+      const cur = currentVersion(u)
+      return {
+        ...u,
+        versions: replaceCurrent(u, { ...cur, after }),
+      }
+    })
+  },
+
+  /** 사업효과(수혜자·농경지·건물) */
+  setSheetEffect(unitId: string, sheetEffect: { people: number; farmHa: number; buildings: number }) {
+    updateUnit(unitId, (u) => {
+      const cur = currentVersion(u)
+      return {
+        ...u,
+        versions: replaceCurrent(u, { ...cur, sheetEffect }),
+      }
+    })
+  },
+
+  /**
+   * 명세서 저장 — 입력값을 반영하고 작성중(DRAFT)으로 둔다.
+   * 확정·기존 계획도 저장하면 작성중으로 바뀐다. 정비율은 사업량으로 자동 계산.
+   */
+  saveSheetDrafts(
+    entries: {
+      unitId: string
+      midYears: { qty: number; costWon: number }[]
+      done: { qty: number; costWon: number }
+      after: { qty: number; costWon: number }
+      sheetEffect: { people: number; farmHa: number; buildings: number }
+    }[],
+    by: string
+  ) {
+    if (entries.length === 0) return
+    const byId = new Map(entries.map((e) => [e.unitId, e]))
+    const s = getState()
+    setState({
+      ...s,
+      units: s.units.map((u) => {
+        const e = byId.get(u.id)
+        if (!e) return u
+        const cur = currentVersion(u)
+        const next = {
+          ...cur,
+          midYears: e.midYears,
+          done: e.done,
+          after: e.after,
+          sheetEffect: e.sheetEffect,
+          sheetRates: null,
+          status: 'DRAFT' as const,
+        }
+        return {
+          ...u,
+          versions: replaceCurrent(u, next),
+          history: [...u.history, { at: nowStamp(), by, text: '정비계획 명세서 저장(작성중)' }],
+        }
+      }),
+    })
+  },
+
+  /** 명세서 적용 — 작성중(추정)을 확정으로 */
+  applyUnits(unitIds: string[], by: string) {
+    const idSet = new Set(unitIds)
+    const s = getState()
+    setState({
+      ...s,
+      units: s.units.map((u) => {
+        if (!idSet.has(u.id)) return u
+        const cur = currentVersion(u)
+        if (cur.status !== 'DRAFT') return u
+        const next = { ...cur, status: 'APPROVED' as const }
+        return {
+          ...u,
+          versions: replaceCurrent(u, next),
+          history: [...u.history, { at: nowStamp(), by, text: '정비계획 명세서 적용(확정)' }],
+        }
+      }),
+    })
   },
 
   /** 분석 삭제 — 추정(검토 전) 분석만 */

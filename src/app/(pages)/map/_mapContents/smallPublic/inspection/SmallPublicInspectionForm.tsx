@@ -12,7 +12,13 @@ import {
   type SmallPublicGrade,
 } from '../smallPublicConfig'
 import { smallPublicCheckFormFor } from '../smallPublicCheckForms'
-import type { SmallPublicFacility, SmallPublicFile, SmallPublicInspection } from '../smallPublicMock'
+import {
+  smallPublicInspectionFiles,
+  type SmallPublicFacility,
+  type SmallPublicFile,
+  type SmallPublicInspection,
+} from '../smallPublicMock'
+import { deleteInspectionFile, smallPublicFileYear, uploadInspectionFiles } from '../smallPublicAttachmentApi'
 import { smallPublicActions, smallPublicFileFromUpload, useSmallPublicStore } from '../smallPublicStore'
 import {
   SmallPublicAttrTable,
@@ -44,8 +50,21 @@ function scoreOfGrade(grade: SmallPublicGrade): number {
 }
 
 function filesOfInspection(i: SmallPublicInspection | null): SmallPublicFile[] {
-  if (!i) return []
-  return [i.file, i.classFile].filter((f): f is SmallPublicFile => !!f)
+  return smallPublicInspectionFiles(i)
+}
+
+/** 파일명으로 위험도·구분·현장조사 칸 나누기 — 못 맞추면 위험도 칸부터 채움 */
+function slotFiles(files: SmallPublicFile[]): Pick<SmallPublicInspection, 'file' | 'classFile' | 'fieldFile'> {
+  const find = (re: RegExp) => files.find((f) => re.test(f.name.replace(/\.[^.]+$/, ''))) ?? null
+  const risk = find(/위험도/)
+  const cls = find(/일반.?관리|구분/)
+  const field = find(/현장조사/)
+  const rest = files.filter((f) => f !== risk && f !== cls && f !== field)
+  return {
+    file: risk ?? rest.shift() ?? null,
+    classFile: cls ?? rest.shift() ?? null,
+    fieldFile: field ?? rest.shift() ?? null,
+  }
 }
 
 /**
@@ -72,6 +91,13 @@ export function SmallPublicInspectionFormModal({
   const { inspections } = useSmallPublicStore()
   const preview = useSmallPublicFilePreview()
   const fileRef = useRef<HTMLInputElement>(null)
+  /** 이번에 새로 고른 파일(저장 때 서버 폴더에 올림) */
+  const pendingRef = useRef(new Map<string, File>())
+  /** 서버 폴더에 있던 파일 중 지우기로 한 것(저장 때 삭제) */
+  const removedRef = useRef<SmallPublicFile[]>([])
+  /** 사용자가 첨부를 만졌는지 — 안 만졌으면 늦게 도착한 서버 첨부 목록으로 갱신 */
+  const touchedRef = useRef(false)
+  const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [attrsOpen, setAttrsOpen] = useState(true)
   const [date, setDate] = useState(
@@ -87,6 +113,11 @@ export function SmallPublicInspectionFormModal({
   const [selectedFileId, setSelectedFileId] = useState<string | null>(
     () => filesOfInspection(initial)[0]?.id ?? null
   )
+
+  useEffect(() => {
+    if (touchedRef.current || !initial?.files) return
+    setFiles(initial.files)
+  }, [initial?.files])
 
   useEffect(() => {
     if (files.length === 0) {
@@ -105,7 +136,19 @@ export function SmallPublicInspectionFormModal({
     .sort((a, b) => b.date.localeCompare(a.date))[0]
   const autoClass = classFromGrade(grade, prev?.classResult ?? null)
 
-  const save = () => {
+  const removeFile = (file: SmallPublicFile) => {
+    touchedRef.current = true
+    if (pendingRef.current.has(file.id)) {
+      pendingRef.current.delete(file.id)
+      if (file.url) URL.revokeObjectURL(file.url)
+    } else if (smallPublicFileYear(file)) {
+      removedRef.current.push(file)
+    }
+    setFiles((prev) => prev.filter((x) => x.id !== file.id))
+  }
+
+  const save = async () => {
+    if (saving) return
     if (!date) return setError('조사일을 넣으세요.')
     if (year && !date.startsWith(String(year))) return setError(`보고서 연도(${year}년) 안의 조사일을 넣으세요.`)
     const scoreNum = Number(score)
@@ -115,7 +158,38 @@ export function SmallPublicInspectionFormModal({
       (i) => i.facilityId === facility.id && i.date === date && i.id !== initial?.id
     )
     if (dup) return setError('같은 날 점검이 이미 있습니다.')
-    const form = initial?.form ?? smallPublicCheckFormFor(facility.type, date)
+    const mngNo = String(facility.mngNo ?? '').trim()
+    if (!mngNo || mngNo.startsWith('excl:')) return setError('관리번호가 없는 시설은 첨부를 저장할 수 없습니다.')
+
+    /** 서버 폴더 {관리번호}/{점검연도}/ 에 올리고 지운 파일을 정리 — 후보지 상세·보고서도 같은 폴더를 읽는다 */
+    setSaving(true)
+    setError(null)
+    let finalFiles = files
+    try {
+      for (const f of removedRef.current) await deleteInspectionFile(mngNo, f)
+      removedRef.current = []
+      const pendingFiles = files.filter((f) => pendingRef.current.has(f.id))
+      if (pendingFiles.length > 0) {
+        const uploaded = await uploadInspectionFiles(
+          mngNo,
+          date.slice(0, 4),
+          pendingFiles.map((f) => pendingRef.current.get(f.id)!)
+        )
+        const byOrder = [...uploaded]
+        finalFiles = files.map((f) => (pendingRef.current.has(f.id) ? (byOrder.shift() ?? f) : f))
+        pendingFiles.forEach((f) => f.url && URL.revokeObjectURL(f.url))
+        pendingRef.current.clear()
+      }
+    } catch (e) {
+      setSaving(false)
+      return setError(e instanceof Error ? e.message : '첨부 저장에 실패했습니다.')
+    }
+    setSaving(false)
+
+    const form =
+      initial?.form && Array.isArray(initial.form.groups) && initial.form.groups.length > 0
+        ? initial.form
+        : smallPublicCheckFormFor(facility.type, date)
     const next: SmallPublicInspection = {
       id: initial?.id ?? `insp-${Date.now()}`,
       facilityId: facility.id,
@@ -129,11 +203,14 @@ export function SmallPublicInspectionFormModal({
       remark: remark.trim(),
       form,
       values: {},
-      file: files[0] ?? null,
-      classFile: files[1] ?? null,
+      ...slotFiles(finalFiles),
+      files: finalFiles,
     }
-    smallPublicActions.saveInspection(next)
-    onSaved(next)
+    setSaving(true)
+    const saved = await smallPublicActions.saveInspection(next)
+    setSaving(false)
+    if (!saved.success) return setError(saved.error)
+    onSaved(saved.inspection)
   }
 
   return (
@@ -276,7 +353,12 @@ export function SmallPublicInspectionFormModal({
             onChange={(e) => {
               const list = Array.from(e.target.files ?? [])
               if (list.length) {
-                const added = list.map((f) => smallPublicFileFromUpload(f, 'safety'))
+                touchedRef.current = true
+                const added = list.map((f) => {
+                  const item = smallPublicFileFromUpload(f, 'safety')
+                  pendingRef.current.set(item.id, f)
+                  return item
+                })
                 setFiles((prev) => [...prev, ...added])
                 setSelectedFileId(added[0]!.id)
               }
@@ -313,7 +395,7 @@ export function SmallPublicInspectionFormModal({
                         className="mr-1 rounded p-0.5 text-destructive hover:bg-destructive/10"
                         title="제거"
                         aria-label="제거"
-                        onClick={() => setFiles((prev) => prev.filter((x) => x.id !== file.id))}
+                        onClick={() => removeFile(file)}
                       >
                         <X className="h-3.5 w-3.5" />
                       </button>
@@ -337,8 +419,8 @@ export function SmallPublicInspectionFormModal({
 
       <div className="flex w-full shrink-0 items-center gap-2.5 border-t border-border px-3 py-1.5">
         {error ? <span className="mr-auto text-[11px] text-destructive">{error}</span> : <span className="mr-auto" />}
-        <button type="button" className={smallPublicBtnPrimary} onClick={save}>
-          저장
+        <button type="button" className={smallPublicBtnPrimary} disabled={saving} onClick={() => void save()}>
+          {saving ? '저장 중…' : '저장'}
         </button>
         <button type="button" className={smallPublicBtnGhost} onClick={onCancel}>
           취소

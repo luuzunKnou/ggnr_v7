@@ -3,7 +3,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import type { SmallPublicFacility, SmallPublicFile, SmallPublicInspection } from '../smallPublicMock'
+import {
+  smallPublicInspectionFiles,
+  type SmallPublicFacility,
+  type SmallPublicInspection,
+} from '../smallPublicMock'
 import { smallPublicActions } from '../smallPublicStore'
 import {
   SmallPublicAttrTable,
@@ -19,8 +23,8 @@ import {
 } from '../smallPublicUi'
 
 /**
- * 점검 완료 시설 상세 — 목록 옆 붙는 패널(후보지 상세와 동일).
- * 속성 + 첨부 목록 + 인라인 미리보기.
+ * 점검 완료 상세 — 점검 속성(조사일·등급·구분 등) + 첨부 목록·미리보기.
+ * 시설 속성표가 아니라 이번 점검 내용만 보여 준다.
  */
 export function SmallPublicFacilityInspectionModal({
   facility: f,
@@ -30,6 +34,8 @@ export function SmallPublicFacilityInspectionModal({
 }: {
   facility: SmallPublicFacility
   inspection: SmallPublicInspection
+  /** @deprecated 호환용 — 상세는 이번 점검만 */
+  inspections?: SmallPublicInspection[]
   year: number
   onEdit: (inspection: SmallPublicInspection) => void
   onClose: () => void
@@ -38,9 +44,7 @@ export function SmallPublicFacilityInspectionModal({
   overlayWidthPx?: number
 }) {
   const preview = useSmallPublicFilePreview()
-  const files = useMemo(() => {
-    return [i.file, i.classFile].filter((x): x is SmallPublicFile => !!x)
-  }, [i])
+  const files = useMemo(() => smallPublicInspectionFiles(i), [i])
   const [attrsOpen, setAttrsOpen] = useState(true)
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null)
 
@@ -52,8 +56,13 @@ export function SmallPublicFacilityInspectionModal({
 
   const remove = () => {
     if (!window.confirm(`${i.date} 점검을 삭제할까요?`)) return
-    smallPublicActions.deleteInspection(i.id)
-    onClose()
+    void smallPublicActions.deleteInspection(i.id).then((res) => {
+      if (!res.success) {
+        window.alert(res.error)
+        return
+      }
+      onClose()
+    })
   }
 
   return (
