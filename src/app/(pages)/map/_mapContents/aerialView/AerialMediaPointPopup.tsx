@@ -10,6 +10,7 @@ import { useMapContext } from '../../_mapComponents/MapContext';
 import { ServiceFileImagePreview } from '../../_mapComponents/standard/ServiceFileImagePreview';
 import { fileCoord5181 } from './aerialLocationParse';
 import type { WorkFileItem } from './aerialMediaTypes';
+import { withBasePath } from '@/lib/basePath';
 
 const to3857 = getTransform('EPSG:5181', 'EPSG:3857');
 
@@ -17,7 +18,7 @@ function mediaUrl(relativePath: string, opts?: { download?: boolean; width?: num
   const q = new URLSearchParams({ path: relativePath.replace(/\\/g, '/') });
   if (opts?.download) q.set('download', '1');
   if (opts?.width) q.set('w', String(opts.width));
-  return `/api/aerial/media?${q.toString()}`;
+  return withBasePath(`/api/aerial/media?${q.toString()}`);
 }
 
 /**

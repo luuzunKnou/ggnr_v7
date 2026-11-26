@@ -23,6 +23,10 @@ export type SmallPublicPlanTransferRow = {
   date: string
   /** 이미 정비계획에 있음 */
   alreadyInPlan: boolean
+  /** 소교량 리 묶음 줄 — 이번에 위험으로 바뀐 소교량 수 */
+  memberCount?: number
+  /** 묶음이 이미 정비계획에 있어 구성원만 늘어나는 경우 */
+  groupInPlan?: boolean
 }
 
 /**
@@ -87,7 +91,7 @@ export function SmallPublicPlanTransferModal({
       {...overlay}
       size="lg"
       title="정비계획 이관"
-      subtitle="위험으로 바뀐 시설을 고른 뒤 «이관»을 누르면 정비계획 분석을 이어서 작성합니다."
+      subtitle="위험으로 바뀐 시설을 고른 뒤 «이관»을 누르면 정비계획 목록에 작성중으로 추가됩니다."
       showHeaderClose
       onClose={onCancel}
       bodyClassName="flex min-h-0 flex-1 flex-col overflow-hidden"
@@ -191,8 +195,18 @@ export function SmallPublicPlanTransferModal({
                       </td>
                       <td className="max-w-[10rem] truncate px-2 py-1.5 font-medium text-foreground" title={r.name}>
                         {r.name}
+                        {r.memberCount ? (
+                          <span className="ml-1 text-[10px] font-normal text-muted-foreground">
+                            ({r.memberCount}곳)
+                          </span>
+                        ) : null}
                         {r.alreadyInPlan ? (
                           <span className="ml-1 text-[10px] font-normal text-muted-foreground">(포함됨)</span>
+                        ) : null}
+                        {r.groupInPlan ? (
+                          <span className="block text-[10px] font-normal text-muted-foreground">
+                            기존 묶음에 추가
+                          </span>
                         ) : null}
                       </td>
                       <td className="whitespace-nowrap px-2 py-1.5 text-foreground/80">{r.type}</td>

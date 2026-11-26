@@ -1,8 +1,9 @@
 'use client'
 
 import { useMemo, useRef } from 'react'
-import { Plus, Search } from 'lucide-react'
+import { Loader2, Plus, Search } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { ListPaginationBar } from '../../../_mapComponents/ListPaginationBar'
 import { LayerRowPanelButton } from '../../../_mapComponents/layerRowEdit/LayerRowPanelButton'
 import {
   SMALL_PUBLIC_CANDIDATES,
@@ -39,13 +40,25 @@ type Props = {
   filter: SmallPublicCandidateFilter
   onFilterChange: (patch: Partial<SmallPublicCandidateFilter>) => void
   emdOptions: string[]
+  /** 서버에서 받은 현재 페이지 행 */
   rows: SmallPublicFacility[]
+  total: number
+  page: number
+  pageSize: number
+  onPageChange: (page: number) => void
+  /** 최근 안전점검 — 목록 구분·등급 표시 */
   latestOf: (facilityId: string) => SmallPublicInspection | null
   selectedId: string | null
   onSelect: (id: string) => void
   /** 새 후보지 등록 */
   onRegister: () => void
   onClose: () => void
+  /** 목록 로딩 중 */
+  loading?: boolean
+  /** defineLayer 한글 라벨 (시설명·읍면·구분). 등급은 점검 전용 고정 */
+  columnLabels?: { name?: string; emd?: string; candidate?: string }
+  /** 레이어설정 show_search 기준 검색 안내 */
+  searchPlaceholder?: string
 }
 
 export function SmallPublicCandidateListPanel({
@@ -53,28 +66,54 @@ export function SmallPublicCandidateListPanel({
   onFilterChange,
   emdOptions,
   rows,
+  total,
+  page,
+  pageSize,
+  onPageChange,
   latestOf,
   selectedId,
   onSelect,
   onRegister,
   onClose,
+  loading = false,
+  columnLabels,
+  searchPlaceholder = '시설명·관리번호 검색',
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null)
-  useSmallPublicScrollSelectedIntoView(scrollRef, selectedId)
   const sort = useSmallPublicSort<SortKey>(initialSortDir)
+  const nameLabel = columnLabels?.name?.trim() || '시설명'
+  const emdLabel = columnLabels?.emd?.trim() || '읍면'
+  const candidateLabel = columnLabels?.candidate?.trim() || '구분'
   const sortedRows = useMemo(
     () =>
-      smallPublicSortRows(rows, sort.sorts, (f, key) => {
-        if (key === 'name') return f.name
-        if (key === 'emd') return f.emd
-        if (key === 'candidate') return SMALL_PUBLIC_CANDIDATES.indexOf(f.candidate)
-        if (f.candidate === '제외') return null
-        const g = latestOf(f.id)?.grade ?? f.riskRank
-        const idx = SMALL_PUBLIC_GRADES.indexOf(g as (typeof SMALL_PUBLIC_GRADES)[number])
-        return idx >= 0 ? idx : g
-      }),
+      smallPublicSortRows(
+        rows,
+        sort.sorts,
+        (f, key) => {
+          if (key === 'name') return f.name
+          if (key === 'emd') return f.emd
+          const latest = latestOf(f.id)
+          if (key === 'candidate') {
+            const cls = latest?.classResult ?? f.candidate
+            return SMALL_PUBLIC_CANDIDATES.indexOf(cls)
+          }
+          if (key === 'grade') {
+            if (f.candidate === '제외' && !latest) return null
+            const g = latest?.grade
+            if (!g) return null
+            const idx = SMALL_PUBLIC_GRADES.indexOf(g as (typeof SMALL_PUBLIC_GRADES)[number])
+            return idx >= 0 ? idx : g
+          }
+          return null
+        },
+        { excludeLast: (f) => f.candidate === '제외' }
+      ),
     [rows, sort.sorts, latestOf]
   )
+  useSmallPublicScrollSelectedIntoView(scrollRef, selectedId, sortedRows)
+
+  const pageCount = Math.max(1, Math.ceil(total / pageSize))
+  const safePage = Math.min(page, pageCount)
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
@@ -108,9 +147,9 @@ export function SmallPublicCandidateListPanel({
             className="standard-filter-select h-8 w-[6.5rem] max-w-none text-[11px]"
             value={filter.emd}
             onChange={(e) => onFilterChange({ emd: e.target.value })}
-            aria-label="읍면"
+            aria-label="읍면동"
           >
-            <option value="">전체 읍면</option>
+            <option value="">전체 읍면동</option>
             {emdOptions.map((e) => (
               <option key={e} value={e}>
                 {e}
@@ -123,7 +162,7 @@ export function SmallPublicCandidateListPanel({
               type="search"
               value={filter.keyword}
               onChange={(e) => onFilterChange({ keyword: e.target.value })}
-              placeholder="시설명·리명 검색"
+              placeholder={searchPlaceholder}
               className="h-8 w-full rounded-md border border-border bg-background pl-8 pr-3 text-xs outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-ring"
             />
           </div>
@@ -140,14 +179,23 @@ export function SmallPublicCandidateListPanel({
           </colgroup>
           <thead className="sticky top-0 z-[1] bg-muted">
             <tr className="[&>th]:whitespace-nowrap [&>th]:px-1.5 [&>th]:py-1 [&>th]:text-[11px] [&>th]:font-semibold [&>th]:text-foreground/90 [&>th]:[box-shadow:inset_0_-2px_0_0_var(--border)]">
-              <SmallPublicSortTh sort={sort} sortKey="name" label="시설명" className="pl-3" />
-              <SmallPublicSortTh sort={sort} sortKey="emd" label="읍면" />
-              <SmallPublicSortTh sort={sort} sortKey="candidate" label="구분" align="center" />
+              <SmallPublicSortTh sort={sort} sortKey="name" label={nameLabel} className="pl-3" />
+              <SmallPublicSortTh sort={sort} sortKey="emd" label={emdLabel} />
+              <SmallPublicSortTh sort={sort} sortKey="candidate" label={candidateLabel} align="center" />
               <SmallPublicSortTh sort={sort} sortKey="grade" label="등급" align="center" />
             </tr>
           </thead>
           <tbody>
-            {rows.length === 0 ? (
+            {loading ? (
+              <tr>
+                <td colSpan={4} className="px-3 py-10 text-center text-muted-foreground">
+                  <span className="inline-flex items-center gap-2 text-[12px]">
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                    목록을 불러오는 중…
+                  </span>
+                </td>
+              </tr>
+            ) : sortedRows.length === 0 ? (
               <tr>
                 <td colSpan={4} className="px-3 py-8 text-center text-muted-foreground">
                   조건에 맞는 시설이 없습니다.
@@ -156,7 +204,9 @@ export function SmallPublicCandidateListPanel({
             ) : (
               sortedRows.map((f) => {
                 const active = selectedId === f.id
-                const grade = latestOf(f.id)?.grade ?? f.riskRank
+                const latest = latestOf(f.id)
+                const cls = latest?.classResult ?? f.candidate
+                const grade = latest?.grade
                 return (
                   <tr
                     key={f.id}
@@ -184,10 +234,10 @@ export function SmallPublicCandidateListPanel({
                     </td>
                     <td className="truncate px-1.5 py-1.5 text-[11px] text-muted-foreground">{f.emd}</td>
                     <td className="px-1.5 py-1.5 text-center">
-                      <SmallPublicClassBadge candidate={f.candidate} />
+                      <SmallPublicClassBadge candidate={cls} />
                     </td>
                     <td className="px-1.5 py-1.5 text-center">
-                      {f.candidate !== '제외' ? <SmallPublicGradeBadge grade={grade} /> : null}
+                      {grade ? <SmallPublicGradeBadge grade={grade} /> : null}
                     </td>
                   </tr>
                 )
@@ -196,7 +246,16 @@ export function SmallPublicCandidateListPanel({
           </tbody>
         </table>
       </div>
-      <div className="standard-list-footer">총 {rows.length}건</div>
+      <div className="flex shrink-0 items-center justify-between gap-2 border-t border-border px-2">
+        <span className="pl-1 text-[11px] text-muted-foreground">총 {total}건</span>
+        <ListPaginationBar
+          page={safePage}
+          pageCount={pageCount}
+          loading={loading}
+          onPageChange={onPageChange}
+          className="border-0 px-0"
+        />
+      </div>
     </div>
   )
 }

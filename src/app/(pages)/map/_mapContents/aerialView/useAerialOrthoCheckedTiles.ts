@@ -8,6 +8,7 @@ import { transformExtent } from 'ol/proj';
 import type Tile from 'ol/Tile';
 import type ImageTile from 'ol/ImageTile';
 import { call } from '@/lib/api';
+import { withBasePath } from '@/lib/basePath';
 import { GEOM_STACK_ZINDEX_BASE } from '@/lib/mapLayerGeometryOrder';
 import { useMapContext } from '../../_mapComponents/MapContext';
 import type { WorkUnitItem } from './aerialMediaTypes';
@@ -163,7 +164,7 @@ export function useAerialOrthoCheckedTiles(params: {
         if (existing.get('orthoMaxZoom') !== tileMaxZoom) {
           existing.setSource(
             new XYZ({
-              url: `/api/aerial/ortho-tiles/${tuKey}/{z}/{x}/{y}.png`,
+              url: withBasePath(`/api/aerial/ortho-tiles/${tuKey}/{z}/{x}/{y}.png`),
               maxZoom: tileMaxZoom,
               crossOrigin: 'anonymous',
               tileSize: 512,
@@ -178,7 +179,7 @@ export function useAerialOrthoCheckedTiles(params: {
       }
       const layer = new TileLayer({
         source: new XYZ({
-          url: `/api/aerial/ortho-tiles/${tuKey}/{z}/{x}/{y}.png`,
+          url: withBasePath(`/api/aerial/ortho-tiles/${tuKey}/{z}/{x}/{y}.png`),
           maxZoom: tileMaxZoom,
           crossOrigin: 'anonymous',
           tileSize: 512,

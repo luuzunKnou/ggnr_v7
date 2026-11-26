@@ -149,7 +149,7 @@ export function FolderBatchUploadDialog({
               onChange={(e) => setWorkName(e.target.value)}
               disabled={starting}
               className="w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-[11px] outline-none focus:border-sky-400 focus:ring-1 focus:ring-sky-200 dark:ring-sky-800 disabled:bg-muted disabled:text-muted-foreground"
-              placeholder="예: 울산 동구 촬영"
+              placeholder="예: 2026 OO 촬영"
             />
           </div>
 

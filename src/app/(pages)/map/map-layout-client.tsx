@@ -215,12 +215,10 @@ import {
   SMALL_PUBLIC_CANDIDATE_OPENED_KEY,
   SMALL_PUBLIC_INSPECTION_OPENED_KEY,
   SMALL_PUBLIC_PLAN_OPENED_KEY,
-  SMALL_PUBLIC_BUDGET_OPENED_KEY,
 } from "./_mapContents/smallPublic/smallPublicConfig"
 import { SmallPublicCandidateShell } from "./_mapContents/smallPublic/candidate/SmallPublicCandidate.shell"
 import { SmallPublicInspectionShell } from "./_mapContents/smallPublic/inspection/SmallPublicInspection.shell"
 import { SmallPublicPlanShell } from "./_mapContents/smallPublic/plan/SmallPublicPlan.shell"
-import { SmallPublicBudgetShell } from "./_mapContents/smallPublic/budget/SmallPublicBudget.shell"
 import {
   WORKS_REGISTER_OPENED_KEY,
   WorksRegisterShell,
@@ -883,7 +881,6 @@ function MapLayoutContent({
   const smallPublicCandidateOpen = openedWindows.includes(SMALL_PUBLIC_CANDIDATE_OPENED_KEY)
   const smallPublicInspectionOpen = openedWindows.includes(SMALL_PUBLIC_INSPECTION_OPENED_KEY)
   const smallPublicPlanOpen = openedWindows.includes(SMALL_PUBLIC_PLAN_OPENED_KEY)
-  const smallPublicBudgetOpen = openedWindows.includes(SMALL_PUBLIC_BUDGET_OPENED_KEY)
   const odorDashboardOpen = openedWindows.includes(ODOR_DASHBOARD_OPENED_KEY)
   const odorAlertOpen = openedWindows.includes(ODOR_ALERT_OPENED_KEY)
   const odorAlertView2Open = openedWindows.includes(ODOR_ALERT_VIEW2_OPENED_KEY)
@@ -1025,7 +1022,6 @@ function MapLayoutContent({
   const [smallPublicCandidateTotalWidth, setSmallPublicCandidateTotalWidth] = useState(0)
   const [smallPublicInspectionTotalWidth, setSmallPublicInspectionTotalWidth] = useState(0)
   const [smallPublicPlanTotalWidth, setSmallPublicPlanTotalWidth] = useState(0)
-  const [smallPublicBudgetTotalWidth, setSmallPublicBudgetTotalWidth] = useState(0)
   const [odorDashboardTotalWidth, setOdorDashboardTotalWidth] = useState(0)
   const [odorAlertTotalWidth, setOdorAlertTotalWidth] = useState(0)
   const [odorAlertView2TotalWidth, setOdorAlertView2TotalWidth] = useState(0)
@@ -1327,7 +1323,6 @@ function MapLayoutContent({
     (smallPublicCandidateOpen ? smallPublicCandidateTotalWidth : 0) +
     (smallPublicInspectionOpen ? smallPublicInspectionTotalWidth : 0) +
     (smallPublicPlanOpen ? smallPublicPlanTotalWidth : 0) +
-    (smallPublicBudgetOpen ? smallPublicBudgetTotalWidth : 0) +
     (worksRegisterOpen ? worksRegisterTotalWidth : 0) +
     (wtlAdminEmptyOpen ? wtlAdminEmptyTotalWidth : 0) +
     (fmsLinkageOpen ? fmsLinkagePanelWidth : 0) +
@@ -1514,10 +1509,8 @@ function MapLayoutContent({
   const smallPublicPlanPanelLeftPx =
     smallPublicInspectionPanelLeftPx +
     (smallPublicInspectionOpen ? smallPublicInspectionTotalWidth : 0)
-  const smallPublicBudgetPanelLeftPx =
-    smallPublicPlanPanelLeftPx + (smallPublicPlanOpen ? smallPublicPlanTotalWidth : 0)
   const worksRegisterPanelLeftPx =
-    smallPublicBudgetPanelLeftPx + (smallPublicBudgetOpen ? smallPublicBudgetTotalWidth : 0)
+    smallPublicPlanPanelLeftPx + (smallPublicPlanOpen ? smallPublicPlanTotalWidth : 0)
   const wtlAdminEmptyPanelLeftPx =
     worksRegisterPanelLeftPx + (worksRegisterOpen ? worksRegisterTotalWidth : 0)
   const fmsLinkagePanelLeftPx =
@@ -2250,11 +2243,6 @@ function MapLayoutContent({
     setOpened(openedWindows.filter((w) => w !== SMALL_PUBLIC_PLAN_OPENED_KEY))
   }
 
-  const handleCloseSmallPublicBudget = () => {
-    setSmallPublicBudgetTotalWidth(0)
-    setOpened(openedWindows.filter((w) => w !== SMALL_PUBLIC_BUDGET_OPENED_KEY))
-  }
-
   const handleCloseWorksRegister = () => {
     setWorksRegisterTotalWidth(0)
     const next = openedWindows.filter((w) => w !== WORKS_REGISTER_OPENED_KEY)
@@ -2492,10 +2480,6 @@ function MapLayoutContent({
   useEffect(() => {
     if (!smallPublicPlanOpen) setSmallPublicPlanTotalWidth(0)
   }, [smallPublicPlanOpen])
-
-  useEffect(() => {
-    if (!smallPublicBudgetOpen) setSmallPublicBudgetTotalWidth(0)
-  }, [smallPublicBudgetOpen])
 
   useEffect(() => {
     if (!worksRegisterOpen) setWorksRegisterTotalWidth(0)
@@ -4284,17 +4268,6 @@ function MapLayoutContent({
               leftOffsetPx={smallPublicPlanPanelLeftPx}
               onTotalWidthChange={setSmallPublicPlanTotalWidth}
               onClose={handleCloseSmallPublicPlan}
-              onOpenBudget={() => {
-                setSmallPublicPlanTotalWidth(0)
-                setOpened([SMALL_PUBLIC_BUDGET_OPENED_KEY])
-              }}
-            />
-          )}
-          {smallPublicBudgetOpen && (
-            <SmallPublicBudgetShell
-              leftOffsetPx={smallPublicBudgetPanelLeftPx}
-              onTotalWidthChange={setSmallPublicBudgetTotalWidth}
-              onClose={handleCloseSmallPublicBudget}
             />
           )}
           {worksRegisterOpen && (

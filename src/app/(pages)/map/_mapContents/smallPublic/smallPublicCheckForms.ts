@@ -192,6 +192,16 @@ export function smallPublicCheckFormFor(facType: SmallPublicFacType, date: strin
   return picked
 }
 
+/** 목록·시드에서 비운 점검 양식을 화면에서 채움 */
+export function hydrateSmallPublicCheckForm(
+  form: SmallPublicCheckForm | null | undefined,
+  facType: SmallPublicFacType,
+  date: string
+): SmallPublicCheckForm {
+  if (form && Array.isArray(form.groups) && form.groups.length > 0) return form
+  return smallPublicCheckFormFor(facType, date)
+}
+
 export function smallPublicCheckItems(form: SmallPublicCheckForm): SmallPublicCheckItem[] {
   return form.groups.flatMap((g) => g.items)
 }

@@ -102,7 +102,7 @@ export function fetchLayerDbTableList(force = false): Promise<DbTableListPayload
   dbInflight = call("", "POST", {
     service: "devTestService",
     action: "getLayerTableList",
-    params: {},
+    params: { includeAttributeTables: true },
   }).then((res) => {
     const data = (res?.data ?? res) as DbTableListPayload
     if (data?.success && Array.isArray(data.tables)) {
