@@ -90,11 +90,17 @@ function injectFrozenHeaderRows(
   return zipSync(files, { level: 6 })
 }
 
-function downloadXlsxBytes(data: Uint8Array, filename: string): void {
+function downloadXlsxBytes(
+  data: Uint8Array,
+  filename: string,
+  opts?: { tableNames?: string[]; tableKorName?: string }
+): void {
   downloadExcelWithPledge({
     data,
     fileName: filename,
-    tableKorName: filename.replace(/\.xlsx?$/i, ''),
+    tableKorName:
+      opts?.tableKorName || filename.replace(/\.xlsx?$/i, '') || '엑셀',
+    tableNames: opts?.tableNames,
   })
 }
 
@@ -120,6 +126,9 @@ export function writeWtlListExcelWorkbook(args: {
   sheets: WtlListExcelSheetInput[]
   fileName: string
   asOf?: Date
+  /** SHP/엑셀 다운로드 권한 조회용 레이어명 */
+  tableNames?: string[]
+  tableKorName?: string
 }): void {
   const usable = args.sheets.filter(
     (s) => s.headers.length > 0 || s.rows.length > 0
@@ -143,5 +152,8 @@ export function writeWtlListExcelWorkbook(args: {
   const raw = XLSX.write(wb, { type: 'array', bookType: 'xlsx' }) as Uint8Array
   // 1~3행 고정 → 데이터는 A4부터 스크롤
   const frozen = injectFrozenHeaderRows(new Uint8Array(raw), 3, 'A4')
-  downloadXlsxBytes(frozen, args.fileName)
+  downloadXlsxBytes(frozen, args.fileName, {
+    tableNames: args.tableNames,
+    tableKorName: args.tableKorName,
+  })
 }

@@ -14,11 +14,16 @@ import { call } from "@/lib/api"
 import { Check, X, Download, FileSpreadsheet, History, Loader2 } from "lucide-react"
 import type { LayerManagerRow } from "./types"
 import { SchemaBadge, SourceBadge } from "./defineBadges"
-import { downloadLayerCsvFromDb, downloadLayerExcel } from "./layerListDownload"
 import {
-  SecurityPledgeModal,
-  postDataRequestJson,
-} from "@/app/(pages)/_components/securityPledge/SecurityPledgeModal"
+  downloadLayerCsvFromDb,
+  downloadLayerExcel,
+  downloadLayerShp,
+} from "./layerListDownload"
+import {
+  DOWNLOAD_AUTH_OPTIONS,
+  normalizeLayerDownloadAuth,
+  type LayerDownloadAuthValue,
+} from "@/lib/layerDownloadAuthClient"
 import { LayerManagerCadDownloadModal } from "./LayerManagerCadDownloadModal"
 import { LayerManagerRowHistoryDialog } from "./LayerManagerRowHistoryDialog"
 import { registerLayerManagerListRefresh, requestLayerManagerDefineRefresh } from "./layerManagerUploadBridge"
@@ -53,6 +58,7 @@ type TableColumnDef =
     }
   | { id: string; label: string; width: string; kind: "infra_status"; infraKey: "table" | "layer" | "style" }
   | { id: string; label: string; width: string; kind: "style_legend" }
+  | { id: string; label: string; width: string; kind: "download_auth"; authKey: "shpExcel" | "attachment" }
   | { id: string; label: string; width: string; kind: "updated_at" }
   | { id: string; label: string; width: string; kind: "row_actions" }
 
@@ -82,6 +88,8 @@ const TABLE_COLUMNS: TableColumnDef[] = [
   { id: "__infra_table", label: "테이블", width: "52px", kind: "infra_status", infraKey: "table" },
   { id: "__infra_layer", label: "레이어", width: "52px", kind: "infra_status", infraKey: "layer" },
   { id: "__infra_style", label: "스타일", width: "52px", kind: "infra_status", infraKey: "style" },
+  { id: "__auth_shp_excel", label: "SHP/엑셀", width: "96px", kind: "download_auth", authKey: "shpExcel" },
+  { id: "__auth_attachment", label: "첨부파일", width: "96px", kind: "download_auth", authKey: "attachment" },
   { id: "__row_actions", label: "", width: "88px", kind: "row_actions" },
 ]
 
@@ -210,6 +218,10 @@ export function LayerManagerListTab() {
   const [metaLoading, setMetaLoading] = useState(false)
   const [downloadingShp, setDownloadingShp] = useState<string | null>(null)
   const [downloadingExcel, setDownloadingExcel] = useState<string | null>(null)
+  const [authMap, setAuthMap] = useState<
+    Record<string, { shpExcel: LayerDownloadAuthValue; attachment: LayerDownloadAuthValue }>
+  >({})
+  const [authSavingKey, setAuthSavingKey] = useState<string | null>(null)
   const [cadModalOpen, setCadModalOpen] = useState(false)
   const [historyTarget, setHistoryTarget] = useState<{ tableName: string; korName: string } | null>(
     null
@@ -337,6 +349,81 @@ export function LayerManagerListTab() {
     }
   }, [])
 
+  const loadAuthMap = useCallback(async () => {
+    try {
+      const res = await call("", "POST", {
+        service: "layerDownloadAuthService",
+        action: "listLayerDownloadAuth",
+        params: {},
+      })
+      const data = res?.data ?? res
+      const map: Record<
+        string,
+        { shpExcel: LayerDownloadAuthValue; attachment: LayerDownloadAuthValue }
+      > = {}
+      if (data?.success && Array.isArray(data.rows)) {
+        for (const row of data.rows as Array<{
+          tableSchema?: string
+          tableName?: string
+          shpExcel?: string
+          attachment?: string
+        }>) {
+          const schema = String(row.tableSchema ?? "layer").trim() || "layer"
+          const name = String(row.tableName ?? "").trim()
+          if (!name) continue
+          map[`${schema}:${name.toLowerCase()}`] = {
+            shpExcel: normalizeLayerDownloadAuth(row.shpExcel),
+            attachment: normalizeLayerDownloadAuth(row.attachment),
+          }
+        }
+      }
+      setAuthMap(map)
+    } catch {
+      /* 권한 맵 실패해도 목록 유지 — 기본 auto */
+    }
+  }, [])
+
+  const updateDownloadAuth = useCallback(
+    async (
+      row: LayerManagerRow,
+      field: "shpExcel" | "attachment",
+      value: LayerDownloadAuthValue
+    ) => {
+      const tableName = row.define_table_name
+      if (!tableName) return
+      const schema = row.define_table_schema === "public_layer" ? "public_layer" : "layer"
+      const mapKey = `${schema}:${tableName.toLowerCase()}`
+      const saveKey = `${mapKey}:${field}`
+      setAuthSavingKey(saveKey)
+      setAuthMap((prev) => ({
+        ...prev,
+        [mapKey]: {
+          shpExcel: prev[mapKey]?.shpExcel ?? "auto",
+          attachment: prev[mapKey]?.attachment ?? "none",
+          [field]: value,
+        },
+      }))
+      try {
+        const res = await call("", "POST", {
+          service: "layerDownloadAuthService",
+          action: "upsertLayerDownloadAuth",
+          params: { schema, tableName, field, value },
+        })
+        const data = res?.data ?? res
+        if (!data?.success) {
+          setError(data?.error ?? "다운로드 권한 저장 실패")
+          void loadAuthMap()
+        }
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "다운로드 권한 저장 실패")
+        void loadAuthMap()
+      } finally {
+        setAuthSavingKey(null)
+      }
+    },
+    [loadAuthMap]
+  )
+
   /** WMS 범례 실패 시 CSS/SLD를 읽어 미리보기. 심볼 URL 있으면 모달 SYMBOL과 동일하게 아이콘 표시 */
   const loadCssFallback = useCallback((key: string, force = false) => {
     setCssFallbackMap((prev) => (prev[key] && !force ? prev : { ...prev, [key]: "loading" }))
@@ -457,7 +544,7 @@ export function LayerManagerListTab() {
     try {
       if (isExcelSource) {
         try {
-          await downloadLayerExcel(meta?.lastSourcePath ?? null, tableName)
+          await downloadLayerExcel(meta?.lastSourcePath ?? null, tableName, schema)
           return
         } catch {
           /* 원본 없으면 DB→CSV */
@@ -553,21 +640,18 @@ export function LayerManagerListTab() {
     }
   }, [dropTarget, historyTarget, loadData, loadRowMeta])
 
-  const [pledgeTarget, setPledgeTarget] = useState<{
-    tableName: string
-    schema: "layer" | "public_layer"
-    tableKorName: string
-  } | null>(null)
-
-  const handleShpDownload = useCallback((row: LayerManagerRow) => {
+  const handleShpDownload = useCallback(async (row: LayerManagerRow) => {
     const tableName = row.define_table_name
     if (!tableName) return
     const schema = row.define_table_schema === "public_layer" ? "public_layer" : "layer"
-    setPledgeTarget({
-      tableName,
-      schema,
-      tableKorName: String(row.define_table_kor_name ?? "").trim() || tableName,
-    })
+    setDownloadingShp(tableName)
+    try {
+      await downloadLayerShp(tableName, schema)
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "SHP 다운로드 실패")
+    } finally {
+      setDownloadingShp(null)
+    }
   }, [])
 
   useEffect(() => {
@@ -577,11 +661,12 @@ export function LayerManagerListTab() {
       if (cancelled) return
       void loadStyleInfo()
       void loadRowMeta()
+      void loadAuthMap()
     })()
     return () => {
       cancelled = true
     }
-  }, [loadData, loadStyleInfo, loadRowMeta])
+  }, [loadData, loadStyleInfo, loadRowMeta, loadAuthMap])
 
   useEffect(() => {
     return registerLayerManagerListRefresh(() => {
@@ -738,7 +823,7 @@ export function LayerManagerListTab() {
               {TABLE_COLUMNS.map((col, i) => (
                 <div
                   key={col.id}
-                  className={`py-1 px-1 text-xs font-medium border-r bg-muted flex items-center ${i === TABLE_COLUMNS.length - 1 ? "border-r-0" : ""} ${col.kind === "field" && col.alignCenter ? "justify-center text-center" : ""} ${col.kind === "infra_status" || col.kind === "row_actions" || col.kind === "updated_at" || col.kind === "style_legend" ? "justify-center text-center" : ""} ${col.width === "flex" ? "min-w-0" : "whitespace-nowrap"}`}
+                  className={`py-1 px-1 text-xs font-medium border-r bg-muted flex items-center ${i === TABLE_COLUMNS.length - 1 ? "border-r-0" : ""} ${col.kind === "field" && col.alignCenter ? "justify-center text-center" : ""} ${col.kind === "infra_status" || col.kind === "row_actions" || col.kind === "updated_at" || col.kind === "style_legend" || col.kind === "download_auth" ? "justify-center text-center" : ""} ${col.width === "flex" ? "min-w-0" : "whitespace-nowrap"}`}
                   style={getColumnStyle(col)}
                 >
                   {col.label}
@@ -832,6 +917,45 @@ export function LayerManagerListTab() {
                           <span className="text-xs text-muted-foreground whitespace-nowrap truncate max-w-full">
                             {metaLoading ? "…" : formatUpdatedAt(updatedAt)}
                           </span>
+                        </div>
+                      )
+                    }
+                    if (col.kind === "download_auth") {
+                      const schema =
+                        row.define_table_schema === "public_layer" ? "public_layer" : "layer"
+                      const mapKey = `${schema}:${tableName.toLowerCase()}`
+                      const current =
+                        authMap[mapKey]?.[col.authKey] ??
+                        (col.authKey === "attachment"
+                          ? ("none" as LayerDownloadAuthValue)
+                          : ("auto" as LayerDownloadAuthValue))
+                      const saveKey = `${mapKey}:${col.authKey}`
+                      const busy = authSavingKey === saveKey
+                      return (
+                        <div
+                          key={col.id}
+                          className={`${cellClass} justify-center p-0`}
+                          style={cellStyle}
+                        >
+                          <select
+                            className="h-full min-h-[28px] w-full cursor-pointer border-0 bg-transparent px-1 text-center text-[11px] text-foreground outline-none disabled:opacity-50"
+                            title={col.label}
+                            value={current}
+                            disabled={busy || !tableName}
+                            onChange={(e) => {
+                              void updateDownloadAuth(
+                                row,
+                                col.authKey,
+                                normalizeLayerDownloadAuth(e.target.value)
+                              )
+                            }}
+                          >
+                            {DOWNLOAD_AUTH_OPTIONS.map((opt) => (
+                              <option key={opt.value} value={opt.value}>
+                                {opt.label}
+                              </option>
+                            ))}
+                          </select>
                         </div>
                       )
                     }
@@ -1023,29 +1147,6 @@ export function LayerManagerListTab() {
         open={cadModalOpen}
         onClose={() => setCadModalOpen(false)}
         rows={rows}
-      />
-
-      <SecurityPledgeModal
-        open={pledgeTarget != null}
-        onOpenChange={(open) => {
-          if (!open) setPledgeTarget(null)
-        }}
-        tableKorName={pledgeTarget?.tableKorName ?? ""}
-        onSubmit={async (pledgeName) => {
-          if (!pledgeTarget) return { success: false, error: "대상 없음" }
-          setDownloadingShp(pledgeTarget.tableName)
-          try {
-            return await postDataRequestJson("/api/data-request/submit-layer-shp", {
-              pledgeName,
-              tableName: pledgeTarget.tableName,
-              schema: pledgeTarget.schema,
-              tableKorName: pledgeTarget.tableKorName,
-              fileType: "레이어(SHP)",
-            })
-          } finally {
-            setDownloadingShp(null)
-          }
-        }}
       />
 
       <LayerManagerRowHistoryDialog

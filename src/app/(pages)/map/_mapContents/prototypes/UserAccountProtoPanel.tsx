@@ -7,6 +7,7 @@ import { useSearchParams } from 'next/navigation'
 import { LogOut, Mail, Phone, User, X } from 'lucide-react'
 import { call } from '@/lib/api'
 import { withBasePathNav } from '@/lib/basePath'
+import { isSuperUser } from '@/lib/auth/superUser'
 import { cn } from '@/lib/utils'
 import {
   dismissAllBizNotifs,
@@ -43,6 +44,7 @@ type MyProfileView = {
   dept: string
   phone: string
   email: string
+  canApproveDataRequest?: boolean
 }
 
 function profileFromSession(session: ReturnType<typeof useSession>['data']): MyProfileView {
@@ -54,6 +56,7 @@ function profileFromSession(session: ReturnType<typeof useSession>['data']): MyP
     dept: usrId === 'su' ? '시스템' : '',
     phone: '',
     email: '',
+    canApproveDataRequest: isSuperUser(usrId),
   }
 }
 
@@ -80,6 +83,8 @@ type Props = {
   onOpenMissingGeom?: (item: ProtoNotifItem) => void
   /** 내 촬영요청 행 선택 시 (신청서 모달 등) */
   onSelectShootingRequest?: (id: string) => void
+  /** 시스템 불편신고 플로팅 모달 */
+  onOpenSystemFeedback?: () => void
   /** 패널 위치·크기 클래스 (기본: 지도 좌측 사이드바 옆) */
   panelClassName?: string
   /** 알림·촬영요청 옆 모달 위치 클래스 */
@@ -93,6 +98,7 @@ export function UserAccountProtoPanel({
   onOpenFee,
   onOpenMissingGeom,
   onSelectShootingRequest,
+  onOpenSystemFeedback,
   panelClassName,
   sideModalClassName,
 }: Props) {
@@ -273,6 +279,8 @@ export function UserAccountProtoPanel({
               onOpenSettings={() => setActiveTab(null)}
               matchHeightPx={panelHeightPx}
               overlayClipPath={overlayClipPath}
+              showDataApprove={Boolean(profile.canApproveDataRequest)}
+              onOpenSystemFeedback={onOpenSystemFeedback}
             />
           </div>
         ) : null}

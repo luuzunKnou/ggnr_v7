@@ -50,6 +50,7 @@ export function downloadStationExcel(rows: OdorStationRow[]) {
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, ws, '지점목록')
   const fileName = `악취_지점목록_${new Date().toISOString().slice(0, 10)}.xlsx`
+  //		TODO : 악취 기능 연결 레이어 테이블의 SHP/엑셀(엑셀) 권한 적용 필요 (tableName·tableNames 전달)
   writeExcelWorkbookWithPledge(XLSX, wb, fileName, '악취 지점목록')
 }
 

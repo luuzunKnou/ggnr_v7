@@ -217,6 +217,18 @@ export function getSystemKorName(): string {
   return name || "공간정보 통합관리 플랫폼"
 }
 
+/** runtime.env 의 SYSTEM_NAME / SYSTEM_KOR_NAME (GNMS 전송 등). UI 표시용 아님 */
+export function getSystemIdentity(_params?: unknown): {
+  systemName: string
+  systemKorName: string
+} {
+  const vars = getRuntimeEnvVars()
+  return {
+    systemName: vars.SYSTEM_NAME?.trim() ?? "",
+    systemKorName: vars.SYSTEM_KOR_NAME?.trim() || getSystemKorName(),
+  }
+}
+
 /**
  * common.runtime.env / 프로젝트 runtime.env 의 GNMS_URL.
  * 예: `host:3000` 또는 `http://dggs.kr/gnms` (없으면 빈 문자열)

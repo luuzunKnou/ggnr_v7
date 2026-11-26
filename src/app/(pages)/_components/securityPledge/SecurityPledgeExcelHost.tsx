@@ -19,6 +19,14 @@ async function postExcelPledge(
   form.set('pledgeName', pledgeName)
   form.set('tableKorName', req.tableKorName)
   form.set('fileName', req.fileName)
+  if (req.tableName) form.set('tableName', req.tableName)
+  if (Array.isArray(req.tableNames)) {
+    for (const n of req.tableNames) {
+      const t = String(n ?? '').trim()
+      if (t) form.append('tableNames', t)
+    }
+  }
+  if (req.schema) form.set('schema', req.schema)
   const copy = new Uint8Array(req.bytes.byteLength)
   copy.set(req.bytes)
   form.set(
@@ -43,7 +51,12 @@ async function postExcelPledge(
       error: typeof data.error === 'string' ? data.error : '엑셀 접수 실패',
     }
   }
-  return { success: true, fileGroupKey: data.fileGroupKey }
+  return {
+    success: true,
+    fileGroupKey: data.fileGroupKey,
+    auth: data.auth,
+    immediateDownload: data.immediateDownload,
+  }
 }
 
 /** 루트 레이아웃 — 엑셀 다운로드 보안서약 호스트 */

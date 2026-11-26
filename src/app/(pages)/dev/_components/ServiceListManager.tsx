@@ -21,17 +21,18 @@ import {
 import { call } from "@/lib/api"
 import { FileDown, Trash2, Plus, Search } from "lucide-react"
 
-import { downloadExcelWithPledge } from "@/app/(pages)/_components/securityPledge/excelPledgeGate"
+import { triggerBlobDownload } from "@/app/(pages)/dev/_components/layerManager/layerListDownload"
 
 function downloadBase64Excel(base64: string, fileName: string) {
   const bin = atob(base64)
   const bytes = new Uint8Array(bin.length)
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
-  downloadExcelWithPledge({
-    data: bytes,
-    fileName,
-    tableKorName: fileName.replace(/\.(xlsx|xls)$/i, "") || "기능목록 보고서",
-  })
+  triggerBlobDownload(
+    new Blob([bytes], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    }),
+    fileName
+  )
 }
 
 export type ServiceItem = {

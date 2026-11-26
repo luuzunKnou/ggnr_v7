@@ -143,5 +143,6 @@ export async function downloadWimsExcel(query: WimsListQuery): Promise<void> {
     data: blob,
     fileName: `${stamp}_WIMS_검침이력.xlsx`,
     tableKorName: 'WIMS 검침이력',
+    tableName: 'wtl_meta_ps',
   });
 }

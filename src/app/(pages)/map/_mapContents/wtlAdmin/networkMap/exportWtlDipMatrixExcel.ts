@@ -92,7 +92,9 @@ function downloadXlsxBytes(data: Uint8Array, filename: string): void {
   downloadExcelWithPledge({
     data,
     fileName: filename,
-    tableKorName: filename.replace(/\.xlsx?$/i, ''),
+    tableKorName: filename.replace(/\.xlsx?$/i, '') || '관로연장',
+    // 관로 교차표 — 부모 상수관로 SHP/엑셀 권한 적용
+    tableNames: ['wtl_pipe_lm'],
   })
 }
 

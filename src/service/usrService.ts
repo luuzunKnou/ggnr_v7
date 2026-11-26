@@ -10,6 +10,7 @@ import { tpMap } from '@/database/schema/tp_map';
 import { tempPasswordCandidates } from '@/lib/auth/hangulQwerty';
 import { hashPassword, isForbiddenNewPassword, isTemporaryPassword } from '@/lib/auth/password';
 import { getSessionUsrId } from '@/lib/auth/guard';
+import { isSuperUser } from '@/lib/auth/superUser';
 import { recordUserLog, UL_CAT_USER } from '@/service/userLogService';
 import { ACCESS_REQUEST_PERM_ETC } from '@/lib/permAccessRequest';
 
@@ -87,6 +88,7 @@ export async function getMyProfile(_params?: unknown) {
         phone: '',
         email: '',
         mustChangePassword: false,
+        canApproveDataRequest: true,
       },
     };
   }
@@ -101,6 +103,7 @@ export async function getMyProfile(_params?: unknown) {
         usrTel: usr.usrTel,
         usrMail: usr.usrMail,
         usrPwd: usr.usrPwd,
+        usrIsManager: usr.usrIsManager,
       })
       .from(usr)
       .where(and(eq(usr.usrId, usrId), or(eq(usr.usrIsDel, false), isNull(usr.usrIsDel))))
@@ -109,6 +112,9 @@ export async function getMyProfile(_params?: unknown) {
     if (!row) return { success: false, error: '사용자를 찾을 수 없습니다.' };
 
     const mustChangePassword = await isTemporaryPassword(row.usrPwd ?? null, row.usrId);
+    const ugName = String(row.ugName ?? '').trim();
+    const isAdminDept = ugName === '관리자';
+    const isManager = Boolean(row.usrIsManager);
 
     return {
       success: true,
@@ -119,6 +125,8 @@ export async function getMyProfile(_params?: unknown) {
         phone: String(row.usrTel ?? '').trim(),
         email: String(row.usrMail ?? '').trim(),
         mustChangePassword,
+        canApproveDataRequest:
+          isSuperUser(usrId) || isManager || isAdminDept || usrId === 'admin',
       },
     };
   } catch (error: unknown) {
@@ -728,6 +736,22 @@ export async function updateUser(params: Record<string, unknown>) {
 
     const nextPwd = strOrNull(params.usr_pwd);
     if (nextPwd) patch.usrPwd = await hashPassword(nextPwd);
+
+    // «팀장» 공통 권한 ↔ usr_is_manager(부서관리자) 동기화
+    if (permKeys.length) {
+      const teamRows = await db
+        .select({ permKey: perm.permKey })
+        .from(perm)
+        .where(eq(perm.permName, '팀장'));
+      const teamKeys = new Set(
+        teamRows
+          .map((r) => Number(r.permKey))
+          .filter((k) => Number.isInteger(k) && k > 0)
+      );
+      patch.usrIsManager = permKeys.some((k) => teamKeys.has(k));
+    } else {
+      patch.usrIsManager = false;
+    }
 
     const [updated] = await db.transaction(async (tx) => {
       const [nextUser] = await tx.update(usr).set(patch).where(eq(usr.usrId, usrId)).returning();

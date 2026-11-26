@@ -34,7 +34,7 @@ import {
 import { COORDINATE_SYSTEM_OPTIONS } from '@/app/(pages)/map/_mapComponents/landInfo/shared';
 import { LayerAttrManager } from '../LayerAttrManager';
 import * as XLSX from 'xlsx';
-import { writeExcelWorkbookWithPledge } from '@/app/(pages)/_components/securityPledge/excelPledgeGate';
+import { triggerBlobDownload } from '@/app/(pages)/dev/_components/layerManager/layerListDownload';
 
 const KEY_FIELD_ERROR_MARKERS = [
   'key 필드가 설정되어 있지 않습니다',
@@ -2609,11 +2609,14 @@ export function ShpWizardModal({
     const ymd = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
     const hm = `${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
     const safeWork = (workName || 'shp_upload_result').replace(/[\\/:*?"<>|]/g, '_').trim() || 'shp_upload_result';
-    writeExcelWorkbookWithPledge(
-      XLSX,
-      wb,
-      `${ymd}_${hm}_${safeWork}.xlsx`,
-      'SHP 업로드 결과'
+    const fileName = `${ymd}_${hm}_${safeWork}.xlsx`;
+    const raw = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
+    const bytes = raw instanceof Uint8Array ? raw : new Uint8Array(raw);
+    triggerBlobDownload(
+      new Blob([bytes], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      }),
+      fileName
     );
   }, [reportRows, workName, groupName, layers, readyPath, reportSuccessCount, reportFailCount, reportSyncTotals]);
 

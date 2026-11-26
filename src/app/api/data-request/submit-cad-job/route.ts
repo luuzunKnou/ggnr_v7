@@ -20,7 +20,12 @@ export async function POST(req: NextRequest) {
         { status: result.error === 'Unauthorized' || result.error === 'Forbidden' ? 403 : 400 }
       );
     }
-    return NextResponse.json({ success: true, fileGroupKey: result.fileGroupKey });
+    return NextResponse.json({
+      success: true,
+      fileGroupKey: result.fileGroupKey,
+      auth: result.auth,
+      immediateDownload: result.immediateDownload,
+    });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     console.error('[data-request/submit-cad-job]', msg);

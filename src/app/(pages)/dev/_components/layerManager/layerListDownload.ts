@@ -1,6 +1,3 @@
-import { downloadExcelWithPledge } from "@/app/(pages)/_components/securityPledge/excelPledgeGate"
-import { requestAttachmentPledge } from "@/app/(pages)/_components/securityPledge/attachmentPledgeGate"
-
 export function triggerBlobDownload(blob: Blob, filename: string) {
   const a = document.createElement("a")
   a.href = URL.createObjectURL(blob)
@@ -32,7 +29,7 @@ function sleep(ms: number) {
 
 /**
  * 선택 레이어 → 단일 DXF/DWG.
- * 서버에서 변환이 길어서 브라우저가 끊기지 않도록 잡 시작 → 폴링 → 파일 받기로 처리.
+ * 개발자 모드: 서약 없이 변환 완료 후 바로 저장.
  */
 export async function downloadLayersCad(
   layers: {
@@ -118,26 +115,24 @@ export async function downloadLayersCad(
     throw new Error("CAD 변환 시간이 너무 깁니다. 레이어·라벨을 줄인 뒤 다시 시도하세요.")
   }
 
-  onProgress?.("보안서약 접수 준비…")
-  const tableKorName = fileName.replace(/\.(dxf|dwg)$/i, "") || "레이어 CAD"
-  if (
-    requestAttachmentPledge({
-      mode: "managed",
-      source: "cadJob",
-      paths: [jobId],
-      tableKorName,
-    })
-  ) {
-    return
-  }
-  console.warn("[downloadLayersCad] SecurityPledgeAttachmentHost 미등록")
-  window.alert(
-    "보안서약 화면을 열 수 없습니다. 페이지를 새로고침한 뒤 다시 시도해 주세요."
+  const dlRes = await fetch(
+    `/api/download/cad?jobId=${encodeURIComponent(jobId)}&download=1`,
+    { credentials: "include", cache: "no-store" }
   )
+  if (!dlRes.ok) {
+    const data = await dlRes.json().catch(() => ({}))
+    throw new Error(typeof data?.error === "string" ? data.error : "CAD 파일 받기 실패")
+  }
+  const blob = await dlRes.blob()
+  triggerBlobDownload(blob, fileName)
 }
 
-/** 업로드 원본 Excel/CSV 파일 다운로드 */
-export async function downloadLayerExcel(pathRel: string | null, tableName: string) {
+/** 업로드 원본 Excel/CSV 파일 다운로드 (개발자 모드: 서약 없음) */
+export async function downloadLayerExcel(
+  pathRel: string | null,
+  tableName: string,
+  _schema: "layer" | "public_layer" = "layer"
+) {
   const path =
     pathRel?.trim() || `excel_data/${tableName.replace(/[^a-zA-Z0-9_]/g, "_")}.xlsx`
   const q = new URLSearchParams({ path })
@@ -147,14 +142,10 @@ export async function downloadLayerExcel(pathRel: string | null, tableName: stri
   }
   const blob = await res.blob()
   const name = path.split(/[/\\]/).pop() ?? "download.xlsx"
-  downloadExcelWithPledge({
-    data: blob,
-    fileName: name,
-    tableKorName: name.replace(/\.(xlsx|xls|csv)$/i, "") || tableName,
-  })
+  triggerBlobDownload(blob, name)
 }
 
-/** DB 테이블 → CSV 내보내기 (교차 다운로드) */
+/** DB 테이블 → CSV 내보내기 (개발자 모드: 서약 없음) */
 export async function downloadLayerCsvFromDb(
   tableName: string,
   schema: "layer" | "public_layer"
@@ -173,9 +164,5 @@ export async function downloadLayerCsvFromDb(
   const m = /filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i.exec(cd)
   const rawName = m?.[1] ? decodeURIComponent(m[1]) : m?.[2]
   const fileName = rawName?.trim() || `${tableName}.csv`
-  downloadExcelWithPledge({
-    data: blob,
-    fileName,
-    tableKorName: fileName.replace(/\.(xlsx|xls|csv)$/i, "") || tableName,
-  })
+  triggerBlobDownload(blob, fileName)
 }

@@ -418,6 +418,7 @@ function injectFrozenHeaderRows(xlsxBytes: Uint8Array, ySplit: number, topLeftCe
 }
 
 function downloadXlsxBytes(data: Uint8Array, filename: string): void {
+  //		TODO : 물놀이 기능 연결 레이어 테이블의 SHP/엑셀(엑셀) 권한 적용 필요 (tableName·tableNames 전달)
   downloadExcelWithPledge({
     data,
     fileName: filename,

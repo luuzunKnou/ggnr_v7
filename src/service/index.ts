@@ -105,6 +105,8 @@ import * as odorSensorService from './odorSensorService';
 import * as realTransactionPriceService from './realTransactionPriceService';
 import * as smallPublicService from './smallPublicService';
 import * as dataRequestService from './dataRequestService';
+import * as layerDownloadAuthService from './layerDownloadAuthService';
+import * as systemFeedbackService from './systemFeedbackService';
 
 export {
   configService,
@@ -210,4 +212,6 @@ export {
   realTransactionPriceService,
   smallPublicService,
   dataRequestService,
+  layerDownloadAuthService,
+  systemFeedbackService,
 };

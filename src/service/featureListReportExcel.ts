@@ -26,6 +26,7 @@ export type FeatureListReportService = {
 type CellStyle = {
   font?: { bold?: boolean }
   alignment?: { vertical?: string; horizontal?: string; wrapText?: boolean }
+  fill?: { patternType: "solid"; fgColor: { rgb: string } }
 }
 
 type ExcelCell = { v: string; t: "s"; s: CellStyle }
@@ -33,13 +34,17 @@ type ExcelCell = { v: string; t: "s"; s: CellStyle }
 type UiRow = { kind: string; ui: string; desc: string }
 
 const KIND_MAIN = "기본"
+const COL1_FILL = { patternType: "solid" as const, fgColor: { rgb: "D9D9D9" } }
 
 const headerStyle: CellStyle = {
   font: { bold: true },
   alignment: { vertical: "center", horizontal: "center", wrapText: true },
 }
+const headerCol1Style: CellStyle = { ...headerStyle, fill: COL1_FILL }
 const cellStyle: CellStyle = { alignment: { vertical: "center", wrapText: true } }
+const cellCol1Style: CellStyle = { ...cellStyle, fill: COL1_FILL }
 const topStyle: CellStyle = { alignment: { vertical: "top", wrapText: true } }
+const topCol1Style: CellStyle = { ...topStyle, fill: COL1_FILL }
 
 function cell(v: string, style: CellStyle = cellStyle): ExcelCell {
   return { v: v ?? "", t: "s", s: style }
@@ -108,7 +113,7 @@ function buildSystemSheet(
 ): { aoa: ExcelCell[][]; cols: { wch: number }[] } {
   const aoa: ExcelCell[][] = [
     [
-      cell("시스템명(시스템키)", headerStyle),
+      cell("시스템명(시스템키)", headerCol1Style),
       cell("서비스명(서비스키)", headerStyle),
       cell("UI구분", headerStyle),
       cell("UI내용", headerStyle),
@@ -131,7 +136,7 @@ function buildSystemSheet(
 
     if (!services.length) {
       aoa.push([
-        cell(sysText, topStyle),
+        cell(sysText, topCol1Style),
         cell("", cellStyle),
         cell("", cellStyle),
         cell("", cellStyle),
@@ -144,7 +149,7 @@ function buildSystemSheet(
       const label = serviceLabel(ser)
       for (const ur of remarkRows(ser)) {
         aoa.push([
-          cell(sysText, topStyle),
+          cell(sysText, topCol1Style),
           cell(label, cellStyle),
           cell(ur.kind, cellStyle),
           cell(ur.ui, cellStyle),
@@ -156,7 +161,7 @@ function buildSystemSheet(
 
   return {
     aoa,
-    cols: [{ wch: 36 }, { wch: 36 }, { wch: 8 }, { wch: 28 }, { wch: 72 }],
+    cols: [{ wch: 40 }, { wch: 40 }, { wch: 8 }, { wch: 28 }, { wch: 72 }],
   }
 }
 
@@ -203,7 +208,7 @@ function buildServiceSheet(
 
   const aoa: ExcelCell[][] = [
     [
-      cell("서비스명(서비스키)", headerStyle),
+      cell("서비스명(서비스키)", headerCol1Style),
       cell("사용 시스템", headerStyle),
       cell("UI구분", headerStyle),
       cell("UI내용", headerStyle),
@@ -228,7 +233,7 @@ function buildServiceSheet(
 
     for (const ur of uiRows) {
       aoa.push([
-        cell(entry.label, cellStyle),
+        cell(entry.label, cellCol1Style),
         cell(sysText, topStyle),
         cell(ur.kind, cellStyle),
         cell(ur.ui, cellStyle),
@@ -239,7 +244,7 @@ function buildServiceSheet(
 
   return {
     aoa,
-    cols: [{ wch: 36 }, { wch: 36 }, { wch: 8 }, { wch: 28 }, { wch: 72 }],
+    cols: [{ wch: 40 }, { wch: 40 }, { wch: 8 }, { wch: 28 }, { wch: 72 }],
   }
 }
 

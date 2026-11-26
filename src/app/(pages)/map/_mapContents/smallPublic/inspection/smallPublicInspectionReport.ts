@@ -268,6 +268,7 @@ export async function exportSmallPublicReportExcel(
     add(rows.length ? rows : [{ 변동: '변동 없음' }], '전년대비변동')
   }
   const fileName = `안전점검대상_${snap.year}_${snap.baseDate.replace(/-/g, '')}.xlsx`
+  //		TODO : 소규모공공 기능 연결 레이어 테이블의 SHP/엑셀(엑셀) 권한 적용 필요 (tableName·tableNames 전달)
   writeExcelWorkbookWithPledge(XLSX, wb, fileName, '안전점검대상')
 }
 

@@ -1,6 +1,6 @@
 import { pgTable, serial, varchar, boolean, timestamp, integer, text } from 'drizzle-orm/pg-core';
 
-/** 승인상태: Y=승인, P=진행중, N=거부 */
+/** 승인상태: Y=승인, P=대기중, N=거부 */
 export const DRF_ACCEPT_Y = 'Y';
 export const DRF_ACCEPT_P = 'P';
 export const DRF_ACCEPT_N = 'N';
@@ -27,8 +27,11 @@ export const dataRequestFile = pgTable('data_request_file', {
   fileType: varchar('file_type').notNull(),
   fileDate: timestamp('file_date', { mode: 'string' }).notNull(),
   filePledge: boolean('file_pledge').notNull().default(true),
+  /** 대상 레이어(영문). 분할 레이어면 부모 테이블명 */
   fileLayer: varchar('file_layer'),
   fileLayerKor: varchar('file_layer_kor'),
+  /** 첨부 file_data/{layer}/{key} 의 폴더명(pk) */
+  fileLayerKey: varchar('file_layer_key'),
   /** 파일 준비: Y=완료, N=실패 */
   fileSuccess: varchar('file_success').notNull().default('Y'),
   fileIsDel: boolean('file_is_del').notNull().default(false),
@@ -54,8 +57,9 @@ export const dataRequestFileColumnComments: Record<string, string> = {
   file_type: '파일분류',
   file_date: '요청일시',
   file_pledge: '서약여부',
-  file_layer: '레이어영문명',
+  file_layer: '레이어영문명(부모 우선)',
   file_layer_kor: '레이어한글명',
+  file_layer_key: '첨부폴더명(pk)',
   file_success: '파일준비(Y|N)',
   file_is_del: '삭제여부',
   user_ip: '요청IP',

@@ -26,6 +26,8 @@ export const SER_FILE_ENG = {
   notice: 'notice',
   /** 자료실 첨부 — file_data/board/{key}/ */
   board: 'board',
+  /** 시스템 불편신고 — file_data/system_feedback/{key}/ */
+  systemFeedback: 'systemFeedback',
 } as const;
 
 export type SerFileEng = (typeof SER_FILE_ENG)[keyof typeof SER_FILE_ENG];

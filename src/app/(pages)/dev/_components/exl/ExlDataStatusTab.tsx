@@ -6,10 +6,9 @@ import { call } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { RefreshCw, Check, X, Search, Download, FileSpreadsheet } from 'lucide-react';
 import {
-  SecurityPledgeModal,
-  postDataRequestJson,
-} from '@/app/(pages)/_components/securityPledge/SecurityPledgeModal';
-import { downloadExcelWithPledge } from '@/app/(pages)/_components/securityPledge/excelPledgeGate';
+  downloadLayerShp,
+  triggerBlobDownload,
+} from '@/app/(pages)/dev/_components/layerManager/layerListDownload';
 
 type ExcelDataStatusRow = {
   tableName: string;
@@ -39,10 +38,6 @@ export function ExlDataStatusTab({ relativePath, onPathChange }: Props) {
   const [search, setSearch] = useState('');
   const [downloadingExcel, setDownloadingExcel] = useState<string | null>(null);
   const [downloadingShp, setDownloadingShp] = useState<string | null>(null);
-  const [pledgeTarget, setPledgeTarget] = useState<{
-    tableName: string;
-    tableKorName: string;
-  } | null>(null);
 
   const handleExcelDownload = useCallback(async (pathRel: string | null, tableName: string) => {
     const path =
@@ -50,37 +45,32 @@ export function ExlDataStatusTab({ relativePath, onPathChange }: Props) {
       `excel_data/${tableName.replace(/[^a-zA-Z0-9_]/g, '_')}.xlsx`;
     const key = `excel:${path}`;
     setDownloadingExcel(key);
-    console.log('[ExlDataStatusTab] Excel download start', path);
     try {
       const q = new URLSearchParams({ path });
       const res = await fetch(`/api/download/excel?${q.toString()}`);
       if (!res.ok) {
-        const errText = await res.text().catch(() => '');
-        console.warn('[ExlDataStatusTab] Excel download failed', res.status, errText);
         throw new Error(res.status === 403 ? '접근 불가' : res.status === 404 ? '파일 없음' : '다운로드 실패');
       }
       const blob = await res.blob();
       const name = path.split(/[/\\]/).pop() ?? 'download.xlsx';
-      downloadExcelWithPledge({
-        data: blob,
-        fileName: name,
-        tableKorName: name.replace(/\.(xlsx|xls|csv)$/i, '') || tableName,
-      });
-      console.log('[ExlDataStatusTab] Excel download ok', name, blob.size);
+      triggerBlobDownload(blob, name);
     } catch (e) {
-      console.error('[ExlDataStatusTab] Excel download', e);
       alert(e instanceof Error ? e.message : 'Excel 다운로드 실패');
     } finally {
       setDownloadingExcel(null);
     }
   }, []);
 
-  const handleShpDownload = useCallback((tableName: string, tableKorName?: string) => {
+  const handleShpDownload = useCallback(async (tableName: string, _tableKorName?: string) => {
     if (!tableName?.trim()) return;
-    setPledgeTarget({
-      tableName,
-      tableKorName: String(tableKorName ?? '').trim() || tableName,
-    });
+    setDownloadingShp(tableName);
+    try {
+      await downloadLayerShp(tableName, 'layer');
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'SHP 다운로드 실패');
+    } finally {
+      setDownloadingShp(null);
+    }
   }, []);
 
   const fetchStatus = useCallback(async () => {
@@ -231,27 +221,6 @@ export function ExlDataStatusTab({ relativePath, onPathChange }: Props) {
         </div>
       )}
 
-      <SecurityPledgeModal
-        open={pledgeTarget != null}
-        onOpenChange={(open) => {
-          if (!open) setPledgeTarget(null);
-        }}
-        tableKorName={pledgeTarget?.tableKorName ?? ''}
-        onSubmit={async (pledgeName) => {
-          if (!pledgeTarget) return { success: false, error: '대상 없음' };
-          setDownloadingShp(pledgeTarget.tableName);
-          try {
-            return await postDataRequestJson('/api/data-request/submit-layer-shp', {
-              pledgeName,
-              tableName: pledgeTarget.tableName,
-              tableKorName: pledgeTarget.tableKorName,
-              fileType: '레이어(SHP)',
-            });
-          } finally {
-            setDownloadingShp(null);
-          }
-        }}
-      />
     </div>
   );
 }

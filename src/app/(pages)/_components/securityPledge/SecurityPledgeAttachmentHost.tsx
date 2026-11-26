@@ -20,6 +20,8 @@ function toSubmitBody(req: AttachmentPledgeRequest, pledgeName: string) {
       key: req.key,
       label: req.label,
       tableKorName: req.tableKorName,
+      tableName: req.tableName || req.layer,
+      schema: req.schema,
     }
   }
   if (req.mode === 'multi') {
@@ -30,6 +32,8 @@ function toSubmitBody(req: AttachmentPledgeRequest, pledgeName: string) {
       files: req.files,
       zipName: req.zipName,
       tableKorName: req.tableKorName,
+      tableName: req.tableName,
+      schema: req.schema,
     }
   }
   if (req.mode === 'managed') {
@@ -55,6 +59,8 @@ function toSubmitBody(req: AttachmentPledgeRequest, pledgeName: string) {
     pathB64: req.pathB64,
     path: req.path,
     tableKorName: req.tableKorName,
+    tableName: req.tableName,
+    schema: req.schema,
   }
 }
 

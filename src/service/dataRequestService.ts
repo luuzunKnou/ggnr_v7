@@ -10,12 +10,21 @@ import {
   DRF_ACCEPT_N,
   DRF_ACCEPT_P,
   DRF_ACCEPT_Y,
+  DRF_AUTHOR_ADMIN,
+  DRF_AUTHOR_TEAM,
 } from '@/database/schema/data_request_file';
+import {
+  LDA_AUTH_ADMIN,
+  LDA_AUTH_AUTO,
+  LDA_AUTH_NONE,
+  LDA_AUTH_TEAM,
+  type LayerDownloadAuthValue,
+} from '@/database/schema/layer_download_auth';
 import { usr } from '@/database/schema/usr';
 import { getSessionUsrId } from '@/lib/auth/guard';
 import { isSuperUser } from '@/lib/auth/superUser';
 import { GGNR_DATA_PATHS } from '@/lib/ggnrDataPaths';
-import { fetchPublicLayerSggNames } from '@/lib/publicLayerSgg';
+import { fetchFirstPublicLayerSggName } from '@/lib/publicLayerSgg';
 import { resolveGgnrDataDir, turbopackOpaquePath } from '@/lib/turbopackFsPath';
 import {
   assertSafeFileDataSegment,
@@ -33,6 +42,12 @@ import {
   cleanupLayerCadExportJob,
   getLayerCadExportJob,
 } from '@/service/layerCadExportService';
+import {
+  getLayerDownloadAuth,
+  normalizeLayerDownloadAuth,
+  normalizeLayerSchema,
+  resolveStrictestAuthForTables,
+} from '@/service/layerDownloadAuthService';
 import {
   getRoadCadFileDir,
   getRoadDocFileDir,
@@ -140,7 +155,7 @@ function acceptLabel(accept: string, author: string): string {
   const a = String(accept ?? '').trim();
   const auth = String(author ?? '').trim();
   if (!auth) return '자동승인';
-  if (a === DRF_ACCEPT_P) return '진행중';
+  if (a === DRF_ACCEPT_P) return '대기중';
   if (a === DRF_ACCEPT_N) return '거부';
   if (a === DRF_ACCEPT_Y) return '승인';
   return a || '-';
@@ -155,15 +170,12 @@ function authorLabel(author: string): string {
 
 /** 서약 모달용 컨텍스트 */
 export async function getPledgeContext(_params?: Record<string, unknown>) {
-  const user = await resolveSessionUser();
+  // 사용자·시군구 병렬 (시군구는 LIMIT 1+캐시, DISTINCT 전체 목록 대기 제거)
+  const [user, sggNm] = await Promise.all([
+    resolveSessionUser(),
+    fetchFirstPublicLayerSggName().catch(() => ''),
+  ]);
   if (!user) return { success: false as const, error: 'Unauthorized' };
-  let sggNm = '';
-  try {
-    const names = await fetchPublicLayerSggNames();
-    sggNm = names[0] ?? '';
-  } catch {
-    sggNm = '';
-  }
   return {
     success: true as const,
     data: {
@@ -198,14 +210,82 @@ export function normalizeClientIp(raw: string | null | undefined): string {
   return ip;
 }
 
+function acceptFieldsFromAuth(auth: LayerDownloadAuthValue): {
+  fileAccept: string;
+  fileAcceptAuthor: string;
+  fileAcceptDate: string | null;
+  fileAcceptUser: string | null;
+  filePledge: boolean;
+} {
+  const mode = normalizeLayerDownloadAuth(auth);
+  if (mode === LDA_AUTH_NONE) {
+    return {
+      fileAccept: DRF_ACCEPT_Y,
+      fileAcceptAuthor: '',
+      fileAcceptDate: formatSeoulDateTime(),
+      fileAcceptUser: '서약없음',
+      filePledge: false,
+    };
+  }
+  if (mode === LDA_AUTH_ADMIN) {
+    return {
+      fileAccept: DRF_ACCEPT_P,
+      fileAcceptAuthor: DRF_AUTHOR_ADMIN,
+      fileAcceptDate: null,
+      fileAcceptUser: null,
+      filePledge: true,
+    };
+  }
+  if (mode === LDA_AUTH_TEAM) {
+    return {
+      fileAccept: DRF_ACCEPT_P,
+      fileAcceptAuthor: DRF_AUTHOR_TEAM,
+      fileAcceptDate: null,
+      fileAcceptUser: null,
+      filePledge: true,
+    };
+  }
+  return {
+    fileAccept: DRF_ACCEPT_Y,
+    fileAcceptAuthor: '',
+    fileAcceptDate: formatSeoulDateTime(),
+    fileAcceptUser: '자동승인',
+    filePledge: true,
+  };
+}
+
+/** file_data/{layer}/{key}/... → 레이어(부모)·폴더 pk */
+function parseFileDataLayerAndKey(
+  relativePath: string
+): { layer: string; key: string } | null {
+  const norm = relativePath.replace(/\\/g, '/').replace(/^\/+/, '');
+  const prefix = 'file_data/';
+  if (!norm.startsWith(prefix)) return null;
+  const parts = norm.slice(prefix.length).split('/').filter(Boolean);
+  if (parts.length < 2) return null;
+  const layer = assertSafeFileDataSegment(parts[0] ?? '');
+  const key = assertSafeFileDataSegment(parts[1] ?? '');
+  if (!layer || !key) return null;
+  return { layer, key };
+}
+
 async function writeZipAndInsert(params: {
   user: SessionUser;
   userIp: string;
   fileType: string;
-  layers: { layer: string; layerKor: string }[];
+  layers: { layer: string; layerKor: string; layerKey?: string | null }[];
   zipBuffer: Buffer;
   zipName: string;
+  /** 레이어 다운로드 권한 — 기본 auto */
+  auth?: LayerDownloadAuthValue;
 }): Promise<{ success: true; fileGroupKey: number } | { success: false; error: string }> {
+  try {
+    const { ensureDataRequestFileTable } = await import('@/service/ensureLayerAppTables');
+    await ensureDataRequestFileTable();
+  } catch {
+    /* best-effort */
+  }
+
   const fileGroupKey = await nextFileGroupKey();
   const folderRel = `${fileGroupKey}_${params.user.usrId}`.replace(/[^\w가-힣._-]+/g, '_');
   const absDir = path.join(dataRequestRootAbs(), folderRel);
@@ -214,25 +294,24 @@ async function writeZipAndInsert(params: {
   await fs.writeFile(path.join(absDir, safeZip), params.zipBuffer);
 
   const now = formatSeoulDateTime();
-  // 당분간 전체 자동승인
-  const fileAccept = DRF_ACCEPT_Y;
-  const fileAcceptAuthor = '';
+  const accept = acceptFieldsFromAuth(params.auth ?? LDA_AUTH_AUTO);
 
   const rows = params.layers.map((L) => ({
     fileGroupKey,
     fileUserId: params.user.usrId,
     fileUserName: params.user.usrName,
     fileUgName: params.user.ugName,
-    fileAccept,
-    fileAcceptAuthor,
-    fileAcceptDate: now,
-    fileAcceptUser: '자동승인',
+    fileAccept: accept.fileAccept,
+    fileAcceptAuthor: accept.fileAcceptAuthor,
+    fileAcceptDate: accept.fileAcceptDate,
+    fileAcceptUser: accept.fileAcceptUser,
     filePath: folderRel,
     fileType: params.fileType,
     fileDate: now,
-    filePledge: true,
+    filePledge: accept.filePledge,
     fileLayer: L.layer,
     fileLayerKor: L.layerKor,
+    fileLayerKey: L.layerKey?.trim() ? L.layerKey.trim() : null,
     fileSuccess: 'Y' as const,
     fileIsDel: false,
     userIp: params.userIp || null,
@@ -241,6 +320,15 @@ async function writeZipAndInsert(params: {
 
   await db.insert(dataRequestFile).values(rows);
   return { success: true, fileGroupKey };
+}
+
+function assertPledgeUnlessNone(
+  userName: string,
+  pledgeName: string | undefined,
+  auth: LayerDownloadAuthValue
+): string | null {
+  if (normalizeLayerDownloadAuth(auth) === LDA_AUTH_NONE) return null;
+  return assertPledgeName(userName, String(pledgeName ?? ''));
 }
 
 /** 레이어 테이블 SHP 요청 접수 */
@@ -254,13 +342,15 @@ export async function submitLayerShpRequest(params: {
 }) {
   const user = await resolveSessionUser();
   if (!user) return { success: false as const, error: 'Unauthorized' };
-  const nameErr = assertPledgeName(user.usrName, String(params.pledgeName ?? ''));
-  if (nameErr) return { success: false as const, error: nameErr };
 
   const tableName = String(params.tableName ?? '').trim();
   if (!tableName) return { success: false as const, error: 'tableName이 필요합니다.' };
-  const schemaRaw = String(params.schema ?? '').toLowerCase();
-  const schema = schemaRaw === 'public_layer' ? ('public_layer' as const) : ('layer' as const);
+  const schema = normalizeLayerSchema(params.schema);
+  const authRes = await getLayerDownloadAuth({ schema, tableName });
+  const auth = authRes.success ? authRes.shpExcel : LDA_AUTH_AUTO;
+  const nameErr = assertPledgeUnlessNone(user.usrName, params.pledgeName, auth);
+  if (nameErr) return { success: false as const, error: nameErr };
+
   const tableKorName =
     String(params.tableKorName ?? '').trim() || tableName;
   const fileType = String(params.fileType ?? '레이어(SHP)').trim() || '레이어(SHP)';
@@ -283,16 +373,34 @@ export async function submitLayerShpRequest(params: {
     layers: [{ layer: tableName, layerKor: tableKorName }],
     zipBuffer: Buffer.from(result.zipBuffer),
     zipName: `${tableName}.zip`,
+    auth,
   });
   if (!saved.success) return saved;
-  return { success: true as const, fileGroupKey: saved.fileGroupKey };
+  return {
+    success: true as const,
+    fileGroupKey: saved.fileGroupKey,
+    auth,
+    immediateDownload: auth === LDA_AUTH_NONE,
+  };
 }
 
 /** 관망조회 SHP 요청 접수 — body는 download API와 동일 */
 export async function submitWtlNetworkShpRequest(params: Record<string, unknown>) {
   const user = await resolveSessionUser();
   if (!user) return { success: false as const, error: 'Unauthorized' };
-  const nameErr = assertPledgeName(user.usrName, String(params.pledgeName ?? ''));
+
+  const layerKeys = Array.isArray(params.layerKeys)
+    ? (params.layerKeys as unknown[]).map((k) => String(k ?? '').trim()).filter(Boolean)
+    : [];
+  const schema = normalizeLayerSchema(params.schema);
+  const auth =
+    layerKeys.length > 0
+      ? await resolveStrictestAuthForTables({
+          tables: layerKeys.map((tableName) => ({ schema, tableName })),
+          kind: 'shpExcel',
+        })
+      : LDA_AUTH_AUTO;
+  const nameErr = assertPledgeUnlessNone(user.usrName, String(params.pledgeName ?? ''), auth);
   if (nameErr) return { success: false as const, error: nameErr };
 
   const result = await exportWtlNetworkShpZip(params as never);
@@ -304,9 +412,6 @@ export async function submitWtlNetworkShpRequest(params: Record<string, unknown>
     };
   }
 
-  const layerKeys = Array.isArray(params.layerKeys)
-    ? (params.layerKeys as unknown[]).map((k) => String(k ?? '').trim()).filter(Boolean)
-    : [];
   const korName = String(params.tableKorName ?? '관망조회').trim() || '관망조회';
   const layers =
     layerKeys.length > 0
@@ -322,6 +427,7 @@ export async function submitWtlNetworkShpRequest(params: Record<string, unknown>
     layers,
     zipBuffer: Buffer.from(result.zipBuffer),
     zipName: fileName,
+    auth,
   });
   if (!saved.success) return saved;
 
@@ -335,6 +441,8 @@ export async function submitWtlNetworkShpRequest(params: Record<string, unknown>
     success: true as const,
     fileGroupKey: saved.fileGroupKey,
     warning: result.warning ?? null,
+    auth,
+    immediateDownload: auth === LDA_AUTH_NONE,
   };
 }
 
@@ -393,11 +501,26 @@ export async function submitAttachmentRequest(params: {
   key?: string;
   label?: string;
   zipName?: string;
+  schema?: string;
+  tableName?: string;
   files?: { pathB64?: string; path?: string; fileName?: string }[];
 }) {
   const user = await resolveSessionUser();
   if (!user) return { success: false as const, error: 'Unauthorized' };
-  const nameErr = assertPledgeName(user.usrName, String(params.pledgeName ?? ''));
+
+  const mode = String(params.mode ?? 'single').trim() || 'single';
+  const layerForAuth =
+    String(params.tableName ?? '').trim() ||
+    (mode === 'folderZip' ? String(params.layer ?? '').trim() : '');
+  let auth: LayerDownloadAuthValue = LDA_AUTH_AUTO;
+  if (layerForAuth) {
+    const authRes = await getLayerDownloadAuth({
+      schema: params.schema,
+      tableName: layerForAuth,
+    });
+    auth = authRes.success ? authRes.attachment : LDA_AUTH_AUTO;
+  }
+  const nameErr = assertPledgeUnlessNone(user.usrName, params.pledgeName, auth);
   if (nameErr) return { success: false as const, error: nameErr };
 
   const serEng = parseSerEngForServiceFileData(String(params.serEng ?? ''));
@@ -408,7 +531,6 @@ export async function submitAttachmentRequest(params: {
     return { success: false as const, error: 'Forbidden' };
   }
 
-  const mode = String(params.mode ?? 'single').trim() || 'single';
   const tableKorName =
     String(params.tableKorName ?? '').trim() ||
     String(params.label ?? '').trim() ||
@@ -416,8 +538,11 @@ export async function submitAttachmentRequest(params: {
 
   let zipBuffer: Buffer;
   let zipName: string;
-  let layerKey: string;
+  /** file_data 레이어 폴더명(부모 테이블) */
+  let fileLayerName: string;
   let layerKor: string;
+  /** file_data/{layer}/{key} 의 key(pk 폴더명) */
+  let fileFolderKey: string | null = null;
 
   try {
     if (mode === 'folderZip') {
@@ -434,7 +559,9 @@ export async function submitAttachmentRequest(params: {
       });
       zipBuffer = packed.zipBuffer;
       zipName = packed.downloadFileName;
-      layerKey = layer;
+      // layer 세그먼트는 첨부 저장소 기준 — 분할 레이어면 부모 테이블명
+      fileLayerName = layer;
+      fileFolderKey = key;
       layerKor = label;
     } else if (mode === 'multi') {
       const files = Array.isArray(params.files) ? params.files : [];
@@ -443,9 +570,11 @@ export async function submitAttachmentRequest(params: {
       }
       const used = new Set<string>();
       const entries: ZipFileEntry[] = [];
+      let parsedMeta: { layer: string; key: string } | null = null;
       for (const f of files) {
         const rel = resolveAttachmentRelativeFromParams(f);
         if (!rel) continue;
+        if (!parsedMeta) parsedMeta = parseFileDataLayerAndKey(rel);
         const abs = resolveAttachmentAbsPath(rel);
         if (!abs) continue;
         try {
@@ -472,7 +601,11 @@ export async function submitAttachmentRequest(params: {
       );
       zipBuffer = packed.zipBuffer;
       zipName = packed.downloadFileName;
-      layerKey = entries[0] ? path.basename(entries[0].entryName) : 'attachments';
+      fileLayerName =
+        String(params.tableName ?? '').trim() ||
+        parsedMeta?.layer ||
+        'attachments';
+      fileFolderKey = parsedMeta?.key ?? null;
       layerKor = tableKorName;
     } else {
       const rel = resolveAttachmentRelativeFromParams({
@@ -501,7 +634,12 @@ export async function submitAttachmentRequest(params: {
       );
       zipBuffer = packed.zipBuffer;
       zipName = packed.downloadFileName;
-      layerKey = baseName;
+      const parsed = parseFileDataLayerAndKey(rel);
+      fileLayerName =
+        String(params.tableName ?? '').trim() ||
+        parsed?.layer ||
+        baseName;
+      fileFolderKey = parsed?.key ?? null;
       layerKor = tableKorName || baseName;
     }
   } catch (e: unknown) {
@@ -515,12 +653,24 @@ export async function submitAttachmentRequest(params: {
     user,
     userIp: normalizeClientIp(params.userIp),
     fileType: '첨부파일',
-    layers: [{ layer: layerKey, layerKor }],
+    layers: [
+      {
+        layer: fileLayerName,
+        layerKor,
+        layerKey: fileFolderKey,
+      },
+    ],
     zipBuffer,
     zipName,
+    auth,
   });
   if (!saved.success) return saved;
-  return { success: true as const, fileGroupKey: saved.fileGroupKey };
+  return {
+    success: true as const,
+    fileGroupKey: saved.fileGroupKey,
+    auth,
+    immediateDownload: auth === LDA_AUTH_NONE,
+  };
 }
 
 /**
@@ -532,12 +682,35 @@ export async function submitExcelBinaryRequest(params: {
   userIp?: string;
   tableKorName?: string;
   fileName?: string;
+  schema?: string;
+  tableName?: string;
+  /** 다중 레이어(관망 등) — shpExcel 권한 중 가장 엄격한 값 */
+  tableNames?: string[];
   /** raw xlsx/xls/csv bytes */
   fileBuffer?: Buffer;
 }) {
   const user = await resolveSessionUser();
   if (!user) return { success: false as const, error: 'Unauthorized' };
-  const nameErr = assertPledgeName(user.usrName, String(params.pledgeName ?? ''));
+
+  const tableName = String(params.tableName ?? '').trim();
+  const tableNames = Array.isArray(params.tableNames)
+    ? params.tableNames.map((n) => String(n ?? '').trim()).filter(Boolean)
+    : [];
+  const schema = normalizeLayerSchema(params.schema);
+  let auth: LayerDownloadAuthValue = LDA_AUTH_AUTO;
+  if (tableNames.length > 0) {
+    auth = await resolveStrictestAuthForTables({
+      tables: tableNames.map((n) => ({ schema, tableName: n })),
+      kind: 'shpExcel',
+    });
+  } else if (tableName) {
+    const authRes = await getLayerDownloadAuth({
+      schema,
+      tableName,
+    });
+    auth = authRes.success ? authRes.shpExcel : LDA_AUTH_AUTO;
+  }
+  const nameErr = assertPledgeUnlessNone(user.usrName, params.pledgeName, auth);
   if (nameErr) return { success: false as const, error: nameErr };
 
   const buf = params.fileBuffer;
@@ -557,6 +730,8 @@ export async function submitExcelBinaryRequest(params: {
     String(params.tableKorName ?? '').trim() ||
     entryName.replace(/\.(xlsx|xls|csv)$/i, '') ||
     '엑셀';
+  const layerLabel =
+    tableNames[0] || tableName || entryName;
 
   try {
     const packed = await createZipBufferFromMemoryEntries(
@@ -567,12 +742,23 @@ export async function submitExcelBinaryRequest(params: {
       user,
       userIp: normalizeClientIp(params.userIp),
       fileType: 'EXCEL',
-      layers: [{ layer: entryName, layerKor: tableKorName }],
+      layers: [
+        {
+          layer: layerLabel,
+          layerKor: tableKorName,
+        },
+      ],
       zipBuffer: packed.zipBuffer,
       zipName: packed.downloadFileName,
+      auth,
     });
     if (!saved.success) return saved;
-    return { success: true as const, fileGroupKey: saved.fileGroupKey };
+    return {
+      success: true as const,
+      fileGroupKey: saved.fileGroupKey,
+      auth,
+      immediateDownload: auth === LDA_AUTH_NONE,
+    };
   } catch (e: unknown) {
     return {
       success: false as const,
@@ -585,7 +771,12 @@ export async function submitExcelBinaryRequest(params: {
 export async function submitWtlFacilityShpRequest(params: Record<string, unknown>) {
   const user = await resolveSessionUser();
   if (!user) return { success: false as const, error: 'Unauthorized' };
-  const nameErr = assertPledgeName(user.usrName, String(params.pledgeName ?? ''));
+
+  const tableName = String(params.table ?? 'wtl_facility').trim() || 'wtl_facility';
+  const schema = normalizeLayerSchema(params.schema);
+  const authRes = await getLayerDownloadAuth({ schema, tableName });
+  const auth = authRes.success ? authRes.shpExcel : LDA_AUTH_AUTO;
+  const nameErr = assertPledgeUnlessNone(user.usrName, String(params.pledgeName ?? ''), auth);
   if (nameErr) return { success: false as const, error: nameErr };
 
   const result = await exportFacilityShpZip(params as never);
@@ -593,7 +784,6 @@ export async function submitWtlFacilityShpRequest(params: Record<string, unknown
     return { success: false as const, error: result.error ?? 'SHP 생성 실패' };
   }
 
-  const tableName = String(params.table ?? 'wtl_facility').trim() || 'wtl_facility';
   const tableKorName = String(params.tableKorName ?? '시설목록').trim() || '시설목록';
   const fileName = String(result.fileName ?? '시설목록_SHP.zip');
 
@@ -604,6 +794,7 @@ export async function submitWtlFacilityShpRequest(params: Record<string, unknown
     layers: [{ layer: tableName, layerKor: tableKorName }],
     zipBuffer: Buffer.from(result.zipBuffer),
     zipName: fileName,
+    auth,
   });
   if (!saved.success) return saved;
 
@@ -613,7 +804,12 @@ export async function submitWtlFacilityShpRequest(params: Record<string, unknown
     /* ignore */
   }
 
-  return { success: true as const, fileGroupKey: saved.fileGroupKey };
+  return {
+    success: true as const,
+    fileGroupKey: saved.fileGroupKey,
+    auth,
+    immediateDownload: auth === LDA_AUTH_NONE,
+  };
 }
 
 type ListParams = {
@@ -622,24 +818,83 @@ type ListParams = {
   endDate?: string;
   fileType?: string;
   fileUserName?: string;
-  mode?: 'mine' | 'approve';
+  fileAccept?: string;
+  /** request=데이터요청 목록, approve=승인 화면 */
+  listMode?: 'request' | 'approve';
   page?: number;
   pageSize?: number;
 };
 
+function isFullViewer(user: SessionUser): boolean {
+  return user.isSuper || user.isAdminDept || user.usrId === 'admin';
+}
+
+function canApproveRole(user: SessionUser): boolean {
+  return user.isManager || user.isAdminDept || user.isSuper || user.usrId === 'admin';
+}
+
+function canFilterByUserRole(user: SessionUser): boolean {
+  return canApproveRole(user);
+}
+
+/** 데이터 요청 목록: 슈퍼·관리자=전체, 팀장=본인+동일부서, 일반=본인 */
+function visibilityForRequestList(user: SessionUser) {
+  if (isFullViewer(user)) return null;
+  if (user.isManager && user.ugName) {
+    return or(
+      eq(dataRequestFile.fileUserId, user.usrId),
+      eq(dataRequestFile.fileUgName, user.ugName)
+    );
+  }
+  return eq(dataRequestFile.fileUserId, user.usrId);
+}
+
+/** 승인 목록: 슈퍼·관리자=전체, 팀장=승인주체 team + 동일부서 */
+function visibilityForApproveList(user: SessionUser) {
+  if (isFullViewer(user)) return null;
+  if (user.isManager && user.ugName) {
+    return and(
+      eq(dataRequestFile.fileAcceptAuthor, DRF_AUTHOR_TEAM),
+      eq(dataRequestFile.fileUgName, user.ugName)
+    );
+  }
+  return sql`false`;
+}
+
+function canActOnRow(
+  user: SessionUser,
+  row: { fileAcceptAuthor?: string | null; fileUgName?: string | null }
+): boolean {
+  if (user.isSuper || user.isAdminDept || user.usrId === 'admin') return true;
+  const auth = String(row.fileAcceptAuthor ?? '').trim();
+  if (
+    user.isManager &&
+    auth === DRF_AUTHOR_TEAM &&
+    user.ugName &&
+    String(row.fileUgName ?? '').trim() === user.ugName
+  ) {
+    return true;
+  }
+  return false;
+}
+
 export async function listDataRequests(params: ListParams = {}) {
   const user = await resolveSessionUser();
   if (!user) return { success: false as const, error: 'Unauthorized' };
+
+  const listMode = params.listMode === 'approve' ? 'approve' : 'request';
+  if (listMode === 'approve' && !canApproveRole(user)) {
+    return { success: false as const, error: '승인 권한이 없습니다.' };
+  }
 
   const page = Math.max(1, Number(params.page) || 1);
   const pageSize = Math.min(100, Math.max(1, Number(params.pageSize) || 20));
 
   const conditions = [eq(dataRequestFile.fileIsDel, false)];
 
-  // 일반 사용자: 본인 요청만. 관리자·슈퍼·admin: 전체
-  if (!user.isSuper && !user.isAdminDept && user.usrId !== 'admin') {
-    conditions.push(eq(dataRequestFile.fileUserId, user.usrId));
-  }
+  const vis =
+    listMode === 'approve' ? visibilityForApproveList(user) : visibilityForRequestList(user);
+  if (vis) conditions.push(vis);
 
   const keyword = String(params.keyword ?? '').trim();
   if (keyword) {
@@ -666,6 +921,14 @@ export async function listDataRequests(params: ListParams = {}) {
   if (fileType) conditions.push(eq(dataRequestFile.fileType, fileType));
   const fileUserName = String(params.fileUserName ?? '').trim();
   if (fileUserName) conditions.push(eq(dataRequestFile.fileUserName, fileUserName));
+
+  // 승인 화면 기본: 대기(P). 빈 문자열이면 전체.
+  const rawAccept = params.fileAccept;
+  const fileAccept =
+    rawAccept === undefined && listMode === 'approve'
+      ? DRF_ACCEPT_P
+      : String(rawAccept ?? '').trim();
+  if (fileAccept) conditions.push(eq(dataRequestFile.fileAccept, fileAccept));
 
   const startDate = String(params.startDate ?? '').trim();
   const endDate = String(params.endDate ?? '').trim();
@@ -696,27 +959,36 @@ export async function listDataRequests(params: ListParams = {}) {
     const first = fileList[0]!;
     const kor = first.fileLayerKor ?? first.fileLayer ?? '';
     const extra = fileList.length > 1 ? ` 외 ${fileList.length - 1}` : '';
+    const canAct = canActOnRow(user, first);
     return {
       fileGroupKey,
       fileUserName: first.fileUserName,
       fileUserId: first.fileUserId,
+      fileUgName: first.fileUgName ?? null,
       userIp: normalizeClientIp(first.userIp),
       fileDate: first.fileDate,
+      fileLayer: first.fileLayer ?? null,
       fileLayerKor: `${kor}${extra}`,
+      fileLayerKey: first.fileLayerKey ?? null,
       fileType: first.fileType,
       fileGroupCount: fileList.length,
       fileAccept: first.fileAccept,
       fileAcceptAuthor: first.fileAcceptAuthor,
+      fileAcceptDate: first.fileAcceptDate ?? null,
       acceptLabel: acceptLabel(first.fileAccept ?? '', first.fileAcceptAuthor ?? ''),
+      authorLabel: authorLabel(first.fileAcceptAuthor ?? ''),
       fileSuccess: first.fileSuccess,
       fileIsDel: first.fileIsDel,
+      canAct,
       fileList: fileList.map((f) => ({
         drfKey: f.drfKey,
         fileLayer: f.fileLayer,
         fileLayerKor: f.fileLayerKor,
+        fileLayerKey: f.fileLayerKey ?? null,
         fileSuccess: f.fileSuccess,
         fileAccept: f.fileAccept,
         fileAcceptAuthor: f.fileAcceptAuthor,
+        fileAcceptDate: f.fileAcceptDate ?? null,
         acceptLabel: acceptLabel(f.fileAccept ?? '', f.fileAcceptAuthor ?? ''),
         authorLabel: authorLabel(f.fileAcceptAuthor ?? ''),
         fileAcceptUser: f.fileAcceptUser,
@@ -751,8 +1023,10 @@ export async function listDataRequests(params: ListParams = {}) {
       page,
       pageSize,
       totalPages: Math.max(1, Math.ceil(totalCnt / pageSize)),
-      canApprove: user.isManager || user.isAdminDept || user.isSuper,
+      canApprove: canApproveRole(user),
+      canFilterByUser: canFilterByUserRole(user),
       fileTypes,
+      fileAccept: fileAccept || '',
     },
   };
 }
@@ -763,7 +1037,7 @@ export async function approveDataRequest(params: {
 }) {
   const user = await resolveSessionUser();
   if (!user) return { success: false as const, error: 'Unauthorized' };
-  if (!(user.isManager || user.isAdminDept || user.isSuper)) {
+  if (!canApproveRole(user)) {
     return { success: false as const, error: '승인 권한이 없습니다.' };
   }
 
@@ -783,16 +1057,10 @@ export async function approveDataRequest(params: {
 
   if (rows.length === 0) return { success: false as const, error: '요청을 찾을 수 없습니다.' };
 
-  // 권한에 맞는 행만 갱신
+  // 권한에 맞는 대기(P) 행만 갱신
   const keys = rows
-    .filter((r) => {
-      if (user.isSuper) return true;
-      const auth = String(r.fileAcceptAuthor ?? '').trim();
-      if (user.isAdminDept && (auth === 'admin' || auth === '')) return true;
-      if (user.isManager && auth === 'team' && r.fileUgName === user.ugName) return true;
-      if (user.isManager && !auth) return true;
-      return false;
-    })
+    .filter((r) => String(r.fileAccept ?? '').trim() === DRF_ACCEPT_P)
+    .filter((r) => canActOnRow(user, r))
     .map((r) => r.drfKey);
 
   if (keys.length === 0) return { success: false as const, error: '처리할 수 있는 항목이 없습니다.' };
@@ -836,8 +1104,12 @@ export async function resolveDownloadZip(params: {
 
   const first = rows[0]!;
   const isOwner = first.fileUserId === user.usrId;
-  const canAdmin = user.isSuper || user.isAdminDept || user.isManager;
-  if (!isOwner && !canAdmin) {
+  const sameTeam =
+    user.isManager &&
+    Boolean(user.ugName) &&
+    String(first.fileUgName ?? '').trim() === user.ugName;
+  const canViewer = isFullViewer(user) || sameTeam;
+  if (!isOwner && !canViewer) {
     return { success: false, error: '다운로드 권한이 없습니다.', status: 403 };
   }
 
@@ -846,7 +1118,7 @@ export async function resolveDownloadZip(params: {
     const anyRejected = rows.some((r) => r.fileAccept === DRF_ACCEPT_N);
     return {
       success: false,
-      error: anyRejected ? '승인 절차가 거부되었습니다.' : '승인 절차가 진행중입니다.',
+      error: anyRejected ? '승인 절차가 거부되었습니다.' : '승인 절차가 대기중입니다.',
       status: 403,
     };
   }
@@ -1066,8 +1338,6 @@ export async function submitCadJobRequest(params: {
 }) {
   const user = await resolveSessionUser();
   if (!user) return { success: false as const, error: 'Unauthorized' };
-  const nameErr = assertPledgeName(user.usrName, String(params.pledgeName ?? ''));
-  if (nameErr) return { success: false as const, error: nameErr };
 
   const jobId = String(params.jobId ?? '').trim();
   if (!jobId) return { success: false as const, error: 'jobId가 필요합니다.' };
@@ -1086,6 +1356,16 @@ export async function submitCadJobRequest(params: {
     };
   }
 
+  const included = (job.included ?? [])
+    .map((t) => String(t ?? '').trim())
+    .filter(Boolean);
+  const auth = await resolveStrictestAuthForTables({
+    tables: included.map((tableName) => ({ tableName })),
+    kind: 'attachment',
+  });
+  const nameErr = assertPledgeUnlessNone(user.usrName, params.pledgeName, auth);
+  if (nameErr) return { success: false as const, error: nameErr };
+
   const fileName = String(job.fileName ?? '').trim() || `layers.${job.format ?? 'dxf'}`;
   const tableKorName =
     String(params.tableKorName ?? '').trim() ||
@@ -1102,7 +1382,7 @@ export async function submitCadJobRequest(params: {
   }
 
   try {
-    for (const tableName of job.included ?? []) {
+    for (const tableName of included) {
       try {
         await recordLayerDownloadLog({
           tableName,
@@ -1124,10 +1404,16 @@ export async function submitCadJobRequest(params: {
       layers: [{ layer: fileName, layerKor: tableKorName }],
       zipBuffer: packed.zipBuffer,
       zipName: packed.downloadFileName,
+      auth,
     });
     await cleanupLayerCadExportJob(jobId);
     if (!saved.success) return saved;
-    return { success: true as const, fileGroupKey: saved.fileGroupKey };
+    return {
+      success: true as const,
+      fileGroupKey: saved.fileGroupKey,
+      auth,
+      immediateDownload: auth === LDA_AUTH_NONE,
+    };
   } catch (e: unknown) {
     return {
       success: false as const,

@@ -13,6 +13,7 @@ import {
   ImportantNotifSidebarBubble,
   UserAccountProtoPanel,
 } from '@/app/(pages)/map/_mapContents/prototypes/UserAccountProtoPanel'
+import { SystemFeedbackModal } from '@/app/(pages)/map/_mapContents/systemFeedback/SystemFeedbackModal'
 import { isOdorAlertNotif } from '@/app/(pages)/(index)/odorPh/odorIndexAlertNotifSeed'
 
 type Props = {
@@ -28,6 +29,7 @@ type Props = {
 export function OdorSidebarUserAccount({ collapsed, onOpenAlertNotif }: Props) {
   const { data: session, status } = useSession()
   const [open, setOpen] = useState(false)
+  const [systemFeedbackOpen, setSystemFeedbackOpen] = useState(false)
   const [protoNotifUnread, setProtoNotifUnread] = useState(false)
   const myInfoAnchorRef = useRef<HTMLDivElement>(null)
 
@@ -107,9 +109,14 @@ export function OdorSidebarUserAccount({ collapsed, onOpenAlertNotif }: Props) {
         <ImportantNotifSidebarBubble anchorRef={myInfoAnchorRef} />
       </div>
 
+      <SystemFeedbackModal
+        open={systemFeedbackOpen}
+        onClose={() => setSystemFeedbackOpen(false)}
+      />
       <UserAccountProtoPanel
         open={open}
         onClose={() => setOpen(false)}
+        onOpenSystemFeedback={() => setSystemFeedbackOpen(true)}
         onOpenLedger={(item) => {
           if (isOdorAlertNotif(item)) {
             onOpenAlertNotif?.(item)

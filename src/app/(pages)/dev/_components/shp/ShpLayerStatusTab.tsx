@@ -5,10 +5,7 @@ import { Button } from '@/app/shadcnComponents/ui/button';
 import { call } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { RefreshCw, Check, X, Search, Download } from 'lucide-react';
-import {
-  SecurityPledgeModal,
-  postDataRequestJson,
-} from '@/app/(pages)/_components/securityPledge/SecurityPledgeModal';
+import { downloadLayerShp } from '@/app/(pages)/dev/_components/layerManager/layerListDownload';
 
 type LayerStatusRow = {
   tableName: string;
@@ -85,20 +82,18 @@ export function ShpLayerStatusTab({ relativePath, onPathChange }: Props) {
   const [downloadingShp, setDownloadingShp] = useState<string | null>(null);
   const [repairingKey, setRepairingKey] = useState<string | null>(null);
   const repairingRef = useRef(false);
-  const [pledgeTarget, setPledgeTarget] = useState<{
-    tableName: string;
-    schema: 'layer' | 'public_layer';
-    tableKorName: string;
-  } | null>(null);
 
   const handleShpDownload = useCallback(
-    (tableName: string, dbSchema: 'layer' | 'public_layer', korName?: string) => {
+    async (tableName: string, dbSchema: 'layer' | 'public_layer', _korName?: string) => {
       if (!tableName?.trim()) return;
-      setPledgeTarget({
-        tableName,
-        schema: dbSchema,
-        tableKorName: String(korName ?? '').trim() || tableName,
-      });
+      setDownloadingShp(tableName);
+      try {
+        await downloadLayerShp(tableName, dbSchema);
+      } catch (e) {
+        alert(e instanceof Error ? e.message : 'SHP 다운로드 실패');
+      } finally {
+        setDownloadingShp(null);
+      }
     },
     []
   );
@@ -374,28 +369,6 @@ export function ShpLayerStatusTab({ relativePath, onPathChange }: Props) {
         </div>
       )}
 
-      <SecurityPledgeModal
-        open={pledgeTarget != null}
-        onOpenChange={(open) => {
-          if (!open) setPledgeTarget(null);
-        }}
-        tableKorName={pledgeTarget?.tableKorName ?? ''}
-        onSubmit={async (pledgeName) => {
-          if (!pledgeTarget) return { success: false, error: '대상 없음' };
-          setDownloadingShp(pledgeTarget.tableName);
-          try {
-            return await postDataRequestJson('/api/data-request/submit-layer-shp', {
-              pledgeName,
-              tableName: pledgeTarget.tableName,
-              schema: pledgeTarget.schema,
-              tableKorName: pledgeTarget.tableKorName,
-              fileType: '레이어(SHP)',
-            });
-          } finally {
-            setDownloadingShp(null);
-          }
-        }}
-      />
     </div>
   );
 }

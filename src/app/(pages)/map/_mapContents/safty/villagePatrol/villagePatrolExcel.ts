@@ -233,6 +233,7 @@ export function exportVillagePatrolExcel(
   const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, '')
 
   XLSX.utils.book_append_sheet(wb, exportRosterSheet(assignmentRows, opts), '편성명단')
+  //		TODO : 마을순찰 기능 연결 레이어 테이블의 SHP/엑셀(엑셀) 권한 적용 필요 (tableName·tableNames 전달)
   writeExcelWorkbookWithPledge(
     XLSX,
     wb,
@@ -274,6 +275,7 @@ export function downloadVillagePatrolImportTemplate() {
   ]
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, ws, '편성명단')
+  //		TODO : 마을순찰 기능 연결 레이어 테이블의 SHP/엑셀(엑셀) 권한 적용 필요 (tableName·tableNames 전달)
   writeExcelWorkbookWithPledge(
     XLSX,
     wb,

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useSession } from 'next-auth/react'
+import { Loader2 } from 'lucide-react'
 import { call } from '@/lib/api'
 import { withBasePath, withBasePathNav } from '@/lib/basePath'
 import { MAP_UI_Z } from '@/lib/mapUiZIndex'
@@ -12,6 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/app/shadcnComponents/ui/dialog'
+import { afterDataRequestSubmit } from '@/app/(pages)/_components/securityPledge/downloadDataRequestZip'
 
 export type SecurityPledgeSubmitResult = {
   success: boolean
@@ -19,6 +21,8 @@ export type SecurityPledgeSubmitResult = {
   code?: string
   warning?: string | null
   fileGroupKey?: number
+  auth?: string
+  immediateDownload?: boolean
 }
 
 type Props = {
@@ -41,6 +45,27 @@ function buildDataRequestHref(fromPath: string): string {
   return withBasePathNav(`/data-request${qs ? `?${qs}` : ''}`)
 }
 
+/** Asia/Seoul yyyy.MM.dd — 서버 응답 전 즉시 표시 */
+function formatPledgeTodayClient(): string {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Seoul',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date())
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? ''
+  return `${get('year')}.${get('month')}.${get('day')}`
+}
+
+function PledgeFieldLoading({ label }: { label: string }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 text-muted-foreground" aria-label={label}>
+      <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden />
+      <span className="inline-block h-3 w-20 animate-pulse rounded bg-muted" />
+    </span>
+  )
+}
+
 export function SecurityPledgeModal({
   open,
   onOpenChange,
@@ -55,14 +80,23 @@ export function SecurityPledgeModal({
   const [today, setToday] = useState('')
   const [pledgeName, setPledgeName] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [contextLoading, setContextLoading] = useState(false)
 
   useEffect(() => {
     if (!open) {
       setPledgeName('')
       setSubmitting(false)
+      setContextLoading(false)
       return
     }
     let cancelled = false
+    setContextLoading(true)
+    setToday(formatPledgeTodayClient())
+    setSggNm('')
+    const sessionName = String(session?.user?.name ?? '').trim()
+    // 세션 이름이 있으면 즉시 표시(스켈레톤 대신), 서버 응답으로 확정
+    setUsrName(sessionName)
+
     void call('', 'POST', {
       service: 'dataRequestService',
       action: 'getPledgeContext',
@@ -72,18 +106,21 @@ export function SecurityPledgeModal({
         if (cancelled) return
         const d = res?.data ?? res
         if (d?.success && d.data) {
-          setUsrName(String(d.data.usrName ?? '').trim())
+          setUsrName(String(d.data.usrName ?? '').trim() || sessionName)
           setSggNm(String(d.data.sggNm ?? '').trim())
-          setToday(String(d.data.today ?? '').trim())
-        } else {
-          const fallback = String(session?.user?.name ?? '').trim()
-          setUsrName(fallback)
+          const serverToday = String(d.data.today ?? '').trim()
+          if (serverToday) setToday(serverToday)
+        } else if (!sessionName) {
+          setUsrName('')
         }
       })
       .catch(() => {
-        if (!cancelled) {
-          setUsrName(String(session?.user?.name ?? '').trim())
+        if (!cancelled && !sessionName) {
+          setUsrName('')
         }
+      })
+      .finally(() => {
+        if (!cancelled) setContextLoading(false)
       })
     return () => {
       cancelled = true
@@ -97,7 +134,11 @@ export function SecurityPledgeModal({
     return `${kor} SHP 파일 다운로드`
   }, [mediaLabelProp, mediaKorName, tableKorName])
 
-  const canAgree = pledgeName.trim().length > 0 && !submitting
+  const layerTitle = tableKorName.trim()
+  const showNameLoading = contextLoading && !usrName
+  const showLayerLoading = !layerTitle && contextLoading
+  const showRegionLoading = contextLoading && !sggNm
+  const canAgree = pledgeName.trim().length > 0 && !submitting && !contextLoading
 
   const handleAgree = async () => {
     if (!canAgree) return
@@ -118,10 +159,10 @@ export function SecurityPledgeModal({
         window.alert(result.error ?? '접수에 실패했습니다.')
         return
       }
-      if (result.warning) {
-        window.alert(String(result.warning))
-      }
       onOpenChange(false)
+      const downloaded = await afterDataRequestSubmit(result)
+      // none 즉시 다운로드 경로면(성공·실패 모두) 이동 confirm 생략
+      if (downloaded || result.immediateDownload) return
       const go = window.confirm(
         '보안서약서가 접수되었습니다.\n데이터 요청 페이지로 바로 이동하시겠습니까?'
       )
@@ -179,14 +220,24 @@ export function SecurityPledgeModal({
                 <th className="w-24 border border-border bg-muted/40 px-2 py-1.5 text-left font-medium">
                   성명
                 </th>
-                <td className="border border-border px-2 py-1.5">{usrName || '-'}</td>
+                <td className="border border-border px-2 py-1.5">
+                  {showNameLoading ? (
+                    <PledgeFieldLoading label="성명 불러오는 중" />
+                  ) : (
+                    usrName || '-'
+                  )}
+                </td>
               </tr>
               <tr>
                 <th className="border border-border bg-muted/40 px-2 py-1.5 text-left font-medium">
                   자료 제목
                 </th>
                 <td className="border border-border px-2 py-1.5">
-                  {tableKorName.trim() || '-'}
+                  {showLayerLoading ? (
+                    <PledgeFieldLoading label="레이어명 불러오는 중" />
+                  ) : (
+                    layerTitle || '-'
+                  )}
                 </td>
               </tr>
               <tr>
@@ -200,7 +251,13 @@ export function SecurityPledgeModal({
                   제공 지역
                 </th>
                 <td className="border border-border px-2 py-1.5">
-                  {sggNm ? `${sggNm} 지역 일대` : '지역 일대'}
+                  {showRegionLoading ? (
+                    <PledgeFieldLoading label="제공 지역 불러오는 중" />
+                  ) : sggNm ? (
+                    `${sggNm} 지역 일대`
+                  ) : (
+                    '지역 일대'
+                  )}
                 </td>
               </tr>
             </tbody>
@@ -212,7 +269,9 @@ export function SecurityPledgeModal({
           </div>
 
           <div className="flex flex-wrap items-center justify-end gap-3 pt-1">
-            <span className="text-[12px] text-muted-foreground">{today || '-'}</span>
+            <span className="text-[12px] text-muted-foreground">
+              {today || <PledgeFieldLoading label="날짜 불러오는 중" />}
+            </span>
             <label className="flex items-center gap-1.5 text-[12px]">
               <span>서약자:</span>
               <input
@@ -222,7 +281,7 @@ export function SecurityPledgeModal({
                 className="h-8 w-36 rounded border border-amber-500/70 bg-amber-50 px-2 text-[12px] text-foreground outline-none ring-amber-400/40 focus:ring-2 dark:bg-amber-950/40"
                 title="서약자"
                 autoComplete="off"
-                disabled={submitting}
+                disabled={submitting || contextLoading}
               />
             </label>
           </div>

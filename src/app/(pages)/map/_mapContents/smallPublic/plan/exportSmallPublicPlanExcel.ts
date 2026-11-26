@@ -107,5 +107,6 @@ export async function exportSmallPublicPlanExcel(ranked: PlanRanked[], startYear
   XLSX.utils.book_append_sheet(wb, ws, '중기계획 명세서')
   XLSX.utils.book_append_sheet(wb, wsSummary, '읍면별 종합표')
   const fileName = `소규모공공시설_정비계획_${todayYmd().replace(/-/g, '')}.xlsx`
+  //		TODO : 소규모공공 기능 연결 레이어 테이블의 SHP/엑셀(엑셀) 권한 적용 필요 (tableName·tableNames 전달)
   writeExcelWorkbookWithPledge(XLSX, wb, fileName, '소규모공공시설 정비계획')
 }

@@ -32,7 +32,8 @@ export function wtlNetworkExcelStamp(date = new Date()): string {
 /** 관망조회 시설목록 — show_detail 컬럼만, 제목·기준일시·헤더 틀고정 */
 export function exportWtlNetworkMapExcel(
   sheets: WtlNetworkExcelSheetInput[],
-  fileName?: string
+  fileName?: string,
+  opts?: { tableNames?: string[]; tableKorName?: string }
 ): void {
   const usable = sheets.filter((s) => s.rows.length > 0)
   if (usable.length === 0) return
@@ -73,5 +74,7 @@ export function exportWtlNetworkMapExcel(
   writeWtlListExcelWorkbook({
     sheets: out,
     fileName: fileName ?? `${stamp}_관망조회.xlsx`,
+    tableNames: opts?.tableNames,
+    tableKorName: opts?.tableKorName ?? '관망조회',
   })
 }

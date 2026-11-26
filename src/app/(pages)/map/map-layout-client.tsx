@@ -252,6 +252,7 @@ import { isFmsOpenedToken } from "@/lib/fmsLinkage/fmsBinding"
 import {
   UserAccountProtoPanel,
 } from "./_mapContents/prototypes/UserAccountProtoPanel"
+import { SystemFeedbackModal } from "./_mapContents/systemFeedback/SystemFeedbackModal"
 // import { PROTO_LEDGERS, type ProtoLedgerRow } from "./_mapContents/prototypes/dummyData"
 // import { flyToProtoLedger } from "./_mapContents/prototypes/protoMapNavigation"
 import { ROAD_LEDGER_SUMMARY_LAYER_ID } from "./_mapContents/road/roadLedger/roadLedgerDocLayerMap"
@@ -1044,6 +1045,7 @@ function MapLayoutContent({
   const [worksRegisterTotalWidth, setWorksRegisterTotalWidth] = useState(0)
   const [wtlAdminEmptyTotalWidth, setWtlAdminEmptyTotalWidth] = useState(0)
   const [protoUserAccountOpen, setProtoUserAccountOpen] = useState(false)
+  const [systemFeedbackOpen, setSystemFeedbackOpen] = useState(false)
 
   const [memoDetailId, setMemoDetailId] = useState<string | null>(null)
   const [gcpDetailId, setGcpDetailId] = useState<string | null>(null)
@@ -4891,10 +4893,15 @@ function MapLayoutContent({
               <MapRightClickMenu />
             </div>
             <div className="pointer-events-auto">
+              <SystemFeedbackModal
+                open={systemFeedbackOpen}
+                onClose={() => setSystemFeedbackOpen(false)}
+              />
               <UserAccountProtoPanel
                 open={protoUserAccountOpen}
                 onClose={() => setProtoUserAccountOpen(false)}
                 onSelectShootingRequest={(id) => setMyInfoShootingModalId(id)}
+                onOpenSystemFeedback={() => setSystemFeedbackOpen(true)}
                 onOpenLedger={(item) => {
                   const key = String(item.notifKey ?? "")
                   if (key.startsWith("cons-alert:")) {

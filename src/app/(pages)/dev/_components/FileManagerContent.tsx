@@ -17,7 +17,8 @@ import {
 } from 'lucide-react';
 import { call } from '@/lib/api';
 import { cn } from '@/lib/utils';
-import { requestAttachmentPledge } from '@/app/(pages)/_components/securityPledge/attachmentPledgeGate';
+import { withBasePath } from '@/lib/basePath';
+import { triggerBlobDownload } from '@/app/(pages)/dev/_components/layerManager/layerListDownload';
 import { Button } from '@/app/shadcnComponents/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/shadcnComponents/ui/card';
 import { Input } from '@/app/shadcnComponents/ui/input';
@@ -527,28 +528,48 @@ export function FileManagerContent() {
     }
   }, [refreshCurrent, selectedRows]);
 
-  const handleDownload = useCallback(() => {
+  const handleDownload = useCallback(async () => {
     if (selectedRows.length === 0) return;
     setActionError(null);
-    const paths = selectedRows.map((row) => row.relativePath);
-    const singleFile = selectedRows.length === 1 && selectedRows[0]!.kind === 'file';
-    const tableKorName = singleFile
-      ? selectedRows[0]!.name
-      : `파일관리자_${selectedRows.length}건`;
-    if (
-      requestAttachmentPledge({
-        mode: 'managed',
-        source: 'fileManager',
-        paths,
-        tableKorName,
-        zipName: singleFile ? undefined : 'download.zip',
-      })
-    ) {
-      return;
+    setActionLoading(true);
+    try {
+      const paths = selectedRows.map((row) => row.relativePath);
+      const singleFile = selectedRows.length === 1 && selectedRows[0]!.kind === 'file';
+      if (singleFile) {
+        const path = paths[0]!;
+        const res = await fetch(
+          withBasePath(`/api/file-manager/download?path=${encodeURIComponent(path)}`),
+          { credentials: 'include', cache: 'no-store' }
+        );
+        if (!res.ok) {
+          const data = (await res.json().catch(() => ({}))) as { error?: string };
+          throw new Error(typeof data.error === 'string' ? data.error : '다운로드 실패');
+        }
+        const blob = await res.blob();
+        triggerBlobDownload(blob, selectedRows[0]!.name);
+      } else {
+        const res = await fetch(withBasePath('/api/file-manager/download-zip'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ paths }),
+          credentials: 'include',
+          cache: 'no-store',
+        });
+        if (!res.ok) {
+          const data = (await res.json().catch(() => ({}))) as { error?: string };
+          throw new Error(typeof data.error === 'string' ? data.error : 'ZIP 다운로드 실패');
+        }
+        const blob = await res.blob();
+        const cd = res.headers.get('Content-Disposition') ?? '';
+        const m = /filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i.exec(cd);
+        const rawName = m?.[1] ? decodeURIComponent(m[1]) : m?.[2];
+        triggerBlobDownload(blob, rawName?.trim() || 'download.zip');
+      }
+    } catch (e: unknown) {
+      setActionError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setActionLoading(false);
     }
-    setActionError(
-      '보안서약 화면을 열 수 없습니다. 페이지를 새로고침한 뒤 다시 시도해 주세요.'
-    );
   }, [selectedRows]);
 
   const breadcrumbs = useMemo(() => {

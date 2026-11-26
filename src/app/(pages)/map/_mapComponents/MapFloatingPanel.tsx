@@ -62,6 +62,8 @@ export interface MapFloatingPanelProps {
   variant?: 'default' | 'mapFloat';
   /** 패널 루트 기준 absolute 오버레이(튜토리얼 등). 헤더 위 노출용 */
   overlay?: React.ReactNode;
+  /** 드래그 헤더 바 추가 class (border-b 등) */
+  headerClassName?: string;
 }
 
 export function MapFloatingPanel({
@@ -82,6 +84,7 @@ export function MapFloatingPanel({
   flushViewportClamp = false,
   variant = 'default',
   overlay,
+  headerClassName,
 }: MapFloatingPanelProps) {
   const isMapFloat = variant === 'mapFloat';
   const useLeft = defaultPosition.left != null;
@@ -382,7 +385,8 @@ export function MapFloatingPanel({
                 pinPosition
                   ? 'cursor-pointer border-b-0 px-2 py-1'
                   : 'cursor-grab border-b border-border/60 px-3 py-1.5 active:cursor-grabbing'
-              )
+              ),
+          headerClassName
         )}
         onKeyDown={(e) => {
           if (e.key === ' ' || e.key === 'Enter') e.preventDefault();

@@ -86,6 +86,7 @@ function downloadTrendCsv(opts: {
   })
   const safeName = opts.sensorKorNm.replace(/[\\/:*?"<>|]/g, '_').slice(0, 40)
   const fileName = `악취경향_${safeName}_${TREND_RANGE_FILE[opts.range]}.csv`
+  //		TODO : 악취 기능 연결 레이어 테이블의 SHP/엑셀(엑셀) 권한 적용 필요 (tableName·tableNames 전달)
   downloadExcelWithPledge({
     data: blob,
     fileName,
@@ -146,6 +147,7 @@ function downloadCompareCsv(opts: {
     type: 'text/csv;charset=utf-8',
   })
   const fileName = `악취추이비교_${COMPARE_RANGE_FILE[opts.range]}.csv`
+  //		TODO : 악취 기능 연결 레이어 테이블의 SHP/엑셀(엑셀) 권한 적용 필요 (tableName·tableNames 전달)
   downloadExcelWithPledge({
     data: blob,
     fileName,

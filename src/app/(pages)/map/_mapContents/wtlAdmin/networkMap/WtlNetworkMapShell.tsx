@@ -1665,7 +1665,10 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
           window.alert('내보낼 시설목록이 없습니다.')
           return
         }
-        exportWtlNetworkMapExcel(sheets)
+        exportWtlNetworkMapExcel(sheets, undefined, {
+          tableNames: layerKeys,
+          tableKorName: '관망조회',
+        })
       } catch (e) {
         window.alert(e instanceof Error ? e.message : 'Excel 내려받기에 실패했습니다.')
       } finally {

@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Check, ChevronLeft, ChevronRight, Plus, RotateCcw, Settings2, X } from 'lucide-react'
-import { ArchiveArrowDown } from '@/app/(pages)/_components/icons/ArchiveArrowDown'
+import { Check, ChevronLeft, ChevronRight, Mail, PackageCheck, Plus, RotateCcw, Settings2, X } from 'lucide-react'
+import { PackageArrowBendUpLeft } from '@/app/(pages)/_components/icons/PackageArrowBendUpLeft'
 import { call } from '@/lib/api'
 import { getBasePath, withBasePath, withBasePathNav } from '@/lib/basePath'
 import { getOpenedKeyForSerEng } from '@/lib/mapServiceOpened'
@@ -19,6 +19,10 @@ type Props = {
   matchHeightPx?: number | null
   /** 바깥 막에서 내 정보 칸을 빼 단추가 눌리게 함 */
   overlayClipPath?: string
+  /** 관리자·팀장·슈퍼 — «데이터 승인» 공통 메뉴 표시 */
+  showDataApprove?: boolean
+  /** 시스템 불편신고 플로팅 모달 */
+  onOpenSystemFeedback?: () => void
 }
 
 type ServiceItem = {
@@ -34,8 +38,9 @@ type SystemItem = {
 }
 
 const FAVORITES_STORAGE_KEY = 'ggnr.proto.moreFavorites'
-const ALWAYS_SHOW_ENGS = ['notice', 'board', 'dataRequest'] as const
-const ALWAYS_SHOW_ENG_SET = new Set<string>(ALWAYS_SHOW_ENGS)
+const ALWAYS_SHOW_ENGS_BASE = ['notice', 'board', 'dataRequest', 'systemFeedback'] as const
+const DATA_APPROVE_ENG = 'dataRequestApprove'
+const SYSTEM_FEEDBACK_ENG = 'systemFeedback'
 
 type FavItem = ServiceItem & { token: string }
 
@@ -57,7 +62,11 @@ function migrateFavoriteTokens(tokens: string[], systems: SystemItem[]): string[
     if (!eng) continue
     const next = sysKey
       ? token
-      : ALWAYS_SHOW_ENG_SET.has(eng)
+      : eng === 'notice' ||
+          eng === 'board' ||
+          eng === 'dataRequest' ||
+          eng === SYSTEM_FEEDBACK_ENG ||
+          eng === DATA_APPROVE_ENG
         ? eng
         : (() => {
             const first = systems.find((s) => s.serviceList.includes(eng))
@@ -76,6 +85,7 @@ const PORTAL_LINKS: Record<string, string> = {
   notice: '/notice',
   board: '/library',
   dataRequest: '/data-request',
+  dataRequestApprove: '/data-request-approve',
 }
 
 /** BASE_PATH(/uav_us)로 프로젝트 추정 — API 응답 전에 공통 메뉴가 비지 않게 */
@@ -230,7 +240,13 @@ function FavoriteStrip({
 
 function ServiceGlyph({ item }: { item: ServiceItem }) {
   if (item.ser_eng === 'dataRequest') {
-    return <ArchiveArrowDown className="h-5 w-5 shrink-0" strokeWidth={2} aria-hidden />
+    return <PackageArrowBendUpLeft className="h-5 w-5 shrink-0" strokeWidth={2} aria-hidden />
+  }
+  if (item.ser_eng === DATA_APPROVE_ENG) {
+    return <PackageCheck className="h-5 w-5 shrink-0" strokeWidth={2} aria-hidden />
+  }
+  if (item.ser_eng === SYSTEM_FEEDBACK_ENG) {
+    return <Mail className="h-5 w-5 shrink-0" strokeWidth={2} aria-hidden />
   }
   const svgRaw = item.ser_svg?.trim() ?? ''
   if (svgRaw.startsWith('<')) {
@@ -268,6 +284,8 @@ export function UserAccountMoreTab({
   onOpenSettings,
   matchHeightPx = null,
   overlayClipPath,
+  showDataApprove = false,
+  onOpenSystemFeedback,
 }: Props) {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -279,6 +297,12 @@ export function UserAccountMoreTab({
   const [favorites, setFavorites] = useState<string[]>([])
   const [settingOpen, setSettingOpen] = useState(false)
   const [draft, setDraft] = useState<string[]>([])
+
+  const alwaysShowEngs = useMemo(() => {
+    const base: string[] = [...ALWAYS_SHOW_ENGS_BASE]
+    if (showDataApprove) base.push(DATA_APPROVE_ENG)
+    return base
+  }, [showDataApprove])
 
   useEffect(() => {
     setFavorites(loadFavorites())
@@ -348,8 +372,25 @@ export function UserAccountMoreTab({
     if (!map.has('dataRequest')) {
       map.set('dataRequest', { ser_eng: 'dataRequest', ser_kor: '데이터 요청', ser_svg: null })
     }
+    if (!map.has(SYSTEM_FEEDBACK_ENG)) {
+      map.set(SYSTEM_FEEDBACK_ENG, {
+        ser_eng: SYSTEM_FEEDBACK_ENG,
+        ser_kor: '시스템 불편신고',
+        ser_svg: null,
+      })
+    }
+    if (showDataApprove) {
+      const existing = map.get(DATA_APPROVE_ENG)
+      map.set(DATA_APPROVE_ENG, {
+        ser_eng: DATA_APPROVE_ENG,
+        ser_kor: '데이터 승인',
+        ser_svg: existing?.ser_svg ?? null,
+      })
+    } else {
+      map.delete(DATA_APPROVE_ENG)
+    }
     return map
-  }, [services, bootProject])
+  }, [services, bootProject, showDataApprove])
 
   const homeSysByEng = useMemo(() => {
     const map = new Map<string, string>()
@@ -371,17 +412,19 @@ export function UserAccountMoreTab({
   )
 
   const basicItems = useMemo(() => {
-    const items = ALWAYS_SHOW_ENGS.map((eng) => serviceMap.get(eng)).filter(
+    const items = alwaysShowEngs.map((eng) => serviceMap.get(eng)).filter(
       (s): s is ServiceItem => s != null
     )
     return items
-  }, [serviceMap, bootProject])
+  }, [serviceMap, bootProject, alwaysShowEngs])
 
   const settingGroups = useMemo(() => {
     const groups: { key: string; title: string; items: ServiceItem[] }[] = []
-    const basics = [...ALWAYS_SHOW_ENGS.map((eng) => serviceMap.get(eng)).filter(
-      (s): s is ServiceItem => s != null
-    )]
+    const basics = [
+      ...alwaysShowEngs
+        .map((eng) => serviceMap.get(eng))
+        .filter((s): s is ServiceItem => s != null),
+    ]
     if (basics.length) {
       groups.push({ key: 'basic', title: '공통', items: basics })
     }
@@ -399,7 +442,7 @@ export function UserAccountMoreTab({
       groups.push({ key: sys.sys_key, title: sys.sys_kor, items })
     }
     return groups
-  }, [serviceMap, systems, visibleEng, bootProject])
+  }, [serviceMap, systems, visibleEng, bootProject, alwaysShowEngs])
 
   useEffect(() => {
     if (suppressSettings) setSettingOpen(false)
@@ -427,6 +470,11 @@ export function UserAccountMoreTab({
 
   const openService = (token: string) => {
     const { sysKey, eng } = parseFavToken(token)
+    if (eng === SYSTEM_FEEDBACK_ENG) {
+      onClosePanel()
+      onOpenSystemFeedback?.()
+      return
+    }
     const portal = PORTAL_LINKS[eng]
     if (portal) {
       onClosePanel()
@@ -435,7 +483,7 @@ export function UserAccountMoreTab({
           ? `${window.location.pathname}${window.location.search}`
           : ''
       const href =
-        eng === 'dataRequest' && fromPath
+        (eng === 'dataRequest' || eng === DATA_APPROVE_ENG) && fromPath
           ? `${portal}?from=${encodeURIComponent(fromPath)}`
           : portal
       window.location.assign(withBasePathNav(href))

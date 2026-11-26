@@ -159,6 +159,7 @@ export async function exportResurveyParcelExcel(args: {
   for (const [name, rows, header] of sheets) {
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows, { header }), name)
   }
+  //		TODO : 지적재조사 기능 연결 레이어 테이블의 SHP/엑셀(엑셀) 권한 적용 필요 (tableName·tableNames 전달)
   writeExcelWorkbookWithPledge(
     XLSX,
     wb,

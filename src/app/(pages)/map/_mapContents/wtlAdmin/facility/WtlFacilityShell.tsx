@@ -1185,6 +1185,12 @@ export function WtlFacilityShell({
         sheetName: title,
         title,
         fileName: undefined,
+        tableNames: [
+          selectedSource.tableName,
+          sample?.fieldsTable,
+          sample?.fieldsTableFallback,
+          sample?.layerKey,
+        ].filter((n): n is string => Boolean(String(n ?? '').trim())),
       })
     } catch (e) {
       window.alert(e instanceof Error ? e.message : '엑셀 내려받기에 실패했습니다.')

@@ -21,7 +21,7 @@ import { isSplitLayerParent } from "@/lib/splitLayerTargets"
 import { call } from "@/lib/api"
 import { normalizeGeoServerSymbolUrl } from "@/lib/geoserverSymbolPath"
 import { parseSimpleStyleFromCss, parseSldEnvStyle, parseSymbolFolderFromUrl, resolveSymbolPreviewUrl, symbolFileNameFromUrl, type GeometryType, type StyleProps } from "@/lib/geoserverStyleUtils"
-import { downloadExcelWithPledge } from "@/app/(pages)/_components/securityPledge/excelPledgeGate"
+import { triggerBlobDownload } from "@/app/(pages)/dev/_components/layerManager/layerListDownload"
 import { withBasePath } from "@/lib/basePath"
 import { getGeoServerBase, getGeoServerPublicBase } from "@/lib/geoserverUrl"
 import {
@@ -30,6 +30,11 @@ import {
   invalidateLayerManagerListCache,
   saveDefineLayerTablesConfig,
 } from "./layerManager/layerManagerListCache"
+import {
+  DOWNLOAD_AUTH_OPTIONS,
+  normalizeLayerDownloadAuth,
+  type LayerDownloadAuthValue,
+} from "@/lib/layerDownloadAuthClient"
 
 const GEOSERVER_DEFAULT_URL = getGeoServerBase()
 
@@ -147,6 +152,8 @@ type TableColumnDef =
       alignCenter?: boolean
       shapeType?: boolean
       share?: "read" | "write"
+      /** SHP/엑셀·첨부 다운로드 권한 */
+      downloadAuth?: "shp_excel" | "attachment"
       badge?: "schema" | "source"
     }
   | { id: string; label: string; width: string; kind: "style_legend" }
@@ -177,6 +184,22 @@ const TABLE_COLUMNS: TableColumnDef[] = [
   { id: "define_table_shp_type", label: "도형", width: "120px", kind: "field", shapeType: true },
   { id: "define_table_read_share", label: "읽기", width: "70px", kind: "field", share: "read", alignCenter: true },
   { id: "define_table_write_share", label: "쓰기", width: "70px", kind: "field", share: "write", alignCenter: true },
+  {
+    id: "define_table_shp_excel",
+    label: "SHP/엑셀",
+    width: "96px",
+    kind: "field",
+    downloadAuth: "shp_excel",
+    alignCenter: true,
+  },
+  {
+    id: "define_table_attachment",
+    label: "첨부파일",
+    width: "96px",
+    kind: "field",
+    downloadAuth: "attachment",
+    alignCenter: true,
+  },
   { id: "__layer_delete", label: "삭제", width: "56px", kind: "layer_delete" },
   //{ id: "define_table_etc", label: "비고", width: "flex", kind: "field" },
 ]
@@ -200,6 +223,15 @@ const SHARE_OPTIONS = [
   { label: "개인", value: "O" },
 ] as const
 const SCHEMA_OPTIONS = ["layer", "public_layer"] as const
+
+function defaultDownloadAuthValue(
+  kind: "shp_excel" | "attachment",
+  raw: unknown
+): LayerDownloadAuthValue {
+  const v = String(raw ?? "").trim()
+  if (v) return normalizeLayerDownloadAuth(v)
+  return kind === "attachment" ? "none" : "auto"
+}
 
 const PAGE_SIZE = 50
 const SCROLL_LOAD_THRESHOLD = 200
@@ -515,6 +547,43 @@ export function LayerInfoManager({
       setConfig(next)
     },
     [config]
+  )
+
+  /** 다운로드 권한: tables.json 반영 + DB layer_download_auth 동기화 */
+  const updateDownloadAuthCell = useCallback(
+    async (
+      tableIndex: number,
+      key: "define_table_shp_excel" | "define_table_attachment",
+      value: LayerDownloadAuthValue
+    ) => {
+      if (!config) return
+      const row = config.tables[tableIndex] as Record<string, unknown> | undefined
+      if (!row) return
+      updateCell(tableIndex, key, value)
+      const tableName = String(row.define_table_name ?? "").trim()
+      if (!tableName) return
+      const schema =
+        String(row.define_table_schema ?? "layer").trim() === "public_layer"
+          ? "public_layer"
+          : "layer"
+      const field = key === "define_table_shp_excel" ? "shpExcel" : "attachment"
+      try {
+        const res = await call("", "POST", {
+          service: "layerDownloadAuthService",
+          action: "upsertLayerDownloadAuth",
+          params: { schema, tableName, field, value },
+        })
+        const data = res?.data ?? res
+        if (!data?.success) {
+          setError(data?.error ?? "다운로드 권한 저장 실패")
+        } else {
+          requestLayerManagerListRefresh()
+        }
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "다운로드 권한 저장 실패")
+      }
+    },
+    [config, updateCell]
   )
 
   /** 스타일이 점·심볼이면 목록 «도형»을 POINT로 맞춤 (SYMBOL은 목록에 두지 않음). */
@@ -1799,11 +1868,7 @@ export function LayerInfoManager({
                     })
                     if (!res.ok) throw new Error("엑셀 다운로드 실패")
                     const blob = await res.blob()
-                    downloadExcelWithPledge({
-                      data: blob,
-                      fileName: "layer-list.xlsx",
-                      tableKorName: "레이어 목록",
-                    })
+                    triggerBlobDownload(blob, "layer-list.xlsx")
                   } catch (e) {
                     window.alert(e instanceof Error ? e.message : "엑셀 다운로드 실패")
                   }
@@ -1832,7 +1897,7 @@ export function LayerInfoManager({
             {TABLE_COLUMNS.map((col, i) => (
               <div
                 key={col.id}
-                className={`py-1 px-1 text-xs font-medium border-r bg-muted flex items-center ${i === TABLE_COLUMNS.length - 1 ? "border-r-0" : ""} ${(col.kind === "field" && col.alignCenter) || col.kind === "style_legend" || col.kind === "layer_delete" ? "justify-center text-center" : ""} ${col.width === "flex" ? "min-w-0" : "whitespace-nowrap"}`}
+                className={`py-1 px-1 text-xs font-medium border-r bg-muted flex items-center ${i === TABLE_COLUMNS.length - 1 ? "border-r-0" : ""} ${(col.kind === "field" && col.alignCenter) || col.kind === "style_legend" || col.kind === "layer_delete" ? "justify-center text-center" : ""} ${col.kind === "field" && col.downloadAuth ? "p-0" : ""} ${col.width === "flex" ? "min-w-0" : "whitespace-nowrap"}`}
                 style={getColumnStyle(col)}
               >
                 {col.label}
@@ -1932,7 +1997,7 @@ export function LayerInfoManager({
                   return (
                     <div
                       key={col.id}
-                      className={`${cellClass} ${col.alignCenter ? "justify-center text-center" : ""}`}
+                      className={`${cellClass} ${col.alignCenter ? "justify-center text-center" : ""} ${col.downloadAuth ? "p-0" : ""}`}
                       style={cellStyle}
                     >
                       {col.readonly ? (
@@ -1998,6 +2063,25 @@ export function LayerInfoManager({
                             <option value={val}>{val}</option>
                           ) : null}
                           {SHARE_OPTIONS.map((opt) => (
+                            <option key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </option>
+                          ))}
+                        </select>
+                      ) : col.downloadAuth ? (
+                        <select
+                          value={defaultDownloadAuthValue(col.downloadAuth, row[key])}
+                          onChange={(e) => {
+                            void updateDownloadAuthCell(
+                              tableIdx,
+                              key as "define_table_shp_excel" | "define_table_attachment",
+                              normalizeLayerDownloadAuth(e.target.value)
+                            )
+                          }}
+                          className="h-full min-h-[28px] w-full cursor-pointer border-0 bg-transparent px-1 text-center text-[11px] text-foreground outline-none"
+                          title={col.label}
+                        >
+                          {DOWNLOAD_AUTH_OPTIONS.map((opt) => (
                             <option key={opt.value} value={opt.value}>
                               {opt.label}
                             </option>
