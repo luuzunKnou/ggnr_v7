@@ -26,7 +26,6 @@ import { cn } from "@/lib/utils"
 import { useShootingRequestUiEnabled } from "@/app/(pages)/map/_mapContents/shootingRequest/useShootingRequestUiEnabled"
 import {
   isUavFamilySystemKey,
-  isUavUsProject,
 } from "@/app/(pages)/map/_mapContents/shootingRequest/shootingRequestUiFlag"
 
 // 패널 아이템 타입 정의
@@ -243,15 +242,15 @@ export const defaultMapControlGroups: MapControlGroup[] = [
   },
 ]
 
-/** UAV 조회·관리에서만 노출하는 우측 컨트롤. 울산은 시스템과 무관하게 항상 노출 */
+/** UAV 조회·관리에서만 노출하는 우측 컨트롤. UAV 시스템이 켜진 프로젝트는 시스템과 무관하게 노출(3D) */
 const UAV_ONLY_CONTROL_IDS = new Set(["aerial-view", "shooting-request"])
 
-/** 현재 시스템에 맞게 맵 컨트롤 그룹 필터 (드론영상·촬영요청 = UAV 전용, 울산은 항상) */
+/** 현재 시스템에 맞게 맵 컨트롤 그룹 필터 (드론영상·촬영요청 = UAV 전용) */
 export function mapControlGroupsForSystem(
   systemKey: string,
-  projectName?: string
+  uavEnabledInProject?: boolean
 ): MapControlGroup[] {
-  if (isUavUsProject(projectName) || isUavFamilySystemKey(systemKey)) {
+  if (uavEnabledInProject || isUavFamilySystemKey(systemKey)) {
     return defaultMapControlGroups
   }
   return defaultMapControlGroups.map((g) => ({

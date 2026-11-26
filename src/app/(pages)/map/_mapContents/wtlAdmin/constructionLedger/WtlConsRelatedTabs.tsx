@@ -104,7 +104,7 @@ function facilitiesToMapItems(rows: WtlNetworkRow[]): WtlConsRelatedFacility[] {
     if (!styleName) continue
     items.push({
       id: row.id,
-      geom: geom as Record<string, unknown>,
+      geom: geom as unknown as Record<string, unknown>,
       projection: 'EPSG:4326',
       /** GeoServer 스타일명 — 관로 분할키(wtl_pipe_lm_saa003 등)와 동일 */
       styleName,
@@ -537,7 +537,7 @@ export function WtlConsRelatedTabs({
       return
     }
     onFocus?.({
-      geom: geom as Record<string, unknown>,
+      geom: geom as unknown as Record<string, unknown>,
       projection,
       styleName: style?.styleName,
       styleCode: style?.styleCode,

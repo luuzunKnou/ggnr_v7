@@ -4,9 +4,10 @@
  */
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { resolveGgnrDataDir } from '@/lib/turbopackFsPath';
 
 export function krasSyncDataDir(): string {
-  return (process.env.GGNR_DATA_DIR ?? 'd:\\ggnr_data_dir').trim() || 'd:\\ggnr_data_dir';
+  return resolveGgnrDataDir();
 }
 
 export function krasSyncSeoulDay(): string {

@@ -453,6 +453,9 @@ export type MapContextValue = {
   /** 불법점용 관리카드 패널 열림 — 지도 식별 시 목록·상세 선택 */
   riverIllegalOccupationPanelOpen: boolean;
   setRiverIllegalOccupationPanelOpen: Dispatch<SetStateAction<boolean>>;
+  /** 급경사지 안전점검 패널 열림 */
+  steepSlopeSafetyPanelOpen: boolean;
+  setSteepSlopeSafetyPanelOpen: Dispatch<SetStateAction<boolean>>;
   /**
    * 지도에서 illegal_usage_as 식별 직후 목록이 키 선택하도록 호출
    * (RiverIllegalOccupationListPanel이 등록)
@@ -849,6 +852,7 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
     markerItemId: string;
   } | null>(null);
   const [riverIllegalOccupationPanelOpen, setRiverIllegalOccupationPanelOpen] = useState(false);
+  const [steepSlopeSafetyPanelOpen, setSteepSlopeSafetyPanelOpen] = useState(false);
   const applyRiverIllegalOccupationMapPickRef = useRef<
     | ((pick: {
         ogcFid: string;
@@ -1104,6 +1108,8 @@ export function MapContextProvider({ children }: { children: React.ReactNode }) 
         setRoadFrontageMarkerDraftPoint,
         riverIllegalOccupationPanelOpen,
         setRiverIllegalOccupationPanelOpen,
+        steepSlopeSafetyPanelOpen,
+        setSteepSlopeSafetyPanelOpen,
         applyRiverIllegalOccupationMapPickRef,
         riverConstructionLedgerRows,
         setRiverConstructionLedgerRows,

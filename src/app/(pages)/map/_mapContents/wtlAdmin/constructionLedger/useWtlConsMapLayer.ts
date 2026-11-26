@@ -6,7 +6,7 @@ import GeoJSON from 'ol/format/GeoJSON'
 import VectorLayer from 'ol/layer/Vector'
 import VectorSource from 'ol/source/Vector'
 import { Fill, Icon, Stroke, Style } from 'ol/style'
-import type { StyleFunction, StyleLike } from 'ol/style/Style'
+import type { StyleFunction } from 'ol/style/Style'
 import '../../../_mapComponents/config/projections'
 import { MAP_AUTO_NAV_MAX_ZOOM } from '../../../_mapComponents/config/mapDefaults'
 import { scheduleFitMapToExtent3857 } from '../../../_mapComponents/config/mapAutoNavigation'
@@ -116,7 +116,7 @@ function midSparkleStyle(feature: Feature, phase: number, zIndex = 20): Style | 
 }
 
 /** 관련시설 — GeoServer 레이어 심볼(조건 ftr_cde 포함). 없으면 모듈 폴백 */
-function relatedFacilityStyle(feature: Feature, onStyleReady: () => void): StyleLike {
+function relatedFacilityStyle(feature: Feature, onStyleReady: () => void): Style | Style[] {
   const styleName = String(feature.get('styleName') ?? '').trim()
   const styleCode = String(feature.get('styleCode') ?? '').trim() || null
   if (!styleName) {

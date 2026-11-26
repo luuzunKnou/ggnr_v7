@@ -240,88 +240,6 @@
     "define_table_source": "shp"
   },
   {
-    "define_table_name": "elevation",
-    "define_table_kor_name": "등고선",
-    "define_table_shp_type": "LINE",
-    "define_table_read_share": "P",
-    "define_table_write_share": "P",
-    "define_table_group": "등고선",
-    "define_table_idx": "0",
-    "define_table_etc": "",
-    "define_table_schema": "public_layer",
-    "define_table_source": "shp"
-  },
-  {
-    "define_table_name": "elevation_ctd001",
-    "define_table_kor_name": "계곡선",
-    "define_table_shp_type": "LINE",
-    "define_table_read_share": "P",
-    "define_table_write_share": "P",
-    "define_table_group": "등고선",
-    "define_table_idx": "10",
-    "define_table_etc": "",
-    "define_table_schema": "public_layer",
-    "define_table_source": "shp",
-    "define_table_div_query": "divi = 'CTD001' OR scls = 'F0017114' OR scls = 'F0017124'",
-    "define_table_parents_layer": "elevation"
-  },
-  {
-    "define_table_name": "elevation_ctd002",
-    "define_table_kor_name": "주곡선",
-    "define_table_shp_type": "LINE",
-    "define_table_read_share": "P",
-    "define_table_write_share": "P",
-    "define_table_group": "등고선",
-    "define_table_idx": "20",
-    "define_table_etc": "",
-    "define_table_schema": "public_layer",
-    "define_table_source": "shp",
-    "define_table_div_query": "divi = 'CTD002' OR scls = 'F0017111' OR scls = 'F0017121'",
-    "define_table_parents_layer": "elevation"
-  },
-  {
-    "define_table_name": "elevation_ctd003",
-    "define_table_kor_name": "간곡선",
-    "define_table_shp_type": "LINE",
-    "define_table_read_share": "P",
-    "define_table_write_share": "P",
-    "define_table_group": "등고선",
-    "define_table_idx": "30",
-    "define_table_etc": "",
-    "define_table_schema": "public_layer",
-    "define_table_source": "shp",
-    "define_table_div_query": "divi = 'CTD003' OR scls = 'F0017112' OR scls = 'F0017122'",
-    "define_table_parents_layer": "elevation"
-  },
-  {
-    "define_table_name": "elevation_ctd004",
-    "define_table_kor_name": "조곡선",
-    "define_table_shp_type": "LINE",
-    "define_table_read_share": "P",
-    "define_table_write_share": "P",
-    "define_table_group": "등고선",
-    "define_table_idx": "40",
-    "define_table_etc": "",
-    "define_table_schema": "public_layer",
-    "define_table_source": "shp",
-    "define_table_div_query": "divi = 'CTD004' OR scls = 'F0017113' OR scls = 'F0017123'",
-    "define_table_parents_layer": "elevation"
-  },
-  {
-    "define_table_name": "elevation_etc",
-    "define_table_kor_name": "등고선(기타)",
-    "define_table_shp_type": "LINE",
-    "define_table_read_share": "P",
-    "define_table_write_share": "P",
-    "define_table_group": "등고선",
-    "define_table_idx": "50",
-    "define_table_etc": "",
-    "define_table_schema": "public_layer",
-    "define_table_source": "shp",
-    "define_table_div_query": "(divi IS NULL OR divi NOT IN ('CTD001', 'CTD002', 'CTD003', 'CTD004')) AND (scls IS NULL OR scls NOT IN ('F0017111', 'F0017112', 'F0017113', 'F0017114', 'F0017121', 'F0017122', 'F0017123', 'F0017124'))",
-    "define_table_parents_layer": "elevation"
-  },
-  {
     "define_table_name": "lard_lawst_ri_budr",
     "define_table_kor_name": "법정구역리경계",
     "define_table_shp_type": "POLYGON",
@@ -512,6 +430,18 @@
     "define_table_etc": "",
     "define_table_schema": "layer",
     "define_table_source": "excel"
+  },
+  {
+    "define_table_name": "swl_cons_as_solo",
+    "define_table_kor_name": "하수도 공사대장_개별",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
   },
   {
     "define_table_name": "test",
@@ -898,6 +828,18 @@
     "define_table_source": "shp"
   },
   {
+    "define_table_name": "safemap",
+    "define_table_kor_name": "보안등",
+    "define_table_shp_type": "POINT",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "공공데이터",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "excel"
+  },
+  {
     "define_table_name": "wtl_photo_ps",
     "define_table_kor_name": "공공측량 현장사진",
     "define_table_shp_type": "POINT",
@@ -1108,30 +1050,6 @@
     "define_table_read_share": "P",
     "define_table_write_share": "P",
     "define_table_group": "공사대장",
-    "define_table_idx": "0",
-    "define_table_etc": "",
-    "define_table_schema": "layer",
-    "define_table_source": "shp"
-  },
-  {
-    "define_table_name": "swl_cons_as_solo",
-    "define_table_kor_name": "하수도 공사대장_개별",
-    "define_table_shp_type": "POLYGON",
-    "define_table_read_share": "P",
-    "define_table_write_share": "P",
-    "define_table_group": "",
-    "define_table_idx": "0",
-    "define_table_etc": "",
-    "define_table_schema": "layer",
-    "define_table_source": "shp"
-  },
-  {
-    "define_table_name": "wtl_cons_as_solo",
-    "define_table_kor_name": "상수도 공사대장_개별",
-    "define_table_shp_type": "POLYGON",
-    "define_table_read_share": "P",
-    "define_table_write_share": "P",
-    "define_table_group": "상수",
     "define_table_idx": "0",
     "define_table_etc": "",
     "define_table_schema": "layer",
@@ -2578,6 +2496,18 @@
     "define_table_source": "shp"
   },
   {
+    "define_table_name": "road_sign_maintenance",
+    "define_table_kor_name": "유지보수내역",
+    "define_table_shp_type": "POINT",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "도로",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "excel"
+  },
+  {
     "define_table_name": "tl_sgco_rnadr_mst_gun",
     "define_table_kor_name": "건물군",
     "define_table_shp_type": "POLYGON",
@@ -2640,7 +2570,7 @@
   {
     "define_table_name": "a0020000",
     "define_table_kor_name": "도로대장총괄",
-    "define_table_shp_type": "LINE",
+    "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
     "define_table_group": "도로대장",
@@ -2670,6 +2600,18 @@
     "define_table_group": "도로대장",
     "define_table_idx": "0",
     "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "a0070000_ls",
+    "define_table_kor_name": "교량(선형)",
+    "define_table_shp_type": "LINE",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "도로대장",
+    "define_table_idx": "0",
+    "define_table_etc": "a0070000 oriented-envelope dual-line view",
     "define_table_schema": "layer",
     "define_table_source": "shp"
   },
@@ -2760,7 +2702,7 @@
   {
     "define_table_name": "a9990001",
     "define_table_kor_name": "도로중심선교점",
-    "define_table_shp_type": "LINE",
+    "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
     "define_table_group": "도로대장",
@@ -2784,7 +2726,7 @@
   {
     "define_table_name": "a9990003",
     "define_table_kor_name": "종단경사",
-    "define_table_shp_type": "LINE",
+    "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
     "define_table_group": "도로대장",
@@ -2844,7 +2786,7 @@
   {
     "define_table_name": "a9990011",
     "define_table_kor_name": "실연장",
-    "define_table_shp_type": "LINE",
+    "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
     "define_table_group": "도로대장",
@@ -2868,7 +2810,7 @@
   {
     "define_table_name": "a9990013",
     "define_table_kor_name": "측점",
-    "define_table_shp_type": "POINT",
+    "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
     "define_table_group": "도로대장",
@@ -2880,7 +2822,7 @@
   {
     "define_table_name": "c0076117",
     "define_table_kor_name": "측구",
-    "define_table_shp_type": "LINE",
+    "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
     "define_table_group": "도로대장",
@@ -2892,7 +2834,7 @@
   {
     "define_table_name": "c0223367",
     "define_table_kor_name": "가로등",
-    "define_table_shp_type": "POINT",
+    "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
     "define_table_group": "도로대장",
@@ -2904,7 +2846,7 @@
   {
     "define_table_name": "c0246120",
     "define_table_kor_name": "지하매설물",
-    "define_table_shp_type": "LINE",
+    "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
     "define_table_group": "도로대장",
@@ -2928,7 +2870,7 @@
   {
     "define_table_name": "c0410000",
     "define_table_kor_name": "표지",
-    "define_table_shp_type": "POINT",
+    "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
     "define_table_group": "도로대장",
@@ -2940,7 +2882,7 @@
   {
     "define_table_name": "c0493376",
     "define_table_kor_name": "신호등",
-    "define_table_shp_type": "POINT",
+    "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
     "define_table_group": "도로대장",
@@ -2952,7 +2894,7 @@
   {
     "define_table_name": "c0520000",
     "define_table_kor_name": "중앙분리대",
-    "define_table_shp_type": "LINE",
+    "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
     "define_table_group": "도로대장",
@@ -2964,7 +2906,7 @@
   {
     "define_table_name": "c0530000",
     "define_table_kor_name": "방호울타리",
-    "define_table_shp_type": "LINE",
+    "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
     "define_table_group": "도로대장",
@@ -2976,7 +2918,7 @@
   {
     "define_table_name": "c0536114",
     "define_table_kor_name": "방음시설",
-    "define_table_shp_type": "LINE",
+    "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
     "define_table_group": "도로대장",
@@ -3060,7 +3002,7 @@
   {
     "define_table_name": "c9530005",
     "define_table_kor_name": "낙석방지시설",
-    "define_table_shp_type": "LINE",
+    "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
     "define_table_group": "도로대장",
@@ -3120,7 +3062,7 @@
   {
     "define_table_name": "d0023372",
     "define_table_kor_name": "가로수",
-    "define_table_shp_type": "POINT",
+    "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
     "define_table_group": "도로대장",
@@ -3132,7 +3074,7 @@
   {
     "define_table_name": "f9037221",
     "define_table_kor_name": "쌓기비탈면",
-    "define_table_shp_type": "LINE",
+    "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
     "define_table_group": "도로대장",
@@ -3144,7 +3086,7 @@
   {
     "define_table_name": "f9037222",
     "define_table_kor_name": "깎기비탈면",
-    "define_table_shp_type": "LINE",
+    "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
     "define_table_group": "도로대장",
@@ -3156,7 +3098,7 @@
   {
     "define_table_name": "f9047224",
     "define_table_kor_name": "옹벽",
-    "define_table_shp_type": "LINE",
+    "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
     "define_table_group": "도로대장",
@@ -3168,7 +3110,7 @@
   {
     "define_table_name": "f9047226",
     "define_table_kor_name": "석축",
-    "define_table_shp_type": "LINE",
+    "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
     "define_table_group": "도로대장",
@@ -4895,6 +4837,76 @@
     "define_table_source": "shp"
   },
   {
+    "define_table_name": "elevation_ctd001",
+    "define_table_kor_name": "계곡선",
+    "define_table_shp_type": "LINE",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "등고선",
+    "define_table_idx": "10",
+    "define_table_etc": "",
+    "define_table_schema": "public_layer",
+    "define_table_source": "shp",
+    "define_table_div_query": "divi = 'CTD001' OR scls = 'F0017114' OR scls = 'F0017124'",
+    "define_table_parents_layer": "elevation"
+  },
+  {
+    "define_table_name": "elevation_ctd002",
+    "define_table_kor_name": "주곡선",
+    "define_table_shp_type": "LINE",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "등고선",
+    "define_table_idx": "20",
+    "define_table_etc": "",
+    "define_table_schema": "public_layer",
+    "define_table_source": "shp",
+    "define_table_div_query": "divi = 'CTD002' OR scls = 'F0017111' OR scls = 'F0017121'",
+    "define_table_parents_layer": "elevation"
+  },
+  {
+    "define_table_name": "elevation_ctd003",
+    "define_table_kor_name": "간곡선",
+    "define_table_shp_type": "LINE",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "등고선",
+    "define_table_idx": "30",
+    "define_table_etc": "",
+    "define_table_schema": "public_layer",
+    "define_table_source": "shp",
+    "define_table_div_query": "divi = 'CTD003' OR scls = 'F0017112' OR scls = 'F0017122'",
+    "define_table_parents_layer": "elevation"
+  },
+  {
+    "define_table_name": "elevation_ctd004",
+    "define_table_kor_name": "조곡선",
+    "define_table_shp_type": "LINE",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "등고선",
+    "define_table_idx": "40",
+    "define_table_etc": "",
+    "define_table_schema": "public_layer",
+    "define_table_source": "shp",
+    "define_table_div_query": "divi = 'CTD004' OR scls = 'F0017113' OR scls = 'F0017123'",
+    "define_table_parents_layer": "elevation"
+  },
+  {
+    "define_table_name": "elevation_etc",
+    "define_table_kor_name": "등고선(기타)",
+    "define_table_shp_type": "LINE",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "등고선",
+    "define_table_idx": "50",
+    "define_table_etc": "",
+    "define_table_schema": "public_layer",
+    "define_table_source": "shp",
+    "define_table_div_query": "(divi IS NULL OR divi NOT IN ('CTD001', 'CTD002', 'CTD003', 'CTD004')) AND (scls IS NULL OR scls NOT IN ('F0017111', 'F0017112', 'F0017113', 'F0017114', 'F0017121', 'F0017122', 'F0017123', 'F0017124'))",
+    "define_table_parents_layer": "elevation"
+  },
+  {
     "define_table_name": "cwtl_pres_ps",
     "define_table_kor_name": "가압장",
     "define_table_shp_type": "POINT",
@@ -5655,6 +5667,18 @@
     "define_table_kor_name": "단수민원",
     "define_table_shp_type": "POINT",
     "define_table_read_share": "G",
+    "define_table_write_share": "P",
+    "define_table_group": "상수",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "wtl_cons_as_solo",
+    "define_table_kor_name": "상수도 공사대장_개별",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
     "define_table_write_share": "P",
     "define_table_group": "상수",
     "define_table_idx": "0",
@@ -11219,18 +11243,6 @@
     "define_table_source": "shp"
   },
   {
-    "define_table_name": "usage_data_as",
-    "define_table_kor_name": "하천점용대장",
-    "define_table_shp_type": "POLYGON",
-    "define_table_read_share": "P",
-    "define_table_write_share": "P",
-    "define_table_group": "점용대장",
-    "define_table_idx": "0",
-    "define_table_etc": "",
-    "define_table_schema": "layer",
-    "define_table_source": "shp"
-  },
-  {
     "define_table_name": "rural_homestays",
     "define_table_kor_name": "농어촌민박 현황",
     "define_table_shp_type": "POLYGON",
@@ -11629,77 +11641,5 @@
     "define_table_etc": "",
     "define_table_schema": "layer",
     "define_table_source": "shp"
-  },
-  {
-    "define_table_name": "bike",
-    "define_table_kor_name": "bike",
-    "define_table_shp_type": "POLYGON",
-    "define_table_read_share": "P",
-    "define_table_write_share": "P",
-    "define_table_group": "테스트",
-    "define_table_idx": "0",
-    "define_table_etc": "",
-    "define_table_schema": "layer",
-    "define_table_source": "shp"
-  },
-  {
-    "define_table_name": "rdl_occ_as",
-    "define_table_kor_name": "도로점용대장",
-    "define_table_shp_type": "POLYGON",
-    "define_table_read_share": "P",
-    "define_table_write_share": "P",
-    "define_table_group": "점용대장",
-    "define_table_idx": "0",
-    "define_table_etc": "",
-    "define_table_schema": "layer",
-    "define_table_source": "shp"
-  },
-  {
-    "define_table_name": "rdl_occ_solo_as",
-    "define_table_kor_name": "도로점용필지",
-    "define_table_shp_type": "POLYGON",
-    "define_table_read_share": "P",
-    "define_table_write_share": "P",
-    "define_table_group": "점용대장",
-    "define_table_idx": "0",
-    "define_table_etc": "",
-    "define_table_schema": "layer",
-    "define_table_source": "shp"
-  },
-  {
-    "define_table_name": "usage_data_solo_as",
-    "define_table_kor_name": "하천점용필지",
-    "define_table_shp_type": "POLYGON",
-    "define_table_read_share": "P",
-    "define_table_write_share": "P",
-    "define_table_group": "점용대장",
-    "define_table_idx": "0",
-    "define_table_etc": "",
-    "define_table_schema": "layer",
-    "define_table_source": "shp"
-  },
-  {
-    "define_table_name": "safemap",
-    "define_table_kor_name": "보안등",
-    "define_table_shp_type": "POINT",
-    "define_table_read_share": "P",
-    "define_table_write_share": "P",
-    "define_table_group": "공공데이터",
-    "define_table_idx": "0",
-    "define_table_etc": "",
-    "define_table_schema": "layer",
-    "define_table_source": "excel"
-  },
-  {
-    "define_table_name": "road_sign_maintenance",
-    "define_table_kor_name": "유지보수내역",
-    "define_table_shp_type": "POINT",
-    "define_table_read_share": "P",
-    "define_table_write_share": "P",
-    "define_table_group": "도로",
-    "define_table_idx": "0",
-    "define_table_etc": "",
-    "define_table_schema": "layer",
-    "define_table_source": "excel"
   }
 ]

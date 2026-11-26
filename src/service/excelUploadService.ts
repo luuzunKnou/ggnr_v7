@@ -40,10 +40,11 @@ import {
 import { broadcastExcelWizardLog } from '@/lib/excelWizardEvents';
 import type { ExcelDefineLayerFieldMeta, ExcelDefineLayerMeta } from '@/lib/excelDefineLayerFieldApply';
 import { pickDefineLayerRowByExcelFileName } from '@/lib/excelDefineLayerFieldApply';
+import { resolveGgnrDataDir } from '@/lib/turbopackFsPath';
 
 export type { ExcelDefineLayerFieldMeta, ExcelDefineLayerMeta };
 
-const GGNR_DATA_DIR = process.env.GGNR_DATA_DIR ?? 'd:\\ggnr_data_dir';
+const GGNR_DATA_DIR = resolveGgnrDataDir();
 const DEFINE_LAYER_TABLES_PATH = path.join(process.cwd(), 'src', 'config', 'defineLayer', 'tables.json');
 const DEFINE_LAYER_FIELDS_DIR = path.join(process.cwd(), 'src', 'config', 'defineLayer', 'fields');
 const EXCEL_FIELD_NAME_MAP_PATH = path.join(process.cwd(), 'src', 'config', 'defineLayer', 'excelFieldNameMap.json');

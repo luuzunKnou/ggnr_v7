@@ -117,8 +117,17 @@ async function setupDb(): Promise<void> {
   }
 
   // start(ggnr_start/nssm): 고정 정책 additive — DROP 대화형 Abort로 기동 실패 방지
-  // dev: 기존 대화형 drizzle-kit push
-  if (COMMAND === 'start') {
+  // dev: TTY면 기존 대화형 drizzle-kit push, 비TTY·스킵 플래그는 additive (에이전트/백그라운드 기동 멈춤 방지)
+  const skipInteractivePush =
+    process.env.GGNR_SKIP_DRIZZLE_PUSH === '1' ||
+    process.env.GGNR_SKIP_DRIZZLE_PUSH === 'true' ||
+    !process.stdin.isTTY;
+  if (COMMAND === 'start' || skipInteractivePush) {
+    if (COMMAND === 'dev' && skipInteractivePush) {
+      console.log(
+        '[run] drizzle-kit push 대화형 생략 — additive sync (stdin non-TTY 또는 GGNR_SKIP_DRIZZLE_PUSH)'
+      );
+    }
     try {
       const { runAdditiveSchemaSync } = await import('./drizzle-push-additive');
       await runAdditiveSchemaSync();

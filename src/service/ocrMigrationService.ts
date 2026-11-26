@@ -13,8 +13,9 @@ import iconv from 'iconv-lite';
 import { appendUploadConvertHistory } from './fileManagerService';
 import { getMapConfig } from './configService';
 import { GGNR_DATA_PATHS } from '@/lib/ggnrDataPaths';
+import { resolveGgnrDataDir } from '@/lib/turbopackFsPath';
 
-const GGNR_DATA_DIR = process.env.GGNR_DATA_DIR ?? 'd:\\ggnr_data_dir';
+const GGNR_DATA_DIR = resolveGgnrDataDir();
 const OCR_ROOT_REL = GGNR_DATA_PATHS.ocr;
 const OCR_RUN_TIMEOUT_MS = 3 * 60 * 60 * 1000;
 const OCR_SCRIPT_PATH = path.join(process.cwd(), 'scripts', 'ocr_run_job.ts');

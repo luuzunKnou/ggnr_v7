@@ -3,7 +3,7 @@
  * 2023·2026 엑셀 대장 사진 기준.
  *
  * 필지 1 : N 소유자
- * 부대비용 묶음은 필지에 연결. 표에서는 그 필지 소유자 행 바로 아래에 수수료 행.
+ * 부대비용 묶음은 필지 N건에 같은 id로 연결 가능. 표에서는 묶음 중 마지막 필지 아래에만 수수료 행.
  */
 
 export const UNPAID_LAND_ROAD_TYPES = ["국도", "지방도", "시군도"] as const;
@@ -17,7 +17,7 @@ export type UnpaidLandFeeItem = {
 /** 부대비용 묶음 — 수수료 항목 한 세트 */
 export type UnpaidLandExpenseSet = {
   id: string;
-  /** 수수료 금액을 넣을 도로종류 칸 (기본: 지방도) */
+  /** 수수료 금액을 넣을 도로종류 칸 (국도·지방도·시군도 중 하나) */
   roadType?: UnpaidLandRoadType;
   items: UnpaidLandFeeItem[];
 };
@@ -49,6 +49,23 @@ export type UnpaidLandOwner = {
   /** 면적 칸 보조 표기 예: 43(92/198) */
   areaNote?: string;
 };
+
+/** 부대비용 기본 표기 — 국도수수료 / 지방도수수료 / 시군도수수료 */
+export function unpaidLandFeeLabelForRoad(roadType: UnpaidLandRoadType): string {
+  return `${roadType}수수료`;
+}
+
+/** 필지 소유자 기준 도로종류(한 종류면 그것, 섞이면 금액 있는 행 우선) */
+export function unpaidLandParcelRoadType(
+  parcelId: string,
+  owners: UnpaidLandOwner[]
+): UnpaidLandRoadType | null {
+  const list = owners.filter((o) => o.parcelId === parcelId);
+  if (list.length === 0) return null;
+  const types = [...new Set(list.map((o) => o.roadType))];
+  if (types.length === 1) return types[0]!;
+  return list.find((o) => o.amount != null)?.roadType ?? list[0]!.roadType;
+}
 
 export type UnpaidLandListRow = {
   parcel: UnpaidLandParcel;

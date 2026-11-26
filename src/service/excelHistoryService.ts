@@ -15,12 +15,13 @@ import {
   excelLayerRowJsonbSql,
 } from '@/lib/syncLogGeom';
 import { recordDataLogsFromSyncStyleRows } from './dataLogService';
+import { resolveGgnrDataDir } from '@/lib/turbopackFsPath';
 
 function safeIdent(name: string): string {
   return String(name ?? '').replace(/[^a-zA-Z0-9_]/g, '').toLowerCase();
 }
 
-const GGNR_DATA_DIR = process.env.GGNR_DATA_DIR ?? 'd:\\ggnr_data_dir';
+const GGNR_DATA_DIR = resolveGgnrDataDir();
 /** 로그 파일 최대 읽기 크기 (2MB) — 그 이상은 잘림 */
 const MAX_LOG_BYTES = 2 * 1024 * 1024;
 
