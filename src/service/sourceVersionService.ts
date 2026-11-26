@@ -28,6 +28,7 @@ import { decodeChildOutput } from '@/lib/decodeChildOutput';
 import {
   isPrebuildTsxAvailable,
   NPM_INSTALL_DEV_ARGS,
+  resolveNpmBuildEnv,
   resolveNpmInstallEnv,
 } from '@/lib/npmApplyEnv';
 
@@ -784,9 +785,13 @@ async function executePreparedSourceApplyCommit(
         });
       }
       await emit('build', '사전 빌드…');
-      await spawnNpmWithApplyLog(['run', 'build'], async (line) => {
-        await emit('build', line.startsWith('build:') ? line : `build: ${line}`);
-      });
+      await spawnNpmWithApplyLog(
+        ['run', 'build'],
+        async (line) => {
+          await emit('build', line.startsWith('build:') ? line : `build: ${line}`);
+        },
+        resolveNpmBuildEnv()
+      );
     }
 
     await fs.rm(tmpBase, { recursive: true, force: true }).catch(() => {});

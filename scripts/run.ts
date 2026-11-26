@@ -10,7 +10,11 @@ import path from 'node:path';
 import { ensureDbUser } from './create-db-user';
 import { loadProjectEnv } from './load-project-env';
 import { resolveGeoServerInternalUrl } from './resolve-geoserver-url';
-import { NPM_INSTALL_DEV_ARGS, resolveNpmInstallEnv } from '../src/lib/npmApplyEnv';
+import {
+  NPM_INSTALL_DEV_ARGS,
+  resolveNpmBuildEnv,
+  resolveNpmInstallEnv,
+} from '../src/lib/npmApplyEnv';
 import { reloadProjectRuntimeEnv } from '../src/lib/projectEnvReload';
 
 const COMMAND = process.argv[2]; // dev | start
@@ -270,12 +274,15 @@ function runNpmInstallSync(): void {
 }
 
 function runNpmBuildSync(): void {
-  console.log('[SourceCodeUpload] npm run build (앱 중지 상태)');
+  const buildEnv = resolveNpmBuildEnv();
+  console.log(
+    `[SourceCodeUpload] npm run build (앱 중지 상태) NODE_OPTIONS=${buildEnv.NODE_OPTIONS ?? ''}`
+  );
   execFileSync('npm', ['run', 'build'], {
     cwd: process.cwd(),
     stdio: 'inherit',
     shell: true,
-    env: process.env,
+    env: buildEnv,
   });
   console.log('[SourceCodeUpload] npm run build OK');
 }
