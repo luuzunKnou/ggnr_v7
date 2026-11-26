@@ -11,8 +11,9 @@ import { spawn } from 'node:child_process';
 import iconv from 'iconv-lite';
 import { appendUploadConvertHistory } from './fileManagerService';
 import { GGNR_DATA_PATHS } from '@/lib/ggnrDataPaths';
+import { resolveGgnrDataDir } from '@/lib/turbopackFsPath';
 
-const GGNR_DATA_DIR = process.env.GGNR_DATA_DIR ?? 'd:\\ggnr_data_dir';
+const GGNR_DATA_DIR = resolveGgnrDataDir();
 const PDF_ROOT_REL = GGNR_DATA_PATHS.pdfToJpg;
 const PDF_INPUT_SUBDIR = 'PDF';
 const JPG_OUTPUT_SUBDIR = 'JPG';

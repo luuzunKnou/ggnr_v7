@@ -7,11 +7,25 @@ import {
   UNPAID_LAND_PARCELS,
   UNPAID_LAND_ROAD_TYPES,
   buildUnpaidLandListRows,
+  unpaidLandFeeLabelForRoad,
+  unpaidLandParcelRoadType,
   type UnpaidLandExpenseSet,
   type UnpaidLandOwner,
   type UnpaidLandParcel,
   type UnpaidLandRoadType,
 } from "./unpaidLandCompensationMock";
+
+export type AddExpenseFeeResult =
+  | {
+      ok: true;
+      expenseSetId: string;
+      itemIndex: number;
+      anchorParcelId: string;
+      mode: "create" | "join" | "append";
+      memberIds: string[];
+      roadType: UnpaidLandRoadType;
+    }
+  | { ok: false; error: string };
 
 function cloneParcels(): UnpaidLandParcel[] {
   return UNPAID_LAND_PARCELS.map((p) => ({ ...p }));
@@ -142,46 +156,142 @@ export function useUnpaidLandMockCrud() {
   }, []);
 
   /**
-   * 부대비용(수수료) 한 줄 추가.
-   * 선택 필지에 묶음이 있으면 항목만 추가, 없으면 새 묶음 만들어 필지에 연결.
+   * 부대비용(수수료) 추가 / 묶음 확장.
+   * 국도·지방도(시군도)는 한 묶음에 한 도로종류만. 표기는 «국도수수료» 등, 금액 칸도 그 도로열.
    */
-  const addExpenseFee = useCallback((parcelId: string) => {
-    const parcel = parcels.find((p) => p.id === parcelId);
-    if (!parcel) return null;
+  const addExpenseFee = useCallback(
+    (parcelIds: string | string[]): AddExpenseFeeResult | null => {
+      const idList = (Array.isArray(parcelIds) ? parcelIds : [parcelIds]).filter(
+        Boolean
+      );
+      const uniqueIds = [...new Set(idList)];
+      const selected = parcels
+        .filter((p) => uniqueIds.includes(p.id))
+        .sort((a, b) =>
+          a.year !== b.year ? a.year - b.year : a.seq - b.seq
+        );
+      if (selected.length === 0) return null;
 
-    const existingId = parcel.expenseSetId ?? null;
-    const existing = existingId
-      ? expenseSets.find((e) => e.id === existingId)
-      : undefined;
-    if (existing) {
-      const itemIndex = existing.items.length;
-      setExpenseSets((prev) =>
-        prev.map((e) =>
-          e.id !== existingId
-            ? e
-            : {
-                ...e,
-                items: [...e.items, { name: "부대비용", amount: 0 }],
-              }
+      const selectedIds = selected.map((p) => p.id);
+      const anchorParcelId = selected[selected.length - 1]!.id;
+      const roadByParcel = selected.map((p) => ({
+        id: p.id,
+        road: unpaidLandParcelRoadType(p.id, owners),
+      }));
+      const roadTypesInSelection = [
+        ...new Set(
+          roadByParcel
+            .map((r) => r.road)
+            .filter((t): t is UnpaidLandRoadType => t != null)
+        ),
+      ];
+      if (roadTypesInSelection.length === 0) {
+        return {
+          ok: false,
+          error: "선택한 필지의 도로종류(국도·지방도)를 확인할 수 없습니다.",
+        };
+      }
+      if (roadTypesInSelection.length > 1) {
+        return {
+          ok: false,
+          error:
+            "국도·지방도·시군도는 한 묶음에 함께 넣을 수 없습니다. 같은 도로종류만 체크하세요.",
+        };
+      }
+      const bundleRoad = roadTypesInSelection[0]!;
+      const feeName = unpaidLandFeeLabelForRoad(bundleRoad);
+
+      const existingIds = [
+        ...new Set(
+          selected
+            .map((p) => p.expenseSetId)
+            .filter((id): id is string => id != null && id !== "")
+        ),
+      ];
+
+      /** 기존 묶음 1개 + 새 필지 → 합치기(도로종류 일치할 때만) */
+      if (existingIds.length === 1) {
+        const targetId = existingIds[0]!;
+        const existing = expenseSets.find((e) => e.id === targetId);
+        const setRoad = existing?.roadType ?? bundleRoad;
+        if (setRoad !== bundleRoad) {
+          return {
+            ok: false,
+            error: `이미 «${setRoad}수수료» 묶음입니다. ${bundleRoad} 필지는 따로 묶으세요.`,
+          };
+        }
+        const needsJoin = selected.some(
+          (p) => (p.expenseSetId ?? null) !== targetId
+        );
+        if (needsJoin) {
+          setParcels((prev) =>
+            prev.map((p) =>
+              selectedIds.includes(p.id) ? { ...p, expenseSetId: targetId } : p
+            )
+          );
+          const itemIndex = Math.max(0, (existing?.items.length ?? 1) - 1);
+          return {
+            ok: true,
+            expenseSetId: targetId,
+            itemIndex,
+            anchorParcelId,
+            mode: "join",
+            memberIds: selectedIds,
+            roadType: setRoad,
+          };
+        }
+        if (existing) {
+          const itemIndex = existing.items.length;
+          setExpenseSets((prev) =>
+            prev.map((e) =>
+              e.id !== targetId
+                ? e
+                : {
+                    ...e,
+                    roadType: setRoad,
+                    items: [...e.items, { name: feeName, amount: 0 }],
+                  }
+            )
+          );
+          return {
+            ok: true,
+            expenseSetId: targetId,
+            itemIndex,
+            anchorParcelId,
+            mode: "append",
+            memberIds: selectedIds,
+            roadType: setRoad,
+          };
+        }
+      }
+
+      /** 새 묶음 (또는 여러 묶음 재묶기) — 도로종류·표기·금액 열 일치 */
+      const expenseSetId = nextId("es");
+      setExpenseSets((prev) => [
+        ...prev,
+        {
+          id: expenseSetId,
+          roadType: bundleRoad,
+          items: [{ name: feeName, amount: 0 }],
+        },
+      ]);
+      setParcels((prev) =>
+        prev.map((p) =>
+          selectedIds.includes(p.id) ? { ...p, expenseSetId } : p
         )
       );
-      return { expenseSetId: existingId!, itemIndex };
-    }
-
-    const expenseSetId = nextId("es");
-    setExpenseSets((prev) => [
-      ...prev,
-      {
-        id: expenseSetId,
-        roadType: "지방도",
-        items: [{ name: "부대비용", amount: 0 }],
-      },
-    ]);
-    setParcels((prev) =>
-      prev.map((p) => (p.id === parcelId ? { ...p, expenseSetId } : p))
-    );
-    return { expenseSetId, itemIndex: 0 };
-  }, [parcels, expenseSets]);
+      return {
+        ok: true,
+        expenseSetId,
+        itemIndex: 0,
+        anchorParcelId,
+        mode: "create",
+        memberIds: selectedIds,
+        roadType: bundleRoad,
+      };
+    },
+    [parcels, owners, expenseSets]
+  );
 
   const updateExpenseItem = useCallback(
     (

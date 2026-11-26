@@ -1,0 +1,12 @@
+/* 교량 선형 — 원본 교량(a0070000) 면색(#8BC34A)에 맞춤 */
+[@sd <= 4500] {
+  stroke-width: 5, 3;
+}
+
+* {
+  stroke: #FFFFFF, #8BC34A;
+  stroke-width: 3, 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-opacity: 0.85, 1.0;
+}

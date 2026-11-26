@@ -82,9 +82,11 @@ const PannellumViewer = dynamic(() => import('./PannellumViewer'), {
 });
 
 function aerialMediaUrl(relativePath: string): string {
-  return withBasePath(`/api/aerial/media?${new URLSearchParams({
-    path: relativePath.replace(/\\/g, '/'),
-  }).toString()}`);
+  return withBasePath(
+    `/api/aerial/media?${new URLSearchParams({
+      path: relativePath.replace(/\\/g, '/'),
+    }).toString()}`
+  );
 }
 
 function attrValue(attrs: AttrRow[], label: string, fallback = ''): string {

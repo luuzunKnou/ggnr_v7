@@ -3,6 +3,11 @@
  * 출처: 공간정보 코드표(R01~R49) — 레이어 키는 WMS/레이어 목록과 동일하게 소문자 사용.
  */
 
+import {
+  MAP_SERVICE_WMS_LAYER_ALIAS,
+  applyMapServiceWmsLayerAlias,
+} from "@/lib/mapServiceWmsAlias";
+
 /** 도로대장 총괄(노선, RDID 기준) define/WMS 레이어 id */
 export const ROAD_LEDGER_SUMMARY_LAYER_ID = "a0020000";
 
@@ -133,13 +138,102 @@ export const ROAD_LEDGER_RDID_JOIN_SEGMENT_LEN = 16;
 /** 구간번호까지 포함하려면 RDID 최소 19자 (1-based 19번째까지) */
 export const ROAD_LEDGER_RDID_MIN_LEN_FOR_FACILITY_JOIN = 19;
 
-/** 도로대장 문서 버튼에 매핑된 define_table_name 전체(중복 제거, 소문자) */
+/**
+ * 시설 목록·건수는 원본 테이블, 지도 WMS만 선형 뷰 등으로 대체.
+ * key/value 모두 define_table_name(소문자).
+ */
+export const ROAD_LEDGER_DOC_WMS_LAYER_ALIAS: Record<string, string> =
+  MAP_SERVICE_WMS_LAYER_ALIAS;
+
+/** 문서 버튼 레이어 id → 실제 WMS 레이어 id */
+export function resolveRoadLedgerDocWmsLayerId(id: string): string {
+  return applyMapServiceWmsLayerAlias(id).toLowerCase();
+}
+
+export function resolveRoadLedgerDocWmsLayers(layers: string[]): string[] {
+  return layers.map((id) => resolveRoadLedgerDocWmsLayerId(id)).filter(Boolean);
+}
+
+/**
+ * 지도 WMS용 id. 별칭이 정의돼 있으면 기본적으로 별칭.
+ * existingIds에 별칭이 없고 원본만 있을 때만 원본으로 폴백.
+ * 속성 목록·건수 조회는 항상 원본(source) id를 쓴다.
+ */
+export function resolveRoadLedgerDocWmsLayerIdWithFallback(
+  id: string,
+  existingIds?: Set<string> | null
+): string {
+  const src = String(id ?? "").trim().toLowerCase();
+  if (!src) return src;
+  const wms = resolveRoadLedgerDocWmsLayerId(src);
+  if (wms === src) return src;
+  if (existingIds && !existingIds.has(wms) && existingIds.has(src)) return src;
+  return wms;
+}
+
+/** 시설관리·도로대장 체크박스: 지도에 해당 시설이 켜져 있는지 */
+export function isRoadLedgerDocLayerVisibleOnMap(
+  visible: Set<string>,
+  sourceTable: string,
+  existingIds?: Set<string> | null
+): boolean {
+  const src = String(sourceTable ?? "").trim().toLowerCase();
+  if (!src) return false;
+  const wms = resolveRoadLedgerDocWmsLayerIdWithFallback(src, existingIds);
+  // 별칭 모드: 원본 면형만 켜진 상태는 «아직 선형으로 안 바뀜»으로 보고 false
+  if (wms !== src) return visible.has(wms);
+  return visible.has(src);
+}
+
+/** 시설관리·도로대장 체크박스: 지도 WMS on/off (별칭 있으면 원본 면형은 끔) */
+export function setRoadLedgerDocLayerVisibleOnMap(
+  prev: Set<string>,
+  sourceTable: string,
+  checked: boolean,
+  existingIds?: Set<string> | null
+): Set<string> {
+  const next = new Set(prev);
+  const src = String(sourceTable ?? "").trim().toLowerCase();
+  if (!src) return next;
+  const wms = resolveRoadLedgerDocWmsLayerIdWithFallback(src, existingIds);
+  if (checked) {
+    next.add(wms);
+    if (wms !== src) next.delete(src);
+  } else {
+    next.delete(wms);
+    next.delete(src);
+  }
+  return next;
+}
+
+/** 켜져 있는 원본 면형을 WMS 별칭(선형 등)으로 교체. 별칭이 명시적으로 없을 때만 유지. */
+export function migrateRoadLedgerDocWmsAliasesInVisible(
+  prev: Set<string>,
+  existingIds?: Set<string> | null
+): Set<string> {
+  let changed = false;
+  const next = new Set(prev);
+  for (const [src, wms] of Object.entries(ROAD_LEDGER_DOC_WMS_LAYER_ALIAS)) {
+    const s = src.toLowerCase();
+    const w = wms.toLowerCase();
+    if (existingIds && !existingIds.has(w) && existingIds.has(s)) continue;
+    if (!next.has(s)) continue;
+    next.delete(s);
+    next.add(w);
+    changed = true;
+  }
+  return changed ? next : prev;
+}
+
+/** 도로대장 문서 버튼에 매핑된 define_table_name 전체(중복 제거, 소문자). WMS 별칭 포함. */
 export function getAllRoadLedgerDocLayerIds(): string[] {
   const s = new Set<string>();
   for (const layers of Object.values(ROAD_LEDGER_DOC_LAYERS)) {
     for (const id of layers) {
       const t = String(id ?? "").trim().toLowerCase();
-      if (t) s.add(t);
+      if (!t) continue;
+      s.add(t);
+      s.add(resolveRoadLedgerDocWmsLayerId(t));
     }
   }
   return [...s];

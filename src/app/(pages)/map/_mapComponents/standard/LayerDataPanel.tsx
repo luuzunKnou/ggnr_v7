@@ -61,6 +61,7 @@ import {
   DATA_QUERY_SELECTION_PULSE_STEP,
   insertLayerBelowServiceLayer,
 } from '@/lib/mapDataQueryMapHighlight';
+import { applyMapDisplayGeomsToRows } from './applyMapDisplayGeoms';
 import VectorSource from 'ol/source/Vector';
 import VectorLayer from 'ol/layer/Vector';
 import GeoJSON from 'ol/format/GeoJSON';
@@ -1325,7 +1326,7 @@ export function LayerDataPanel({
         });
 
     Promise.all([fieldsPromise, dataPromise])
-      .then(([fieldsRes, dataRes]) => {
+      .then(async ([fieldsRes, dataRes]) => {
         if (cancelled || initSeq !== loadPageSeqRef.current) return;
         // 복원 페이로드는 이 로드가 대상 테이블일 때만 소비
         const restoreDone = isListRestore ? restoreState : null;
@@ -1366,9 +1367,18 @@ export function LayerDataPanel({
           : null;
         setKeyFieldName(resolvedKeyFieldName);
 
+        const withDisplayGeoms = (rows: Record<string, unknown>[]) =>
+          applyMapDisplayGeomsToRows(
+            activeLayer.physicalTableName,
+            activeLayer.schema,
+            rows
+          );
+
         if (isListRestore && restoreDone) {
           const data = dataRes?.data ?? dataRes;
-          const dataRows: Record<string, unknown>[] = Array.isArray(data?.rows) ? data.rows : [];
+          const rawRows: Record<string, unknown>[] = Array.isArray(data?.rows) ? data.rows : [];
+          const dataRows = await withDisplayGeoms(rawRows);
+          if (cancelled || initSeq !== loadPageSeqRef.current) return;
           const dataTotal =
             typeof data?.total === 'number'
               ? data.total
@@ -1401,9 +1411,11 @@ export function LayerDataPanel({
             highlightSourceRef.current?.clear();
             showIdentifyFeatureOnMap(dataRows[idx]);
           } else if (restoreDone.selectedRow) {
-            setSelectedRowData(restoreDone.selectedRow);
+            const [restored] = await withDisplayGeoms([restoreDone.selectedRow]);
+            if (cancelled || initSeq !== loadPageSeqRef.current) return;
+            setSelectedRowData(restored);
             highlightSourceRef.current?.clear();
-            showIdentifyFeatureOnMap(restoreDone.selectedRow);
+            showIdentifyFeatureOnMap(restored);
           } else {
             showCurrentListOnMap(dataRows);
           }
@@ -1422,11 +1434,13 @@ export function LayerDataPanel({
           };
           const inner = packed?.__keyOpen ? packed.dataRes : dataRes;
           const data = (inner as { data?: unknown } | undefined)?.data ?? inner;
-          const dataRows: Record<string, unknown>[] = Array.isArray(
+          const rawRows: Record<string, unknown>[] = Array.isArray(
             (data as { rows?: unknown } | undefined)?.rows
           )
             ? ((data as { rows: Record<string, unknown>[] }).rows)
             : [];
+          const dataRows = await withDisplayGeoms(rawRows);
+          if (cancelled || initSeq !== loadPageSeqRef.current) return;
           const dataTotal =
             typeof (data as { total?: unknown } | undefined)?.total === 'number'
               ? (data as { total: number }).total
@@ -1451,7 +1465,9 @@ export function LayerDataPanel({
           }
         } else if (!isIdentify) {
           const data = dataRes?.data ?? dataRes;
-          const dataRows = Array.isArray(data?.rows) ? data.rows : [];
+          const rawRows = Array.isArray(data?.rows) ? data.rows : [];
+          const dataRows = await withDisplayGeoms(rawRows);
+          if (cancelled || initSeq !== loadPageSeqRef.current) return;
           const dataTotal = typeof data?.total === 'number' ? data.total : 0;
           setRows(dataRows);
           setTotal(dataTotal);
@@ -1553,10 +1569,16 @@ export function LayerDataPanel({
           ...(activeLayer.rowFilterSql ? { rowFilter: activeLayer.rowFilterSql } : {}),
         },
       })
-        .then((res) => {
+        .then(async (res) => {
           if (seq !== loadPageSeqRef.current) return;
           const data = res?.data ?? res;
-          const dataRows: Record<string, unknown>[] = Array.isArray(data?.rows) ? data.rows : [];
+          const rawRows: Record<string, unknown>[] = Array.isArray(data?.rows) ? data.rows : [];
+          const dataRows = await applyMapDisplayGeomsToRows(
+            activeLayer.physicalTableName,
+            activeLayer.schema,
+            rawRows
+          );
+          if (seq !== loadPageSeqRef.current) return;
           const dataTotal = typeof data?.total === 'number' ? data.total : total;
           // 행·칸 수를 같이 맞춰 한 렌더에 반영 (30칸+7행 / 7칸+30행 방지)
           setListPageSize(ps);
@@ -1609,6 +1631,18 @@ export function LayerDataPanel({
           ) {
             highlightOnlySelectedRef.current = false;
             highlightSourceRef.current?.clear();
+            // 선택 행 geom도 표시용으로 맞춰 재강조
+            const selected = selectedRowDataRef.current;
+            if (selected != null) {
+              const [displaySelected] = await applyMapDisplayGeomsToRows(
+                activeLayer.physicalTableName,
+                activeLayer.schema,
+                [selected]
+              );
+              if (seq !== loadPageSeqRef.current) return;
+              if (displaySelected !== selected) setSelectedRowData(displaySelected);
+              showIdentifyFeatureOnMap(displaySelected, { fit: false });
+            }
           } else {
             showCurrentListOnMap(dataRows);
           }
@@ -1620,7 +1654,7 @@ export function LayerDataPanel({
           setLoading(false);
         });
     },
-    [activeLayer, total, listPageSize, mapContext, showCurrentListOnMap]
+    [activeLayer, total, listPageSize, mapContext, showCurrentListOnMap, showIdentifyFeatureOnMap]
   );
 
   // 앱 안에서 행 선택 시 URL의 dataKey만 반영 → 선택/하이라이트 동기화 (목록↔상세 칸 수 맞춤)

@@ -15,6 +15,7 @@ import {
   UNPAID_LAND_OWNER_EXTRA_NOTES,
   formatUnpaidLandArea,
   formatUnpaidLandMoney,
+  unpaidLandFeeLabelForRoad,
   type UnpaidLandOwner,
   type UnpaidLandRoadType,
 } from "./unpaidLandCompensationMock";
@@ -37,6 +38,10 @@ type ExcelOwnerLine = {
   parcelArea: number;
   showParcelMeta: boolean;
   owner: UnpaidLandOwner;
+  /** 부대비용 묶음(2필지 이상일 때 표시용) */
+  expenseSetId?: string | null;
+  expenseGroupTone?: number;
+  expenseGroupSize?: number;
 };
 
 type ExcelFeeLine = {
@@ -49,6 +54,10 @@ type ExcelFeeLine = {
   label: string;
   amount: number;
   roadType: UnpaidLandRoadType;
+  /** 묶인 필지 연번 (표기용) */
+  memberSeqs: number[];
+  contiguous: boolean;
+  groupTone: number;
 };
 
 type RoadTypeSum = { parcels: number; area: number; amount: number };
@@ -112,8 +121,62 @@ function parseArea(raw: string): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+/** 묶음별 왼쪽 띠 색 순환 */
+function expenseGroupTone(expenseSetId: string): number {
+  let h = 0;
+  for (let i = 0; i < expenseSetId.length; i++) {
+    h = (h * 31 + expenseSetId.charCodeAt(i)) >>> 0;
+  }
+  return h % 4;
+}
+
+function isContiguousSeqs(seqs: number[]): boolean {
+  if (seqs.length <= 1) return true;
+  const sorted = [...seqs].sort((a, b) => a - b);
+  for (let i = 1; i < sorted.length; i++) {
+    if (sorted[i] !== sorted[i - 1]! + 1) return false;
+  }
+  return true;
+}
+
+/** 1,2,3,7 → «1~3·7» */
+function formatSeqList(seqs: number[]): string {
+  if (seqs.length === 0) return "";
+  const sorted = [...seqs].sort((a, b) => a - b);
+  const parts: string[] = [];
+  let start = sorted[0]!;
+  let prev = sorted[0]!;
+  for (let i = 1; i <= sorted.length; i++) {
+    const cur = sorted[i];
+    if (cur === prev + 1) {
+      prev = cur;
+      continue;
+    }
+    parts.push(start === prev ? String(start) : `${start}~${prev}`);
+    if (cur != null) {
+      start = cur;
+      prev = cur;
+    }
+  }
+  return parts.join("·");
+}
+
+const EXPENSE_GROUP_ROW = [
+  "border-l-[3px] border-l-sky-500 bg-sky-50/50",
+  "border-l-[3px] border-l-violet-500 bg-violet-50/50",
+  "border-l-[3px] border-l-teal-500 bg-teal-50/50",
+  "border-l-[3px] border-l-amber-500 bg-amber-50/40",
+] as const;
+const EXPENSE_GROUP_FEE = [
+  "border-l-[3px] border-l-sky-500 bg-sky-100/60",
+  "border-l-[3px] border-l-violet-500 bg-violet-100/60",
+  "border-l-[3px] border-l-teal-500 bg-teal-100/60",
+  "border-l-[3px] border-l-amber-500 bg-amber-100/50",
+] as const;
+
 /** 엑셀형 고정 열폭(px). 도로그룹 필지 열은 헤더«필지»·숫자가 안 잘리게 확보 */
 const COL_W = {
+  check: 28,
   year: 44,
   seq: 36,
   address: 100,
@@ -128,6 +191,7 @@ const COL_W = {
 } as const;
 const ROAD_GROUP_W = COL_W.roadParcel + COL_W.roadArea + COL_W.roadAmount;
 const TABLE_W =
+  COL_W.check +
   COL_W.year +
   COL_W.seq +
   COL_W.address +
@@ -226,6 +290,9 @@ export function UnpaidLandCompensationListPanel({ onClose }: Props) {
   const [newYearDraft, setNewYearDraft] = useState("");
   const [edit, setEdit] = useState<EditTarget | null>(null);
   const [rowMenu, setRowMenu] = useState<RowContextMenu | null>(null);
+  /** 부대비용 묶음용 필지 체크 */
+  const [checkedParcelIds, setCheckedParcelIds] = useState<string[]>([]);
+  const [expenseError, setExpenseError] = useState<string | null>(null);
   const {
     selectedParcelId,
     locating,
@@ -295,7 +362,6 @@ export function UnpaidLandCompensationListPanel({ onClose }: Props) {
         row.parcel.landCat,
         ...row.owners.map((o) => o.name),
         ...row.owners.map((o) => o.roadType),
-        ...(row.expenseSet?.items.map((i) => i.name) ?? []),
       ]
         .join(" ")
         .toLowerCase();
@@ -312,8 +378,25 @@ export function UnpaidLandCompensationListPanel({ onClose }: Props) {
     };
     let parcelAreaSum = 0;
 
+    /** 같은 부대비용 묶음은 마지막 필지 아래에만 수수료 행 */
+    const expenseAnchorBySet = new Map<string, string>();
+    const expenseSeqsBySet = new Map<string, number[]>();
+    for (const row of filteredParcels) {
+      const esId = row.parcel.expenseSetId;
+      if (!esId) continue;
+      expenseAnchorBySet.set(esId, row.parcel.id);
+      const list = expenseSeqsBySet.get(esId) ?? [];
+      list.push(row.parcel.seq);
+      expenseSeqsBySet.set(esId, list);
+    }
+
     for (const row of filteredParcels) {
       if (row.parcel.area > 0) parcelAreaSum += row.parcel.area;
+      const esId = row.parcel.expenseSetId ?? null;
+      const memberSeqs = esId ? (expenseSeqsBySet.get(esId) ?? []) : [];
+      const groupSize = memberSeqs.length;
+      const groupTone =
+        esId && groupSize > 1 ? expenseGroupTone(esId) : undefined;
       const owners =
         row.owners.length > 0
           ? row.owners
@@ -341,6 +424,9 @@ export function UnpaidLandCompensationListPanel({ onClose }: Props) {
           parcelArea: row.parcel.area,
           showParcelMeta: idx === 0,
           owner,
+          expenseSetId: esId,
+          expenseGroupTone: groupTone,
+          expenseGroupSize: groupSize > 1 ? groupSize : undefined,
         });
         const bucket = byRoad[owner.roadType];
         bucket.parcels += 1;
@@ -349,19 +435,27 @@ export function UnpaidLandCompensationListPanel({ onClose }: Props) {
           bucket.amount += owner.amount;
         }
       });
-      if (row.expenseSet) {
-        const feeRoad = row.expenseSet.roadType ?? "지방도";
-        row.expenseSet.items.forEach((it, itemIndex) => {
+      const es = row.expenseSet;
+      const isExpenseAnchor =
+        es != null && expenseAnchorBySet.get(es.id) === row.parcel.id;
+      if (es && isExpenseAnchor) {
+        const feeRoad = es.roadType ?? "지방도";
+        const seqs = expenseSeqsBySet.get(es.id) ?? [row.parcel.seq];
+        const tone = expenseGroupTone(es.id);
+        es.items.forEach((it, itemIndex) => {
           lines.push({
             kind: "fee",
-            key: `${row.expenseSet!.id}:${row.parcel.id}:${itemIndex}`,
+            key: `${es.id}:${row.parcel.id}:${itemIndex}`,
             parcelId: row.parcel.id,
-            expenseSetId: row.expenseSet!.id,
+            expenseSetId: es.id,
             itemIndex,
             year: row.parcel.year,
             label: it.name,
             amount: it.amount,
             roadType: feeRoad,
+            memberSeqs: seqs,
+            contiguous: isContiguousSeqs(seqs),
+            groupTone: tone,
           });
           byRoad[feeRoad].amount += it.amount;
         });
@@ -378,6 +472,38 @@ export function UnpaidLandCompensationListPanel({ onClose }: Props) {
     }
     return lines;
   }, [filteredParcels]);
+
+  const filteredParcelIds = useMemo(
+    () => filteredParcels.map((r) => r.parcel.id),
+    [filteredParcels]
+  );
+  const allFilteredChecked =
+    filteredParcelIds.length > 0 &&
+    filteredParcelIds.every((id) => checkedParcelIds.includes(id));
+  const someFilteredChecked = filteredParcelIds.some((id) =>
+    checkedParcelIds.includes(id)
+  );
+
+  const toggleParcelCheck = (parcelId: string) => {
+    setExpenseError(null);
+    setCheckedParcelIds((prev) =>
+      prev.includes(parcelId)
+        ? prev.filter((id) => id !== parcelId)
+        : [...prev, parcelId]
+    );
+  };
+
+  const toggleCheckAllFiltered = () => {
+    if (allFilteredChecked) {
+      setCheckedParcelIds((prev) =>
+        prev.filter((id) => !filteredParcelIds.includes(id))
+      );
+      return;
+    }
+    setCheckedParcelIds((prev) => [
+      ...new Set([...prev, ...filteredParcelIds]),
+    ]);
+  };
 
   const ownerCount = excelLines.filter((l) => l.kind === "owner").length;
   const addYear = yearFilter === "전체" ? 2026 : yearFilter;
@@ -417,9 +543,12 @@ export function UnpaidLandCompensationListPanel({ onClose }: Props) {
     ) {
       if (field === "feeLabel") {
         updateExpenseItem(expenseSetId, itemIndex, {
-          name: raw.trim() || "부대비용",
+          name:
+            raw.trim() ||
+            (editRoad ? unpaidLandFeeLabelForRoad(editRoad) : "부대비용"),
         });
       } else {
+        /** 금액 칸 편집 시 그 도로열로 위치만 맞춤(국도·지방도) */
         updateExpenseItem(expenseSetId, itemIndex, {
           amount: parseMoney(raw) ?? 0,
           ...(editRoad ? { roadType: editRoad } : {}),
@@ -470,16 +599,28 @@ export function UnpaidLandCompensationListPanel({ onClose }: Props) {
     setRowMenu(null);
   };
 
-  const handleAddExpense = (parcelId: string) => {
-    const added = addExpenseFee(parcelId);
+  const handleAddExpense = (parcelIds: string[]) => {
+    const added = addExpenseFee(parcelIds);
     if (!added) return;
-    selectParcel(parcelId);
-    setEdit({
-      parcelId,
-      expenseSetId: added.expenseSetId,
-      itemIndex: added.itemIndex,
-      field: "feeLabel",
-    });
+    if (!added.ok) {
+      setExpenseError(added.error);
+      setRowMenu(null);
+      return;
+    }
+    setExpenseError(null);
+    selectParcel(added.anchorParcelId);
+    if (added.mode === "append" || added.mode === "create") {
+      setEdit({
+        parcelId: added.anchorParcelId,
+        expenseSetId: added.expenseSetId,
+        itemIndex: added.itemIndex,
+        field: "feeLabel",
+      });
+    } else {
+      setEdit(null);
+    }
+    /** 추가 후 체크 해제 — 다음 묶음 체크와 합쳐지지 않음 */
+    setCheckedParcelIds([]);
     setRowMenu(null);
   };
 
@@ -487,7 +628,7 @@ export function UnpaidLandCompensationListPanel({ onClose }: Props) {
     <div className="flex h-full min-h-0 flex-col bg-background">
       <div className="flex shrink-0 items-center gap-2 border-b border-border px-2.5 py-2">
         <span className="standard-panel-title min-w-0 flex-1 truncate">
-          미지급용지 보상 지급대장
+          미지급용지
         </span>
         <span className="shrink-0 text-[11px] text-muted-foreground">목업</span>
         <button
@@ -509,7 +650,7 @@ export function UnpaidLandCompensationListPanel({ onClose }: Props) {
           <input
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
-            placeholder="소재지·지번·소유자·수수료"
+            placeholder="소재지·지번·소유자"
             className="h-8 w-full rounded border border-border pl-7 pr-2.5 text-xs outline-none focus:border-primary focus:ring-2 focus:ring-primary/25"
           />
         </div>
@@ -605,22 +746,36 @@ export function UnpaidLandCompensationListPanel({ onClose }: Props) {
           </button>
           <button
             type="button"
-            disabled={!selectedParcelId}
-            onClick={() => {
-              if (!selectedParcelId) return;
-              handleAddExpense(selectedParcelId);
-            }}
+            disabled={checkedParcelIds.length === 0}
+            onClick={() => handleAddExpense(checkedParcelIds)}
             className="inline-flex h-7 items-center gap-1 rounded border border-border px-2 text-[10px] hover:bg-muted/50 disabled:opacity-40"
-            title="선택한 필지 아래에 부대비용(수수료) 행 추가"
+            title="체크한 필지에 부대비용 행 추가(국도·지방도 따로). 추가 후 체크 해제"
           >
             <Receipt className="h-3 w-3" />
             부대비용 추가
+            {checkedParcelIds.length > 0
+              ? ` (${checkedParcelIds.length})`
+              : ""}
           </button>
+          {checkedParcelIds.length > 0 ? (
+            <button
+              type="button"
+              onClick={() => {
+                setCheckedParcelIds([]);
+                setExpenseError(null);
+              }}
+              className="inline-flex h-7 items-center rounded border border-border px-2 text-[10px] text-muted-foreground hover:bg-muted/50"
+              title="체크 취소"
+            >
+              체크 취소
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={() => {
               clearLocate();
               setEdit(null);
+              setCheckedParcelIds([]);
               resetMock();
             }}
             className="inline-flex h-7 items-center gap-1 rounded border border-border px-2 text-[10px] text-muted-foreground hover:bg-muted/50"
@@ -631,10 +786,16 @@ export function UnpaidLandCompensationListPanel({ onClose }: Props) {
         </div>
         <p className="text-[11px] text-muted-foreground">
           필지 {filteredParcels.length}건 · 소유자 행 {ownerCount}건
+          {checkedParcelIds.length > 0
+            ? ` · 체크 ${checkedParcelIds.length}건`
+            : ""}
           {locating
             ? " · 필지 찾는 중…"
-            : " · 클릭=선택·지도 · 더블클릭=편집 · 우클릭=추가메뉴"}
+            : " · 체크→부대비용 추가(추가 후 체크 해제) · 국도·지방도 따로 · 클릭=지도"}
         </p>
+        {expenseError ? (
+          <p className="text-[11px] text-rose-600">{expenseError}</p>
+        ) : null}
         {locateError ? (
           <p className="text-[11px] text-rose-600">{locateError}</p>
         ) : null}
@@ -645,10 +806,11 @@ export function UnpaidLandCompensationListPanel({ onClose }: Props) {
           <p className="px-3 py-2.5 text-xs text-muted-foreground">검색 결과가 없습니다.</p>
         ) : (
           <table
-            className="border-collapse text-left text-[11px] leading-snug"
+            className="border-collapse border border-border text-left text-[11px] leading-snug [&_td]:border [&_td]:border-border [&_th]:border [&_th]:border-border"
             style={{ tableLayout: "fixed", width: TABLE_W }}
           >
             <colgroup>
+              <col style={{ width: COL_W.check }} />
               <col style={{ width: COL_W.year }} />
               <col style={{ width: COL_W.seq }} />
               <col style={{ width: COL_W.address }} />
@@ -663,12 +825,32 @@ export function UnpaidLandCompensationListPanel({ onClose }: Props) {
               ])}
               <col style={{ width: COL_W.del }} />
             </colgroup>
-            <thead className="sticky top-0 z-[1] bg-muted">
+            <thead className="sticky top-0 z-[1] bg-muted [&_th]:text-center">
               <tr className="border-b border-border text-muted-foreground">
-                <th className="px-1.5 py-1.5 text-center font-normal whitespace-nowrap" rowSpan={2}>
+                <th
+                  className="px-0.5 py-1.5 font-normal whitespace-nowrap"
+                  rowSpan={2}
+                  title="부대비용용 필지 선택"
+                >
+                  <input
+                    type="checkbox"
+                    className="h-3.5 w-3.5 accent-primary"
+                    checked={allFilteredChecked}
+                    ref={(el) => {
+                      if (el) {
+                        el.indeterminate =
+                          someFilteredChecked && !allFilteredChecked;
+                      }
+                    }}
+                    onChange={toggleCheckAllFiltered}
+                    aria-label="표시 필지 전체 선택"
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                </th>
+                <th className="px-1.5 py-1.5 font-normal whitespace-nowrap" rowSpan={2}>
                   연도
                 </th>
-                <th className="px-1.5 py-1.5 text-center font-normal whitespace-nowrap" rowSpan={2}>
+                <th className="px-1.5 py-1.5 font-normal whitespace-nowrap" rowSpan={2}>
                   연번
                 </th>
                 <th className="truncate px-1.5 py-1.5 font-normal" rowSpan={2}>
@@ -677,10 +859,10 @@ export function UnpaidLandCompensationListPanel({ onClose }: Props) {
                 <th className="px-1.5 py-1.5 font-normal whitespace-nowrap" rowSpan={2}>
                   지번
                 </th>
-                <th className="px-1.5 py-1.5 text-center font-normal whitespace-nowrap" rowSpan={2}>
+                <th className="px-1.5 py-1.5 font-normal whitespace-nowrap" rowSpan={2}>
                   지목
                 </th>
-                <th className="px-1.5 py-1.5 text-right font-normal whitespace-nowrap" rowSpan={2}>
+                <th className="px-1.5 py-1.5 font-normal whitespace-nowrap" rowSpan={2}>
                   면적
                 </th>
                 <th className="truncate px-1.5 py-1.5 font-normal" rowSpan={2}>
@@ -696,7 +878,7 @@ export function UnpaidLandCompensationListPanel({ onClose }: Props) {
                   시군도
                 </th>
                 <th
-                  className="border-l border-border px-1.5 py-1.5 text-center font-normal whitespace-nowrap"
+                  className="border-l border-border px-1.5 py-1.5 font-normal whitespace-nowrap"
                   rowSpan={2}
                 >
                   삭제
@@ -706,14 +888,22 @@ export function UnpaidLandCompensationListPanel({ onClose }: Props) {
                 {(["국도", "지방도", "시군도"] as const).flatMap((t) => [
                   <th
                     key={`${t}-p`}
-                    className={cn("border-l border-border font-normal", ROAD_COL.parcel)}
+                    className={cn(
+                      "border-l border-border px-1 py-1.5 font-normal whitespace-nowrap"
+                    )}
                   >
                     필지
                   </th>,
-                  <th key={`${t}-a`} className={cn("font-normal", ROAD_COL.area)}>
+                  <th
+                    key={`${t}-a`}
+                    className="px-1 py-1.5 font-normal whitespace-nowrap"
+                  >
                     면적
                   </th>,
-                  <th key={`${t}-m`} className={cn("font-normal", ROAD_COL.amount)}>
+                  <th
+                    key={`${t}-m`}
+                    className="px-1 py-1.5 font-normal whitespace-nowrap"
+                  >
                     금액
                   </th>,
                 ])}
@@ -760,22 +950,42 @@ export function UnpaidLandCompensationListPanel({ onClose }: Props) {
                       />
                     );
                   };
+                  const multi = line.memberSeqs.length > 1;
+                  const seqHint = multi
+                    ? `연번 ${formatSeqList(line.memberSeqs)}${
+                        line.contiguous
+                          ? ""
+                          : " · 비연속"
+                      } (${line.memberSeqs.length}필지)`
+                    : "";
                   return (
                     <tr
                       key={line.key}
                       className={cn(
-                        "border-b border-border bg-muted/30 text-foreground",
+                        "border-b border-border text-foreground",
+                        multi
+                          ? EXPENSE_GROUP_FEE[line.groupTone % 4]
+                          : "bg-muted/30",
                         selectedParcelId === line.parcelId && "bg-primary/10"
                       )}
-                      onClick={() => selectParcel(line.parcelId)}
+                      title={seqHint || undefined}
+                      onClick={() => {
+                        if (selectedParcelId === line.parcelId) clearLocate();
+                        else selectParcel(line.parcelId);
+                      }}
                       onContextMenu={(e) => openRowMenu(e, line.parcelId)}
                     >
+                      <td className="px-0.5 py-1.5" />
                       <td className="px-2 py-1.5" />
-                      <td className="px-2 py-1.5" />
-                      <td className="px-2 py-1.5" />
-                      <td className="px-2 py-1.5" />
-                      <td className="px-2 py-1.5" />
-                      <td className="px-2 py-1.5" />
+                      <td className="px-2 py-1.5 text-center align-middle text-[10px] text-muted-foreground">
+                        {multi ? "묶" : ""}
+                      </td>
+                      <td
+                        className="px-2 py-1.5 align-middle text-[10px] text-muted-foreground"
+                        colSpan={4}
+                      >
+                        {seqHint}
+                      </td>
                       <EditableCell
                         editing={isEditing(
                           line.parcelId,
@@ -834,6 +1044,7 @@ export function UnpaidLandCompensationListPanel({ onClose }: Props) {
                       key={line.key}
                       className="border-t-2 border-border bg-muted/50 font-semibold text-foreground"
                     >
+                      <td className="px-0.5 py-1.5" />
                       <td className="px-2 py-1.5" />
                       <td className="px-2 py-1.5 text-center align-middle">계</td>
                       <td className="px-2 py-1.5" colSpan={3} />
@@ -942,6 +1153,10 @@ export function UnpaidLandCompensationListPanel({ onClose }: Props) {
                 };
 
                 const goMap = () => {
+                  if (selectedParcelId === line.parcelId) {
+                    clearLocate();
+                    return;
+                  }
                   void locateParcel({
                     parcelId: line.parcelId,
                     address: line.address,
@@ -949,17 +1164,45 @@ export function UnpaidLandCompensationListPanel({ onClose }: Props) {
                   });
                 };
 
+                const checked = checkedParcelIds.includes(line.parcelId);
+                const inExpenseGroup =
+                  line.expenseGroupSize != null && line.expenseGroupSize > 1;
+                const groupToneClass =
+                  inExpenseGroup && line.expenseGroupTone != null
+                    ? EXPENSE_GROUP_ROW[line.expenseGroupTone % 4]
+                    : null;
+
                 return (
                   <tr
                     key={line.key}
                     className={cn(
                       "cursor-pointer border-b border-border text-foreground hover:bg-muted/40",
-                      selected && "bg-primary/10"
+                      groupToneClass,
+                      selected && "bg-primary/10",
+                      checked && "bg-amber-50/80"
                     )}
                     onClick={goMap}
                     onContextMenu={(e) => openRowMenu(e, line.parcelId)}
-                    title="클릭=선택·지도 · 더블클릭=편집 · 우클릭=추가"
+                    title={
+                      inExpenseGroup
+                        ? `부대비용 묶음 ${line.expenseGroupSize}필지 · 클릭=선택·지도(다시=해제)`
+                        : "체크=부대비용 · 클릭=선택·지도(다시 클릭=해제) · 더블클릭=편집 · 우클릭=추가"
+                    }
                   >
+                    <td
+                      className="px-0.5 py-1.5 text-center align-middle"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {line.showParcelMeta ? (
+                        <input
+                          type="checkbox"
+                          className="h-3.5 w-3.5 accent-primary"
+                          checked={checked}
+                          onChange={() => toggleParcelCheck(line.parcelId)}
+                          aria-label={`${line.year}-${line.seq} 필지 선택`}
+                        />
+                      ) : null}
+                    </td>
                     {line.showParcelMeta ? (
                       <EditableCell
                         editing={isEditing(line.parcelId, "year")}
@@ -976,7 +1219,21 @@ export function UnpaidLandCompensationListPanel({ onClose }: Props) {
                       <td className="px-2 py-1.5" />
                     )}
                     <td className="px-2 py-1.5 text-center tabular-nums align-middle whitespace-nowrap">
-                      {line.showParcelMeta ? line.seq : ""}
+                      {line.showParcelMeta ? (
+                        <span className="inline-flex items-center gap-0.5">
+                          {line.seq}
+                          {inExpenseGroup ? (
+                            <span
+                              className="rounded bg-foreground/10 px-0.5 text-[9px] font-medium text-muted-foreground"
+                              title={`부대비용 묶음 ${line.expenseGroupSize}필지`}
+                            >
+                              묶
+                            </span>
+                          ) : null}
+                        </span>
+                      ) : (
+                        ""
+                      )}
                     </td>
                     {line.showParcelMeta ? (
                       <EditableCell
@@ -1108,10 +1365,23 @@ export function UnpaidLandCompensationListPanel({ onClose }: Props) {
           <button
             type="button"
             className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] hover:bg-muted"
-            onClick={() => handleAddExpense(rowMenu.parcelId)}
+            onClick={() =>
+              handleAddExpense(
+                checkedParcelIds.length > 0
+                  ? checkedParcelIds
+                  : [rowMenu.parcelId]
+              )
+            }
+            title={
+              checkedParcelIds.length > 0
+                ? `체크한 ${checkedParcelIds.length}필지 묶음에 부대비용 추가`
+                : "이 행 필지에 부대비용 추가"
+            }
           >
             <Receipt className="h-3.5 w-3.5 shrink-0" />
-            부대비용 추가
+            {checkedParcelIds.length > 0
+              ? `부대비용 추가 (${checkedParcelIds.length})`
+              : "부대비용 추가"}
           </button>
         </div>
       ) : null}

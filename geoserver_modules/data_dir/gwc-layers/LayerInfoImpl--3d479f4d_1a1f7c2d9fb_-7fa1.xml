@@ -1,5 +1,5 @@
 <GeoServerTileLayer>
-  <id>LayerInfoImpl--55857d9c:1a19abc0bff:-77e5</id>
+  <id>LayerInfoImpl--3d479f4d:1a1f7c2d9fb:-7fa1</id>
   <enabled>true</enabled>
   <inMemoryCached>true</inMemoryCached>
   <name>ggnr:sd_heat_mitigation_facility</name>
@@ -12,10 +12,10 @@
       <gridSetName>EPSG:4326</gridSetName>
       <extent>
         <coords>
-          <double>128.4924963502581</double>
-          <double>36.54007943414051</double>
-          <double>128.8842022000003</double>
-          <double>36.66684966240214</double>
+          <double>128.71600810471452</double>
+          <double>35.79922938085491</double>
+          <double>128.85198610330022</double>
+          <double>35.92042321326513</double>
         </coords>
       </extent>
     </gridSubset>
@@ -23,10 +23,10 @@
       <gridSetName>EPSG:900913</gridSetName>
       <extent>
         <coords>
-          <double>1.4303719264467297E7</double>
-          <double>4375192.21753327</double>
-          <double>1.4347323760201342E7</double>
-          <double>4392771.103812191</double>
+          <double>-2.003750834E7</double>
+          <double>-2.003750834E7</double>
+          <double>2.003750834E7</double>
+          <double>2.003750834E7</double>
         </coords>
       </extent>
     </gridSubset>

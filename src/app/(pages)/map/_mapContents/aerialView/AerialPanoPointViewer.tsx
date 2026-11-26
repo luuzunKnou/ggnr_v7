@@ -11,9 +11,11 @@ import type { WorkFileItem } from './aerialMediaTypes';
 import { withBasePath } from '@/lib/basePath';
 
 function mediaUrl(relativePath: string): string {
-  return withBasePath(`/api/aerial/media?${new URLSearchParams({
-    path: relativePath.replace(/\\/g, '/'),
-  }).toString()}`);
+  return withBasePath(
+    `/api/aerial/media?${new URLSearchParams({
+      path: relativePath.replace(/\\/g, '/'),
+    }).toString()}`
+  );
 }
 
 /** 왼쪽 메뉴를 뺀 보이는 지도 칸. 항공뷰 화면과 같은 자리 (도로대장 도로영상도 사용) */
