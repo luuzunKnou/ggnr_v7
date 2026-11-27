@@ -6,6 +6,8 @@ import { X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { MAP_UI_Z_CLASS } from '@/lib/mapUiZIndex'
 import { SmallPublicCheckSheet } from '../SmallPublicCheckSheet'
+import { hydrateSmallPublicCheckForm } from '../smallPublicCheckForms'
+import type { SmallPublicFacType } from '../smallPublicConfig'
 import type { SmallPublicInspection } from '../smallPublicMock'
 import {
   SmallPublicAttrTable,
@@ -132,16 +134,23 @@ export function SmallPublicModalShell({
 /** 후보지 위험도평가 이력 → 점검 정보와 위험도 평가표 */
 export function SmallPublicInspectionViewModal({
   inspection,
+  facilityType,
   onEdit,
   onDelete,
   onClose,
   ...overlay
 }: SmallPublicModalOverlay & {
   inspection: SmallPublicInspection
+  facilityType?: SmallPublicFacType
   onEdit?: () => void
   onDelete?: () => void
   onClose: () => void
 }) {
+  const form = hydrateSmallPublicCheckForm(
+    inspection.form,
+    facilityType ?? inspection.form.facType,
+    inspection.date
+  )
   return (
     <SmallPublicModalShell
       {...overlay}
@@ -160,20 +169,29 @@ export function SmallPublicInspectionViewModal({
     >
       <SmallPublicAttrTable
         entries={[
-          { key: 'date', label: '점검일', value: smallPublicDateLabel(inspection.date) },
-          { key: 'inspector', label: '점검자', value: inspection.inspector || '—' },
-          { key: 'score', label: '합계점수', value: `${inspection.score}점` },
-          { key: 'grade', label: '등급', value: <SmallPublicGradeBadge grade={inspection.grade} /> },
+          { key: 'date', label: '조사일', value: smallPublicDateLabel(inspection.date) },
+          { key: 'inspector', label: '조사자', value: inspection.inspector || '—' },
+          { key: 'score', label: '평가점수', value: `${inspection.score}점` },
+          { key: 'grade', label: '평가등급', value: <SmallPublicGradeBadge grade={inspection.grade} /> },
           {
             key: 'class',
             label: '평가구분',
             value: <SmallPublicClassBadge candidate={inspection.classResult} />,
           },
-          { key: 'remark', label: '기타의견', value: inspection.remark || '—', full: true },
+          {
+            key: 'remark',
+            label: '기타의견',
+            value: (
+              <span className="block min-h-[3.25rem] whitespace-pre-wrap break-words text-[11px] leading-relaxed text-foreground/80">
+                {inspection.remark || '—'}
+              </span>
+            ),
+            full: true,
+          },
         ]}
       />
       <div className="mt-3">
-        <SmallPublicCheckSheet form={inspection.form} values={inspection.values} />
+        <SmallPublicCheckSheet form={form} values={inspection.values} />
       </div>
     </SmallPublicModalShell>
   )

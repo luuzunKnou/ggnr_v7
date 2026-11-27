@@ -300,8 +300,8 @@
     "define_table_source": "shp"
   },
   {
-    "define_table_name": "rdl_occ_as_mgj",
-    "define_table_kor_name": "rdl_occ_as_mgj",
+    "define_table_name": "public_fms_facility",
+    "define_table_kor_name": "public_fms_facility",
     "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
@@ -384,6 +384,42 @@
     "define_table_source": "excel"
   },
   {
+    "define_table_name": "road_occupationledger",
+    "define_table_kor_name": "road_occupationledger",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "road_occupationledger_jijuk",
+    "define_table_kor_name": "road_occupationledger_jijuk",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "road_occupationledger_mgj",
+    "define_table_kor_name": "road_occupationledger_mgj",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
     "define_table_name": "road_use_ledger_mulgunji",
     "define_table_kor_name": "road_use_ledger_mulgunji",
     "define_table_shp_type": "POLYGON",
@@ -421,7 +457,7 @@
   },
   {
     "define_table_name": "swl_cons_as_solo",
-    "define_table_kor_name": "swl_cons_as_solo",
+    "define_table_kor_name": "하수도 공사대장_개별",
     "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
@@ -780,6 +816,54 @@
     "define_table_source": "shp"
   },
   {
+    "define_table_name": "water_fms_facility",
+    "define_table_kor_name": "water_fms_facility",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "water_occupationledger",
+    "define_table_kor_name": "water_occupationledger",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "water_occupationledger_jijuk",
+    "define_table_kor_name": "water_occupationledger_jijuk",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "water_occupationledger_mgj",
+    "define_table_kor_name": "water_occupationledger_mgj",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
     "define_table_name": "wtl_gupsu_ps",
     "define_table_kor_name": "wtl_gupsu_ps",
     "define_table_shp_type": "POLYGON",
@@ -826,6 +910,30 @@
     "define_table_etc": "",
     "define_table_schema": "layer",
     "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "senior_center",
+    "define_table_kor_name": "경로당",
+    "define_table_shp_type": "POINT",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "경로당",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "excel"
+  },
+  {
+    "define_table_name": "safemap",
+    "define_table_kor_name": "보안등",
+    "define_table_shp_type": "POINT",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "공공데이터",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "excel"
   },
   {
     "define_table_name": "wtl_photo_ps",
@@ -1034,18 +1142,6 @@
   {
     "define_table_name": "wtl_cons_as",
     "define_table_kor_name": "상수도 공사대장",
-    "define_table_shp_type": "POLYGON",
-    "define_table_read_share": "P",
-    "define_table_write_share": "P",
-    "define_table_group": "공사대장",
-    "define_table_idx": "0",
-    "define_table_etc": "",
-    "define_table_schema": "layer",
-    "define_table_source": "shp"
-  },
-  {
-    "define_table_name": "wtl_cons_as_solo",
-    "define_table_kor_name": "wtl_cons_as_solo",
     "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
@@ -2496,6 +2592,18 @@
     "define_table_source": "shp"
   },
   {
+    "define_table_name": "road_sign_maintenance",
+    "define_table_kor_name": "유지보수내역",
+    "define_table_shp_type": "POINT",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "도로",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "excel"
+  },
+  {
     "define_table_name": "tl_sgco_rnadr_mst_gun",
     "define_table_kor_name": "건물군",
     "define_table_shp_type": "POLYGON",
@@ -2558,7 +2666,7 @@
   {
     "define_table_name": "a0020000",
     "define_table_kor_name": "도로대장총괄",
-    "define_table_shp_type": "LINE",
+    "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
     "define_table_group": "도로대장",
@@ -2588,6 +2696,18 @@
     "define_table_group": "도로대장",
     "define_table_idx": "0",
     "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "a0070000_ls",
+    "define_table_kor_name": "교량(선형)",
+    "define_table_shp_type": "LINE",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "도로대장",
+    "define_table_idx": "0",
+    "define_table_etc": "a0070000 oriented-envelope dual-line view",
     "define_table_schema": "layer",
     "define_table_source": "shp"
   },
@@ -2678,7 +2798,7 @@
   {
     "define_table_name": "a9990001",
     "define_table_kor_name": "도로중심선교점",
-    "define_table_shp_type": "LINE",
+    "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
     "define_table_group": "도로대장",
@@ -2702,7 +2822,7 @@
   {
     "define_table_name": "a9990003",
     "define_table_kor_name": "종단경사",
-    "define_table_shp_type": "LINE",
+    "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
     "define_table_group": "도로대장",
@@ -2762,7 +2882,7 @@
   {
     "define_table_name": "a9990011",
     "define_table_kor_name": "실연장",
-    "define_table_shp_type": "LINE",
+    "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
     "define_table_group": "도로대장",
@@ -2786,7 +2906,7 @@
   {
     "define_table_name": "a9990013",
     "define_table_kor_name": "측점",
-    "define_table_shp_type": "POINT",
+    "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
     "define_table_group": "도로대장",
@@ -2798,7 +2918,7 @@
   {
     "define_table_name": "c0076117",
     "define_table_kor_name": "측구",
-    "define_table_shp_type": "LINE",
+    "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
     "define_table_group": "도로대장",
@@ -2810,7 +2930,7 @@
   {
     "define_table_name": "c0223367",
     "define_table_kor_name": "가로등",
-    "define_table_shp_type": "POINT",
+    "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
     "define_table_group": "도로대장",
@@ -2822,7 +2942,7 @@
   {
     "define_table_name": "c0246120",
     "define_table_kor_name": "지하매설물",
-    "define_table_shp_type": "LINE",
+    "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
     "define_table_group": "도로대장",
@@ -2846,7 +2966,7 @@
   {
     "define_table_name": "c0410000",
     "define_table_kor_name": "표지",
-    "define_table_shp_type": "POINT",
+    "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
     "define_table_group": "도로대장",
@@ -2858,7 +2978,7 @@
   {
     "define_table_name": "c0493376",
     "define_table_kor_name": "신호등",
-    "define_table_shp_type": "POINT",
+    "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
     "define_table_group": "도로대장",
@@ -2870,7 +2990,7 @@
   {
     "define_table_name": "c0520000",
     "define_table_kor_name": "중앙분리대",
-    "define_table_shp_type": "LINE",
+    "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
     "define_table_group": "도로대장",
@@ -2882,7 +3002,7 @@
   {
     "define_table_name": "c0530000",
     "define_table_kor_name": "방호울타리",
-    "define_table_shp_type": "LINE",
+    "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
     "define_table_group": "도로대장",
@@ -2894,7 +3014,7 @@
   {
     "define_table_name": "c0536114",
     "define_table_kor_name": "방음시설",
-    "define_table_shp_type": "LINE",
+    "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
     "define_table_group": "도로대장",
@@ -2978,7 +3098,7 @@
   {
     "define_table_name": "c9530005",
     "define_table_kor_name": "낙석방지시설",
-    "define_table_shp_type": "LINE",
+    "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
     "define_table_group": "도로대장",
@@ -3038,7 +3158,7 @@
   {
     "define_table_name": "d0023372",
     "define_table_kor_name": "가로수",
-    "define_table_shp_type": "POINT",
+    "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
     "define_table_group": "도로대장",
@@ -3050,7 +3170,7 @@
   {
     "define_table_name": "f9037221",
     "define_table_kor_name": "쌓기비탈면",
-    "define_table_shp_type": "LINE",
+    "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
     "define_table_group": "도로대장",
@@ -3062,7 +3182,7 @@
   {
     "define_table_name": "f9037222",
     "define_table_kor_name": "깎기비탈면",
-    "define_table_shp_type": "LINE",
+    "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
     "define_table_group": "도로대장",
@@ -3074,7 +3194,7 @@
   {
     "define_table_name": "f9047224",
     "define_table_kor_name": "옹벽",
-    "define_table_shp_type": "LINE",
+    "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
     "define_table_group": "도로대장",
@@ -3086,7 +3206,7 @@
   {
     "define_table_name": "f9047226",
     "define_table_kor_name": "석축",
-    "define_table_shp_type": "LINE",
+    "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
     "define_table_group": "도로대장",
@@ -5687,6 +5807,18 @@
     "define_table_source": "shp"
   },
   {
+    "define_table_name": "wtl_cons_as_solo",
+    "define_table_kor_name": "상수도 공사대장_개별",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "상수",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
     "define_table_name": "wtl_pipe_ps_gsg",
     "define_table_kor_name": "상수 관상단고",
     "define_table_shp_type": "POINT",
@@ -7919,8 +8051,32 @@
     "define_table_source": "shp"
   },
   {
+    "define_table_name": "rdl_occ_as_mgj",
+    "define_table_kor_name": "도로점용물건지",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "점용대장",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
     "define_table_name": "rdl_occ_solo_as",
     "define_table_kor_name": "도로점용필지",
+    "define_table_shp_type": "POLYGON",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "점용대장",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "usage_data_as_mgj",
+    "define_table_kor_name": "하천점용물건지",
     "define_table_shp_type": "POLYGON",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
@@ -11685,147 +11841,135 @@
     "define_table_source": "shp"
   },
   {
-    "define_table_name": "safemap",
-    "define_table_kor_name": "보안등",
+    "define_table_name": "spf_creek",
+    "define_table_kor_name": "세천",
+    "define_table_shp_type": "LINE",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "소규모공공시설",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "spf_bridge",
+    "define_table_kor_name": "소교량",
     "define_table_shp_type": "POINT",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
-    "define_table_group": "공공데이터",
+    "define_table_group": "소규모공공시설",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "spf_intake",
+    "define_table_kor_name": "취입보",
+    "define_table_shp_type": "POINT",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "소규모공공시설",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "spf_village",
+    "define_table_kor_name": "마을진입로",
+    "define_table_shp_type": "LINE",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "소규모공공시설",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "spf_farm",
+    "define_table_kor_name": "농로",
+    "define_table_shp_type": "LINE",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "소규모공공시설",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "spf_drop",
+    "define_table_kor_name": "낙차공",
+    "define_table_shp_type": "POINT",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "소규모공공시설",
+    "define_table_idx": "0",
+    "define_table_etc": "",
+    "define_table_schema": "layer",
+    "define_table_source": "shp"
+  },
+  {
+    "define_table_name": "spf_eval",
+    "define_table_kor_name": "후보지평가",
+    "define_table_shp_type": "",
+    "define_table_read_share": "P",
+    "define_table_write_share": "P",
+    "define_table_group": "소규모공공시설",
     "define_table_idx": "0",
     "define_table_etc": "",
     "define_table_schema": "layer",
     "define_table_source": "excel"
   },
   {
-    "define_table_name": "senior_center",
-    "define_table_kor_name": "경로당",
-    "define_table_shp_type": "POINT",
+    "define_table_name": "spf_report",
+    "define_table_kor_name": "안전점검 보고서",
+    "define_table_shp_type": "",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
-    "define_table_group": "경로당",
+    "define_table_group": "소규모공공시설",
     "define_table_idx": "0",
     "define_table_etc": "",
     "define_table_schema": "layer",
     "define_table_source": "excel"
   },
   {
-    "define_table_name": "road_sign_maintenance",
-    "define_table_kor_name": "유지보수내역",
-    "define_table_shp_type": "POINT",
+    "define_table_name": "spf_check",
+    "define_table_kor_name": "점검결과",
+    "define_table_shp_type": "",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
-    "define_table_group": "도로",
+    "define_table_group": "소규모공공시설",
     "define_table_idx": "0",
     "define_table_etc": "",
     "define_table_schema": "layer",
     "define_table_source": "excel"
   },
   {
-    "define_table_name": "public_fms_facility",
-    "define_table_kor_name": "public_fms_facility",
-    "define_table_shp_type": "POLYGON",
+    "define_table_name": "spf_plan",
+    "define_table_kor_name": "정비계획 연도",
+    "define_table_shp_type": "",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
-    "define_table_group": "",
+    "define_table_group": "소규모공공시설",
     "define_table_idx": "0",
     "define_table_etc": "",
     "define_table_schema": "layer",
-    "define_table_source": "shp"
+    "define_table_source": "excel"
   },
   {
-    "define_table_name": "road_occupationledger",
-    "define_table_kor_name": "road_occupationledger",
-    "define_table_shp_type": "POLYGON",
+    "define_table_name": "spf_plan_fac",
+    "define_table_kor_name": "정비계획 목록",
+    "define_table_shp_type": "",
     "define_table_read_share": "P",
     "define_table_write_share": "P",
-    "define_table_group": "",
+    "define_table_group": "소규모공공시설",
     "define_table_idx": "0",
     "define_table_etc": "",
     "define_table_schema": "layer",
-    "define_table_source": "shp"
-  },
-  {
-    "define_table_name": "road_occupationledger_jijuk",
-    "define_table_kor_name": "road_occupationledger_jijuk",
-    "define_table_shp_type": "POLYGON",
-    "define_table_read_share": "P",
-    "define_table_write_share": "P",
-    "define_table_group": "",
-    "define_table_idx": "0",
-    "define_table_etc": "",
-    "define_table_schema": "layer",
-    "define_table_source": "shp"
-  },
-  {
-    "define_table_name": "road_occupationledger_mgj",
-    "define_table_kor_name": "road_occupationledger_mgj",
-    "define_table_shp_type": "POLYGON",
-    "define_table_read_share": "P",
-    "define_table_write_share": "P",
-    "define_table_group": "",
-    "define_table_idx": "0",
-    "define_table_etc": "",
-    "define_table_schema": "layer",
-    "define_table_source": "shp"
-  },
-  {
-    "define_table_name": "usage_data_as_mgj",
-    "define_table_kor_name": "usage_data_as_mgj",
-    "define_table_shp_type": "POLYGON",
-    "define_table_read_share": "P",
-    "define_table_write_share": "P",
-    "define_table_group": "",
-    "define_table_idx": "0",
-    "define_table_etc": "",
-    "define_table_schema": "layer",
-    "define_table_source": "shp"
-  },
-  {
-    "define_table_name": "water_fms_facility",
-    "define_table_kor_name": "water_fms_facility",
-    "define_table_shp_type": "POLYGON",
-    "define_table_read_share": "P",
-    "define_table_write_share": "P",
-    "define_table_group": "",
-    "define_table_idx": "0",
-    "define_table_etc": "",
-    "define_table_schema": "layer",
-    "define_table_source": "shp"
-  },
-  {
-    "define_table_name": "water_occupationledger",
-    "define_table_kor_name": "water_occupationledger",
-    "define_table_shp_type": "POLYGON",
-    "define_table_read_share": "P",
-    "define_table_write_share": "P",
-    "define_table_group": "",
-    "define_table_idx": "0",
-    "define_table_etc": "",
-    "define_table_schema": "layer",
-    "define_table_source": "shp"
-  },
-  {
-    "define_table_name": "water_occupationledger_jijuk",
-    "define_table_kor_name": "water_occupationledger_jijuk",
-    "define_table_shp_type": "POLYGON",
-    "define_table_read_share": "P",
-    "define_table_write_share": "P",
-    "define_table_group": "",
-    "define_table_idx": "0",
-    "define_table_etc": "",
-    "define_table_schema": "layer",
-    "define_table_source": "shp"
-  },
-  {
-    "define_table_name": "water_occupationledger_mgj",
-    "define_table_kor_name": "water_occupationledger_mgj",
-    "define_table_shp_type": "POLYGON",
-    "define_table_read_share": "P",
-    "define_table_write_share": "P",
-    "define_table_group": "",
-    "define_table_idx": "0",
-    "define_table_etc": "",
-    "define_table_schema": "layer",
-    "define_table_source": "shp"
+    "define_table_source": "excel"
   }
 ]

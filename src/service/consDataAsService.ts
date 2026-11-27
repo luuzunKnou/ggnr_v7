@@ -468,6 +468,70 @@ export type ConsIntersectRow = {
   geom: ConsDataAsGeom | null;
 };
 
+/**
+ * 지도 화면과 공사위치(solo) 도형이 겹치는 공사코드.
+ * 사업목록 «화면에 보이는 사업만» — 본표가 아니라 가장 작은 단위(공사위치) 기준.
+ * extent3857 우선(서버에서 5181 변환). wkt5181 은 하위 호환.
+ */
+export async function listConsCodesBySoloView(params?: {
+  kind?: string;
+  wkt5181?: string;
+  extent3857?: number[] | null;
+  limit?: number;
+}): Promise<{ consCodes: string[]; error?: string }> {
+  const limitRaw = Number(params?.limit ?? 500);
+  const limit = Number.isFinite(limitRaw) ? Math.min(2000, Math.max(1, Math.floor(limitRaw))) : 500;
+  const cfg = variantOf(params);
+
+  const extent = Array.isArray(params?.extent3857) ? params!.extent3857!.map(Number) : [];
+  const extentOk =
+    extent.length >= 4 &&
+    extent.slice(0, 4).every((n) => Number.isFinite(n)) &&
+    extent[2]! > extent[0]! &&
+    extent[3]! > extent[1]!;
+  const wkt = String(params?.wkt5181 ?? '').trim();
+  if (!extentOk && !wkt) return { consCodes: [] };
+
+  try {
+    const meta = await resolveTableWithSchema(cfg.soloTable);
+    if (!meta) return { consCodes: [], error: `${cfg.soloTable} 테이블이 없습니다.` };
+    const columns = await getTableColumns(meta.schema, meta.tableName);
+    const parentCol = findColumn(columns, CHILD_PARENT_FIELD);
+    const geomCol = findColumn(columns, 'geom');
+    if (!parentCol || !geomCol) return { consCodes: [] };
+
+    const safe = meta.tableName.replace(/"/g, '""');
+    const safeSchema = meta.schema.replace(/"/g, '""');
+    const geom = `t.${quoteIdent(geomCol)}`;
+    // 클라 WKT 변환 오류 방지 — 3857 envelope 를 DB에서 5181 로 변환
+    const searchGeom = extentOk
+      ? `ST_MakeValid(ST_Force2D(ST_Transform(ST_MakeEnvelope(${extent[0]}, ${extent[1]}, ${extent[2]}, ${extent[3]}, 3857), 5181)))`
+      : `ST_MakeValid(ST_Force2D(ST_SetSRID(ST_GeomFromText('${esc(wkt)}'), 5181)))`;
+    const sqlText = `
+      WITH search AS (
+        SELECT ${searchGeom} AS g
+      )
+      SELECT DISTINCT COALESCE(t.${quoteIdent(parentCol)}::text, '') AS cons_code
+      FROM "${safeSchema}"."${safe}" t
+      CROSS JOIN search s
+      WHERE COALESCE(t.${quoteIdent(parentCol)}::text, '') <> ''
+        AND ${geom} IS NOT NULL
+        AND ST_Intersects(
+          ${geom},
+          CASE WHEN ST_SRID(${geom}) IN (0, 5181) THEN s.g ELSE ST_Transform(s.g, ST_SRID(${geom})) END
+        )
+      ORDER BY 1
+      LIMIT ${limit}`;
+    const res = await db.execute(sql.raw(sqlText));
+    const consCodes = (res.rows ?? [])
+      .map((raw) => cell((raw as Record<string, unknown>).cons_code))
+      .filter(Boolean);
+    return { consCodes };
+  } catch (e: unknown) {
+    return { consCodes: [], error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
 /** 선택한 공사 도형(5181)과 겹치는 같은 종류 공사대장. 자기 자신은 제외 */
 export async function listIntersectingRows(params?: {
   kind?: string;

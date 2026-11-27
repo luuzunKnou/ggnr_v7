@@ -14,8 +14,9 @@ import iconv from 'iconv-lite';
 import { appendUploadConvertHistory } from './fileManagerService';
 import { convertDxfFileToDwg, isQcadDwgConverterAvailable } from '@/lib/dwgToDxf';
 import { GGNR_DATA_PATHS } from '@/lib/ggnrDataPaths';
+import { resolveGgnrDataDir } from '@/lib/turbopackFsPath';
 
-const GGNR_DATA_DIR = process.env.GGNR_DATA_DIR ?? 'd:\\ggnr_data_dir';
+const GGNR_DATA_DIR = resolveGgnrDataDir();
 const ROOT_REL = GGNR_DATA_PATHS.shpToDxf;
 const SHP_INPUT_SUBDIR = 'SHP';
 const DXF_OUTPUT_SUBDIR = 'DXF';

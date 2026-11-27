@@ -1,8 +1,12 @@
 /** 공사대장 알림설정과 알림일 계산. 화면·서버가 같이 쓴다. */
 
 export type ConsAlertSettings = {
-  /** 알림 주기(년). 0이면 미사용 */
+  /** 알림 반복 주기를 쓸지 */
+  cycleOn: boolean
+  /** 알림 반복 주기(년) */
   cycleYears: number
+  /** 반복 종료일. 비어 있으면 오늘로부터 5년 */
+  cycleEnd: string
   doneBeforeDays: number
   doneBeforeOn: boolean
   doneAfterDays: number
@@ -14,7 +18,9 @@ export type ConsAlertSettings = {
 }
 
 export const DEFAULT_CONS_ALERT: ConsAlertSettings = {
+  cycleOn: true,
   cycleYears: 1,
+  cycleEnd: '',
   doneBeforeDays: 30,
   doneBeforeOn: true,
   doneAfterDays: 7,
@@ -66,6 +72,27 @@ export function todayYmd(now = new Date()): Ymd {
   return { y: now.getFullYear(), m: now.getMonth() + 1, d: now.getDate() }
 }
 
+export function formatYmd(ymd: Ymd): string {
+  const month = String(ymd.m).padStart(2, '0')
+  const day = String(ymd.d).padStart(2, '0')
+  return `${ymd.y}-${month}-${day}`
+}
+
+/** 반복 종료일자를 비워 두면 화면에 넣어 주는 기본 기간 */
+export const CYCLE_END_PLACEHOLDER_YEARS = 5
+
+/** 반복 종료일자 기본값. 오늘부터 5년 뒤 */
+export function defaultCycleEnd(now = new Date()): string {
+  return formatYmd(addYears(todayYmd(now), CYCLE_END_PLACEHOLDER_YEARS))
+}
+
+/** 기준일에서 일수를 더한 날짜. 기준일이 없으면 빈 문자열 */
+export function offsetYmd(raw: string | undefined, days: number): string {
+  const base = parseYmd(raw)
+  if (!base || !Number.isFinite(days)) return ''
+  return formatYmd(addDays(base, days))
+}
+
 export function diffYmd(from: Ymd, to: Ymd): number {
   return utcDay(to) - utcDay(from)
 }
@@ -106,10 +133,12 @@ export function consAlertHits(
   if (settings.startAfterOn) {
     push('start-after', `착수 ${settings.startAfterDays}일 후`, start ? addDays(start, settings.startAfterDays) : null)
   }
-  if (settings.cycleYears > 0 && done) {
+  const cycleEnd = parseYmd(settings.cycleEnd) ?? (settings.cycleOn ? parseYmd(defaultCycleEnd()) : null)
+  if (settings.cycleOn && settings.cycleYears > 0 && done && cycleEnd) {
     let years = settings.cycleYears
     for (let i = 0; i < 40; i += 1) {
       const when = addYears(done, years)
+      if (diffYmd(cycleEnd, when) > 0) break
       const daysUntil = diffYmd(today, when)
       if (daysUntil > withinDays) break
       if (daysUntil >= -withinDays) {

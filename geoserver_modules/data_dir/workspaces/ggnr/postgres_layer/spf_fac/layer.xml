@@ -1,0 +1,19 @@
+<layer>
+  <name>spf_fac</name>
+  <id>LayerInfoImpl-e61148f:1a20ae03515:-7e1e</id>
+  <type>VECTOR</type>
+  <defaultStyle>
+    <id>StyleInfoImpl-e61148f:1a20ae03515:-7e1d</id>
+  </defaultStyle>
+  <resource class="featureType">
+    <id>FeatureTypeInfoImpl-e61148f:1a20ae03515:-7e1f</id>
+  </resource>
+  <queryable>true</queryable>
+  <opaque>false</opaque>
+  <attribution>
+    <logoWidth>0</logoWidth>
+    <logoHeight>0</logoHeight>
+  </attribution>
+  <dateCreated>2026-11-25 02:41:36.181 UTC</dateCreated>
+  <dateModified>2026-11-25 02:41:40.179 UTC</dateModified>
+</layer>

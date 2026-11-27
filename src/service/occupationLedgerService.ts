@@ -11,12 +11,14 @@ import {
   parseOccupationPermitNoSeq,
 } from '@/lib/occupationPermitNo';
 import {
+  adaptOccupationLedgerBindingToColumns,
   getOccupationLedgerBinding,
   OCCUPATION_LEDGER_PREFIXES,
   occupationLedgerPrefixToSystemKey,
   type OccupationLedgerBinding,
   type OccupationLedgerPrefix,
 } from '@/lib/occupationLedgerBinding';
+import { splitUsagePeriod } from '@/lib/usageDataAsFieldUtils';
 import {
   getEditableFieldDefinitionsForTable,
   resolveJijukParcelGeomsByAddresses,
@@ -37,6 +39,7 @@ import {
   getJijukGeomByPnu,
   resolvePnuFromParsedParts,
 } from './excelUploadService';
+import { getGeoServerInternalBase } from '@/lib/geoserverUrl';
 
 const DEFAULT_SCHEMA = 'layer';
 const GEOM_COLUMN_NAMES = new Set(['geom', 'geometry', 'the_geom', 'shape']);
@@ -99,10 +102,13 @@ function diffLocalCalendarDays(fromMs: number, toMs: number): number {
   return Math.round((toMs - fromMs) / 86_400_000);
 }
 
-function resolveBinding(params?: {
+async function resolveBinding(params?: {
   serEng?: string;
   system?: string;
-}): { binding: OccupationLedgerBinding; error?: undefined } | { binding?: undefined; error: string } {
+}): Promise<
+  | { binding: OccupationLedgerBinding; error?: undefined }
+  | { binding?: undefined; error: string }
+> {
   const binding = getOccupationLedgerBinding({
     serEng: params?.serEng,
     system: params?.system,
@@ -110,7 +116,22 @@ function resolveBinding(params?: {
   if (!binding) {
     return { error: '점용대장 서비스(occupationLedger*)를 확인할 수 없습니다.' };
   }
-  return { binding };
+  const meta = await resolveTableWithSchema(binding.mainTable);
+  if (!meta) return { binding };
+  const columns = await getTableColumns(meta.schema, meta.tableName);
+  const jijukCache = new Map<string, boolean>();
+  const jijukTableExists = (table: string): boolean => {
+    // sync 콜백용 — 아래에서 await 로 미리 채움
+    return jijukCache.get(table) === true;
+  };
+  for (const name of ['usage_data_as_solo', 'usage_data_solo_as']) {
+    jijukCache.set(name, (await resolveTableWithSchema(name)) != null);
+  }
+  return {
+    binding: adaptOccupationLedgerBindingToColumns(binding, columns, {
+      jijukTableExists,
+    }),
+  };
 }
 
 async function resolveTableWithSchema(
@@ -211,7 +232,7 @@ export async function resolveOccupationLedgerRowKey(params?: {
   serEng?: string;
   system?: string;
 }): Promise<{ key: string | null; error?: string }> {
-  const resolved = resolveBinding(params);
+  const resolved = await resolveBinding(params);
   if (resolved.error || !resolved.binding) {
     return { key: null, error: resolved.error };
   }
@@ -221,7 +242,18 @@ export async function resolveOccupationLedgerRowKey(params?: {
 
 /** 필지·물건지의 본표 고유키 연결 칸 — 설정한 칸만 (없으면 연결 없음) */
 function resolveChildParentCol(columns: string[], hint: string): string | null {
-  return findColumn(columns, String(hint ?? '').trim());
+  const ordered = [hint, 'cons_code', 'ftr_idn', 'id']
+    .map((n) => String(n ?? '').trim())
+    .filter(Boolean);
+  const seen = new Set<string>();
+  for (const name of ordered) {
+    const lower = name.toLowerCase();
+    if (seen.has(lower)) continue;
+    seen.add(lower);
+    const found = findColumn(columns, name);
+    if (found) return found;
+  }
+  return null;
 }
 
 function resolveChildAddressCol(columns: string[], hint: string): string | null {
@@ -404,7 +436,7 @@ export async function getOccupationLedgerBindingInfo(params?: {
   serEng?: string;
   system?: string;
 }) {
-  const resolved = resolveBinding(params);
+  const resolved = await resolveBinding(params);
   if (resolved.error || !resolved.binding) {
     return { success: false as const, error: resolved.error ?? '설정 없음' };
   }
@@ -416,6 +448,10 @@ export async function getOccupationLedgerBindingInfo(params?: {
     jijukTable: b.jijukTable,
     mgjTable: b.mgjTable,
     keyField: b.fields.keyField,
+    childParentField: b.fields.childParentField,
+    childAddressField: b.fields.childAddressField,
+    placeField: b.fields.placeField,
+    permitField: b.fields.permitField,
     editPresetKey: b.editPresetKey,
     wmsLayerIds: [b.mainTable, b.jijukTable, b.mgjTable],
   };
@@ -432,7 +468,7 @@ export async function getOccupationLedgerList(params?: {
   error?: string;
   title?: string;
 }> {
-  const resolved = resolveBinding(params);
+  const resolved = await resolveBinding(params);
   if (resolved.error || !resolved.binding) {
     return { rows: [], error: resolved.error };
   }
@@ -449,6 +485,7 @@ export async function getOccupationLedgerList(params?: {
   const placeCol = findColumn(columns, f.placeField);
   const startCol = f.startField ? findColumn(columns, f.startField) : null;
   const endCol = f.endField ? findColumn(columns, f.endField) : null;
+  const periodCol = f.periodField ? findColumn(columns, f.periodField) : null;
   if (!keyCol) return { rows: [], error: `${f.keyField} 컬럼이 없습니다.`, title: binding.title };
 
   const safe = tableName.replace(/"/g, '""');
@@ -459,10 +496,11 @@ export async function getOccupationLedgerList(params?: {
   const placeExpr = placeCol ? `COALESCE(${q(placeCol)}::text, '')` : `''::text`;
   const startExpr = startCol ? `COALESCE(${q(startCol)}::text, '')` : `''::text`;
   const endExpr = endCol ? `COALESCE(${q(endCol)}::text, '')` : `''::text`;
+  const periodExpr = periodCol ? `COALESCE(${q(periodCol)}::text, '')` : `''::text`;
 
   // 목록 열 — 필드 정의 «목록». 상태는 맨 앞 배지로 따로 보이므로 뺀다
   const defineColumns = await resolveDefineListColumns(binding.mainTable, columns, [f.stateField]);
-  const fallbackColumns = [f.nameField, f.placeField, f.startField, f.endField]
+  const fallbackColumns = [f.nameField, f.placeField, f.startField, f.endField, f.periodField]
     .map((x) => (x ? findColumn(columns, x) : null))
     .filter((c): c is string => Boolean(c))
     .map((c) => ({ field: c, label: labelForOccupationLedgerField(c) }));
@@ -491,6 +529,7 @@ export async function getOccupationLedgerList(params?: {
       ${placeExpr} AS "place",
       ${startExpr} AS "startRaw",
       ${endExpr} AS "endRaw",
+      ${periodExpr} AS "periodRaw",
       ${listValuesSqlExpr(t, listColumns.map((c) => c.field))} AS "vals"
     FROM "${safeSchema}"."${safe}" ${t}
     WHERE COALESCE(${q(keyCol)}::text, '') <> '' ${kwClause}
@@ -501,8 +540,14 @@ export async function getOccupationLedgerList(params?: {
     const rows = (res.rows ?? []).map((r) => {
       const row = r as Record<string, unknown>;
       // 시작·종료는 글자 그대로 (날짜·영구·허가일로부터 ○개월 등)
-      const startDate = String(row.startRaw ?? '').trim();
-      const endDate = String(row.endRaw ?? '').trim();
+      let startDate = String(row.startRaw ?? '').trim();
+      let endDate = String(row.endRaw ?? '').trim();
+      // 울진 옛 점용기간(usage_pd) 한 칸 → 시작·종료 분리
+      if (periodCol && !startCol && !endCol) {
+        const split = splitUsagePeriod(String(row.periodRaw ?? ''));
+        startDate = split.start;
+        endDate = split.end;
+      }
       return {
         rowKey: String(row.rowKey ?? '').trim(),
         name: formatAddressStripSidoSigungu(String(row.name ?? '')),
@@ -576,7 +621,7 @@ export async function getOccupationLedgerExtent3857ByKey(params: {
   serEng?: string;
   system?: string;
 }): Promise<{ extent3857: [number, number, number, number] | null; error?: string }> {
-  const resolved = resolveBinding(params);
+  const resolved = await resolveBinding(params);
   if (resolved.error || !resolved.binding) {
     return { extent3857: null, error: resolved.error };
   }
@@ -710,7 +755,7 @@ export async function getOccupationLedgerFieldList(params?: {
   serEng?: string;
   system?: string;
 }): Promise<{ fields: OccupationLedgerFieldMeta[]; error?: string }> {
-  const resolved = resolveBinding(params);
+  const resolved = await resolveBinding(params);
   if (resolved.error || !resolved.binding) return { fields: [], error: resolved.error };
   const meta = await resolveTableWithSchema(resolved.binding.mainTable);
   if (!meta) return { fields: [], error: `${resolved.binding.mainTable} 테이블이 없습니다.` };
@@ -733,7 +778,7 @@ export async function getOccupationLedgerDetailByKey(params: {
   fileKey?: string;
   error?: string;
 }> {
-  const resolved = resolveBinding(params);
+  const resolved = await resolveBinding(params);
   if (resolved.error || !resolved.binding) {
     return { attributes: [], parcelItems: [], mgjItems: [], error: resolved.error };
   }
@@ -897,7 +942,7 @@ export async function getOccupationLedgerChildFieldList(params?: {
   system?: string;
   role?: 'jijuk' | 'mgj';
 }): Promise<{ fields: OccupationLedgerFieldMeta[]; error?: string }> {
-  const resolved = resolveBinding(params);
+  const resolved = await resolveBinding(params);
   if (resolved.error || !resolved.binding) return { fields: [], error: resolved.error };
   const binding = resolved.binding;
   const tableWanted = params?.role === 'mgj' ? binding.mgjTable : binding.jijukTable;
@@ -944,7 +989,7 @@ export async function getOccupationLedgerChildDetail(params: {
   role?: 'jijuk' | 'mgj';
   ogcFid?: string | number;
 }): Promise<{ attributes: OccupationLedgerDetailAttr[]; error?: string }> {
-  const resolved = resolveBinding(params);
+  const resolved = await resolveBinding(params);
   if (resolved.error || !resolved.binding) return { attributes: [], error: resolved.error };
   const binding = resolved.binding;
   const ogcFid = String(params?.ogcFid ?? '').trim();
@@ -1021,7 +1066,7 @@ export async function getNextOccupationLedgerPermitNo(params?: {
     return { permitNo: '', error: '시작일 연도가 필요합니다.' };
   }
 
-  const resolved = resolveBinding(params);
+  const resolved = await resolveBinding(params);
   if (resolved.error || !resolved.binding) {
     return { permitNo: '', error: resolved.error };
   }
@@ -1084,7 +1129,7 @@ export async function getNextOccupationLedgerAutoCode(params?: {
   serEng?: string;
   system?: string;
 }): Promise<{ code: string; field?: string; error?: string }> {
-  const resolved = resolveBinding(params);
+  const resolved = await resolveBinding(params);
   if (resolved.error || !resolved.binding) return { code: '', error: resolved.error };
   const field = resolved.binding.autoCodeField;
   if (!field) return { code: '' };
@@ -1117,7 +1162,7 @@ export async function getNextOccupationLedgerKey(params?: {
   serEng?: string;
   system?: string;
 }): Promise<{ key: string; error?: string }> {
-  const resolved = resolveBinding(params);
+  const resolved = await resolveBinding(params);
   if (resolved.error || !resolved.binding) {
     return { key: '', error: resolved.error };
   }
@@ -1191,7 +1236,7 @@ export async function syncOccupationLedgerMgjByKey(params: {
   system?: string;
   items?: Array<{ address: string; pnu?: string; x4326?: number; y4326?: number }>;
 }): Promise<{ success: boolean; error?: string }> {
-  const resolved = resolveBinding(params);
+  const resolved = await resolveBinding(params);
   if (resolved.error || !resolved.binding) {
     return { success: false, error: resolved.error ?? '점용대장 설정을 확인할 수 없습니다.' };
   }
@@ -1463,7 +1508,10 @@ export type OccupationLedgerStateFillCounts = {
   total: number;
 };
 
-/** 본표 종료일 기준 — 오늘을 지나지 않았으면 진행중, 지났으면 종료 */
+/**
+ * 본표 종료일(또는 점용기간 끝) 기준 — 오늘을 지나지 않았으면 진행중, 지났으면 종료.
+ * 상태·종료 칸이 없으면 건너뛴다(옛 usage_pd 표 등).
+ */
 async function fillMainTableStateFromEndDate(
   binding: OccupationLedgerBinding
 ): Promise<OccupationLedgerStateFillCounts | { error: string }> {
@@ -1473,16 +1521,20 @@ async function fillMainTableStateFromEndDate(
   const cols = await getTableColumns(meta.schema, meta.tableName);
   const keyCol = findColumn(cols, binding.fields.keyField);
   const endCol = binding.fields.endField ? findColumn(cols, binding.fields.endField) : null;
+  const periodCol = binding.fields.periodField
+    ? findColumn(cols, binding.fields.periodField)
+    : null;
   const stateCol = findColumn(cols, binding.fields.stateField);
-  if (!keyCol || !endCol || !stateCol) {
-    return { error: `${binding.mainTable}에 키·종료일·상태 칸이 없습니다.` };
-  }
+  if (!keyCol || !stateCol) return empty;
+  const dateCol = endCol ?? periodCol;
+  if (!dateCol) return empty;
+  const usePeriodSplit = !endCol && Boolean(periodCol);
   const safeSchema = meta.schema.replace(/"/g, '""');
   const safeTable = meta.tableName.replace(/"/g, '""');
   const res = await db.execute(
     sql.raw(
       `SELECT ${quoteIdent(keyCol)}::text AS k,
-              ${quoteIdent(endCol)} AS e
+              ${quoteIdent(dateCol)} AS e
        FROM "${safeSchema}"."${safeTable}"
        ORDER BY ${quoteIdent(keyCol)}`
     )
@@ -1493,8 +1545,9 @@ async function fillMainTableStateFromEndDate(
   for (const row of rows) {
     const id = String(row.k ?? '').trim();
     if (!id) continue;
-    const endText =
+    const raw =
       row.e instanceof Date ? (tryFormatToYmd(row.e) ?? '') : String(row.e ?? '').trim();
+    const endText = usePeriodSplit ? splitUsagePeriod(raw).end : raw;
     const state = deriveOccupationPeriodState(endText);
     if (state === OCCUPATION_PERIOD_STATE_ENDED) ended += 1;
     else inProgress += 1;
@@ -1509,6 +1562,188 @@ async function fillMainTableStateFromEndDate(
   return { inProgress, ended, total: rows.length };
 }
 
+/** 하천점용 — 주소 칸은 usage_loc 우선, 없으면 바인딩 placeField */
+async function resolveWaterPlaceFieldForGeomFill(
+  binding: OccupationLedgerBinding
+): Promise<string> {
+  if (binding.serEng !== 'waterOccupationLedger') return binding.fields.placeField;
+  const meta = await resolveTableWithSchema(binding.mainTable);
+  if (!meta) return binding.fields.placeField;
+  const cols = await getTableColumns(meta.schema, meta.tableName);
+  return findColumn(cols, 'usage_loc') ?? binding.fields.placeField;
+}
+
+type LayerExtentBox = {
+  minx: number;
+  miny: number;
+  maxx: number;
+  maxy: number;
+};
+
+/** 본표 도형 extent — GeoServer 선언 범위 갱신용 */
+async function queryLayerGeomExtentBoxes(
+  tableWanted: string
+): Promise<{ native5181: LayerExtentBox; latLon4326: LayerExtentBox } | null> {
+  const meta = await resolveTableWithSchema(tableWanted);
+  if (!meta) return null;
+  const cols = await getTableColumns(meta.schema, meta.tableName);
+  const geomCol = findColumn(cols, 'geom');
+  if (!geomCol) return null;
+  const safeSchema = meta.schema.replace(/"/g, '""');
+  const safeTable = meta.tableName.replace(/"/g, '""');
+  const g = quoteIdent(geomCol);
+  try {
+    const res = await db.execute(
+      sql.raw(
+        `SELECT
+           ST_XMin(e5181) AS nminx, ST_YMin(e5181) AS nminy,
+           ST_XMax(e5181) AS nmaxx, ST_YMax(e5181) AS nmaxy,
+           ST_XMin(e4326) AS lminx, ST_YMin(e4326) AS lminy,
+           ST_XMax(e4326) AS lmaxx, ST_YMax(e4326) AS lmaxy
+         FROM (
+           SELECT
+             ST_Extent(ST_SetSRID(${g}, COALESCE(NULLIF(ST_SRID(${g}), 0), 5181))) AS e5181,
+             ST_Extent(
+               ST_Transform(
+                 ST_SetSRID(${g}, COALESCE(NULLIF(ST_SRID(${g}), 0), 5181)),
+                 4326
+               )
+             ) AS e4326
+           FROM "${safeSchema}"."${safeTable}"
+           WHERE ${g} IS NOT NULL AND NOT ST_IsEmpty(${g})
+         ) t`
+      )
+    );
+    const row = res.rows?.[0] as Record<string, unknown> | undefined;
+    if (!row) return null;
+    const num = (k: string) => {
+      const v = Number(row[k]);
+      return Number.isFinite(v) ? v : null;
+    };
+    const nminx = num('nminx');
+    const nminy = num('nminy');
+    const nmaxx = num('nmaxx');
+    const nmaxy = num('nmaxy');
+    const lminx = num('lminx');
+    const lminy = num('lminy');
+    const lmaxx = num('lmaxx');
+    const lmaxy = num('lmaxy');
+    if (
+      nminx == null ||
+      nminy == null ||
+      nmaxx == null ||
+      nmaxy == null ||
+      lminx == null ||
+      lminy == null ||
+      lmaxx == null ||
+      lmaxy == null
+    ) {
+      return null;
+    }
+    const pad5181 = 2000;
+    const padLon = 0.05;
+    const padLat = 0.05;
+    return {
+      native5181: {
+        minx: nminx - pad5181,
+        miny: nminy - pad5181,
+        maxx: nmaxx + pad5181,
+        maxy: nmaxy + pad5181,
+      },
+      latLon4326: {
+        minx: lminx - padLon,
+        miny: lminy - padLat,
+        maxx: lmaxx + padLon,
+        maxy: lmaxy + padLat,
+      },
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 도형 대량 반영 후 GeoServer 레이어 범위를 DB extent로 맞춤.
+ * 선언 범위(옛 울진 등) 밖 도형은 WMS가 빈 이미지로 나올 수 있다.
+ * (recalculate= 옵션은 빈 범위로 깨지는 경우가 있어 DB 조회 값을 PUT)
+ */
+async function recalculateGeoServerFeatureTypeBounds(
+  layerNames: string[]
+): Promise<{ ok: boolean; detail?: string }> {
+  const base = getGeoServerInternalBase().replace(/\/$/, '');
+  const workspace = (process.env.GEOSERVER_WORKSPACE?.trim() || 'ggnr').replace(/\/$/, '');
+  const user = process.env.GEOSERVER_USER ?? 'admin';
+  const pass = process.env.GEOSERVER_PASSWORD ?? 'geoserver';
+  const auth = `Basic ${Buffer.from(`${user}:${pass}`, 'utf8').toString('base64')}`;
+  const project = String(process.env.GGNR_PROJECT ?? '').trim();
+  const stores = ['postgres_layer', project ? `postgres_layer_${project}` : ''].filter(
+    (s, i, arr) => Boolean(s) && arr.indexOf(s) === i
+  );
+
+  let anyOk = false;
+  const errors: string[] = [];
+  for (const name of layerNames) {
+    const layer = String(name ?? '').trim().toLowerCase();
+    if (!layer) continue;
+    const boxes = await queryLayerGeomExtentBoxes(layer);
+    if (!boxes) {
+      errors.push(`${layer}: no geom extent`);
+      continue;
+    }
+    const body = {
+      featureType: {
+        name: layer,
+        nativeName: layer,
+        enabled: true,
+        srs: 'EPSG:5181',
+        nativeBoundingBox: {
+          minx: boxes.native5181.minx,
+          maxx: boxes.native5181.maxx,
+          miny: boxes.native5181.miny,
+          maxy: boxes.native5181.maxy,
+          crs: 'EPSG:5181',
+        },
+        latLonBoundingBox: {
+          minx: boxes.latLon4326.minx,
+          maxx: boxes.latLon4326.maxx,
+          miny: boxes.latLon4326.miny,
+          maxy: boxes.latLon4326.maxy,
+          crs: 'EPSG:4326',
+        },
+      },
+    };
+    let layerOk = false;
+    for (const store of stores) {
+      try {
+        const url =
+          `${base}/rest/workspaces/${encodeURIComponent(workspace)}` +
+          `/datastores/${encodeURIComponent(store)}` +
+          `/featuretypes/${encodeURIComponent(layer)}.json`;
+        const res = await fetch(url, {
+          method: 'PUT',
+          headers: {
+            Authorization: auth,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(body),
+        });
+        if (res.ok) {
+          anyOk = true;
+          layerOk = true;
+          break;
+        }
+        errors.push(`${store}/${layer}:${res.status}`);
+      } catch (e: unknown) {
+        errors.push(`${store}/${layer}:${e instanceof Error ? e.message : 'fetch failed'}`);
+      }
+    }
+    if (!layerOk && !errors.some((x) => x.startsWith(`${layer}:`) || x.includes(`/${layer}:`))) {
+      errors.push(`${layer}: no store`);
+    }
+  }
+  return { ok: anyOk, detail: errors.slice(0, 4).join('; ') || undefined };
+}
+
 /** 점용장소 → 지적 도형. 못 맞추면 도형을 비운다. 본표 상태는 종료일 기준으로 넣는다. */
 export async function fillOccupationLedgerGeomFromOccupPlace(params?: {
   serEng?: string;
@@ -1521,33 +1756,66 @@ export async function fillOccupationLedgerGeomFromOccupPlace(params?: {
 }> {
   const empty = { filled: 0, cleared: 0, total: 0 };
   const emptyState = { inProgress: 0, ended: 0, total: 0 };
-  const resolved = resolveBinding(params);
+  const resolved = await resolveBinding(params);
   if (resolved.error || !resolved.binding) {
     return { main: empty, jijuk: empty, state: emptyState, error: resolved.error };
   }
   const binding = resolved.binding;
   const cache = new Map<string, string | null>();
+  const mainPlaceField = await resolveWaterPlaceFieldForGeomFill(binding);
   const main = await fillTableGeomFromOccupPlace({
     tableWanted: binding.mainTable,
     keyField: binding.fields.keyField,
-    placeField: binding.fields.placeField,
+    placeField: mainPlaceField,
     cache,
   });
   if ('error' in main) {
     return { main: empty, jijuk: empty, state: emptyState, error: main.error };
   }
+  const jijukPlace =
+    binding.serEng === 'waterOccupationLedger'
+      ? 'usage_loc'
+      : binding.fields.childAddressField;
   const jijuk = await fillTableGeomFromOccupPlace({
     tableWanted: binding.jijukTable,
     keyField: 'ogc_fid',
-    placeField: binding.fields.childAddressField,
+    placeField: jijukPlace,
     cache,
   });
-  if ('error' in jijuk) {
-    return { main, jijuk: empty, state: emptyState, error: jijuk.error };
-  }
+  // 필지 표·주소 칸이 없으면 본표만 반영하고 넘어간다
+  const jijukCounts = 'error' in jijuk ? empty : jijuk;
   const state = await fillMainTableStateFromEndDate(binding);
-  if ('error' in state) {
-    return { main, jijuk, state: emptyState, error: state.error };
+  const stateCounts = 'error' in state ? emptyState : state;
+
+  // 본표·필지 WMS 범위 — 영덕 등 선언범위 밖 도형이 보이도록
+  await recalculateGeoServerFeatureTypeBounds([
+    binding.mainTable,
+    binding.jijukTable,
+  ]);
+
+  return { main, jijuk: jijukCounts, state: stateCounts };
+}
+
+/** 지도서버 레이어 범위만 다시 맞춤 (도형은 이미 들어간 뒤) */
+export async function recalculateOccupationLedgerWmsBounds(params?: {
+  serEng?: string;
+  system?: string;
+}): Promise<{ success: boolean; error?: string }> {
+  const resolved = await resolveBinding(params);
+  if (resolved.error || !resolved.binding) {
+    return { success: false, error: resolved.error ?? '설정 없음' };
   }
-  return { main, jijuk, state };
+  const r = await recalculateGeoServerFeatureTypeBounds([
+    resolved.binding.mainTable,
+    resolved.binding.jijukTable,
+  ]);
+  if (!r.ok) {
+    return {
+      success: false,
+      error: r.detail
+        ? `지도서버 범위 갱신 실패 (${r.detail})`
+        : '지도서버 범위 갱신 실패',
+    };
+  }
+  return { success: true };
 }

@@ -31,6 +31,7 @@ import * as privateLandAnalysisService from './privateLandAnalysisService';
 import * as roadLedgerService from './roadLedgerService';
 import * as roadVideoTrackService from './roadVideoTrackService';
 import * as roadNetworkService from './roadNetworkService';
+import * as bikeRoadNetService from './bikeRoadNetService';
 import * as wtlNetworkService from './wtlNetworkService';
 import * as wtlFacilityService from './wtlFacilityService';
 import * as wtlRequestService from './wtlRequestService';
@@ -43,6 +44,7 @@ import * as roadUseLedgerService from './roadUseLedgerService';
 import * as roadFrontageBuildingService from './roadFrontageBuildingService';
 import * as roadFrontageMarkerService from './roadFrontageMarkerService';
 import * as radiationShelterService from './radiationShelterService';
+import * as securityLightService from './securityLightService';
 import * as waterPlaySignService from './waterPlaySignService';
 import * as riverUseLedgerService from './riverUseLedgerService';
 import * as usageDataAsService from './usageDataAsService';
@@ -89,6 +91,7 @@ import * as fmsLinkageService from './fmsLinkageService';
 import * as groundwaterPermitService from './groundwaterPermitService';
 import * as waterAdminComplaintService from './waterAdminComplaintService';
 import * as bizNotifService from './bizNotifService';
+import * as consAlertService from './consAlertService';
 import * as thematicMapService from './thematicMapService';
 import * as roadWorkHandbookService from './roadWorkHandbookService';
 import * as qgisLayerControlService from './qgisLayerControlService';
@@ -105,6 +108,7 @@ import * as individualLandPriceService from './individualLandPriceService';
 import * as odorSensorService from './odorSensorService';
 import * as realTransactionPriceService from './realTransactionPriceService';
 import * as smallPublicService from './smallPublicService';
+import * as smallPublicPlanService from './smallPublicPlanService';
 
 export {
   configService,
@@ -139,6 +143,7 @@ export {
   roadLedgerService,
   roadVideoTrackService,
   roadNetworkService,
+  bikeRoadNetService,
   wtlNetworkService,
   wtlFacilityService,
   wtlRequestService,
@@ -151,6 +156,7 @@ export {
   roadFrontageBuildingService,
   roadFrontageMarkerService,
   radiationShelterService,
+  securityLightService,
   waterPlaySignService,
   riverUseLedgerService,
   usageDataAsService,
@@ -195,6 +201,7 @@ export {
   groundwaterPermitService,
   waterAdminComplaintService,
   bizNotifService,
+  consAlertService,
   roadWorkHandbookService,
   qgisLayerControlService,
   userDataUploadService,
@@ -210,4 +217,5 @@ export {
   odorSensorService,
   realTransactionPriceService,
   smallPublicService,
+  smallPublicPlanService,
 };

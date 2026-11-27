@@ -10,9 +10,15 @@ import { call } from '@/lib/api';
 import { sidebarServicePolicy } from '@/lib/accessClient';
 import { useMyAccessSnapshot } from '@/hooks/useMyAccessSnapshot';
 import { ResourceAccessDeniedDialog } from '@/app/(pages)/_components/AccessRequest';
+import { CONS_LEDGER_VARIANTS } from '@/lib/consLedgerVariant';
 import { getOpenedKeyForSerEng } from '@/lib/mapServiceOpened';
 import { openShapeEditorMapWindow } from '@/lib/shapeEditorWindow';
 import { requestCloseMapFloatingDetail } from './mapFloatingDetailEvent';
+import { useMapContext } from './MapContext';
+
+const CONS_LEDGER_OPENED_KEYS = new Set(
+  Object.values(CONS_LEDGER_VARIANTS).map((v) => v.openedKey)
+);
 import {
   hasProtoUnreadNotifications,
   PROTO_NOTIF_CHANGED_EVENT,
@@ -231,6 +237,8 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
     };
   }, [updateNavScrollState, stopNavScrollHold, sidebarItems.length]);
 
+  const mapContext = useMapContext();
+
   const toggleWindow = (windowName: string) => {
     const current = new URLSearchParams(Array.from(searchParams.entries()));
     const isCurrentlyActive = openedWindows.length === 1 && openedWindows[0] === windowName;
@@ -239,8 +247,16 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
     } else {
       current.set('opened', windowName);
     }
-    /** 업무 패널 전환·종료 시 body portal 상세(최소화 바 포함) 정리 신호 */
-    requestCloseMapFloatingDetail();
+    // 공사대장 열 때: 메뉴 클릭이 지도 식별로 새어 기존 지하시설물 선택이 꺼지지 않게
+    if (CONS_LEDGER_OPENED_KEYS.has(windowName) && !isCurrentlyActive) {
+      const until = Date.now() + 600;
+      if (mapContext?.suppressMapIdentifyUntilRef) {
+        mapContext.suppressMapIdentifyUntilRef.current = until;
+      }
+    } else {
+      /** 업무 패널 전환·종료 시 body portal 상세(최소화 바 포함) 정리 신호 */
+      requestCloseMapFloatingDetail();
+    }
     router.push(`/map?${current.toString()}`);
   };
 

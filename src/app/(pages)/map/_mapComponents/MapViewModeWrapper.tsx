@@ -31,6 +31,7 @@ import { useSplitGutterControlOffset } from './mapSplit/useSplitGutterControlOff
 import { useStreetViewSecondary } from '../_mapContents/streetView/useStreetViewSecondary';
 import { useMapSplitSecondary } from '../_mapContents/mapSplit/useMapSplitSecondary';
 import { AerialViewLayerPanel } from '../_mapContents/aerialView/AerialViewLayerPanel';
+import { useShootingRequestUiEnabled } from '../_mapContents/shootingRequest/useShootingRequestUiEnabled';
 
 /** 3D 오른쪽 패널에서 다중 토글 허용 id (OpenLayers MULTI_SELECT_IDS 와 동일 계열) */
 const MULTI_SELECT_CONTROLS_3D = ['cadastral', 'thematic-map'] as const;
@@ -83,9 +84,10 @@ export default function MapViewModeWrapper({
   const router = useRouter();
   const searchParams = useSearchParams();
   const systemKey = searchParams.get('system') ?? '';
+  const uavEnabledInProject = useShootingRequestUiEnabled();
   const mapControlGroups3d = useMemo(
-    (): MapControlGroup[] => mapControlGroupsForSystem(systemKey, projectName),
-    [systemKey, projectName]
+    (): MapControlGroup[] => mapControlGroupsForSystem(systemKey, uavEnabledInProject),
+    [systemKey, uavEnabledInProject]
   );
 
   useEffect(() => {

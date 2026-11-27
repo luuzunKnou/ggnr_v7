@@ -64,6 +64,7 @@ export function SmallPublicClassEvalFormModal({
     )
   )
   const [error, setError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
 
   const filledValues = useMemo(
     () => smallPublicClassValuesWithAuto(form, values, grade, facility.length),
@@ -84,21 +85,30 @@ export function SmallPublicClassEvalFormModal({
     setValues((prev) => ({ ...prev, [key]: level }))
   }
 
+  /** DB(점검결과)에 저장 — 실패하면 창을 닫지 않고 사유를 보여 준다 */
+  const persist = async (next: SmallPublicInspection) => {
+    if (saving) return
+    setSaving(true)
+    setError(null)
+    const res = await smallPublicActions.saveInspection(next)
+    setSaving(false)
+    if (!res.success) return setError(res.error)
+    onSaved({ ...res.inspection, classEval: next.classEval })
+  }
+
   const save = () => {
     if (!date) return setError('평가일을 넣으세요.')
     if (!complete) return setError('평가표의 모든 항목 등급을 고르세요.')
     const classEval = { form, values: filledValues, total }
     if (initial) {
-      const next: SmallPublicInspection = {
+      void persist({
         ...initial,
         date,
         inspector: inspector.trim(),
         grade,
         classResult,
         classEval,
-      }
-      smallPublicActions.saveInspection(next)
-      onSaved(next)
+      })
       return
     }
     const checkForm = smallPublicCheckFormFor(facility.type, date)
@@ -124,8 +134,7 @@ export function SmallPublicClassEvalFormModal({
     // 위험도 등급을 사용자가 고른 값에 맞춤(자동 생성 점수의 등급과 다를 수 있음)
     next.grade = grade
     next.classResult = smallPublicClassOf(form, filledValues, grade, facility.candidate === '위험' ? '위험' : null)
-    smallPublicActions.saveInspection(next)
-    onSaved(next)
+    void persist(next)
   }
 
   return (

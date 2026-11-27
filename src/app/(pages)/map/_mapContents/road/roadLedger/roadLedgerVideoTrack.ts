@@ -1,5 +1,12 @@
 import { fromLonLat } from "ol/proj";
 
+export type RoadLedgerVideoManualLandmark = {
+  id: number;
+  fileName: string;
+  timeSec: number;
+  routeM: number;
+};
+
 export type RoadLedgerVideoTrack = {
   /** done=자동 맞춤 완료, failed=분석 실패, none=분석 전 */
   status: "done" | "failed" | "none";
@@ -15,6 +22,7 @@ export type RoadLedgerVideoTrack = {
   /** anchors 와 같은 순서 — 영상 속 차 정면(도, 영상 가운데 0·오른쪽 +) */
   fronts?: number[];
   loops: [number, number][];
+  landmarks?: RoadLedgerVideoManualLandmark[];
   message?: string;
   analyzedAt?: string;
 };
@@ -39,9 +47,14 @@ export function buildRoadLedgerVideoRoute(lineLonLat: [number, number][]): RoadL
   return total > 0 ? { coords, cum, total } : null;
 }
 
-/** 파일명으로 추정하는 방향 — 분석 전 시간 비율 위치에 쓴다 */
+/**
+ * 파일명으로 추정하는 방향 — 분석 전 시간 비율 위치에 쓴다.
+ * 도로대장 노선(시작→끝) 기준: 상행=시작→끝(forward), 하행=끝→시작(reverse).
+ */
 export function roadLedgerVideoFallbackReverse(fileName: string): boolean {
-  return fileName.includes("하행");
+  if (fileName.includes("상행")) return false;
+  if (fileName.includes("하행")) return true;
+  return false;
 }
 
 function clamp01(v: number): number {
@@ -72,6 +85,12 @@ export function roadLedgerVideoFracAtTime(
   return fallbackReverse ? 1 - f : f;
 }
 
+/** 각도 차이를 -180~180 으로 (지도 부채꼴·시야 상대각) */
+export function roadLedgerVideoShortestDeg(deg: number): number {
+  if (!Number.isFinite(deg)) return 0;
+  return ((deg + 540) % 360) - 180;
+}
+
 /** 영상 시각의 차 정면이 360° 영상에서 어느 방향인지(도, 영상 가운데 0·오른쪽 +). 자료 없으면 0 */
 export function roadLedgerVideoFrontAtTime(track: RoadLedgerVideoTrack | null, t: number): number {
   const a = track?.status === "done" ? track.anchors : [];
@@ -82,7 +101,7 @@ export function roadLedgerVideoFrontAtTime(track: RoadLedgerVideoTrack | null, t
   const t0 = a[i - 1]![0];
   const t1 = a[i]![0];
   const k = t1 > t0 ? Math.min(1, Math.max(0, (t - t0) / (t1 - t0))) : 0;
-  const d = ((f[i]! - f[i - 1]! + 540) % 360) - 180;
+  const d = roadLedgerVideoShortestDeg(f[i]! - f[i - 1]!);
   return f[i - 1]! + d * k;
 }
 

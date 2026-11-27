@@ -1,6 +1,20 @@
 /**
- * 공사대장 관련시설 — GeoServer 레이어 스타일(조건 심볼 포함) → OL Style
- * 밸브 등 ftr_cde별 ExternalGraphic SLD는 단일 symbolUrl이 없어 조건 맵을 쓴다.
+ * =============================================================================
+ * [공사대장 · 관련시설 아이콘 의도 — 임의로 바꾸지 말 것]
+ * =============================================================================
+ *
+ * - 스타일 조회 키 = 레이어명(layerKey). 예: wtl_valv_ps, wtl_fire_ps
+ * - 심볼 URL = 그 레이어 GeoServer SLD에 적힌 ExternalGraphic만
+ *   · SLD에 ftr_cde/saa_cde 조건이 있으면 styleCode로 고름
+ *   · 조건에 없거나 코드가 없으면 해당 스타일 기본 심볼
+ *
+ * 금지:
+ * - ftr_cde로 `{layer}_{code}.svg` / `wtl_valv_ps_sa202` 스타일명을 임의 조립
+ *   (코드마다 아이콘·전용 스타일이 있는 게 아님. WMS/SLD가 진실)
+ * - SA202 등 특정 코드 하드코딩
+ *
+ * 목록·맵무브 의도: WtlConsRelatedTabs / useWtlConsMapLayer 상단 주석.
+ * =============================================================================
  */
 'use client'
 
@@ -202,7 +216,18 @@ async function fetchStyleBundle(styleName: string): Promise<StyleBundle | null> 
   return p
 }
 
-function pickSymbolUrl(bundle: StyleBundle, styleCode?: string | null): string | null {
+/**
+ * 아이콘 URL은 SLD에 적힌 것만 사용.
+ * - 조건 심볼(symbolByCode)에 styleCode가 있으면 그 ExternalGraphic
+ * - 없으면 스타일 기본 심볼
+ * ftr_cde로 `{layer}_{code}.svg` 를 임의 조합하지 않음(파일/스타일이 코드마다 있는 건 아님).
+ */
+function pickSymbolUrl(
+  bundle: StyleBundle,
+  styleCode?: string | null,
+  _styleName?: string
+): string | null {
+  void _styleName
   const code = String(styleCode ?? '')
     .trim()
     .toUpperCase()
@@ -355,7 +380,7 @@ export function resolveRelatedFacilityOlStyle(
   }
 
   const isPoint = geomType === 'Point' || geomType === 'MultiPoint' || bundle.geometryType === 'POINT'
-  const symbolUrl = isPoint ? pickSymbolUrl(bundle, styleCode) : null
+  const symbolUrl = isPoint ? pickSymbolUrl(bundle, styleCode, name) : null
 
   if (symbolUrl && isPoint) {
     if (missingIconUrls.has(symbolUrl)) {
@@ -376,9 +401,10 @@ export function peekRelatedFacilityIcon(
   styleName: string,
   styleCode?: string | null
 ): { src: string; size: number; scale: number } | null {
-  const bundle = bundleCache.get(styleName.trim().toLowerCase())
+  const name = styleName.trim()
+  const bundle = bundleCache.get(name.toLowerCase())
   if (!bundle) return null
-  const url = pickSymbolUrl(bundle, styleCode)
+  const url = pickSymbolUrl(bundle, styleCode, name)
   if (!url || missingIconUrls.has(url) || !okIconUrls.has(url)) return null
   const size = pickMarkSize(bundle, styleCode)
   return { src: url, size, scale: iconScaleForSrc(url, size) }
@@ -398,9 +424,10 @@ export async function prefetchRelatedFacilityStyles(
   await Promise.all(names.map((n) => fetchStyleBundle(n)))
   const urls = new Set<string>()
   for (const e of entries) {
-    const bundle = bundleCache.get(e.styleName.trim().toLowerCase())
+    const name = e.styleName.trim()
+    const bundle = bundleCache.get(name.toLowerCase())
     if (!bundle) continue
-    const url = pickSymbolUrl(bundle, e.styleCode)
+    const url = pickSymbolUrl(bundle, e.styleCode, name)
     if (url) urls.add(url)
   }
   await Promise.all([...urls].map((u) => ensureIcon(u)))

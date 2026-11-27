@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
-import { ArrowDown, ArrowUp, ArrowUpDown, Download, FileText, Loader2, Pencil, Save, Trash2, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, ArrowUpDown, Download, Eye, FileText, Loader2, Pencil, Save, Trash2, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { smallPublicBtnDanger, smallPublicBtnGhost, smallPublicBtnPrimary } from './smallPublicConfig'
 import {
@@ -18,6 +18,7 @@ import {
   type SmallPublicFacType,
 } from './smallPublicConfig'
 import type { SmallPublicFacility, SmallPublicFile, SmallPublicInspection } from './smallPublicMock'
+import { spfFacAttrKey } from './smallPublicDefineFields'
 
 export function SmallPublicPanelHeader({
   title,
@@ -98,13 +99,15 @@ export const smallPublicSelectedRowClass =
 /** 고른 행이 목록 밖에 있으면 보이는 곳까지 스크롤 */
 export function useSmallPublicScrollSelectedIntoView(
   containerRef: RefObject<HTMLElement | null>,
-  selectedId: string | null
+  selectedId: string | null,
+  /** 페이지 이동 등으로 행이 다시 그려진 뒤에도 스크롤 */
+  rowsVersion?: unknown
 ) {
   useEffect(() => {
     if (!selectedId) return
     const row = containerRef.current?.querySelector<HTMLElement>(`[data-row-id="${CSS.escape(selectedId)}"]`)
     row?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
-  }, [containerRef, selectedId])
+  }, [containerRef, selectedId, rowsVersion])
 }
 
 const dash = (s: string | null | undefined) => (String(s ?? '').trim() ? String(s) : '—')
@@ -128,41 +131,71 @@ export type SmallPublicAttrKey =
   | 'address'
   | 'startXy'
   | 'endXy'
-  | 'riskRank'
-  | 'riskScore'
   | 'benefitArea'
   | 'riskDate'
-  | 'surveyDate'
-  | 'surveyor'
-  | 'candidate'
   | 'length'
   | 'width'
   | 'height'
+  | 'parentFacName'
 
 /**
- * 시설 속성 19개 — 후보지·안전점검 상세 공용.
- * 위험도등급·점수·현장조사일자·현장조사자는 가장 최근 점검(연계·입력 모두, 없으면 자료 값)으로 자동.
+ * 시설 속성 — 구분·등급은 최근 안전점검에서 목록에만 표시(속성 표에는 없음).
  * edit 에 넣은 항목만 입력칸으로 바뀐다.
  */
 export function smallPublicFacilityAttrEntries(
   f: SmallPublicFacility,
-  latest: { grade: string; score: number; date: string; inspector: string } | null,
-  edit?: Partial<Record<SmallPublicAttrKey, ReactNode>>
+  _latest?: { grade: string; score: number; date: string; inspector: string } | null,
+  edit?: Partial<Record<SmallPublicAttrKey, ReactNode>>,
+  /** defineLayer show_detail 필드 — 있으면 이 순서로 표시(등급은 넣지 않음) */
+  defineDetailFields?: Array<{ define_field_name?: string; define_field_kor_name?: string }>
 ): { key: string; label: string; value: ReactNode; full?: boolean }[] {
-  const grade = latest?.grade ?? f.riskRank
-  const score = latest ? String(latest.score) : f.riskScore
-  const surveyDate = latest?.date || f.surveyDate
-  const surveyor = latest?.inspector || f.surveyor
+  void _latest
   /** 수정 중에도 칸 배치가 바뀌지 않도록 보기 글자 길이로 전체 행 여부를 정함 */
-  const row = (key: SmallPublicAttrKey, label: string, view: ReactNode, full?: boolean) => ({
+  const row = (key: string, label: string, view: ReactNode, full?: boolean) => ({
     key,
     label,
-    value: edit?.[key] ?? view,
+    value: (edit && key in edit ? edit[key as SmallPublicAttrKey] : undefined) ?? view,
     full: full || (typeof view === 'string' && smallPublicIsLongAttrText(view)),
   })
+
+  const valueOf = (attrKey: string): ReactNode => {
+    if (attrKey === 'riskDate') return smallPublicDateLabel(f.riskDate)
+    if (attrKey === 'candidate') return f.candidate
+    const v = (f as unknown as Record<string, unknown>)[attrKey]
+    if (v == null || v === '') return '—'
+    return String(v)
+  }
+
+  const mngNoLabel = () => {
+    const m = String(f.mngNo ?? '').trim()
+    if (!m || m.startsWith('excl:')) return '없음'
+    return m
+  }
+
+  if (defineDetailFields && defineDetailFields.length > 0) {
+    const entries: { key: string; label: string; value: ReactNode; full?: boolean }[] = []
+    for (const df of defineDetailFields) {
+      const fname = String(df.define_field_name ?? '').trim()
+      const attrKey = spfFacAttrKey(fname)
+      if (!attrKey) continue
+      if (attrKey === 'parentFacName' || attrKey === 'parentFacId') continue
+      const label = String(df.define_field_kor_name ?? '').trim() || fname
+      const full =
+        attrKey === 'mngNo' ||
+        attrKey === 'name' ||
+        attrKey === 'address' ||
+        attrKey === 'startXy' ||
+        attrKey === 'endXy' ||
+        attrKey === 'riskDate'
+      const value = attrKey === 'mngNo' ? mngNoLabel() : valueOf(attrKey)
+      entries.push(row(attrKey, label, value, full))
+    }
+    if (entries.length > 0) return entries
+  }
+
   return [
-    row('mngNo', '관리번호', dash(f.mngNo)),
-    row('name', '시설명', dash(f.name)),
+    row('mngNo', '관리번호', mngNoLabel(), true),
+    row('name', '시설명', dash(f.name), true),
     row('geomCode', '도형코드', dash(f.geomCode)),
     row('type', '유형', f.type),
     row('emd', '읍면명', dash(f.emd)),
@@ -170,13 +203,8 @@ export function smallPublicFacilityAttrEntries(
     row('address', '주소', dash(f.address), true),
     row('startXy', '시점좌표', dash(f.startXy), true),
     row('endXy', '종점좌표', dash(f.endXy), true),
-    row('riskRank', '위험도등급', grade ? <SmallPublicGradeBadge grade={grade} /> : '—'),
-    row('riskScore', '위험도점수', score ? `${score}점` : '—'),
     row('benefitArea', '수혜지역', dash(f.benefitArea)),
     row('riskDate', '위험시설지정일', smallPublicDateLabel(f.riskDate), true),
-    row('surveyDate', '현장조사일자', smallPublicDateLabel(surveyDate)),
-    row('surveyor', '현장조사자', dash(surveyor)),
-    row('candidate', '후보지', <SmallPublicClassBadge candidate={f.candidate} />),
     row('length', '연장(m)', dash(f.length)),
     row('width', '폭(m)', dash(f.width)),
     row('height', '높이(m)', dash(f.height)),
@@ -253,26 +281,36 @@ export function useSmallPublicSort<K extends string>(
 export function smallPublicSortRows<T, K extends string>(
   rows: T[],
   sorts: SmallPublicSortSpec<K>[],
-  valueOf: (row: T, key: K) => string | number | null | undefined
+  valueOf: (row: T, key: K) => string | number | null | undefined,
+  opts?: { excludeLast?: (row: T) => boolean }
 ): T[] {
-  if (sorts.length === 0) return rows
-  return [...rows].sort((a, b) => {
-    for (const { key, dir } of sorts) {
-      const av = valueOf(a, key)
-      const bv = valueOf(b, key)
-      const aEmpty = av == null || av === ''
-      const bEmpty = bv == null || bv === ''
-      if (aEmpty || bEmpty) {
-        if (aEmpty && bEmpty) continue
-        return aEmpty ? 1 : -1
-      }
-      const cmp =
-        typeof av === 'number' && typeof bv === 'number'
-          ? av - bv
-          : String(av).localeCompare(String(bv), 'ko')
-      if (cmp !== 0) return dir === 'asc' ? cmp : -cmp
-    }
-    return 0
+  const excludeLast = opts?.excludeLast
+  const sorted =
+    sorts.length === 0
+      ? [...rows]
+      : [...rows].sort((a, b) => {
+          for (const { key, dir } of sorts) {
+            const av = valueOf(a, key)
+            const bv = valueOf(b, key)
+            const aEmpty = av == null || av === ''
+            const bEmpty = bv == null || bv === ''
+            if (aEmpty || bEmpty) {
+              if (aEmpty && bEmpty) continue
+              return aEmpty ? 1 : -1
+            }
+            const cmp =
+              typeof av === 'number' && typeof bv === 'number'
+                ? av - bv
+                : String(av).localeCompare(String(bv), 'ko')
+            if (cmp !== 0) return dir === 'asc' ? cmp : -cmp
+          }
+          return 0
+        })
+  if (!excludeLast) return sorted
+  return sorted.sort((a, b) => {
+    const ae = excludeLast(a) ? 1 : 0
+    const be = excludeLast(b) ? 1 : 0
+    return ae - be
   })
 }
 
@@ -612,33 +650,62 @@ export function useSmallPublicFilePreview() {
 export function SmallPublicFileRow({
   file,
   onPreview,
+  onSelect,
   onDownload,
   onRemove,
   facilityName,
 }: {
   file: SmallPublicFileRef
+  /** 전체 미리보기 화면 */
   onPreview: () => void
+  /** 있으면 이름 클릭은 선택만(아래 인라인 미리보기 전환), 미리보기는 눈 아이콘 */
+  onSelect?: () => void
   onDownload: () => void
   onRemove?: () => void
   /** 있으면 시설명 접두도 표시명에서 제거 */
   facilityName?: string
 }) {
   const label = smallPublicAttachmentDisplayName(file.name, facilityName)
+  const selectMode = !!onSelect
   return (
     <div className="flex items-center gap-2 rounded border border-border bg-card px-2 py-1.5">
       <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
       <button
         type="button"
-        onClick={onPreview}
-        className="min-w-0 flex-1 truncate text-left text-[11px] text-foreground hover:text-primary hover:underline"
-        title={`${file.name} 미리보기`}
+        onClick={(e) => {
+          e.stopPropagation()
+          if (selectMode) onSelect()
+          else onPreview()
+        }}
+        className={cn(
+          'min-w-0 flex-1 truncate text-left text-[11px] text-foreground',
+          selectMode ? 'hover:text-foreground' : 'hover:text-primary hover:underline'
+        )}
+        title={selectMode ? file.name : `${file.name} 미리보기`}
       >
         {label}
       </button>
       {!file.url ? <span className="shrink-0 text-[10px] text-muted-foreground">예시</span> : null}
+      {selectMode ? (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation()
+            onPreview()
+          }}
+          className="shrink-0 rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+          title="미리보기"
+          aria-label="미리보기"
+        >
+          <Eye className="h-3.5 w-3.5" />
+        </button>
+      ) : null}
       <button
         type="button"
-        onClick={onDownload}
+        onClick={(e) => {
+          e.stopPropagation()
+          onDownload()
+        }}
         className="shrink-0 rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
         title="내려받기"
         aria-label="내려받기"
@@ -648,7 +715,10 @@ export function SmallPublicFileRow({
       {onRemove ? (
         <button
           type="button"
-          onClick={onRemove}
+          onClick={(e) => {
+            e.stopPropagation()
+            onRemove()
+          }}
           className="shrink-0 rounded p-1 text-destructive hover:bg-destructive/10"
           title="삭제"
           aria-label="삭제"
@@ -742,6 +812,8 @@ function SmallPublicInlinePdfPreview({
 }) {
   const rootRef = useRef<HTMLButtonElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const renderTaskRef = useRef<{ cancel: () => void } | null>(null)
+  const paintSeqRef = useRef(0)
   const [phase, setPhase] = useState<'loading' | 'ready' | 'error'>('loading')
   const [page, setPage] = useState(1)
   const [numPages, setNumPages] = useState(0)
@@ -754,6 +826,9 @@ function SmallPublicInlinePdfPreview({
     let cancelled = false
     let removeWheel: (() => void) | null = null
     let releaseDoc: (() => void) | null = null
+    paintSeqRef.current += 1
+    renderTaskRef.current?.cancel()
+    renderTaskRef.current = null
     setPhase('loading')
     setPage(1)
     setNumPages(0)
@@ -775,19 +850,43 @@ function SmallPublicInlinePdfPreview({
         const paint = async (pn: number) => {
           const canvas = canvasRef.current
           if (!canvas || cancelled) return
+          const seq = ++paintSeqRef.current
+          // 같은 캔버스에 겹쳐 render 하지 않도록 이전 작업 취소
+          renderTaskRef.current?.cancel()
+          renderTaskRef.current = null
           setPhase('loading')
-          const pg = await pdf.getPage(Math.min(Math.max(1, pn), pdf.numPages))
-          if (cancelled) return
-          const base = pg.getViewport({ scale: 1 })
-          const maxW = Math.max(120, rootRef.current?.clientWidth ?? 280)
-          const scale = Math.min(1.25, maxW / base.width)
-          const viewport = pg.getViewport({ scale })
-          const ctx = canvas.getContext('2d')
-          if (!ctx) return
-          canvas.width = Math.ceil(viewport.width)
-          canvas.height = Math.ceil(viewport.height)
-          await pg.render({ canvasContext: ctx, viewport }).promise
-          if (!cancelled) setPhase('ready')
+          try {
+            const pg = await pdf.getPage(Math.min(Math.max(1, pn), pdf.numPages))
+            if (cancelled || seq !== paintSeqRef.current) return
+            const base = pg.getViewport({ scale: 1 })
+            const maxW = Math.max(120, rootRef.current?.clientWidth ?? 280)
+            const scale = Math.min(1.25, maxW / base.width)
+            const viewport = pg.getViewport({ scale })
+            const ctx = canvas.getContext('2d')
+            if (!ctx) return
+            canvas.width = Math.ceil(viewport.width)
+            canvas.height = Math.ceil(viewport.height)
+            const task = pg.render({ canvasContext: ctx, viewport })
+            renderTaskRef.current = task
+            await task.promise
+            if (renderTaskRef.current === task) renderTaskRef.current = null
+            if (!cancelled && seq === paintSeqRef.current) setPhase('ready')
+          } catch (err) {
+            if (renderTaskRef.current) renderTaskRef.current = null
+            // cancel 시 pdf.js 가 throw — 무시
+            const errName =
+              err && typeof err === 'object' && 'name' in err
+                ? String((err as { name?: string }).name)
+                : ''
+            if (
+              errName === 'RenderingCancelledException' ||
+              cancelled ||
+              seq !== paintSeqRef.current
+            ) {
+              return
+            }
+            setPhase('error')
+          }
         }
 
         setNumPages(pdf.numPages)
@@ -816,6 +915,9 @@ function SmallPublicInlinePdfPreview({
 
     return () => {
       cancelled = true
+      paintSeqRef.current += 1
+      renderTaskRef.current?.cancel()
+      renderTaskRef.current = null
       removeWheel?.()
       releaseDoc?.()
     }
@@ -841,10 +943,15 @@ function SmallPublicInlinePdfPreview({
           </div>
         ) : null}
         {phase === 'error' ? (
-          <span className="px-3 text-center text-[11px] text-white/70">미리보기를 불러오지 못했습니다.</span>
-        ) : (
-          <canvas ref={canvasRef} className="mx-auto max-h-full max-w-full" />
-        )}
+          <span className="absolute inset-0 z-[1] flex items-center justify-center px-3 text-center text-[11px] text-white/70">
+            미리보기를 불러오지 못했습니다.
+          </span>
+        ) : null}
+        {/* 캔버스는 항상 유지 — 로딩/에러 시 unmount 하면 render 중첩·ref 유실 */}
+        <canvas
+          ref={canvasRef}
+          className={cn('mx-auto max-h-full max-w-full', phase === 'error' && 'invisible')}
+        />
       </button>
       {numPages > 0 ? (
         <div className="pointer-events-none absolute bottom-1.5 right-2 rounded bg-black/60 px-1.5 py-0.5 text-[10px] tabular-nums text-white/80">
@@ -913,6 +1020,7 @@ export function SmallPublicInlineFilePreview({
 /** 오른쪽 정렬 · 저장→수정→삭제(간격 10px) — 후보지·안전점검·정비계획 공통 */
 export function SmallPublicCrudBar({
   onSave,
+  onCancel,
   onEdit,
   onDelete,
   saveDisabled,
@@ -922,6 +1030,7 @@ export function SmallPublicCrudBar({
   bordered = true,
 }: {
   onSave?: () => void
+  onCancel?: () => void
   onEdit?: () => void
   onDelete?: () => void
   saveDisabled?: boolean
@@ -947,6 +1056,11 @@ export function SmallPublicCrudBar({
           <button type="button" className={smallPublicBtnPrimary} disabled={saveDisabled} onClick={onSave}>
             <Save className="h-3 w-3" />
             저장
+          </button>
+        ) : null}
+        {onCancel ? (
+          <button type="button" className={smallPublicBtnGhost} onClick={onCancel}>
+            취소
           </button>
         ) : null}
         {onEdit ? (

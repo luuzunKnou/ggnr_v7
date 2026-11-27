@@ -456,6 +456,10 @@ export type PlanSheetCells = {
   totalCost: number
   doneQty: number
   doneCost: number
+  /** 정비된 정비율(%) — 직접 입력 또는 사업량 비율 */
+  doneRate: number | null
+  /** 중기 계 정비율(%) */
+  midRate: number | null
   /** 중기 1~5차년 사업량·사업비(남은 부분을 배분한 연차에 모두) */
   years: { qty: number; cost: number }[]
   afterQty: number
@@ -477,23 +481,44 @@ export function planSheetCells(r: PlanRanked): PlanSheetCells {
   const remainCost = Math.max(0, totalCost - doneCost)
   let afterQty = 0
   let afterCost = 0
-  if (r.yearNo != null) years[r.yearNo - 1] = { qty: remainQty, cost: remainCost }
+  if (v.midYears && v.midYears.length > 0) {
+    for (let i = 0; i < SYSTEM_PARAMS.PLAN_PERIOD_YEARS; i++) {
+      const y = v.midYears[i]
+      years[i] = { qty: y?.qty ?? 0, cost: y?.costWon ?? 0 }
+    }
+  } else if (r.yearNo != null) years[r.yearNo - 1] = { qty: remainQty, cost: remainCost }
   else if (r.yearNo === null) {
     afterQty = remainQty
     afterCost = remainCost
   }
+  if (v.after) {
+    afterQty = v.after.qty
+    afterCost = v.after.costWon
+  }
+  const mid = years.reduce((a, y) => ({ qty: a.qty + y.qty, cost: a.cost + y.cost }), { qty: 0, cost: 0 })
+  /**
+   * 명세서 입력 시 전체 = 기정비 + 중기 + 5개년 후(미정비).
+   * 중기만 있으면 중기 계. 없으면 분석·보고서 사업량.
+   */
+  const hasSheet = Boolean(v.midYears?.length || v.done || v.after)
+  const sheetTotalQty = hasSheet ? doneQty + mid.qty + afterQty : totalQty
+  const sheetTotalCost = hasSheet ? doneCost + mid.cost + afterCost : totalCost
   const effect = planEffect(v)
+  const se = v.sheetEffect
+  /** 정비율 = 해당 사업량 ÷ 전체 정비계획 사업량 × 100 (자동) */
   return {
-    totalQty,
-    totalCost,
+    totalQty: sheetTotalQty,
+    totalCost: sheetTotalCost,
     doneQty,
     doneCost,
+    doneRate: planRate(doneQty, sheetTotalQty),
+    midRate: planRate(mid.qty, sheetTotalQty),
     years,
     afterQty,
     afterCost,
-    people: effect.people ?? 0,
-    farmHa: effect.farmHa ?? 0,
-    buildings: effect.buildings ?? 0,
+    people: se?.people ?? effect.people ?? 0,
+    farmHa: se?.farmHa ?? effect.farmHa ?? 0,
+    buildings: se?.buildings ?? effect.buildings ?? 0,
   }
 }
 
@@ -504,6 +529,8 @@ export function sumPlanSheetCells(list: PlanSheetCells[]): PlanSheetCells {
     totalCost: 0,
     doneQty: 0,
     doneCost: 0,
+    doneRate: null,
+    midRate: null,
     years: Array.from({ length: SYSTEM_PARAMS.PLAN_PERIOD_YEARS }, () => ({ qty: 0, cost: 0 })),
     afterQty: 0,
     afterCost: 0,
@@ -511,12 +538,14 @@ export function sumPlanSheetCells(list: PlanSheetCells[]): PlanSheetCells {
     farmHa: 0,
     buildings: 0,
   }
-  return list.reduce(
+  const summed = list.reduce(
     (a, c) => ({
       totalQty: a.totalQty + c.totalQty,
       totalCost: a.totalCost + c.totalCost,
       doneQty: a.doneQty + c.doneQty,
       doneCost: a.doneCost + c.doneCost,
+      doneRate: null as number | null,
+      midRate: null as number | null,
       years: a.years.map((y, i) => ({ qty: y.qty + c.years[i]!.qty, cost: y.cost + c.years[i]!.cost })),
       afterQty: a.afterQty + c.afterQty,
       afterCost: a.afterCost + c.afterCost,
@@ -526,6 +555,12 @@ export function sumPlanSheetCells(list: PlanSheetCells[]): PlanSheetCells {
     }),
     zero
   )
+  const mid = planSheetMid(summed)
+  return {
+    ...summed,
+    doneRate: planRate(summed.doneQty, summed.totalQty),
+    midRate: planRate(mid.qty, summed.totalQty),
+  }
 }
 
 /** 중기 계(1~5차년 합) */

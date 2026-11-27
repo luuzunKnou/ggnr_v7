@@ -6,8 +6,9 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { GGNR_DATA_PATHS } from '@/lib/ggnrDataPaths';
+import { resolveGgnrDataDir } from '@/lib/turbopackFsPath';
 
-const GGNR_DATA_DIR = process.env.GGNR_DATA_DIR ?? 'd:\\ggnr_data_dir';
+const GGNR_DATA_DIR = resolveGgnrDataDir();
 
 function normalizeRel(p: string): string {
   return p.trim().replace(/\\/g, '/').replace(/^\/+/, '');

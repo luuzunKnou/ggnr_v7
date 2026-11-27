@@ -72,19 +72,6 @@ const SPATIAL_SHAPE_SEARCH_HEADER = '도형검색 결과';
 const KEYWORD_SEARCH_HEADER = '통합검색 결과';
 const BOUNDARY_SEARCH_HEADER = '행정경계 검색 결과';
 
-/**
- * 데이터 조회 «기타»에서 숨길 레이어.
- * (그룹 미지정·tables.json 미등록으로 기타에 모이는 항목 중 UI에 노출하지 않을 것)
- */
-const DATA_QUERY_ETC_BLOCKLIST = new Set([
-  'abpd_bunit_job_detl_jibn_map',
-  'abpd_land_mov_adj_bef_aft',
-  'f_fac_building',
-  'lard_adm_sect_sgg',
-  'lsmd_adm_sect_ri',
-  'lsmd_adm_sect_umd',
-]);
-
 /** 데이터 조회에 아예 내지 않을 레이어 (그룹과 무관) */
 const DATA_QUERY_LAYER_BLOCKLIST = new Set(['water_play_sign']);
 
@@ -318,7 +305,11 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
   // 데이터 조회 레이어 목록: DB + defineLayer 메타 → 현재 시스템 layerGroupList ∪ 미소속(공통) 그룹
   useEffect(() => {
     let cancelled = false;
-    const dbPromise = call('', 'POST', { service: 'devTestService', action: 'getLayerTableList', params: {} });
+    const dbPromise = call('', 'POST', {
+      service: 'devTestService',
+      action: 'getLayerTableList',
+      params: { includeAttributeTables: true },
+    });
     /** 레이어 설정 순서·프로젝트 분할 idx — 지하시설물과 동일 소스 */
     const metaPromise = call('', 'POST', {
       service: 'devTestService',
@@ -430,9 +421,10 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
           if (parentTablesWithSplitDefs.has(tblName)) continue;
           if (DATA_QUERY_LAYER_BLOCKLIST.has(tblName)) continue;
           const meta = metaMap.get(tblName);
-          const groupName = meta?.define_table_group?.trim() || '기타';
+          // layer 실존이어도 레이어설정 그룹(출처)이 없으면 데이터조회에 내지 않음
+          const groupName = meta?.define_table_group?.trim();
+          if (!groupName) continue;
           if (!isGroupVisible(groupName)) continue;
-          if (groupName === '기타' && DATA_QUERY_ETC_BLOCKLIST.has(tblName)) continue;
           const korName = meta?.define_table_kor_name?.trim() || tblName;
           if (!groupMap.has(groupName)) {
             groupMap.set(groupName, []);
@@ -461,9 +453,9 @@ export function AttributeQueryUI({ activeTableName, onOpenDataPanel, onClearData
           if (!dbSet.has(parentLower)) continue;
           if (dbSet.has(engLower)) continue;
           if (DATA_QUERY_LAYER_BLOCKLIST.has(engLower)) continue;
-          const groupName = String(m.define_table_group ?? '').trim() || '기타';
+          const groupName = String(m.define_table_group ?? '').trim();
+          if (!groupName) continue;
           if (!isGroupVisible(groupName)) continue;
-          if (groupName === '기타' && DATA_QUERY_ETC_BLOCKLIST.has(engLower)) continue;
           const korName = String(m.define_table_kor_name ?? '').trim() || eng;
           if (!groupMap.has(groupName)) {
             groupMap.set(groupName, []);

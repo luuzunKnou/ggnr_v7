@@ -64,6 +64,7 @@ import { UploadCompleteDialog } from './UploadCompleteDialog';
 import { UploadProgressBanner } from './UploadProgressBanner';
 import { PanoViewerNav } from './PanoViewerNav';
 import { call } from '@/lib/api';
+import { withBasePath } from '@/lib/basePath';
 import { useMapContext } from '../../_mapComponents/MapContext';
 import { refreshBizNotifs } from '../bizNotif/bizNotifClient';
 import { showSatelliteOnBackgroundMap } from './showSatelliteBackground';
@@ -81,9 +82,11 @@ const PannellumViewer = dynamic(() => import('./PannellumViewer'), {
 });
 
 function aerialMediaUrl(relativePath: string): string {
-  return `/api/aerial/media?${new URLSearchParams({
-    path: relativePath.replace(/\\/g, '/'),
-  }).toString()}`;
+  return withBasePath(
+    `/api/aerial/media?${new URLSearchParams({
+      path: relativePath.replace(/\\/g, '/'),
+    }).toString()}`
+  );
 }
 
 function attrValue(attrs: AttrRow[], label: string, fallback = ''): string {

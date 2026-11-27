@@ -461,12 +461,12 @@ export function AdminConsoleLayout({
           <div
             role="menu"
             aria-label={collapsedFlyoutGroup.label}
-            className="fixed z-[200] min-w-40 rounded-md border bg-popover py-1 text-popover-foreground shadow-md"
-            style={{ top: collapsedFlyout.top, left: collapsedFlyout.left }}
+            className="fixed z-[200] w-max min-w-40 max-w-[16rem] rounded-md border bg-popover py-1 text-popover-foreground shadow-md"
+            style={{ top: collapsedFlyout.top, left: collapsedFlyout.left, right: "auto" }}
             onMouseEnter={clearCollapsedFlyoutTimer}
             onMouseLeave={scheduleCloseCollapsedFlyout}
           >
-            <div className="mb-1 whitespace-nowrap border-b px-3 py-1.5 text-xs font-semibold text-muted-foreground">
+            <div className="mb-1 truncate border-b px-3 py-1.5 text-xs font-semibold text-muted-foreground">
               {collapsedFlyoutGroup.label}
             </div>
             {collapsedFlyoutMenuIds.map((menuId) => {
@@ -481,7 +481,8 @@ export function AdminConsoleLayout({
                   role="menuitem"
                   onClick={() => handleMenuClick(menu.id)}
                   className={cn(
-                    "w-full cursor-pointer whitespace-nowrap px-3 py-1.5 text-left text-sm",
+                    // fixed+자식 w-full 만 쓰면 뷰포트 나머지 폭으로 늘어남 → 부모 w-max 안에서만 채움
+                    "block w-full cursor-pointer truncate px-3 py-1.5 text-left text-sm transition-colors",
                     selectedMenu === menu.id && !isBlock
                       ? "bg-primary text-primary-foreground"
                       : isBlock

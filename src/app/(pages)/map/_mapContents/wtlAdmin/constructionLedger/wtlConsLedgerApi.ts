@@ -183,6 +183,54 @@ export type WtlConsIntersectHit = {
 }
 
 /** 같은 종류 공사대장 중 도형이 겹치는 다른 공사 */
+/** 공사이력 «자세히» — 본표 전체 속성 (필지 도형 생략) */
+export async function loadWtlConsDetail(
+  kind: Extract<ConsLedgerKind, 'wtl' | 'swl'>,
+  consCode: string
+): Promise<{ row: WtlConsLedgerItem | null; error?: string }> {
+  const code = consCode.trim()
+  if (!code) return { row: null, error: '공사코드가 필요합니다.' }
+  const res = await call('', 'POST', {
+    service: 'consDataAsService',
+    action: 'getDetailByConsCode',
+    params: { kind, consCode: code, includeParcelGeometry: false },
+  })
+  const body = asBody(res)
+  const raw = body.row as LedgerApiRow | null | undefined
+  if (!raw || typeof raw !== 'object') {
+    return {
+      row: null,
+      error: typeof body.error === 'string' ? body.error : '해당 건을 찾을 수 없습니다.',
+    }
+  }
+  return {
+    row: rowToWork({
+      consCode: String(raw.consCode ?? code).trim() || code,
+      consName: String(raw.consName ?? '').trim(),
+      consLocat: String(raw.consLocat ?? '').trim(),
+      consVolum: String(raw.consVolum ?? '').trim(),
+      contDate: String(raw.contDate ?? '').trim(),
+      startDate: String(raw.startDate ?? '').trim(),
+      doneDate: String(raw.doneDate ?? '').trim(),
+      sdoneDate: String(raw.sdoneDate ?? '').trim(),
+      businName: String(raw.businName ?? '').trim(),
+      ceoName: String(raw.ceoName ?? '').trim(),
+      businPhon: String(raw.businPhon ?? '').trim(),
+      businAddr: String(raw.businAddr ?? '').trim(),
+      directPos: String(raw.directPos ?? '').trim(),
+      directNam: String(raw.directNam ?? '').trim(),
+      amountPre: String(raw.amountPre ?? '').trim(),
+      amountVar: String(raw.amountVar ?? '').trim(),
+      amountCha: String(raw.amountCha ?? '').trim(),
+      amountAft: String(raw.amountAft ?? '').trim(),
+      reason: String(raw.reason ?? '').trim(),
+      descript: String(raw.descript ?? '').trim(),
+      geom: (raw.geom as WtlConsGeom4326 | null) ?? null,
+    }),
+    error: typeof body.error === 'string' ? body.error : undefined,
+  }
+}
+
 export async function loadWtlConsIntersecting(
   kind: Extract<ConsLedgerKind, 'wtl' | 'swl'>,
   consCode: string,
@@ -208,6 +256,36 @@ export async function loadWtlConsIntersecting(
         geom4326: (row.geom as WtlConsGeom4326 | null) ?? null,
       }))
       .filter((row) => row.consCode),
+    error: typeof body.error === 'string' ? body.error : undefined,
+  }
+}
+
+/** 지금 지도 화면(extent 3857)과 공사위치가 겹치는 공사코드 — 사업목록 «화면만» 필터 */
+export async function loadWtlConsInMapView(
+  kind: Extract<ConsLedgerKind, 'wtl' | 'swl'>,
+  extent3857: number[]
+): Promise<{ consCodes: string[]; error?: string }> {
+  const extent = Array.isArray(extent3857) ? extent3857.map(Number) : []
+  if (
+    extent.length < 4 ||
+    !extent.slice(0, 4).every((n) => Number.isFinite(n)) ||
+    extent[2]! <= extent[0]! ||
+    extent[3]! <= extent[1]!
+  ) {
+    return { consCodes: [] }
+  }
+  const res = await call('', 'POST', {
+    service: 'consDataAsService',
+    action: 'listConsCodesBySoloView',
+    params: { kind, extent3857: extent.slice(0, 4), limit: 2000 },
+  })
+  const body = asBody(res)
+  const raw = Array.isArray(body.consCodes) ? (body.consCodes as unknown[]) : []
+  const consCodes = [
+    ...new Set(raw.map((code) => String(code ?? '').trim()).filter(Boolean)),
+  ]
+  return {
+    consCodes,
     error: typeof body.error === 'string' ? body.error : undefined,
   }
 }

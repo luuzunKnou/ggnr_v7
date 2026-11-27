@@ -143,6 +143,8 @@ export function mergeJijukIntoOccupationParcels(
       extent3857: item.extent3857 ?? prevRow?.extent3857 ?? null,
       geometry3857: item.geometry3857 ?? prevRow?.geometry3857 ?? null,
       listValues: Object.keys(listValues).length > 0 ? listValues : prevRow?.listValues,
+      // 기존 DB 행 키 유지 — 편집 모달이 상세 조회할 때 필요
+      ...(prevRow?.wmsRowKey ? { wmsRowKey: prevRow.wmsRowKey } : {}),
       showMapGeom: false as const,
       keepOnReplace: false as const,
       manualAdd: false as const,

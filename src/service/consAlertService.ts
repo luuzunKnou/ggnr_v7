@@ -10,6 +10,8 @@ import {
   consAlertHits,
   consAlertWhenLabel,
   DEFAULT_CONS_ALERT,
+  defaultCycleEnd,
+  parseYmd,
   todayYmd,
   type ConsAlertSettings,
 } from '@/lib/consAlertSchedule';
@@ -59,10 +61,22 @@ function flag(value: unknown, fallback: boolean): boolean {
   return typeof value === 'boolean' ? value : fallback;
 }
 
+function normalizeCycleEnd(value: unknown): string {
+  const parsed = parseYmd(typeof value === 'string' ? value : '');
+  if (!parsed) return '';
+  const month = String(parsed.m).padStart(2, '0');
+  const day = String(parsed.d).padStart(2, '0');
+  return `${parsed.y}-${month}-${day}`;
+}
+
 function normalizeSettings(raw: Partial<ConsAlertSettings> | null | undefined): ConsAlertSettings {
   const src = raw ?? {};
+  const cycleOn = flag(src.cycleOn, DEFAULT_CONS_ALERT.cycleOn);
+  const cycleEnd = normalizeCycleEnd(src.cycleEnd) || (cycleOn ? defaultCycleEnd() : '');
   return {
+    cycleOn,
     cycleYears: clampDays(src.cycleYears, DEFAULT_CONS_ALERT.cycleYears),
+    cycleEnd,
     doneBeforeDays: clampDays(src.doneBeforeDays, DEFAULT_CONS_ALERT.doneBeforeDays),
     doneBeforeOn: flag(src.doneBeforeOn, DEFAULT_CONS_ALERT.doneBeforeOn),
     doneAfterDays: clampDays(src.doneAfterDays, DEFAULT_CONS_ALERT.doneAfterDays),
@@ -76,7 +90,9 @@ function normalizeSettings(raw: Partial<ConsAlertSettings> | null | undefined): 
 
 function toSettings(row: typeof consAlertSetting.$inferSelect): ConsAlertSettings {
   return {
+    cycleOn: row.cycleOn,
     cycleYears: row.cycleYears,
+    cycleEnd: row.cycleEnd ?? '',
     doneBeforeDays: row.doneBeforeDays,
     doneBeforeOn: row.doneBeforeOn,
     doneAfterDays: row.doneAfterDays,

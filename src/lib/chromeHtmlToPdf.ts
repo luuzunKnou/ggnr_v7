@@ -1,16 +1,52 @@
 /**
  * Chromium(Chrome/Edge) print-to-PDF — 브라우저 «인쇄 → PDF로 저장»과 동일한 엔진.
  * html2canvas 대비 선·레이아웃이 인쇄 미리보기와 맞음.
+ *
+ * 폐쇄망: 인터넷 없이 동작. 실행 파일만 서버에 두고 CHROME_PATH 또는 tools/chromium 배치.
+ * (런타임에 구글·CDN 접속 없음 — HTML·사진은 로컬/data URL)
  */
 import fs from 'node:fs';
 import path from 'node:path';
 import puppeteer, { type Browser, type Page } from 'puppeteer-core';
 import { PDFDocument } from 'pdf-lib';
 
+/** 배포 폴더에 수동 배치한 Chromium (Chrome for Testing zip 구조) */
+function bundledChromeCandidates(): string[] {
+  const cwd = process.cwd();
+  const roots = [path.join(cwd, 'tools', 'chromium'), path.join(cwd, 'chromium')];
+  const rel =
+    process.platform === 'win32'
+      ? [
+          path.join('chrome-win64', 'chrome.exe'),
+          path.join('chrome-win', 'chrome.exe'),
+          path.join('chrome-headless-shell-win64', 'chrome-headless-shell.exe'),
+          'chrome.exe',
+        ]
+      : process.platform === 'darwin'
+        ? [
+            path.join('chrome-mac-x64', 'Google Chrome for Testing.app', 'Contents', 'MacOS', 'Google Chrome for Testing'),
+            path.join('chrome-mac-arm64', 'Google Chrome for Testing.app', 'Contents', 'MacOS', 'Google Chrome for Testing'),
+            'Google Chrome for Testing',
+          ]
+        : [
+            path.join('chrome-linux64', 'chrome'),
+            path.join('chrome-linux', 'chrome'),
+            path.join('chrome-headless-shell-linux64', 'chrome-headless-shell'),
+            'chrome',
+            'chromium',
+          ];
+  const out: string[] = [];
+  for (const root of roots) {
+    for (const r of rel) out.push(path.join(root, r));
+  }
+  return out;
+}
+
 function chromeCandidates(): string[] {
   const fromEnv = String(process.env.CHROME_PATH ?? process.env.PUPPETEER_EXECUTABLE_PATH ?? '').trim();
   const list = [
     fromEnv,
+    ...bundledChromeCandidates(),
     'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
     'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
     'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
@@ -36,24 +72,51 @@ export function resolveChromeExecutable(): string | null {
   return null;
 }
 
+/** 서버·폐쇄망 headless (GPU process Code 1002 완화) */
+const CHROME_LAUNCH_ARGS = [
+  '--no-sandbox',
+  '--disable-setuid-sandbox',
+  '--font-render-hinting=medium',
+  '--disable-dev-shm-usage',
+  '--disable-gpu',
+  '--disable-software-rasterizer',
+  '--in-process-gpu',
+  '--disable-extensions',
+  '--disable-background-networking',
+  '--disable-default-apps',
+  '--disable-sync',
+  '--hide-scrollbars',
+  '--mute-audio',
+  '--no-first-run',
+];
+
 async function launchChrome(): Promise<Browser> {
   const executablePath = resolveChromeExecutable();
   if (!executablePath) {
+    const hint = chromeCandidates()
+      .filter(Boolean)
+      .slice(0, 8)
+      .map((p) => `  - ${p}`)
+      .join('\n');
     throw new Error(
-      'Chrome/Edge 를 찾을 수 없습니다. Chrome을 설치하거나 CHROME_PATH 환경변수를 설정하세요.'
+      'Chrome/Edge/Chromium 을 찾을 수 없습니다. 폐쇄망이면 tools/chromium 에 Chrome for Testing을 두거나 CHROME_PATH를 설정하세요.\n시도 경로 예:\n' +
+        hint
     );
   }
-  return puppeteer.launch({
-    executablePath,
-    headless: true,
-    args: [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--font-render-hinting=medium',
-      '--disable-dev-shm-usage',
-      '--disable-gpu',
-    ],
-  });
+  try {
+    return await puppeteer.launch({
+      executablePath,
+      headless: true,
+      args: CHROME_LAUNCH_ARGS,
+    });
+  } catch (e: unknown) {
+    const detail = e instanceof Error ? e.message : String(e);
+    throw new Error(
+      `Chrome 실행 실패 (경로: ${path.normalize(executablePath)}).\n` +
+        `폐쇄망·서버 GPU 이슈면 동일 OS용 Chrome for Testing을 tools/chromium 에 두고 CHROME_PATH로 지정하세요.\n` +
+        detail
+    );
+  }
 }
 
 /** data URL 위주 HTML — networkidle 대기 불필요(타임아웃 원인). */
