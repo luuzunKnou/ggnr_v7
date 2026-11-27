@@ -103,17 +103,17 @@ export function OdorIndexAlertModal({
       style={style}
       role="dialog"
       aria-modal="true"
-      aria-label="악취 경보 발생"
+      aria-label="경보 알림"
     >
       <div
         className={cn(
-          'overflow-hidden rounded-[5px] border border-border bg-background shadow-2xl',
+          'overflow-hidden rounded-[5px] border border-red-600 bg-background shadow-2xl',
           contentClassName
         )}
       >
         <div className="flex items-center gap-1.5 bg-red-600 px-3 py-2 text-sm font-semibold text-white">
           <TriangleAlert className="h-4 w-4 shrink-0" aria-hidden />
-          악취 경보 발생
+          경보 알림
         </div>
 
         <div className="space-y-1.5 px-3 py-2.5 text-[11px]">

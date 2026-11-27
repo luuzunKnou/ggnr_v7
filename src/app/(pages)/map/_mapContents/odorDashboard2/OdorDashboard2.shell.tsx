@@ -16,6 +16,13 @@ import { OdorGradeDistributionPanel } from './panels/OdorGradeDistributionPanel'
 import { OdorDeviceStatusPanel } from './panels/OdorDeviceStatusPanel'
 import { OdorRecentAlertList } from './panels/OdorRecentAlertList'
 import { OdorCautionAlertList } from './panels/OdorCautionAlertList'
+import { OdorIndexAlertModal } from './panels/OdorIndexAlertModal'
+import {
+  ODOR_COMPLAINT_MOCK,
+  OdorComplaintManageModal,
+} from './panels/OdorComplaintManageModal'
+import { useOdorAlertStore } from '../odorAlert/odorAlertStore'
+import { useOdorMapPointRadarHighlight } from './useOdorMapPointRadarHighlight'
 import {
   buildDashboardGradeMock,
   sortCautionAlerts,
@@ -33,6 +40,7 @@ import { useOdorDashboard2GradeLayer } from './useOdorDashboard2GradeLayer'
 import { consumePendingOdorStationFocus } from '@/app/(pages)/(index)/odorPh/systemStatus/odorSystemStatusFocus'
 import { withBasePath } from '@/lib/basePath'
 import { cn } from '@/lib/utils'
+import { MAP_UI_Z_CLASS } from '@/lib/mapUiZIndex'
 import { MAP_LAYER_PANEL_SURFACE_CLASS } from '../../_mapComponents/mapControlPanel/mapLayerPanelLayout'
 import {
   ODOR_MAP_FLOAT_SURFACE_OPACITY_RESET_CLASS,
@@ -253,6 +261,8 @@ export function OdorDashboard2Shell({
     caution: true,
   })
   const [detailAlert, setDetailAlert] = useState<OdorAlertItem | null>(null)
+  const [alertModalOpen, setAlertModalOpen] = useState(false)
+  const [complaintModalOpen, setComplaintModalOpen] = useState(false)
   const cautionPanelRef = useRef<HTMLDivElement>(null)
   const [cautionPanelHeight, setCautionPanelHeight] = useState<number | null>(null)
 
@@ -322,6 +332,12 @@ export function OdorDashboard2Shell({
     void loadSensors()
   }, [loadSensors])
 
+  /** 대시보드 진입 시 경보·민원 알림을 우측 하단에 표시 */
+  useEffect(() => {
+    setAlertModalOpen(true)
+    setComplaintModalOpen(true)
+  }, [])
+
   const { gradeCounts, points, emdStatuses } = useMemo(
     () => buildDashboardGradeMock(sensors),
     [sensors]
@@ -348,12 +364,37 @@ export function OdorDashboard2Shell({
   }, [stationRows])
 
   const [deviceHeaderRight, setDeviceHeaderRight] = useState<ReactNode>(null)
+  const { alerts: storeAlerts } = useOdorAlertStore()
+  const notifyAlertFocus = useMemo(() => {
+    const unacked = storeAlerts.filter((a) => !a.acked)
+    return unacked[0] ?? storeAlerts[0] ?? null
+  }, [storeAlerts])
 
   useOdorDashboard2GradeLayer({
     enabled: isClient,
     rows: stationRows,
     selectedId: highlightSensorKey,
     flyToSelected: true,
+  })
+
+  /** 경보 알림 표시 중 — 해당 경보 지점 빨강 레이더 */
+  useOdorMapPointRadarHighlight({
+    enabled: isClient && alertModalOpen,
+    lon: notifyAlertFocus?.lon,
+    lat: notifyAlertFocus?.lat,
+    color: 'red',
+    layerName: 'odorAlertNotifyRadarHighlight',
+    flyTo: true,
+  })
+
+  /** 민원 알림 표시 중 — 신고 지점 파랑 레이더 */
+  useOdorMapPointRadarHighlight({
+    enabled: isClient && complaintModalOpen,
+    lon: ODOR_COMPLAINT_MOCK.lon,
+    lat: ODOR_COMPLAINT_MOCK.lat,
+    color: 'blue',
+    layerName: 'odorComplaintNotifyRadarHighlight',
+    flyTo: true,
   })
 
   useEffect(() => {
@@ -429,6 +470,45 @@ export function OdorDashboard2Shell({
   )
 
   if (!isClient) return null
+
+  /** 경보·민원 알림 — 우측 하단, 플로팅·우측메뉴 모달보다 위(nestedDialog) */
+  const notifyStack =
+    alertModalOpen || complaintModalOpen
+      ? createPortal(
+          <div
+            className={cn(
+              'pointer-events-none fixed flex w-[min(100vw-2rem,22rem)] flex-col gap-2',
+              MAP_UI_Z_CLASS.nestedDialog
+            )}
+            style={{
+              bottom: 12,
+              right: ODOR_DASHBOARD2_FLOAT_RIGHT_INSET,
+            }}
+          >
+            {alertModalOpen ? (
+              <OdorIndexAlertModal
+                open={alertModalOpen}
+                onClose={() => setAlertModalOpen(false)}
+                onGoAlertList={() => {
+                  setAlertModalOpen(false)
+                  onOpenAlertList?.()
+                }}
+                className="pointer-events-auto relative w-full shrink-0"
+                contentClassName="rounded-[5px]"
+              />
+            ) : null}
+            {complaintModalOpen ? (
+              <OdorComplaintManageModal
+                open={complaintModalOpen}
+                onClose={() => setComplaintModalOpen(false)}
+                className="pointer-events-auto relative w-full shrink-0"
+                contentClassName="rounded-[5px]"
+              />
+            ) : null}
+          </div>,
+          document.body
+        )
+      : null
 
   if (isFloating) {
     const floatLeft = leftOffsetPx + 20
@@ -596,6 +676,7 @@ export function OdorDashboard2Shell({
       </div>,
       document.body
         )}
+        {notifyStack}
         <OdorAlertDetailBottomSheet
           alert={detailAlert}
           leftPx={floatLeft + ODOR_DASHBOARD2_FLOAT_STATS_WIDTH + ODOR_DASHBOARD2_DETAIL_LEFT_GAP}
@@ -656,6 +737,7 @@ export function OdorDashboard2Shell({
         </div>,
         document.body
       )}
+      {notifyStack}
       <OdorAlertDetailBottomSheet
         alert={detailAlert}
         leftPx={leftOffsetPx + 12}

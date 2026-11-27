@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { fromLonLat } from 'ol/proj'
 import { History, X } from 'lucide-react'
@@ -18,6 +18,7 @@ import {
 } from '../odorMapFloatOpacity'
 import { OdorAlertDetailBottomSheet } from '../odorDashboard2/OdorAlertDetailBottomSheet'
 import { ODOR_DASHBOARD2_FLOAT_RIGHT_INSET } from '../odorDashboard2/odorDashboard2Config'
+import { useOdorMapPointRadarHighlight } from '../odorDashboard2/useOdorMapPointRadarHighlight'
 import type { OdorAckHistoryRow, OdorAlertRow } from '../odorAlert/odorAlertMock'
 import { useOdorAlertStore } from '../odorAlert/odorAlertStore'
 import { OdorAlertView2HistoryModal } from './OdorAlertView2HistoryModal'
@@ -194,6 +195,20 @@ export function OdorAlertView2Shell({
     : `calc(100vh - ${ODOR_ALERT_VIEW2_FLOAT_TOP + 10}px)`
 
   const selectedAlertId = detailAlert?.id ?? null
+
+  const selectedSource = useMemo(() => {
+    if (!selectedAlertId) return null
+    return alerts.find((a) => a.id === selectedAlertId) ?? null
+  }, [alerts, selectedAlertId])
+
+  useOdorMapPointRadarHighlight({
+    enabled: true,
+    lon: selectedSource?.lon,
+    lat: selectedSource?.lat,
+    color: 'red',
+    layerName: 'odorAlertView2RadarHighlight',
+    flyTo: false,
+  })
 
   const listPanel = (
     <OdorAlertView2ListPanel

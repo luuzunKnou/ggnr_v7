@@ -2308,7 +2308,7 @@ function MapLayoutContent({
 
   const handleOpenOdorAlertFromDashboard2 = () => {
     setOdorDashboard2TotalWidth(0)
-    setOpened([ODOR_ALERT_OPENED_KEY])
+    setOpened([ODOR_ALERT_VIEW2_OPENED_KEY])
   }
 
   const handleCloseFmsLinkage = () => {
