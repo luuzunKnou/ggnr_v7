@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { ChevronUp, Trash2 } from 'lucide-react'
+import { ChevronUp, Inbox, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { BIZ_NOTIF_WITHIN_DAYS } from '../bizNotif/bizNotifClient'
 import type { ProtoNotifItem } from '../bizNotif/bizNotifStore'
@@ -108,15 +108,16 @@ export function UserAccountProtoNotifTab({
 
   if (totalCount === 0) {
     return (
-      <div className="flex min-h-[120px] flex-col items-center justify-center px-3 py-10 text-center text-[10px] font-normal text-[#8A8A8A]">
-        받은 알림이 없습니다.
+      <div className="flex h-full min-h-0 flex-1 flex-col items-center justify-center gap-2 px-3 text-center">
+        <Inbox className="h-8 w-8 text-[#B3B3B3]" strokeWidth={1} aria-hidden />
+        <p className="text-[10px] font-normal text-[#8A8A8A]">알림이 없습니다.</p>
       </div>
     )
   }
 
   return (
-    <>
-      <div className="flex shrink-0 items-center justify-between border-b border-border bg-[#FAFAFA] px-[10px] py-[2px]">
+    <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
+      <div className="flex shrink-0 items-center justify-between border-b border-border bg-[#FAFAFA] px-[10px] py-2">
         <span className="text-[10px] font-normal text-[#8A8A8A]">
           총 <span className="font-normal tabular-nums text-[#1A1A1A]">{totalCount}</span>건
           {unreadCount > 0 ? (
@@ -235,7 +236,7 @@ export function UserAccountProtoNotifTab({
           </NotifGroup>
         ) : null}
       </div>
-    </>
+    </div>
   )
 }
 

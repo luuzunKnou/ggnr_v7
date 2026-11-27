@@ -39,6 +39,7 @@ type GroupRow = {
   fileAccept: string
   fileAcceptAuthor: string
   fileAcceptDate?: string | null
+  fileAcceptUser?: string | null
   acceptLabel: string
   authorLabel: string
   canAct?: boolean
@@ -71,13 +72,36 @@ function formatLayerDisplayName(
   return k || e || '-'
 }
 
-/** 승인일시 표시 — ISO면 읽기 쉽게, 없으면 - */
+/** 처리일시 표시 — ISO면 읽기 쉽게, 없으면 - */
 function formatAcceptDate(raw: string | null | undefined): string {
   const s = String(raw ?? '').trim()
   if (!s) return '-'
   const m = /^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}:\d{2})/.exec(s)
   if (m) return `${m[1]} ${m[2]}`
   return s
+}
+
+/** 승인상태 칩 — 거부=빨강, 대기=회색, 승인·자동승인=파랑 (standard-status-badge) */
+function AcceptStatusChip({
+  accept,
+  acceptLabel,
+}: {
+  accept: string
+  acceptLabel: string
+}) {
+  const a = String(accept ?? '').trim()
+  const label = String(acceptLabel ?? '').trim() || '-'
+  const tone =
+    label === '자동승인' || a === 'Y'
+      ? 'standard-status-badge-primary border-primary/35'
+      : a === 'N'
+        ? 'standard-status-badge-ended border-destructive/30'
+        : 'standard-status-badge-muted border-border'
+  return (
+    <span className={cn('standard-status-badge border', tone)} title={label}>
+      {label}
+    </span>
+  )
 }
 
 type ListMode = 'request' | 'approve'
@@ -431,21 +455,22 @@ export function DataRequestApproveClient({
                       <th className="px-2 py-2.5 text-center font-semibold">요청일시</th>
                       <th className="px-2 py-2.5 text-center font-semibold">레이어명</th>
                       <th className="px-2 py-2.5 text-center font-semibold">파일분류</th>
-                      <th className="px-2 py-2.5 text-center font-semibold">승인 상태</th>
-                      <th className="px-2 py-2.5 text-center font-semibold">승인주체</th>
-                      <th className="px-2 py-2.5 text-center font-semibold">승인일시</th>
+                      <th className="px-2 py-2.5 text-center font-semibold">승인상태</th>
+                      <th className="px-2 py-2.5 text-center font-semibold">권한 분류</th>
+                      <th className="px-2 py-2.5 text-center font-semibold">처리자명</th>
+                      <th className="px-2 py-2.5 text-center font-semibold">처리일시</th>
                     </tr>
                   </thead>
                   <tbody>
                     {loading && list.length === 0 ? (
                       <tr>
-                        <td colSpan={8} className="px-3 py-8 text-center text-muted-foreground">
+                        <td colSpan={9} className="px-3 py-8 text-center text-muted-foreground">
                           불러오는 중…
                         </td>
                       </tr>
                     ) : list.length === 0 ? (
                       <tr>
-                        <td colSpan={8} className="px-3 py-8 text-center text-muted-foreground">
+                        <td colSpan={9} className="px-3 py-8 text-center text-muted-foreground">
                           목록이 없습니다
                         </td>
                       </tr>
@@ -476,8 +501,16 @@ export function DataRequestApproveClient({
                               )}
                             </td>
                             <td className="px-2 py-2.5 text-center">{g.fileType}</td>
-                            <td className="px-2 py-2.5 text-center">{g.acceptLabel}</td>
+                            <td className="px-2 py-2.5 text-center">
+                              <AcceptStatusChip
+                                accept={g.fileAccept}
+                                acceptLabel={g.acceptLabel}
+                              />
+                            </td>
                             <td className="px-2 py-2.5 text-center">{g.authorLabel || '-'}</td>
+                            <td className="px-2 py-2.5 text-center">
+                              {String(g.fileAcceptUser ?? '').trim() || '-'}
+                            </td>
                             <td className="whitespace-nowrap px-2 py-2.5 text-center">
                               {formatAcceptDate(g.fileAcceptDate)}
                             </td>
@@ -586,15 +619,18 @@ export function DataRequestApproveClient({
                         </tr>
                         <tr>
                           <th className="standard-detail-attr-label standard-detail-attr-cell-border">
-                            승인 상태
+                            승인상태
                           </th>
                           <td className="standard-detail-attr-value standard-detail-attr-value-title standard-detail-attr-cell-border">
-                            {selected.acceptLabel}
+                            <AcceptStatusChip
+                              accept={selected.fileAccept}
+                              acceptLabel={selected.acceptLabel}
+                            />
                           </td>
                         </tr>
                         <tr>
                           <th className="standard-detail-attr-label standard-detail-attr-cell-border">
-                            승인주체
+                            권한 분류
                           </th>
                           <td className="standard-detail-attr-value standard-detail-attr-cell-border">
                             {selected.authorLabel || '-'}
@@ -602,7 +638,15 @@ export function DataRequestApproveClient({
                         </tr>
                         <tr>
                           <th className="standard-detail-attr-label standard-detail-attr-cell-border">
-                            승인일시
+                            처리자명
+                          </th>
+                          <td className="standard-detail-attr-value standard-detail-attr-cell-border">
+                            {String(selected.fileAcceptUser ?? '').trim() || '-'}
+                          </td>
+                        </tr>
+                        <tr>
+                          <th className="standard-detail-attr-label standard-detail-attr-cell-border">
+                            처리일시
                           </th>
                           <td className="standard-detail-attr-value standard-detail-attr-cell-border">
                             {formatAcceptDate(selected.fileAcceptDate)}

@@ -112,7 +112,11 @@ export async function refreshBizNotifs(opts?: {
       ? payload.items.map((i) => ({
           ...i,
           notifKey: i.notifKey || i.id,
-          systemScope: i.systemScope || 'river',
+          // 데이터요청은 systemScope 빈 값 유지 (|| 'river' 로 덮지 않음)
+          systemScope:
+            i.category === '데이터요청'
+              ? String(i.systemScope ?? '')
+              : String(i.systemScope ?? '').trim() || 'river',
           serEng: String(i.serEng ?? '').trim() || undefined,
           important: true as const,
         }))

@@ -63,6 +63,8 @@ type Props = {
   hideFooterActions?: boolean;
   /** true면 헤더 X 숨김 (신청 상세 패널에 이미 닫기가 있을 때) */
   hideHeaderClose?: boolean;
+  /** 읽기 전용 시 «상세보기» — 촬영요청승인 메뉴로 이동 */
+  onOpenDetail?: () => void;
 };
 
 const cellBorder = 'border border-border';
@@ -78,6 +80,7 @@ export function ShootingRequestForm({
   readOnly = false,
   onSubmit,
   onClose,
+  onOpenDetail,
   closeLabel = '목록으로',
   hideFooterActions = false,
   hideHeaderClose = false,
@@ -502,25 +505,39 @@ export function ShootingRequestForm({
       </div>
 
       {!hideFooterActions ? (
-        <div className="flex shrink-0 items-center justify-end gap-1.5 border-t border-border bg-muted/30 px-3 py-2">
-          <button
-            type="button"
-            className="rounded border border-border bg-background px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted/50 disabled:opacity-50"
-            disabled={downloading}
-            onClick={() => void handleDownload()}
-          >
-            {downloading ? 'PDF 생성 중…' : 'PDF 내려받기'}
-          </button>
-          {!readOnly ? (
+        <div className="flex shrink-0 items-center justify-between gap-1.5 border-t border-border bg-muted/30 px-3 py-2">
+          <div className="flex items-center gap-1.5">
+            {readOnly && onOpenDetail ? (
+              <button
+                type="button"
+                title="상세보기"
+                className="rounded border border-sky-600 bg-sky-600 px-2.5 py-1 text-[11px] font-medium text-white transition-colors hover:bg-sky-700"
+                onClick={onOpenDetail}
+              >
+                상세보기
+              </button>
+            ) : null}
+          </div>
+          <div className="flex items-center gap-1.5">
             <button
               type="button"
               className="rounded border border-border bg-background px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted/50 disabled:opacity-50"
-              disabled={submitting}
-              onClick={() => void handleSubmit()}
+              disabled={downloading}
+              onClick={() => void handleDownload()}
             >
-              {submitting ? '제출 중…' : '제출'}
+              {downloading ? 'PDF 생성 중…' : 'PDF 내려받기'}
             </button>
-          ) : null}
+            {!readOnly ? (
+              <button
+                type="button"
+                className="rounded border border-border bg-background px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted/50 disabled:opacity-50"
+                disabled={submitting}
+                onClick={() => void handleSubmit()}
+              >
+                {submitting ? '제출 중…' : '제출'}
+              </button>
+            ) : null}
+          </div>
         </div>
       ) : null}
 

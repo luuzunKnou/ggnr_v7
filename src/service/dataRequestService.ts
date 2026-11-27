@@ -826,11 +826,22 @@ type ListParams = {
 };
 
 function isFullViewer(user: SessionUser): boolean {
-  return user.isSuper || user.isAdminDept || user.usrId === 'admin';
+  return (
+    user.isSuper ||
+    user.isAdminDept ||
+    user.usrId === 'admin' ||
+    isSuperUser(user.usrId)
+  );
 }
 
 function canApproveRole(user: SessionUser): boolean {
-  return user.isManager || user.isAdminDept || user.isSuper || user.usrId === 'admin';
+  return (
+    user.isManager ||
+    user.isAdminDept ||
+    user.isSuper ||
+    user.usrId === 'admin' ||
+    isSuperUser(user.usrId)
+  );
 }
 
 function canFilterByUserRole(user: SessionUser): boolean {
@@ -849,14 +860,11 @@ function visibilityForRequestList(user: SessionUser) {
   return eq(dataRequestFile.fileUserId, user.usrId);
 }
 
-/** 승인 목록: 슈퍼·관리자=전체, 팀장=승인주체 team + 동일부서 */
+/** 승인 목록: 슈퍼·관리자=전체, 팀장=승인주체 team 전체(부서 무관) */
 function visibilityForApproveList(user: SessionUser) {
   if (isFullViewer(user)) return null;
-  if (user.isManager && user.ugName) {
-    return and(
-      eq(dataRequestFile.fileAcceptAuthor, DRF_AUTHOR_TEAM),
-      eq(dataRequestFile.fileUgName, user.ugName)
-    );
+  if (user.isManager) {
+    return eq(dataRequestFile.fileAcceptAuthor, DRF_AUTHOR_TEAM);
   }
   return sql`false`;
 }
@@ -865,14 +873,18 @@ function canActOnRow(
   user: SessionUser,
   row: { fileAcceptAuthor?: string | null; fileUgName?: string | null }
 ): boolean {
-  if (user.isSuper || user.isAdminDept || user.usrId === 'admin') return true;
-  const auth = String(row.fileAcceptAuthor ?? '').trim();
+  // 슈퍼·관리자부서: 승인주체(팀장/관리자) 무관하게 대기 건 처리·알림
   if (
-    user.isManager &&
-    auth === DRF_AUTHOR_TEAM &&
-    user.ugName &&
-    String(row.fileUgName ?? '').trim() === user.ugName
+    user.isSuper ||
+    user.isAdminDept ||
+    user.usrId === 'admin' ||
+    isSuperUser(user.usrId)
   ) {
+    return true;
+  }
+  const auth = String(row.fileAcceptAuthor ?? '').trim();
+  // 팀장 권한: 승인주체 team 이면 부서 무관하게 조회·알림·처리
+  if (user.isManager && auth === DRF_AUTHOR_TEAM) {
     return true;
   }
   return false;
@@ -906,7 +918,9 @@ function dataRequestNotifName(row: {
 
 /**
  * 데이터요청 알림 후보.
- * - pending: 승인 가능한 대기(P) 건 (팀장/관리자)
+ * - pending: 승인 가능한 대기(P) 건
+ *   · 팀장: 승인주체 team 전체(부서 무관)
+ *   · 관리자·슈퍼: team·admin 전체
  * - result: 본인 요청의 승인·반려(Y/N), 수동승인만, withinDays 이내
  */
 export async function listDataRequestNotifications(params?: {
@@ -1092,6 +1106,7 @@ export async function listDataRequests(params: ListParams = {}) {
       fileAccept: first.fileAccept,
       fileAcceptAuthor: first.fileAcceptAuthor,
       fileAcceptDate: first.fileAcceptDate ?? null,
+      fileAcceptUser: first.fileAcceptUser ?? null,
       acceptLabel: acceptLabel(first.fileAccept ?? '', first.fileAcceptAuthor ?? ''),
       authorLabel: authorLabel(first.fileAcceptAuthor ?? ''),
       fileSuccess: first.fileSuccess,
@@ -1225,7 +1240,7 @@ export async function resolveDownloadZip(params: {
     user.isManager &&
     Boolean(user.ugName) &&
     String(first.fileUgName ?? '').trim() === user.ugName;
-  const canViewer = isFullViewer(user) || sameTeam;
+  const canViewer = isFullViewer(user) || canActOnRow(user, first) || sameTeam;
   if (!isOwner && !canViewer) {
     return { success: false, error: '다운로드 권한이 없습니다.', status: 403 };
   }

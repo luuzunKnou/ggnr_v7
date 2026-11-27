@@ -302,8 +302,9 @@ export async function listMyBizNotifications(params?: {
     });
   }
 
+  // 데이터요청은 시스템 소속 없음 — system 필터가 있어도 항상 포함
   const scoped = system
-    ? candidates.filter((c) => c.systemScope === system)
+    ? candidates.filter((c) => c.category === '데이터요청' || c.systemScope === system)
     : candidates;
 
   const stateMap = await loadStateMap(
@@ -328,7 +329,8 @@ export async function listMyBizNotifications(params?: {
   items.sort((a, b) => {
     const byCategory = categoryOrder[a.category] - categoryOrder[b.category];
     if (byCategory !== 0) return byCategory;
-    return a.listKey.localeCompare(b.listKey);
+    // 카테고리 내 최신순 (listKey 날짜·시각 내림차순)
+    return b.listKey.localeCompare(a.listKey);
   });
 
   const err = [occupExpiryRes.error, feeRes.error, dataReqRes.error]

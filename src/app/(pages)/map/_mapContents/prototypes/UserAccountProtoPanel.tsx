@@ -4,7 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObje
 import { createPortal } from 'react-dom'
 import { signOut, useSession } from 'next-auth/react'
 import { useSearchParams } from 'next/navigation'
-import { LogOut, Mail, Phone, User, X } from 'lucide-react'
+import { LogOut, Mail, Phone, X } from 'lucide-react'
 import { call } from '@/lib/api'
 import { withBasePathNav } from '@/lib/basePath'
 import { cn } from '@/lib/utils'
@@ -24,10 +24,11 @@ import { UserAccountProtoNotifTab } from './UserAccountProtoNotifTab'
 import { UserAccountMoreTab } from './UserAccountMoreTab'
 import { UserAccountApproveTab } from './UserAccountApproveTab'
 
-/** 프로토 내 정보 패널 — 내용만큼 높이, 공통은 한 줄 */
+/** 프로토 내 정보 패널 — 헤더·프로필·탭바 아래 본문 공통 높이 */
 const PANEL_SHELL_ROUND = 'rounded-[5px]'
-/** 높이 제한 없음 — 내용만큼 늘어남 */
 const USER_ACCOUNT_PANEL_HEIGHT = ''
+/** 3탭 본문 공통 높이(px) — 모달 높이 조절은 이 값 */
+const TAB_BODY_HEIGHT_PX = 240
 const PANEL_ROUND = 'rounded-sm'
 const BUBBLE_ROUND = 'rounded-[2px]'
 const TEXT_BODY = 'text-xs'
@@ -242,7 +243,7 @@ export function UserAccountProtoPanel({
       <div
         ref={panelRef}
         className={cn(
-          'fixed bottom-[7px] z-[90] flex w-[340px] flex-col overflow-visible border bg-background shadow-2xl',
+          'fixed bottom-[7px] z-[90] flex w-[400px] flex-col overflow-hidden border bg-background shadow-2xl',
           BORDER_PANEL,
           USER_ACCOUNT_PANEL_HEIGHT,
           PANEL_SHELL_ROUND,
@@ -260,25 +261,49 @@ export function UserAccountProtoPanel({
           approveCount={approveCount}
           onSelectTab={setActiveTab}
         />
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          {activeTab === 'menu' && SHOW_USER_ACCOUNT_MORE_TAB ? (
-            <UserAccountMoreTab
-              onClosePanel={onClose}
-              matchHeightPx={panelHeightPx}
-              overlayClipPath={overlayClipPath}
-              onOpenSystemFeedback={onOpenSystemFeedback}
-              pendingApproveCount={approveCount}
-              onOpenApproveTab={() => setActiveTab('approve')}
-            />
+        <div
+          className="relative min-h-0 w-full shrink-0 overflow-hidden"
+          style={{ height: TAB_BODY_HEIGHT_PX, maxHeight: TAB_BODY_HEIGHT_PX }}
+        >
+          {SHOW_USER_ACCOUNT_MORE_TAB ? (
+            <div
+              className={cn(
+                'absolute inset-0 flex min-h-0 flex-col overflow-hidden',
+                activeTab === 'menu' ? '' : 'hidden'
+              )}
+              aria-hidden={activeTab !== 'menu'}
+            >
+              <UserAccountMoreTab
+                onClosePanel={onClose}
+                matchHeightPx={panelHeightPx}
+                overlayClipPath={overlayClipPath}
+                onOpenSystemFeedback={onOpenSystemFeedback}
+                pendingApproveCount={approveCount}
+                onOpenApproveTab={() => setActiveTab('approve')}
+              />
+            </div>
           ) : null}
-          {activeTab === 'approve' ? (
+          {/* 탭 전환 시 언마운트하지 않음 — 건수 뱃지·라벨 깜빡임 방지 */}
+          <div
+            className={cn(
+              'absolute inset-0 flex min-h-0 flex-col overflow-hidden',
+              activeTab === 'approve' ? '' : 'hidden'
+            )}
+            aria-hidden={activeTab !== 'approve'}
+          >
             <UserAccountApproveTab
-              open={open && activeTab === 'approve'}
+              open={open}
               onSelectShooting={(id) => onSelectShootingRequest?.(id)}
               onCountChange={setApproveCount}
             />
-          ) : null}
-          {activeTab === 'notif' ? (
+          </div>
+          <div
+            className={cn(
+              'absolute inset-0 flex min-h-0 flex-col overflow-hidden',
+              activeTab === 'notif' ? '' : 'hidden'
+            )}
+            aria-hidden={activeTab !== 'notif'}
+          >
             <UserAccountProtoNotifTab
               items={notifItems}
               onDismiss={handleDismissNotif}
@@ -289,19 +314,9 @@ export function UserAccountProtoPanel({
               onOpenMissingGeom={onOpenMissingGeom}
               onOpenDataRequest={onOpenDataRequest}
             />
-          ) : null}
+          </div>
         </div>
       </div>
-      {/* 승인요청 탭이 아니어도 건수 동기화 */}
-      {activeTab !== 'approve' ? (
-        <div className="hidden" aria-hidden>
-          <UserAccountApproveTab
-            open={open}
-            onSelectShooting={() => undefined}
-            onCountChange={setApproveCount}
-          />
-        </div>
-      ) : null}
     </>,
     document.body
   )
@@ -311,7 +326,7 @@ function PanelHeader({ onClose }: { onClose: () => void }) {
   return (
     <div
       className={cn(
-        'flex shrink-0 items-center justify-between gap-2 border-b bg-background px-[10px] py-2',
+        'flex shrink-0 items-center justify-between gap-2 border-b bg-background px-[10px] py-1.5',
         BORDER_PANEL
       )}
     >
@@ -331,6 +346,23 @@ function PanelHeader({ onClose }: { onClose: () => void }) {
   )
 }
 
+/** 하이픈 없으면 표시용 서식 — 010→000-0000-0000, 그 외→000-000-0000 */
+function formatDisplayPhone(raw: string): string {
+  const s = String(raw ?? '').trim()
+  if (!s) return '—'
+  if (s.includes('-')) return s
+  const digits = s.replace(/\D/g, '')
+  if (!digits) return s
+  if (digits.startsWith('010')) {
+    if (digits.length <= 3) return digits
+    if (digits.length <= 7) return `${digits.slice(0, 3)}-${digits.slice(3)}`
+    return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7, 11)}`
+  }
+  if (digits.length <= 3) return digits
+  if (digits.length <= 6) return `${digits.slice(0, 3)}-${digits.slice(3)}`
+  return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6, 10)}`
+}
+
 function ProfileSection({
   profile,
   loading,
@@ -340,37 +372,74 @@ function ProfileSection({
   loading: boolean
   onLogout: () => void
 }) {
-  const phone = profile.phone || '—'
+  const phone = formatDisplayPhone(profile.phone)
   const email = profile.email || '—'
 
   return (
-    <div className={cn('shrink-0 border-b bg-background px-[10px] py-2.5', BORDER_PANEL)}>
+    <div className={cn('shrink-0 border-b bg-background px-[10px] py-2', BORDER_PANEL)}>
       <div className="flex items-start gap-2.5">
         <div
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded bg-sky-600 text-white"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded bg-[#0F91B2] text-white"
           aria-hidden
         >
-          <User className="h-5 w-5" strokeWidth={2} />
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="h-6 w-6"
+            aria-hidden
+          >
+            <circle cx="12" cy="10" r="4" />
+            <path d="M18 20a6 6 0 0 0-12 0" />
+          </svg>
         </div>
-        <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 flex-1 flex-col gap-2">
           <div className="flex items-center gap-1.5">
-            <p className="truncate text-[12px] font-normal text-foreground">
-              {loading ? '불러오는 중…' : profile.name}
-            </p>
-            {profile.dept ? (
+            {loading ? (
+              <span
+                className="inline-block h-3 w-[34.56px] shrink-0 animate-pulse rounded bg-muted"
+                aria-hidden
+              />
+            ) : (
+              <p className="truncate text-[12px] font-normal text-foreground">{profile.name}</p>
+            )}
+            {loading ? (
+              <span
+                className="inline-block h-[18px] w-[48px] shrink-0 animate-pulse rounded bg-[#C7E9F2]/62"
+                aria-hidden
+              />
+            ) : profile.dept ? (
               <span className="inline-flex shrink-0 rounded px-[6px] py-1 text-[10px] font-medium text-[#0F91B2] bg-[#C7E9F2]/62">
                 {profile.dept}
               </span>
             ) : null}
           </div>
-          <div className="mt-1 flex min-w-0 items-center gap-1 text-[8px] text-[#B3B3B3]">
+          <div className="flex min-w-0 flex-nowrap items-center gap-1 overflow-hidden text-[8px] text-[#B3B3B3]">
             <Phone className="h-2.5 w-2.5 shrink-0" aria-hidden />
-            <span className="tabular-nums">{loading ? '…' : phone}</span>
+            {loading ? (
+              <span
+                className="inline-block h-2 w-[72px] shrink-0 animate-pulse rounded bg-muted"
+                aria-hidden
+              />
+            ) : (
+              <span className="shrink-0 whitespace-nowrap tabular-nums">{phone}</span>
+            )}
             <span className="shrink-0" aria-hidden>
               |
             </span>
             <Mail className="h-2.5 w-2.5 shrink-0" aria-hidden />
-            <span className="min-w-0 truncate">{loading ? '…' : email}</span>
+            {loading ? (
+              <span
+                className="inline-block h-2 w-[140px] shrink-0 animate-pulse rounded bg-muted"
+                aria-hidden
+              />
+            ) : (
+              <span className="whitespace-nowrap">{email}</span>
+            )}
           </div>
         </div>
         <button
@@ -404,11 +473,16 @@ function PanelTabBar({
   onSelectTab: (tabId: ProtoPanelTabId) => void
 }) {
   return (
-    <div className={cn('flex shrink-0 items-stretch border-b bg-background px-[10px]', BORDER_PANEL)}>
+    <div
+      className={cn(
+        'flex shrink-0 items-stretch justify-center border-b bg-background px-[10px]',
+        BORDER_PANEL
+      )}
+    >
       {PROTO_PANEL_TABS.map((tab) => {
         const active = activeTab === tab.id
         const count = tab.id === 'notif' ? notifCount : tab.id === 'approve' ? approveCount : 0
-        const showCount = tab.id === 'notif' || tab.id === 'approve'
+        const showCount = (tab.id === 'notif' || tab.id === 'approve') && count > 0
         const underline =
           active && tab.id === 'notif'
             ? 'border-b-2 border-[#C70036]'
@@ -422,7 +496,7 @@ function PanelTabBar({
             onClick={() => onSelectTab(tab.id)}
             aria-selected={active}
             className={cn(
-              'inline-flex w-[100px] items-center justify-center gap-1 p-[10px] text-[11px] font-medium transition-colors',
+              'inline-flex w-[100px] items-center justify-center gap-1 px-[10px] py-2 text-[11px] font-medium transition-colors',
               underline,
               active ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
             )}

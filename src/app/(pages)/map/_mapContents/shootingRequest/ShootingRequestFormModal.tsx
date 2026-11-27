@@ -29,6 +29,8 @@ type Props = {
   detailId?: string | null;
   /** 신청 접수 후 생성된 id */
   onCreated?: (newId: string) => void;
+  /** 읽기 전용 «상세보기» → 촬영요청승인 메뉴 */
+  onOpenDetail?: (id: string) => void;
 };
 
 /** 촬영요청 신청서 — 신규 작성·내 정보 조회 공용 모달 */
@@ -37,6 +39,7 @@ export function ShootingRequestFormModal({
   onOpenChange,
   detailId = SHOOTING_REQUEST_NEW_ID,
   onCreated,
+  onOpenDetail,
 }: Props) {
   useSyncExternalStore(subscribeShootingRequests, getShootingRequests, getShootingRequests);
 
@@ -120,6 +123,11 @@ export function ShootingRequestFormModal({
               readOnly={!isNew}
               closeLabel="닫기"
               onClose={() => onOpenChange(false)}
+              onOpenDetail={
+                !isNew && existing && onOpenDetail
+                  ? () => onOpenDetail(existing.id)
+                  : undefined
+              }
               onSubmit={
                 isNew
                   ? async (draft) => {

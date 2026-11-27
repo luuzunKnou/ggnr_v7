@@ -8,7 +8,6 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronUp,
-  MessageSquareWarning,
   Plus,
   RotateCcw,
   Settings2,
@@ -102,17 +101,18 @@ function projectHintFromBasePath(): string {
   return base || ''
 }
 
-/** 추가 단추 테두리까지 포함한 칸 높이 — 비었을 때·있을 때 줄이 흔들리지 않게 */
+/** 추가 단추 테두리까지 포함한 칸 높이 — 비었을 때·로딩·있을 때 동일 */
+const FAVORITE_ROW_H = 'h-[78px]'
 const FAVORITE_SLOT =
-  'box-border flex flex-col items-center justify-center gap-0.5 rounded-sm border px-0.5 py-1.5'
-const FAVORITE_EMPTY_SLOT = `${FAVORITE_SLOT} h-[78px]`
+  `box-border ${FAVORITE_ROW_H} flex flex-col items-center justify-center gap-0.5 rounded-sm border px-0.5 py-1.5`
+const FAVORITE_EMPTY_SLOT = FAVORITE_SLOT
 const ICON_LABEL =
   'w-full whitespace-nowrap text-center text-[11px] font-normal leading-tight text-[#8A8A8A]'
 /** 공통 메뉴 버튼 라벨 — 섹션 타이틀과 별개 */
 const COMMON_MENU_LABEL =
   'w-full whitespace-nowrap text-center text-[11px] font-normal leading-tight text-[#1A1A1A]'
 const COMMON_ITEM =
-  'flex flex-col items-center gap-1 rounded-sm px-0.5 py-1 text-foreground hover:bg-muted/50'
+  'flex flex-col items-center gap-0.5 rounded-sm px-0.5 py-1 text-foreground hover:bg-muted/50'
 
 function loadFavorites(): string[] {
   try {
@@ -169,7 +169,7 @@ function FavoriteStrip({
   }
 
   return (
-    <div className="relative min-w-0">
+    <div className={`relative min-w-0 ${FAVORITE_ROW_H}`}>
       {edge.left ? (
         <button
           type="button"
@@ -253,10 +253,37 @@ function FavoriteStrip({
   )
 }
 
+/** 공통 메뉴 고정 아이콘 — PNG 마스크 (currentColor) */
+const COMMON_MENU_ICON_EXT: Record<string, 'png'> = {
+  notice: 'png',
+  board: 'png',
+  [SYSTEM_FEEDBACK_ENG]: 'png',
+}
+
+function MaskGlyph({ src }: { src: string }) {
+  return (
+    <span
+      className="inline-block h-6 w-6 shrink-0 bg-current"
+      style={{
+        WebkitMaskImage: `url(${src})`,
+        maskImage: `url(${src})`,
+        WebkitMaskSize: 'contain',
+        maskSize: 'contain',
+        WebkitMaskRepeat: 'no-repeat',
+        maskRepeat: 'no-repeat',
+        WebkitMaskPosition: 'center',
+        maskPosition: 'center',
+      }}
+      aria-hidden
+    />
+  )
+}
+
 function ServiceGlyph({ item }: { item: ServiceItem }) {
-  if (item.ser_eng === SYSTEM_FEEDBACK_ENG) {
-    // 공지·자료실 ser_svg stroke 1.5와 맞춤
-    return <MessageSquareWarning className="h-6 w-6 shrink-0" strokeWidth={1.5} aria-hidden />
+  const commonExt = COMMON_MENU_ICON_EXT[item.ser_eng]
+  if (commonExt) {
+    const iconKey = SERVICE_ICON_ALIASES[item.ser_eng] ?? item.ser_eng
+    return <MaskGlyph src={withBasePath(`/image/serviceListIcon/${iconKey}.${commonExt}`)} />
   }
   const svgRaw = item.ser_svg?.trim() ?? ''
   if (svgRaw.startsWith('<')) {
@@ -268,23 +295,7 @@ function ServiceGlyph({ item }: { item: ServiceItem }) {
     )
   }
   const iconKey = SERVICE_ICON_ALIASES[item.ser_eng] ?? item.ser_eng
-  const iconSrc = withBasePath(`/image/serviceListIcon/${iconKey}.svg`)
-  return (
-    <span
-      className="inline-block h-6 w-6 shrink-0 bg-current"
-      style={{
-        WebkitMaskImage: `url(${iconSrc})`,
-        maskImage: `url(${iconSrc})`,
-        WebkitMaskSize: 'contain',
-        maskSize: 'contain',
-        WebkitMaskRepeat: 'no-repeat',
-        maskRepeat: 'no-repeat',
-        WebkitMaskPosition: 'center',
-        maskPosition: 'center',
-      }}
-      aria-hidden
-    />
-  )
+  return <MaskGlyph src={withBasePath(`/image/serviceListIcon/${iconKey}.svg`)} />
 }
 
 /** 내 정보 패널 — 더보기(즐겨찾기·검색·기능 목록) */
@@ -305,7 +316,10 @@ export function UserAccountMoreTab({
   const [services, setServices] = useState<ServiceItem[]>([])
   const [systems, setSystems] = useState<SystemItem[]>([])
   const [bootProject, setBootProject] = useState(projectHintFromBasePath)
-  const [favorites, setFavorites] = useState<string[]>([])
+  const [favorites, setFavorites] = useState<string[]>(() =>
+    typeof window !== 'undefined' ? loadFavorites() : []
+  )
+  const [menuReady, setMenuReady] = useState(false)
   const [settingOpen, setSettingOpen] = useState(false)
   const [draft, setDraft] = useState<string[]>([])
 
@@ -356,11 +370,13 @@ export function UserAccountMoreTab({
         )
         const boot = bootRes?.data ?? bootRes
         setBootProject(String(boot?.project ?? '').trim())
+        setMenuReady(true)
       })
       .catch(() => {
         if (!cancelled) {
           setServices([])
           setSystems([])
+          setMenuReady(true)
         }
       })
     return () => {
@@ -592,21 +608,23 @@ export function UserAccountMoreTab({
       : null
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+    <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
       {settingsModal}
-      <div className="shrink-0 border-b border-border p-[10px]">
-        <button
-          type="button"
-          title="승인요청 탭 열기"
-          onClick={() => onOpenApproveTab?.()}
-          className="flex w-full items-center justify-between gap-2 rounded-[4px] border border-[#E3E3E3] px-2.5 py-2 text-left text-[10px] text-[#696969] hover:bg-muted/40"
-        >
-          <span className="min-w-0 flex-1">
-            처리 대기 중인 승인요청이 {pendingApproveCount}건 있습니다.
-          </span>
-          <ChevronUp className="h-4 w-4 shrink-0 text-[#696969]" aria-hidden />
-        </button>
-      </div>
+      {pendingApproveCount > 0 ? (
+        <div className="shrink-0 border-b border-border p-[10px]">
+          <button
+            type="button"
+            title="승인요청 탭 열기"
+            onClick={() => onOpenApproveTab?.()}
+            className="flex w-full items-center justify-between gap-2 rounded-[4px] border border-[#E3E3E3] px-2.5 py-2 text-left text-[10px] text-[#696969] hover:bg-muted/40"
+          >
+            <span className="min-w-0 flex-1">
+              처리 대기 중인 승인요청이 {pendingApproveCount}건 있습니다.
+            </span>
+            <ChevronUp className="h-4 w-4 shrink-0 text-[#696969]" aria-hidden />
+          </button>
+        </div>
+      ) : null}
       <div className="shrink-0 border-b border-border px-2.5 pb-1.5 pt-1.5">
         <div className="mb-1 flex items-center justify-between">
           <p className="text-[11px] font-normal text-[#8A8A8A]">즐겨찾기</p>
@@ -619,7 +637,19 @@ export function UserAccountMoreTab({
             <Settings2 className="h-4 w-4" />
           </button>
         </div>
-        {favoriteItems.length === 0 ? (
+        {!menuReady && favorites.length > 0 ? (
+          <div className={`${FAVORITE_ROW_H} flex w-full items-stretch gap-0`} aria-hidden>
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div
+                key={i}
+                className="flex w-[25%] flex-col items-center justify-center gap-1.5 px-0.5"
+              >
+                <span className="h-8 w-8 animate-pulse rounded bg-muted" />
+                <span className="h-2.5 w-10 animate-pulse rounded bg-muted" />
+              </div>
+            ))}
+          </div>
+        ) : favoriteItems.length === 0 ? (
           <button
             type="button"
             onClick={openSettings}
@@ -635,26 +665,30 @@ export function UserAccountMoreTab({
         )}
       </div>
 
-      <div className="shrink-0">
-        <p className="px-[10px] pt-1.5 text-[11px] font-normal text-[#8A8A8A]">공통</p>
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <p className="shrink-0 px-[10px] py-[6px] text-[11px] font-normal text-[#8A8A8A]">공통</p>
         {basicItems.length === 0 ? (
-          <p className="px-3 py-5 text-center text-xs text-muted-foreground">표시할 기능이 없습니다.</p>
+          <p className="flex min-h-0 flex-1 items-center justify-center px-3 text-center text-xs text-muted-foreground">
+            표시할 기능이 없습니다.
+          </p>
         ) : (
-          <div className="flex flex-wrap gap-x-2 gap-y-2 px-[10px] py-[14px]">
-            {basicItems.map((item) => (
-              <button
-                key={item.ser_eng}
-                type="button"
-                onClick={() => openService(item.ser_eng)}
-                className={COMMON_ITEM}
-                title={item.ser_kor}
-              >
-                <span className="flex h-[43px] w-[43px] shrink-0 items-center justify-center [&_svg]:h-6 [&_svg]:w-6">
-                  <ServiceGlyph item={item} />
-                </span>
-                <span className={COMMON_MENU_LABEL}>{item.ser_kor}</span>
-              </button>
-            ))}
+          <div className="min-h-0 flex-1 overflow-y-auto px-[10px] pt-[4px] pb-[15px]">
+            <div className="flex flex-wrap gap-x-2 gap-y-2">
+              {basicItems.map((item) => (
+                <button
+                  key={item.ser_eng}
+                  type="button"
+                  onClick={() => openService(item.ser_eng)}
+                  className={COMMON_ITEM}
+                  title={item.ser_kor}
+                >
+                  <span className="flex h-[43px] w-[43px] shrink-0 items-center justify-center [&_svg]:h-6 [&_svg]:w-6">
+                    <ServiceGlyph item={item} />
+                  </span>
+                  <span className={COMMON_MENU_LABEL}>{item.ser_kor}</span>
+                </button>
+              ))}
+            </div>
           </div>
         )}
       </div>

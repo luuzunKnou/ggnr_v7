@@ -1,6 +1,7 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Inbox } from 'lucide-react'
 import { call } from '@/lib/api'
 import { withBasePathNav } from '@/lib/basePath'
 import { cn } from '@/lib/utils'
@@ -11,16 +12,26 @@ import {
 } from '../shootingRequest/shootingRequestMockStore'
 import { useShootingRequestUiEnabled } from '../shootingRequest/useShootingRequestUiEnabled'
 
-export type ApproveFilter = 'all' | 'shooting' | 'system'
+export type ApproveFilter = 'all' | 'shooting' | 'data' | 'system'
 
 export type ApproveCardItem = {
   id: string
-  kind: 'shooting' | 'system'
+  kind: 'shooting' | 'data' | 'system'
   date: string
   categoryLabel: string
   statusLabel: string
   title: string
   subLine: string
+}
+
+type DataNotifRow = {
+  notifKey?: string
+  kind?: string
+  fileGroupKey?: number
+  title?: string
+  name?: string
+  listKey?: string
+  target?: string
 }
 
 type AccessRow = {
@@ -60,8 +71,11 @@ export function UserAccountApproveTab({ open, onSelectShooting, onCountChange }:
   const shootingUiEnabled = useShootingRequestUiEnabled()
   const [filter, setFilter] = useState<ApproveFilter>('all')
   const [shootingItems, setShootingItems] = useState<ApproveCardItem[]>([])
+  const [dataItems, setDataItems] = useState<ApproveCardItem[]>([])
   const [systemItems, setSystemItems] = useState<ApproveCardItem[]>([])
   const [loading, setLoading] = useState(false)
+  const [countReady, setCountReady] = useState(false)
+  const lastCountRef = useRef<number | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -87,6 +101,36 @@ export function UserAccountApproveTab({ open, onSelectShooting, onCountChange }:
         }
       }
       setShootingItems(nextShooting)
+
+      let nextData: ApproveCardItem[] = []
+      try {
+        const res = await call('', 'POST', {
+          service: 'dataRequestService',
+          action: 'listDataRequestNotifications',
+          params: { withinDays: 15 },
+        })
+        const payload = (res?.data ?? res) as { items?: DataNotifRow[] }
+        const list = Array.isArray(payload?.items) ? payload.items : []
+        nextData = list
+          .filter(
+            (r) =>
+              String(r.kind ?? '').trim() === 'pending' ||
+              String(r.target ?? '').trim() === 'dataRequestApprove'
+          )
+          .map((r) => ({
+            id: String(r.fileGroupKey ?? r.notifKey ?? ''),
+            kind: 'data' as const,
+            date: sliceDate(r.listKey),
+            categoryLabel: '데이터승인',
+            statusLabel: '대기',
+            title: String(r.title ?? '').trim() || '데이터 승인 대기',
+            subLine: String(r.name ?? '').trim() || '—',
+          }))
+          .filter((r) => r.id)
+      } catch {
+        nextData = []
+      }
+      setDataItems(nextData)
 
       let nextSystem: ApproveCardItem[] = []
       try {
@@ -117,6 +161,7 @@ export function UserAccountApproveTab({ open, onSelectShooting, onCountChange }:
         nextSystem = []
       }
       setSystemItems(nextSystem)
+      setCountReady(true)
     } finally {
       setLoading(false)
     }
@@ -147,34 +192,70 @@ export function UserAccountApproveTab({ open, onSelectShooting, onCountChange }:
   }, [open, shootingUiEnabled])
 
   const allItems = useMemo(
-    () => [...shootingItems, ...systemItems].sort((a, b) => b.date.localeCompare(a.date)),
-    [shootingItems, systemItems]
+    () =>
+      [...shootingItems, ...dataItems, ...systemItems].sort((a, b) =>
+        b.date.localeCompare(a.date)
+      ),
+    [shootingItems, dataItems, systemItems]
   )
 
   const visible = useMemo(() => {
     if (filter === 'shooting') return shootingItems
+    if (filter === 'data') return dataItems
     if (filter === 'system') return systemItems
     return allItems
-  }, [filter, shootingItems, systemItems, allItems])
+  }, [filter, shootingItems, dataItems, systemItems, allItems])
 
   useEffect(() => {
+    if (!countReady) return
+    if (lastCountRef.current === allItems.length) return
+    lastCountRef.current = allItems.length
     onCountChange?.(allItems.length)
-  }, [allItems.length, onCountChange])
+  }, [allItems.length, countReady, onCountChange])
 
   const chips: { id: ApproveFilter; label: string; count: number; show: boolean }[] = [
-    { id: 'all', label: '전체', count: allItems.length, show: true },
+    { id: 'all', label: '전체', count: allItems.length, show: allItems.length > 0 },
     {
       id: 'shooting',
       label: '촬영 요청',
       count: shootingItems.length,
-      show: shootingUiEnabled,
+      show: shootingUiEnabled && shootingItems.length > 0,
     },
-    { id: 'system', label: '시스템 승인', count: systemItems.length, show: true },
+    {
+      id: 'data',
+      label: '데이터 승인',
+      count: dataItems.length,
+      show: dataItems.length > 0,
+    },
+    {
+      id: 'system',
+      label: '시스템 승인',
+      count: systemItems.length,
+      show: systemItems.length > 0,
+    },
   ]
+
+  const visibleChips = chips.filter((c) => c.show)
+
+  useEffect(() => {
+    if (visibleChips.some((c) => c.id === filter)) return
+    setFilter('all')
+  }, [
+    filter,
+    allItems.length,
+    shootingItems.length,
+    dataItems.length,
+    systemItems.length,
+    shootingUiEnabled,
+  ])
 
   const openItem = (item: ApproveCardItem) => {
     if (item.kind === 'shooting') {
       onSelectShooting(item.id)
+      return
+    }
+    if (item.kind === 'data') {
+      window.location.assign(withBasePathNav('/data-request-approve'))
       return
     }
     try {
@@ -186,11 +267,10 @@ export function UserAccountApproveTab({ open, onSelectShooting, onCountChange }:
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex shrink-0 flex-wrap gap-1.5 border-b border-border bg-[#FAFAFA] px-2.5 py-2">
-        {chips
-          .filter((c) => c.show)
-          .map((c) => {
+    <div className="flex h-full min-h-0 flex-1 flex-col">
+      {visibleChips.length > 0 ? (
+        <div className="flex shrink-0 flex-wrap gap-1.5 border-b border-border bg-[#FAFAFA] px-2.5 py-2">
+          {visibleChips.map((c) => {
             const active = filter === c.id
             return (
               <button
@@ -199,10 +279,10 @@ export function UserAccountApproveTab({ open, onSelectShooting, onCountChange }:
                 title={`${c.label} ${c.count}`}
                 onClick={() => setFilter(c.id)}
                 className={cn(
-                  'inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors',
+                  'inline-flex items-center gap-1 rounded-[4px] border p-[4px] text-[11px] font-medium transition-colors',
                   active
                     ? 'border-black bg-black text-white'
-                    : 'border-border bg-background text-muted-foreground hover:bg-muted/50'
+                    : 'border-border bg-background text-[#8A8A8A] hover:bg-muted/50'
                 )}
               >
                 {c.label}
@@ -210,13 +290,19 @@ export function UserAccountApproveTab({ open, onSelectShooting, onCountChange }:
               </button>
             )
           })}
-      </div>
+        </div>
+      ) : null}
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-[10px]">
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-[10px]">
         {loading && visible.length === 0 ? (
-          <p className="py-8 text-center text-xs text-muted-foreground">불러오는 중…</p>
+          <p className="flex flex-1 items-center justify-center text-center text-xs text-muted-foreground">
+            불러오는 중…
+          </p>
         ) : visible.length === 0 ? (
-          <p className="py-8 text-center text-xs text-muted-foreground">처리할 승인요청이 없습니다.</p>
+          <div className="flex flex-1 flex-col items-center justify-center gap-2 text-center">
+            <Inbox className="h-8 w-8 text-[#B3B3B3]" strokeWidth={1} aria-hidden />
+            <p className="text-[10px] font-normal text-[#8A8A8A]">승인요청이 없습니다.</p>
+          </div>
         ) : (
           <ul className="flex flex-col gap-2">
             {visible.map((item) => (
