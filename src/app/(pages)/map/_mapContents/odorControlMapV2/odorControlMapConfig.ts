@@ -1,0 +1,11 @@
+/** 하수악취 V2 관제 지도 — 메뉴·opened 키 */
+
+export const ODOR_CONTROL_MAP_V2_OPENED_KEY = 'odorControlMapV2'
+export const ODOR_CONTROL_MAP_V2_SER_ENG = 'odorControlMapV2'
+
+export const ODOR_CONTROL_MAP_OPENED_KEY = ODOR_CONTROL_MAP_V2_OPENED_KEY
+export const ODOR_CONTROL_MAP_SER_ENG = ODOR_CONTROL_MAP_V2_SER_ENG
+
+export const ODOR_CONTROL_MAP_PANEL_DEFAULT_WIDTH = 340
+export const ODOR_CONTROL_MAP_PANEL_MIN_WIDTH = 280
+export const ODOR_CONTROL_MAP_PANEL_MAX_WIDTH = 480
