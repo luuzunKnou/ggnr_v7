@@ -3115,6 +3115,80 @@ export async function ensureLayerExtraSourceTable(result?: EnsureResult): Promis
   return out;
 }
 
+const LAYER_DOWNLOAD_AUTH_SQL = `
+CREATE TABLE IF NOT EXISTS public.layer_download_auth (
+  table_schema varchar NOT NULL,
+  table_name varchar NOT NULL,
+  shp_excel varchar NOT NULL DEFAULT 'auto',
+  attachment varchar NOT NULL DEFAULT 'none',
+  updated_at timestamp NOT NULL DEFAULT now(),
+  PRIMARY KEY (table_schema, table_name)
+);
+COMMENT ON TABLE public.layer_download_auth IS '레이어 다운로드 승인권한(SHP·엑셀/첨부)';
+COMMENT ON COLUMN public.layer_download_auth.table_schema IS '스키마(layer|public_layer)';
+COMMENT ON COLUMN public.layer_download_auth.table_name IS '테이블명';
+COMMENT ON COLUMN public.layer_download_auth.shp_excel IS 'SHP·엑셀 승인(auto|admin|team|none)';
+COMMENT ON COLUMN public.layer_download_auth.attachment IS '첨부파일 승인(auto|admin|team|none)';
+COMMENT ON COLUMN public.layer_download_auth.updated_at IS '수정시각';
+`;
+
+/** 레이어 다운로드 권한 테이블 확보 + 누락 컬럼 IF NOT EXISTS */
+export async function ensureLayerDownloadAuthTable(
+  result?: EnsureResult
+): Promise<EnsureResult> {
+  const out: EnsureResult = result ?? { created: [], moved: [], existed: [], errors: [] };
+  const fq = 'public.layer_download_auth';
+  try {
+    const existed = await tableExists('public', 'layer_download_auth');
+    await db.execute(sql.raw(LAYER_DOWNLOAD_AUTH_SQL));
+    if (existed === 'BASE TABLE') out.existed.push(fq);
+    else out.created.push(fq);
+
+    const cols: Array<{ name: string; ddl: string }> = [
+      { name: 'shp_excel', ddl: `varchar NOT NULL DEFAULT 'auto'` },
+      { name: 'attachment', ddl: `varchar NOT NULL DEFAULT 'none'` },
+      { name: 'updated_at', ddl: `timestamp NOT NULL DEFAULT now()` },
+    ];
+    for (const col of cols) {
+      if (await columnExists('public', 'layer_download_auth', col.name)) continue;
+      await db.execute(
+        sql.raw(
+          `ALTER TABLE public.layer_download_auth ADD COLUMN IF NOT EXISTS ${col.name} ${col.ddl}`
+        )
+      );
+      out.created.push(`${fq}.${col.name}`);
+    }
+
+    // attachment 컬럼 기본값을 none으로 맞춤 (기존 테이블)
+    try {
+      await db.execute(
+        sql.raw(
+          `ALTER TABLE public.layer_download_auth ALTER COLUMN attachment SET DEFAULT 'none'`
+        )
+      );
+    } catch {
+      /* ignore */
+    }
+
+    // geometry_columns 기준 미등록 레이어 시드 (SHP/엑셀=auto, 첨부=none)
+    await db.execute(
+      sql.raw(`
+        INSERT INTO public.layer_download_auth (table_schema, table_name, shp_excel, attachment, updated_at)
+        SELECT g.f_table_schema, g.f_table_name, 'auto', 'none', now()
+        FROM geometry_columns g
+        WHERE g.f_table_schema IN ('layer', 'public_layer')
+          AND g.f_table_name !~* '_bak[0-9]*$'
+          AND g.f_table_name !~* '^_(cmp_|sync_|rctmp_)'
+        ON CONFLICT (table_schema, table_name) DO NOTHING
+      `)
+    );
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    out.errors.push(`${fq}: ${msg}`);
+  }
+  return out;
+}
+
 /** instrumentation / 수동 호출용 */
 export async function ensureLayerAppTables(): Promise<EnsureResult> {
   const result: EnsureResult = { created: [], moved: [], existed: [], errors: [] };
@@ -3144,6 +3218,8 @@ export async function ensureLayerAppTables(): Promise<EnsureResult> {
     await ensureConsAlertSettingTable(result);
     await ensureRoadWorkHandbookTables(result);
     await ensureLandPriceMemoTable(result);
+    await ensureLayerDownloadAuthTable(result);
+    await ensureDataRequestFileTable(result);
     if ((process.env.GGNR_PROJECT ?? '').trim() === 'odor_ph') {
       await ensureOdorLinkageTables(result);
     }
@@ -3152,4 +3228,97 @@ export async function ensureLayerAppTables(): Promise<EnsureResult> {
     result.errors.push(msg);
   }
   return result;
+}
+
+const DATA_REQUEST_FILE_CREATE_SQL = `
+CREATE TABLE IF NOT EXISTS public.data_request_file (
+  drf_key serial PRIMARY KEY,
+  file_group_key integer NOT NULL,
+  file_user_id varchar NOT NULL,
+  file_user_name varchar,
+  file_ug_name varchar,
+  file_accept varchar NOT NULL DEFAULT 'Y',
+  file_accept_author varchar NOT NULL DEFAULT '',
+  file_accept_date timestamp,
+  file_accept_user varchar,
+  file_path varchar NOT NULL,
+  file_type varchar NOT NULL,
+  file_date timestamp NOT NULL,
+  file_pledge boolean NOT NULL DEFAULT true,
+  file_layer varchar,
+  file_layer_kor varchar,
+  file_layer_key varchar,
+  file_success varchar NOT NULL DEFAULT 'Y',
+  file_is_del boolean NOT NULL DEFAULT false,
+  user_ip varchar,
+  file_zip_name varchar,
+  file_etc text
+)
+`;
+
+/** data_request_file 확보 + file_layer_key 등 누락 컬럼 IF NOT EXISTS */
+export async function ensureDataRequestFileTable(
+  result?: EnsureResult
+): Promise<EnsureResult> {
+  const out: EnsureResult = result ?? { created: [], moved: [], existed: [], errors: [] };
+  const fq = 'public.data_request_file';
+  try {
+    const existed = await tableExists('public', 'data_request_file');
+    await db.execute(sql.raw(DATA_REQUEST_FILE_CREATE_SQL));
+    if (existed === 'BASE TABLE') out.existed.push(fq);
+    else out.created.push(fq);
+
+    try {
+      await db.execute(
+        sql.raw(`COMMENT ON TABLE public.data_request_file IS '데이터요청(보안서약·다운로드)'`)
+      );
+    } catch {
+      /* comment optional */
+    }
+
+    const cols: Array<{ name: string; ddl: string; comment?: string }> = [
+      { name: 'file_layer_key', ddl: 'varchar', comment: '첨부폴더명(pk)' },
+      { name: 'file_layer', ddl: 'varchar', comment: '레이어영문명(부모 우선)' },
+      { name: 'file_layer_kor', ddl: 'varchar' },
+      { name: 'file_accept_date', ddl: 'timestamp', comment: '승인일시' },
+      { name: 'file_etc', ddl: 'text' },
+    ];
+    for (const col of cols) {
+      if (await columnExists('public', 'data_request_file', col.name)) continue;
+      await db.execute(
+        sql.raw(
+          `ALTER TABLE public.data_request_file ADD COLUMN IF NOT EXISTS ${col.name} ${col.ddl}`
+        )
+      );
+      if (col.comment) {
+        try {
+          await db.execute(
+            sql.raw(
+              `COMMENT ON COLUMN public.data_request_file.${col.name} IS '${col.comment.replace(/'/g, "''")}'`
+            )
+          );
+        } catch {
+          /* comment optional */
+        }
+      }
+      out.created.push(`${fq}.${col.name}`);
+    }
+
+    // 기존 테이블에 file_layer_key가 이미 있어도 코멘트만 보강
+    if (await columnExists('public', 'data_request_file', 'file_layer_key')) {
+      try {
+        await db.execute(
+          sql.raw(
+            `COMMENT ON COLUMN public.data_request_file.file_layer_key IS '첨부폴더명(pk)'`
+          )
+        );
+      } catch {
+        /* ignore */
+      }
+    }
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    out.errors.push(`${fq}: ${msg}`);
+  }
+  return out;
 }

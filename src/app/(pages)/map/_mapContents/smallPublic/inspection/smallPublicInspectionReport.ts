@@ -1,3 +1,5 @@
+// TODO: 보안서약 일시 비활성화 — 이후 확인 후 주석 해제 필요 (레이어 SHP/엑셀 권한·tableName 연동)
+// import { writeExcelWorkbookWithPledge } from '@/app/(pages)/_components/securityPledge/excelPledgeGate'
 import type { SmallPublicCandidate, SmallPublicFacType } from '../smallPublicConfig'
 import { applyThinBorders } from '../smallPublicExcelStyle'
 import { downloadHwpx, type HwpxBlock } from '../smallPublicHwpx'
@@ -270,7 +272,10 @@ export async function exportSmallPublicReportExcel(
     ]
     add(rows.length ? rows : [{ 변동: '변동 없음' }], '전년대비변동')
   }
-  XLSX.writeFile(wb, `안전점검대상_${snap.year}${emd ? `_${emd}` : ''}_${snap.baseDate.replace(/-/g, '')}.xlsx`)
+  const fileName = `안전점검대상_${snap.year}${emd ? `_${emd}` : ''}_${snap.baseDate.replace(/-/g, '')}.xlsx`
+  // TODO: 보안서약 일시 비활성화 — 이후 확인 후 주석 해제 필요
+  // writeExcelWorkbookWithPledge(XLSX, wb, fileName, '안전점검대상')
+  XLSX.writeFile(wb, fileName)
 }
 
 /** 보고서 한글 문서 본문 — 미리보기 HTML과 같은 구성 */

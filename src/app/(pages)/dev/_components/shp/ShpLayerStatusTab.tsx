@@ -5,6 +5,7 @@ import { Button } from '@/app/shadcnComponents/ui/button';
 import { call } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { RefreshCw, Check, X, Search, Download } from 'lucide-react';
+import { downloadLayerShp } from '@/app/(pages)/dev/_components/layerManager/layerListDownload';
 
 type LayerStatusRow = {
   tableName: string;
@@ -82,38 +83,20 @@ export function ShpLayerStatusTab({ relativePath, onPathChange }: Props) {
   const [repairingKey, setRepairingKey] = useState<string | null>(null);
   const repairingRef = useRef(false);
 
-  const triggerBlobDownload = (blob: Blob, filename: string) => {
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = filename;
-    a.rel = 'noopener';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(a.href);
-  };
-
-  const handleShpDownload = useCallback(async (tableName: string, dbSchema: 'layer' | 'public_layer') => {
-    if (!tableName?.trim()) return;
-    setDownloadingShp(tableName);
-    try {
-      const res = await fetch('/api/download/shp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tableName, schema: dbSchema }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(typeof data?.error === 'string' ? data.error : 'SHP export failed');
+  const handleShpDownload = useCallback(
+    async (tableName: string, dbSchema: 'layer' | 'public_layer', _korName?: string) => {
+      if (!tableName?.trim()) return;
+      setDownloadingShp(tableName);
+      try {
+        await downloadLayerShp(tableName, dbSchema);
+      } catch (e) {
+        alert(e instanceof Error ? e.message : 'SHP 다운로드 실패');
+      } finally {
+        setDownloadingShp(null);
       }
-      const blob = await res.blob();
-      triggerBlobDownload(blob, `${tableName}.zip`);
-    } catch (e) {
-      alert(e instanceof Error ? e.message : 'SHP 다운로드 실패');
-    } finally {
-      setDownloadingShp(null);
-    }
-  }, []);
+    },
+    []
+  );
 
   const fetchStatus = useCallback(async () => {
     setLoading(true);
@@ -363,7 +346,9 @@ export function ShpLayerStatusTab({ relativePath, onPathChange }: Props) {
                       size="sm"
                       className="h-7 px-1.5 gap-0.5"
                       disabled={!row.table || downloadingShp !== null}
-                      onClick={() => handleShpDownload(row.tableName, row.dbSchema ?? 'layer')}
+                      onClick={() =>
+                        handleShpDownload(row.tableName, row.dbSchema ?? 'layer', row.korName)
+                      }
                       title="DB layer 테이블을 EPSG:5181 SHP(zip)로 다운로드"
                     >
                       <Download className="w-3.5 h-3.5" />
@@ -383,6 +368,7 @@ export function ShpLayerStatusTab({ relativePath, onPathChange }: Props) {
           {filtered.length}건 표시 (전체 {rows.length}건)
         </div>
       )}
+
     </div>
   );
 }

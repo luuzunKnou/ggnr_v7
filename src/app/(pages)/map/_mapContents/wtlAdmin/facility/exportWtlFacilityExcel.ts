@@ -22,6 +22,8 @@ export function exportWtlFacilityExcel(args: {
   sheetName?: string
   title?: string
   fileName?: string
+  /** SHP/엑셀 다운로드 권한 조회용 */
+  tableNames?: string[]
 }): void {
   const { rows, fields, codesByField } = args
   if (rows.length === 0) return
@@ -61,5 +63,7 @@ export function exportWtlFacilityExcel(args: {
       },
     ],
     fileName: args.fileName ?? `${stamp}_${sheetLabel}.xlsx`,
+    tableNames: args.tableNames,
+    tableKorName: title,
   })
 }

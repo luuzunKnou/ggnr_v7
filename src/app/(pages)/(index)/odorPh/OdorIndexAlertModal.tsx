@@ -83,7 +83,7 @@ export function OdorIndexAlertModal({ open, onClose, onGoAlertList }: Props) {
 
   return (
     <div
-      className="pointer-events-auto absolute bottom-4 right-4 z-[80] w-[min(100%,22rem)]"
+      className="pointer-events-auto absolute bottom-4 right-4 z-80 w-[min(100%,22rem)]"
       role="dialog"
       aria-modal="true"
       aria-label="악취 경보 발생"

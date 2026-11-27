@@ -164,9 +164,9 @@ export function WtlFacilityInfoPreviewFloat({ preview, onClose }: Props) {
       title="시설정보 상세보기"
       className={cn(
         'pointer-events-auto fixed flex flex-col overflow-hidden',
-        'standard-map-float-surface !opacity-100',
+        'standard-map-float-surface opacity-100!',
         // 지도(z-0) 위 · 리스트·확장 패널(z-10) 아래
-        'z-[5]',
+        'z-5',
         !pos && 'invisible'
       )}
       style={{
@@ -178,7 +178,7 @@ export function WtlFacilityInfoPreviewFloat({ preview, onClose }: Props) {
     >
       <div
         className={cn(
-          'standard-map-float-header cursor-default gap-1.5 !py-1.5 !text-[11px]',
+          'standard-map-float-header cursor-default gap-1.5 py-1.5! text-[11px]!',
           'hover:bg-slate-100 dark:hover:bg-white/10 dark:hover:text-white/90'
         )}
       >
@@ -209,7 +209,7 @@ export function WtlFacilityInfoPreviewFloat({ preview, onClose }: Props) {
         </button>
       </div>
       <div className="px-2.5 py-1.5 text-[11px] leading-snug text-slate-700 dark:text-white/85">
-        <p className="m-0 break-words" title={address}>
+        <p className="m-0 wrap-break-word" title={address}>
           {address}
         </p>
       </div>

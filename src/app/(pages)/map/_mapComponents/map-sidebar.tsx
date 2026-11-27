@@ -325,7 +325,7 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
           {navHover && canScrollUp && (
             <button
               type="button"
-              className="absolute left-0 right-0 top-0 z-[2] flex h-6 items-center justify-center bg-gradient-to-b from-black/55 to-transparent text-white/90"
+              className="absolute left-0 right-0 top-0 z-2 flex h-6 items-center justify-center bg-gradient-to-b from-black/55 to-transparent text-white/90"
               aria-label="메뉴 위로 스크롤"
               onMouseEnter={() => startNavScrollHold(-1)}
               onMouseLeave={stopNavScrollHold}
@@ -387,7 +387,7 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
           {navHover && canScrollDown && (
             <button
               type="button"
-              className="absolute bottom-0 left-0 right-0 z-[2] flex h-6 items-center justify-center bg-gradient-to-t from-black/55 to-transparent text-white/90"
+              className="absolute bottom-0 left-0 right-0 z-2 flex h-6 items-center justify-center bg-gradient-to-t from-black/55 to-transparent text-white/90"
               aria-label="메뉴 아래로 스크롤"
               onMouseEnter={() => startNavScrollHold(1)}
               onMouseLeave={stopNavScrollHold}

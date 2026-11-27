@@ -377,7 +377,7 @@ export function MeterBulkAddModal({ open, onClose, onAdd, existingKeys }: Props)
 
   return createPortal(
     <div
-      className="pointer-events-auto fixed z-[80] flex flex-col overflow-hidden rounded-md border border-border bg-card shadow-xl"
+      className="pointer-events-auto fixed z-80 flex flex-col overflow-hidden rounded-md border border-border bg-card shadow-xl"
       style={{ left: pos.x, top: pos.y, width: size.width, height: size.height }}
       role="dialog"
       aria-label="일괄 입력"

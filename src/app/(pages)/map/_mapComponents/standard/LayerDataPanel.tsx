@@ -2382,10 +2382,10 @@ export function LayerDataPanel({
           'flex flex-col overflow-hidden',
           isIdentifyMode
             ? hasDetail
-              ? 'flex-[3] min-h-0'
+              ? 'flex-3 min-h-0'
               : 'flex-1 min-h-0'
             : hasDetail
-              ? 'flex-[3] min-h-0'
+              ? 'flex-3 min-h-0'
               : 'flex-1 min-h-0'
         )}
       >
@@ -2617,7 +2617,7 @@ export function LayerDataPanel({
 
       {/* Detail section - 2/3 */}
       {hasDetail && selectedRow && (
-        <div className="flex-[7] min-h-0 flex flex-col border-t-2 border-primary/30 bg-background overflow-hidden">
+        <div className="flex-7 min-h-0 flex flex-col border-t-2 border-primary/30 bg-background overflow-hidden">
           {/* Detail tabs */}
           <div className="flex border-b border-border shrink-0">
             {detailTabs.map(({ id, label, icon: TabIcon }) => (
@@ -3060,18 +3060,25 @@ export function LayerDataPanel({
                   rowKeyForAttachments != null &&
                   activeLayer != null &&
                   attachmentQuery.files.length > 0 ? (
-                    <a
-                      href={serviceFileDataZipDownloadUrl(
-                        SER_FILE_ENG.dataQuery,
-                        activeLayer.physicalTableName,
-                        rowKeyForAttachments,
-                        { layerDisplayName: activeLayer.name }
-                      )}
-                      download
-                      className="rounded border border-border bg-background px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted/50"
+                    <button
+                      type="button"
+                      title="전체 다운로드"
+                      onClick={() => {
+                        const zipUrl = serviceFileDataZipDownloadUrl(
+                          SER_FILE_ENG.dataQuery,
+                          activeLayer.physicalTableName,
+                          rowKeyForAttachments,
+                          { layerDisplayName: activeLayer.name }
+                        );
+                        triggerServiceFileDownload(
+                          zipUrl,
+                          `${activeLayer.name || '첨부'}_첨부파일.zip`
+                        );
+                      }}
+                      className="cursor-pointer rounded border border-border bg-background px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted/50"
                     >
                       전체 다운로드
-                    </a>
+                    </button>
                   ) : (
                     <span className="rounded border border-border bg-muted/30 px-2.5 py-1 text-[11px] text-muted-foreground cursor-not-allowed">
                       전체 다운로드

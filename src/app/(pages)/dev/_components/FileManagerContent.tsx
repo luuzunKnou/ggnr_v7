@@ -16,8 +16,9 @@ import {
   Upload,
 } from 'lucide-react';
 import { call } from '@/lib/api';
-import { appFetch, withBasePath } from '@/lib/basePath';
 import { cn } from '@/lib/utils';
+import { withBasePath } from '@/lib/basePath';
+import { triggerBlobDownload } from '@/app/(pages)/dev/_components/layerManager/layerListDownload';
 import { Button } from '@/app/shadcnComponents/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/shadcnComponents/ui/card';
 import { Input } from '@/app/shadcnComponents/ui/input';
@@ -114,25 +115,6 @@ function formatModified(iso?: string): string {
 
 function pathDisplayName(relativePath: string, rootName: string): string {
   return relativePath ? relativePath.split('/').pop() ?? relativePath : rootName;
-}
-
-function fileNameFromDisposition(header: string | null): string | null {
-  if (!header) return null;
-  const utf8 = /filename\*=UTF-8''([^;]+)/i.exec(header);
-  if (utf8?.[1]) return decodeURIComponent(utf8[1]);
-  const ascii = /filename="([^"]+)"/i.exec(header);
-  return ascii?.[1] ?? null;
-}
-
-function triggerBlobDownload(blob: Blob, fileName: string): void {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = fileName;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
 }
 
 function TreeNode({
@@ -548,44 +530,40 @@ export function FileManagerContent() {
 
   const handleDownload = useCallback(async () => {
     if (selectedRows.length === 0) return;
-    setActionLoading(true);
     setActionError(null);
+    setActionLoading(true);
     try {
-      if (selectedRows.length === 1 && selectedRows[0]!.kind === 'file') {
-        const row = selectedRows[0]!;
-        const res = await appFetch(
-          `/api/file-manager/download?path=${encodeURIComponent(row.relativePath)}`,
-          {
-            method: 'GET',
-            cache: 'no-store',
-            credentials: 'include',
-          }
+      const paths = selectedRows.map((row) => row.relativePath);
+      const singleFile = selectedRows.length === 1 && selectedRows[0]!.kind === 'file';
+      if (singleFile) {
+        const path = paths[0]!;
+        const res = await fetch(
+          withBasePath(`/api/file-manager/download?path=${encodeURIComponent(path)}`),
+          { credentials: 'include', cache: 'no-store' }
         );
         if (!res.ok) {
-          const text = await res.text();
-          throw new Error(text || '다운로드 실패');
+          const data = (await res.json().catch(() => ({}))) as { error?: string };
+          throw new Error(typeof data.error === 'string' ? data.error : '다운로드 실패');
         }
         const blob = await res.blob();
-        triggerBlobDownload(
-          blob,
-          fileNameFromDisposition(res.headers.get('content-disposition')) ?? row.name
-        );
+        triggerBlobDownload(blob, selectedRows[0]!.name);
       } else {
-        const res = await appFetch(withBasePath('/api/file-manager/download-zip'), {
+        const res = await fetch(withBasePath('/api/file-manager/download-zip'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ paths }),
           credentials: 'include',
-          body: JSON.stringify({ paths: selectedRows.map((row) => row.relativePath) }),
+          cache: 'no-store',
         });
         if (!res.ok) {
-          const text = await res.text();
-          throw new Error(text || 'ZIP 다운로드 실패');
+          const data = (await res.json().catch(() => ({}))) as { error?: string };
+          throw new Error(typeof data.error === 'string' ? data.error : 'ZIP 다운로드 실패');
         }
         const blob = await res.blob();
-        triggerBlobDownload(
-          blob,
-          fileNameFromDisposition(res.headers.get('content-disposition')) ?? 'download.zip'
-        );
+        const cd = res.headers.get('Content-Disposition') ?? '';
+        const m = /filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i.exec(cd);
+        const rawName = m?.[1] ? decodeURIComponent(m[1]) : m?.[2];
+        triggerBlobDownload(blob, rawName?.trim() || 'download.zip');
       }
     } catch (e: unknown) {
       setActionError(e instanceof Error ? e.message : String(e));

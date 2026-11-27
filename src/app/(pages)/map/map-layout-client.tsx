@@ -1,4 +1,4 @@
-﻿// src/app/(pages)/map/map-layout-client.tsx
+// src/app/(pages)/map/map-layout-client.tsx
 "use client"
 
 import React, { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo, Suspense } from "react"
@@ -252,21 +252,29 @@ import {
   ODOR_ALERT_OPENED_KEY,
 } from "./_mapContents/odorAlert/odorAlertConfig"
 import { OdorAlertShell } from "./_mapContents/odorAlert/OdorAlert.shell"
-import { OdorAlertPopupHost } from "./_mapContents/odorAlert/OdorAlertPopupHost"
 import {
-  ODOR_DASHBOARD_OPENED_KEY,
-} from "./_mapContents/odorDashboard/odorDashboardConfig"
-import { OdorDashboardShell } from "./_mapContents/odorDashboard/OdorDashboard.shell"
+  ODOR_DASHBOARD2_OPENED_KEY,
+} from "./_mapContents/odorDashboard2/odorDashboard2Config"
+import { OdorDashboard2Shell } from "./_mapContents/odorDashboard2/OdorDashboard2.shell"
 import {
   ODOR_ALERT_VIEW2_OPENED_KEY,
 } from "./_mapContents/odorAlertView2/odorAlertView2Config"
 import { OdorAlertView2Shell } from "./_mapContents/odorAlertView2/OdorAlertView2.shell"
+import {
+  ODOR_REPORT_VIEW_OPENED_KEY,
+} from "./_mapContents/odorReportView/odorReportViewMapConfig"
+import { OdorReportViewShell } from "./_mapContents/odorReportView/OdorReportView.shell"
+import {
+  ODOR_SYSTEM_STATUS_OPENED_KEY,
+} from "./_mapContents/odorSystemStatus/odorSystemStatusConfig"
+import { OdorSystemStatusShell } from "./_mapContents/odorSystemStatus/OdorSystemStatus.shell"
 import { FmsLinkageListPanel } from "./_mapContents/fmsLinkage/FmsLinkageListPanel"
 import { FmsLinkageDetailPanel } from "./_mapContents/fmsLinkage/FmsLinkageDetailPanel"
 import { isFmsOpenedToken } from "@/lib/fmsLinkage/fmsBinding"
 import {
   UserAccountProtoPanel,
 } from "./_mapContents/prototypes/UserAccountProtoPanel"
+import { SystemFeedbackModal } from "./_mapContents/systemFeedback/SystemFeedbackModal"
 // import { PROTO_LEDGERS, type ProtoLedgerRow } from "./_mapContents/prototypes/dummyData"
 // import { flyToProtoLedger } from "./_mapContents/prototypes/protoMapNavigation"
 import { ROAD_LEDGER_SUMMARY_LAYER_ID } from "./_mapContents/road/roadLedger/roadLedgerDocLayerMap"
@@ -289,6 +297,7 @@ import {
   writeLastMapSystemKey,
 } from "./_mapComponents/hooks/useMapStatePersist"
 import { call } from "@/lib/api"
+import { withBasePathNav } from "@/lib/basePath"
 import { MapSidebar } from "./_mapComponents/map-sidebar"
 import { MapSearchBar } from "./_mapComponents/map-search-bar"
 import { MapContextProvider, useMapContext } from "./_mapComponents/MapContext"
@@ -916,9 +925,12 @@ function MapLayoutContent({
   const smallPublicCandidateOpen = openedWindows.includes(SMALL_PUBLIC_CANDIDATE_OPENED_KEY)
   const smallPublicInspectionOpen = openedWindows.includes(SMALL_PUBLIC_INSPECTION_OPENED_KEY)
   const smallPublicPlanOpen = openedWindows.includes(SMALL_PUBLIC_PLAN_OPENED_KEY)
-  const odorDashboardOpen = openedWindows.includes(ODOR_DASHBOARD_OPENED_KEY)
+  const smallPublicBudgetOpen = openedWindows.includes(SMALL_PUBLIC_BUDGET_OPENED_KEY)
+  const odorDashboard2Open = openedWindows.includes(ODOR_DASHBOARD2_OPENED_KEY)
   const odorAlertOpen = openedWindows.includes(ODOR_ALERT_OPENED_KEY)
   const odorAlertView2Open = openedWindows.includes(ODOR_ALERT_VIEW2_OPENED_KEY)
+  const odorReportViewOpen = openedWindows.includes(ODOR_REPORT_VIEW_OPENED_KEY)
+  const odorSystemStatusOpen = openedWindows.includes(ODOR_SYSTEM_STATUS_OPENED_KEY)
   const worksRegisterOpen = openedWindows.includes(WORKS_REGISTER_OPENED_KEY)
   const wtlAdminEmptySerEng = findOpenedWtlAdminEmptySerEng(openedWindows)
   const wtlAdminEmptyOpen = Boolean(wtlAdminEmptySerEng)
@@ -1067,12 +1079,16 @@ function MapLayoutContent({
   const [smallPublicCandidateTotalWidth, setSmallPublicCandidateTotalWidth] = useState(0)
   const [smallPublicInspectionTotalWidth, setSmallPublicInspectionTotalWidth] = useState(0)
   const [smallPublicPlanTotalWidth, setSmallPublicPlanTotalWidth] = useState(0)
-  const [odorDashboardTotalWidth, setOdorDashboardTotalWidth] = useState(0)
+  const [smallPublicBudgetTotalWidth, setSmallPublicBudgetTotalWidth] = useState(0)
+  const [odorDashboard2TotalWidth, setOdorDashboard2TotalWidth] = useState(0)
   const [odorAlertTotalWidth, setOdorAlertTotalWidth] = useState(0)
   const [odorAlertView2TotalWidth, setOdorAlertView2TotalWidth] = useState(0)
+  const [odorReportViewTotalWidth, setOdorReportViewTotalWidth] = useState(0)
+  const [odorSystemStatusTotalWidth, setOdorSystemStatusTotalWidth] = useState(0)
   const [worksRegisterTotalWidth, setWorksRegisterTotalWidth] = useState(0)
   const [wtlAdminEmptyTotalWidth, setWtlAdminEmptyTotalWidth] = useState(0)
   const [protoUserAccountOpen, setProtoUserAccountOpen] = useState(false)
+  const [systemFeedbackOpen, setSystemFeedbackOpen] = useState(false)
 
   const [memoDetailId, setMemoDetailId] = useState<string | null>(null)
   const [gcpDetailId, setGcpDetailId] = useState<string | null>(null)
@@ -1418,9 +1434,11 @@ function MapLayoutContent({
     (cadastralControlPointDetailOpen ? cadastralControlPointDetailWidth : 0) +
     (riverIllegalOccupationOpen ? riverIllegalOccupationPanelWidth : 0) +
     (riverIllegalOccupationDetailOpen ? riverIllegalOccupationDetailWidth : 0) +
-    (odorDashboardOpen ? odorDashboardTotalWidth : 0) +
+    (odorDashboard2Open ? odorDashboard2TotalWidth : 0) +
     (odorAlertOpen ? odorAlertTotalWidth : 0) +
-    (odorAlertView2Open ? odorAlertView2TotalWidth : 0)
+    (odorAlertView2Open ? odorAlertView2TotalWidth : 0) +
+    (odorReportViewOpen ? odorReportViewTotalWidth : 0) +
+    (odorSystemStatusOpen ? odorSystemStatusTotalWidth : 0)
   const searchBarOffset = {
     leftPx: SIDEBAR_WIDTH + totalListPanelWidth + SEARCH_BAR_MARGIN,
     topPx: 16,
@@ -1649,13 +1667,17 @@ function MapLayoutContent({
   const riverIllegalOccupationDetailLeftPx =
     riverIllegalOccupationPanelLeftPx +
     (riverIllegalOccupationOpen ? riverIllegalOccupationPanelWidth : 0)
-  const odorDashboardPanelLeftPx =
+  const odorDashboard2PanelLeftPx =
     riverIllegalOccupationDetailLeftPx +
     (riverIllegalOccupationDetailOpen ? riverIllegalOccupationDetailWidth : 0)
   const odorAlertPanelLeftPx =
-    odorDashboardPanelLeftPx + (odorDashboardOpen ? odorDashboardTotalWidth : 0)
+    odorDashboard2PanelLeftPx + (odorDashboard2Open ? odorDashboard2TotalWidth : 0)
   const odorAlertView2PanelLeftPx =
     odorAlertPanelLeftPx + (odorAlertOpen ? odorAlertTotalWidth : 0)
+  const odorReportViewPanelLeftPx =
+    odorAlertView2PanelLeftPx + (odorAlertView2Open ? odorAlertView2TotalWidth : 0)
+  const odorSystemStatusPanelLeftPx =
+    odorReportViewPanelLeftPx + (odorReportViewOpen ? odorReportViewTotalWidth : 0)
   const mapPaddingLeft = SIDEBAR_WIDTH + totalListPanelWidth
   /** 패딩은 useLayoutEffect — 자식 useEffect(도로대장 fit 등)보다 먼저 적용되어야 함.
    * 거리뷰 ON일 때만 맵 중심(A)을 새 센터마크 위치에 맞춤.
@@ -2360,9 +2382,9 @@ function MapLayoutContent({
     setOpened(next)
   }
 
-  const handleCloseOdorDashboard = () => {
-    setOdorDashboardTotalWidth(0)
-    setOpened(openedWindows.filter((w) => w !== ODOR_DASHBOARD_OPENED_KEY))
+  const handleCloseOdorDashboard2 = () => {
+    setOdorDashboard2TotalWidth(0)
+    setOpened(openedWindows.filter((w) => w !== ODOR_DASHBOARD2_OPENED_KEY))
   }
 
   const handleCloseOdorAlert = () => {
@@ -2375,9 +2397,19 @@ function MapLayoutContent({
     setOpened(openedWindows.filter((w) => w !== ODOR_ALERT_VIEW2_OPENED_KEY))
   }
 
-  const handleOpenOdorAlertFromDashboard = () => {
-    setOdorDashboardTotalWidth(0)
-    setOpened([ODOR_ALERT_OPENED_KEY])
+  const handleCloseOdorReportView = () => {
+    setOdorReportViewTotalWidth(0)
+    setOpened(openedWindows.filter((w) => w !== ODOR_REPORT_VIEW_OPENED_KEY))
+  }
+
+  const handleCloseOdorSystemStatus = () => {
+    setOdorSystemStatusTotalWidth(0)
+    setOpened(openedWindows.filter((w) => w !== ODOR_SYSTEM_STATUS_OPENED_KEY))
+  }
+
+  const handleOpenOdorAlertFromDashboard2 = () => {
+    setOdorDashboard2TotalWidth(0)
+    setOpened([ODOR_ALERT_VIEW2_OPENED_KEY])
   }
 
   const handleCloseFmsLinkage = () => {
@@ -2609,8 +2641,8 @@ function MapLayoutContent({
   }, [worksRegisterOpen])
 
   useEffect(() => {
-    if (!odorDashboardOpen) setOdorDashboardTotalWidth(0)
-  }, [odorDashboardOpen])
+    if (!odorDashboard2Open) setOdorDashboard2TotalWidth(0)
+  }, [odorDashboard2Open])
 
   useEffect(() => {
     if (!odorAlertOpen) setOdorAlertTotalWidth(0)
@@ -2619,6 +2651,14 @@ function MapLayoutContent({
   useEffect(() => {
     if (!odorAlertView2Open) setOdorAlertView2TotalWidth(0)
   }, [odorAlertView2Open])
+
+  useEffect(() => {
+    if (!odorReportViewOpen) setOdorReportViewTotalWidth(0)
+  }, [odorReportViewOpen])
+
+  useEffect(() => {
+    if (!odorSystemStatusOpen) setOdorSystemStatusTotalWidth(0)
+  }, [odorSystemStatusOpen])
 
   useEffect(() => {
     if (!cadastralResurveyOpen) setCadastralResurveyDistrictId(null)
@@ -2958,7 +2998,7 @@ function MapLayoutContent({
         <HangulSearchIme />
         {mapContext?.layerRowGeomEdit && (
           <div
-            className="pointer-events-none fixed inset-0 z-[100] box-border border-2 border-primary/40"
+            className="pointer-events-none fixed inset-0 z-100 box-border border-2 border-primary/40"
             aria-hidden
           />
         )}
@@ -3540,7 +3580,7 @@ function MapLayoutContent({
             qgisLayerPortalReady &&
             createPortal(
               <div
-                className="pointer-events-auto fixed inset-y-0 right-0 z-[55] flex flex-col border-l border-border bg-background shadow-lg"
+                className="pointer-events-auto fixed inset-y-0 right-0 z-55 flex flex-col border-l border-border bg-background shadow-lg"
                 style={{ left: qgisLayerControlPanelLeftPx }}
               >
                 <SerWriteAccessProvider serEng="qgisLayerControl">
@@ -3990,6 +4030,18 @@ function MapLayoutContent({
                 return
               }
               setShootingRequestDetailId(newId)
+            }}
+            onOpenDetail={(id) => {
+              setMyInfoShootingModalId(null)
+              setProtoUserAccountOpen(false)
+              const current = new URLSearchParams(Array.from(searchParams.entries()))
+              if (!isUavAdminSystemKey(systemKeyFromUrl)) {
+                current.set("system", "uav")
+              }
+              current.set("opened", SHOOTING_APPROVAL_OPENED_KEY)
+              pushMapQuery(current)
+              setShootingRequestDetailId(id)
+              setShootingRequestListMode("approval")
             }}
           />
           {policyMapOpen && (
@@ -4900,12 +4952,12 @@ function MapLayoutContent({
               </MapSideListPanel>
             </div>
           )}
-          {odorDashboardOpen && (
-            <OdorDashboardShell
-              leftOffsetPx={odorDashboardPanelLeftPx}
-              onTotalWidthChange={setOdorDashboardTotalWidth}
-              onClose={handleCloseOdorDashboard}
-              onOpenAlertList={handleOpenOdorAlertFromDashboard}
+          {odorDashboard2Open && (
+            <OdorDashboard2Shell
+              leftOffsetPx={odorDashboard2PanelLeftPx}
+              onTotalWidthChange={setOdorDashboard2TotalWidth}
+              onClose={handleCloseOdorDashboard2}
+              onOpenAlertList={handleOpenOdorAlertFromDashboard2}
             />
           )}
           {odorAlertOpen && (
@@ -4922,7 +4974,20 @@ function MapLayoutContent({
               onClose={handleCloseOdorAlertView2}
             />
           )}
-          <OdorAlertPopupHost enabled={systemKeyFromUrl === "odorAdmin"} />
+          {odorReportViewOpen && (
+            <OdorReportViewShell
+              leftOffsetPx={odorReportViewPanelLeftPx}
+              onTotalWidthChange={setOdorReportViewTotalWidth}
+              onClose={handleCloseOdorReportView}
+            />
+          )}
+          {odorSystemStatusOpen && (
+            <OdorSystemStatusShell
+              leftOffsetPx={odorSystemStatusPanelLeftPx}
+              onTotalWidthChange={setOdorSystemStatusTotalWidth}
+              onClose={handleCloseOdorSystemStatus}
+            />
+          )}
           <div className="flex-1 min-w-0 relative">
             <div className="pointer-events-auto">
               <MapSearchBar
@@ -5068,10 +5133,15 @@ function MapLayoutContent({
               <MapRightClickMenu />
             </div>
             <div className="pointer-events-auto">
+              <SystemFeedbackModal
+                open={systemFeedbackOpen}
+                onClose={() => setSystemFeedbackOpen(false)}
+              />
               <UserAccountProtoPanel
                 open={protoUserAccountOpen}
                 onClose={() => setProtoUserAccountOpen(false)}
                 onSelectShootingRequest={(id) => setMyInfoShootingModalId(id)}
+                onOpenSystemFeedback={() => setSystemFeedbackOpen(true)}
                 onOpenLedger={(item) => {
                   const key = String(item.notifKey ?? "")
                   if (key.startsWith("cons-alert:")) {
@@ -5167,6 +5237,14 @@ function MapLayoutContent({
                   })
                   setOpened([AERIAL_DRONE_OPENED_KEY])
                   setProtoUserAccountOpen(false)
+                }}
+                onOpenDataRequest={(item) => {
+                  const href =
+                    item.target === "dataRequestApprove"
+                      ? "/data-request-approve"
+                      : "/data-request"
+                  setProtoUserAccountOpen(false)
+                  window.location.assign(withBasePathNav(href))
                 }}
               />
             </div>

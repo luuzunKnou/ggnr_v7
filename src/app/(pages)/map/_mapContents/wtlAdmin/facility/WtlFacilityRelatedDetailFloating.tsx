@@ -29,6 +29,7 @@ import {
   peekWtlDefineDisplayBundle,
   type WtlDefineDisplayBundle,
 } from '../networkMap/wtlNetworkDefineDisplayCache'
+import { recordDataViewLog } from '@/lib/recordDataViewLog'
 
 export type WtlFacilityRelatedDetailRow = {
   ogcFid: number | null
@@ -44,6 +45,8 @@ type Props = {
   /** 물리 테이블명 — BOOLEAN 체크박스용 DB 타입 조회 */
   table?: string | null
   schema?: string | null
+  /** 데이터 이력관리 조회 서비스명 */
+  serviceName?: string | null
   /** 겹침 방지용 위치·순서 오프셋(px) */
   stackOffset?: number
   /** 미지정 시 stackOffset>0 → detailRelated, 아니면 detailFloating */
@@ -179,6 +182,7 @@ export function WtlMappedFacilityFloating({
   collapsed,
   onToggleCollapsed,
   anchorPosition = null,
+  serviceName,
 }: {
   target: WtlMappedFacilityTarget
   onClose: () => void
@@ -186,6 +190,8 @@ export function WtlMappedFacilityFloating({
   onToggleCollapsed: () => void
   /** Search 아이콘 화면 좌표 — 있으면 그 위치에 모달 오픈 */
   anchorPosition?: { top: number; left: number } | null
+  /** 데이터 이력관리 조회 서비스명 */
+  serviceName?: string | null
 }) {
   /** 지도 기본 모달(LayerClickDetail)과 동일 티어 */
   const facilityInfoZLayer: MapUiZLayer = 'detailFloating'
@@ -261,6 +267,7 @@ export function WtlMappedFacilityFloating({
         bundle={bundle}
         table={target.table}
         schema={target.schema}
+        serviceName={serviceName}
         onClose={onClose}
         stackOffset={36}
         zLayer={facilityInfoZLayer}
@@ -300,6 +307,7 @@ export function WtlFacilityRelatedDetailFloating({
   bundle,
   table: tableProp,
   schema: schemaProp,
+  serviceName,
   onClose,
   stackOffset = 0,
   zLayer: zLayerProp,
@@ -322,6 +330,37 @@ export function WtlFacilityRelatedDetailFloating({
     String(schemaProp ?? '')
       .trim()
       .toLowerCase() || 'layer'
+
+  // 데이터 이력관리에 조회 저장을 위해 추가
+  // 레이어명 = table prop. 키는 ogc_fid 우선( bundle 로딩으로 effect 재실행·중복 방지 )
+  useEffect(() => {
+    const logTable = String(tableProp ?? '')
+      .trim()
+      .replace(/^.*\./, '')
+      .toLowerCase()
+    if (!logTable) return
+    let keyField = 'ogc_fid'
+    let keyValue: string | null = null
+    if (row.ogcFid != null && Number.isFinite(row.ogcFid)) {
+      keyValue = String(row.ogcFid)
+    } else if (row.record) {
+      for (const f of ['ogc_fid', 'gid', 'id'] as const) {
+        const v = getRowValueByField(row.record, f)
+        if (v != null && String(v).trim()) {
+          keyField = f
+          keyValue = String(v).trim()
+          break
+        }
+      }
+    }
+    if (!keyValue) return
+    recordDataViewLog({
+      tableName: logTable,
+      keyField,
+      keyValue,
+      serviceName,
+    })
+  }, [tableProp, row.ogcFid, serviceName])
 
   useEffect(() => {
     if (!tableName) {

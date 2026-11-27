@@ -12,7 +12,7 @@ import { createBasicSectionLayers } from '../layerFactory/basicSectionLayerFacto
 import { createJimokLayers } from '../layerFactory/jimokLayerFactory';
 import { createOwnershipLayers } from '../layerFactory/ownershipLayerFactory';
 import { createThematicMapLayers } from '../layerFactory/thematicMapLayerFactory';
-import { createUndergroundFacilityLayers } from '../layerFactory/undergroundFacilityLayerFactory';
+import { createUndergroundFacilityServiceLayer } from '../layerFactory/undergroundFacilityLayerFactory';
 import { createSafetydataMapLayers } from '../layerFactory/safetydataMapLayerFactory';
 import { createServiceLayer } from '../layerFactory/serviceLayerFactory';
 import { loadPersistedMapState } from './useMapStatePersist';
@@ -70,7 +70,7 @@ export function useMapInstance(
         ...createJimokLayers(),
         ...createOwnershipLayers(),
         ...createThematicMapLayers(),
-        ...createUndergroundFacilityLayers(),
+        createUndergroundFacilityServiceLayer(),
         ...createSafetydataMapLayers(),
       ],
       view: new View({

@@ -36,6 +36,10 @@ import { useEnsureMapCenterInSggOnMount } from '../useEnsureMapCenterInSggOnMoun
 import { WtlLayerMark } from '../networkMap/WtlLayerMark'
 import { exportWtlFacilityExcel } from './exportWtlFacilityExcel'
 import {
+  SecurityPledgeModal,
+  postDataRequestJson,
+} from '@/app/(pages)/_components/securityPledge/SecurityPledgeModal'
+import {
   loadWtlDefineDisplayBundle,
 } from '../networkMap/wtlNetworkDefineDisplayCache'
 import { claimMapLayerClickDetailHighlight } from '@/lib/mapLayerClickDetailHighlight'
@@ -55,7 +59,7 @@ import {
 } from './resolveEquipmentFacilityInfoPreview'
 
 const RELATED_BTN =
-  'standard-layer-toggle-chip !w-[120px] !max-w-[120px] !min-w-[120px] shrink-0 cursor-pointer'
+  'standard-layer-toggle-chip w-[120px]! max-w-[120px]! min-w-[120px]! shrink-0 cursor-pointer'
 const RELATED_BTN_ON = 'standard-layer-toggle-chip-active'
 const RELATED_BTN_OFF = 'standard-layer-toggle-chip-inactive'
 
@@ -170,6 +174,7 @@ export function WtlFacilityShell({
   const [rows, setRows] = useState<WtlFacilityListRow[]>([])
   const [total, setTotal] = useState(0)
   const [shpExporting, setShpExporting] = useState(false)
+  const [shpPledgeOpen, setShpPledgeOpen] = useState(false)
   const [excelExporting, setExcelExporting] = useState(false)
   /** 점용허가 목록과 동일 — thead 다중 정렬 */
   const [sorts, setSorts] = useState<WtlFacilityListSortSpec[]>([])
@@ -508,8 +513,6 @@ export function WtlFacilityShell({
     }
   }, [layerGroupsMode, selectedSource?.tableName, tab])
 
-  /** 이 셸이 visible에 마지막으로 켠 테이블 — 전 탭 일괄 delete 금지(점멸 원인) */
-  const lastAppliedVisibleRef = useRef<string[]>([])
   /** 그룹 API가 완료된 탭 — 로딩 중·탭 불일치 시 visible sync 생략 */
   const groupsReadyTabRef = useRef<string | null>(null)
   /** 연관 초기 ON 반영 후에만 visible sync (직접만 먼저 켜는 2단 적용 방지) */
@@ -519,7 +522,7 @@ export function WtlFacilityShell({
   onTotalWidthChangeRef.current = onTotalWidthChange
   const onCloseRef = useRef(onClose)
   onCloseRef.current = onClose
-  /** 닫기 중 — 패널을 먼저 내리고 무거운 언마운트·레이어 OFF는 뒤로 */
+  /** 닫기 중 — 패널을 먼저 내리고 무거운 언마운트는 뒤로 (레이어는 유지) */
   const closingRef = useRef(false)
   const [isClosing, setIsClosing] = useState(false)
 
@@ -628,8 +631,6 @@ export function WtlFacilityShell({
     const toggleable = toggleableRelatedKey
       ? toggleableRelatedKey.split('\0')
       : []
-    const wantedToggleable = toggleable.filter((name) => onSet.has(name))
-    const prevApplied = lastAppliedVisibleRef.current
 
     setVisible((prev) => {
       const next = new Set(prev)
@@ -650,9 +651,6 @@ export function WtlFacilityShell({
       }
       return next
     })
-    lastAppliedVisibleRef.current = [
-      ...new Set([...prevApplied, direct, ...wantedToggleable]),
-    ]
   }, [
     mapContext?.setVisibleLayerNames,
     selectedSource?.tableName,
@@ -679,7 +677,6 @@ export function WtlFacilityShell({
 
     const pipes = pipeRelatedKey ? pipeRelatedKey.split('\0') : []
     if (pipes.length === 0) return
-    const prevApplied = lastAppliedVisibleRef.current
 
     setVisible((prev) => {
       const next = new Set(prev)
@@ -692,9 +689,6 @@ export function WtlFacilityShell({
       }
       return changed ? next : prev
     })
-    lastAppliedVisibleRef.current = [
-      ...new Set([...prevApplied, ...pipes]),
-    ]
   }, [
     mapContext?.setVisibleLayerNames,
     selectedSource?.tableName,
@@ -702,27 +696,6 @@ export function WtlFacilityShell({
     pipeRelatedKey,
     visibleSyncReady,
   ])
-
-  /** 시설·설비 종료 시 이 셸이 켠 레이어 제거 — 닫기 페인트 뒤로 미룸 */
-  useEffect(() => {
-    const setVisible = mapContext?.setVisibleLayerNames
-    if (!setVisible) return
-    return () => {
-      const applied = lastAppliedVisibleRef.current
-      lastAppliedVisibleRef.current = []
-      if (applied.length === 0) return
-      window.setTimeout(() => {
-        setVisible((prev) => {
-          let changed = false
-          const next = new Set(prev)
-          for (const t of applied) {
-            if (next.delete(t)) changed = true
-          }
-          return changed ? next : prev
-        })
-      }, 0)
-    }
-  }, [mapContext?.setVisibleLayerNames])
 
   /** 탭 변경 시 목록·필터·연관 레이어 초기화 + DB에 있는 레이어 그룹만 조회 */
   useEffect(() => {
@@ -1212,6 +1185,12 @@ export function WtlFacilityShell({
         sheetName: title,
         title,
         fileName: undefined,
+        tableNames: [
+          selectedSource.tableName,
+          sample?.fieldsTable,
+          sample?.fieldsTableFallback,
+          sample?.layerKey,
+        ].filter((n): n is string => Boolean(String(n ?? '').trim())),
       })
     } catch (e) {
       window.alert(e instanceof Error ? e.message : '엑셀 내려받기에 실패했습니다.')
@@ -1228,54 +1207,16 @@ export function WtlFacilityShell({
     title,
   ])
 
-  const handleShpExport = useCallback(async () => {
+  const handleShpExport = useCallback(() => {
     if (!selectedSource || shpExporting) return
-    setShpExporting(true)
-    try {
-      const res = await fetch('/api/download/wtl-facility-shp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          table: selectedSource.tableName,
-          schema: selectedSource.schema,
-          keyword,
-          areaWkts5181:
-            showLocationFilter && effectiveAreaWkts5181.length > 0
-              ? effectiveAreaWkts5181
-              : null,
-        }),
-      })
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        throw new Error(
-          typeof data?.error === 'string' ? data.error : 'SHP 다운로드 실패'
-        )
-      }
-      const blob = await res.blob()
-      const cd = res.headers.get('Content-Disposition') ?? ''
-      const m = /filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i.exec(cd)
-      const rawName = m?.[1] ? decodeURIComponent(m[1]) : m?.[2]
-      const fileName = rawName?.trim() || '시설목록_SHP.zip'
-      const a = document.createElement('a')
-      a.href = URL.createObjectURL(blob)
-      a.download = fileName
-      a.rel = 'noopener'
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(a.href)
-    } catch (e) {
-      window.alert(e instanceof Error ? e.message : 'SHP 다운로드 실패')
-    } finally {
-      setShpExporting(false)
-    }
-  }, [
-    shpExporting,
-    selectedSource,
-    keyword,
-    showLocationFilter,
-    effectiveAreaWkts5181,
-  ])
+    setShpPledgeOpen(true)
+  }, [shpExporting, selectedSource])
+
+  const facilityKorName = useMemo(() => {
+    const g = String(selectedSource?.group ?? '').trim()
+    const t = String(selectedSource?.tableName ?? '').trim()
+    return g || t || title || '시설목록'
+  }, [selectedSource?.group, selectedSource?.tableName, title])
 
   /**
    * 그룹·탭이 맞춰진 뒤에만 목록 조회.
@@ -1366,7 +1307,7 @@ export function WtlFacilityShell({
               </button>
             </div>
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-              <div className="standard-filter-section shrink-0 border-b-1 !pb-[13px]">
+              <div className="standard-filter-section shrink-0 border-b pb-[13px]!">
                 <div className="mb-2 flex flex-wrap items-center gap-1.5">
                   {catalog.tabs
                     .filter((name) => isTabEnabled(name))
@@ -1381,12 +1322,12 @@ export function WtlFacilityShell({
                           title={label}
                           className={cn(
                             RELATED_BTN,
-                            '!w-auto !min-w-0 !max-w-none px-2',
+                            'w-auto! min-w-0! max-w-none! px-2',
                             on ? RELATED_BTN_ON : RELATED_BTN_OFF
                           )}
                           onClick={() => handleTabClick(name)}
                         >
-                          <span className="min-w-0 truncate [word-break:keep-all]">
+                          <span className="min-w-0 truncate break-keep">
                             {label}
                           </span>
                         </button>
@@ -1396,7 +1337,7 @@ export function WtlFacilityShell({
                 {tab && isTabEnabled(tab) && groupOptions.length > 0 ? (
                   <div className="space-y-1.5">
                     <div className="flex items-center gap-1">
-                      <span className="standard-detail-hit-label w-16 !text-foreground">
+                      <span className="standard-detail-hit-label w-16 text-foreground!">
                         레이어 그룹
                       </span>
                       <select
@@ -1435,7 +1376,7 @@ export function WtlFacilityShell({
                             className="flex items-start gap-1"
                           >
                             <span
-                              className="standard-detail-hit-label mt-1 w-16 shrink-0 !text-foreground"
+                              className="standard-detail-hit-label mt-1 w-16 shrink-0 text-foreground!"
                               title={group.category}
                             >
                               {group.category}
@@ -1462,7 +1403,7 @@ export function WtlFacilityShell({
                                     }
                                   >
                                     <WtlLayerMark layerKey={item.tableName} />
-                                    <span className="min-w-0 truncate [word-break:keep-all]">
+                                    <span className="min-w-0 truncate break-keep">
                                       {label}
                                     </span>
                                   </button>
@@ -1475,7 +1416,7 @@ export function WtlFacilityShell({
                     ) : null}
                     {showLocationFilter ? (
                       <div className="flex items-center gap-1">
-                        <span className="standard-detail-hit-label w-16 !text-foreground">위치</span>
+                        <span className="standard-detail-hit-label w-16 text-foreground!">위치</span>
                         <div className="grid min-w-0 flex-1 grid-cols-3 gap-1">
                           <select
                             value={emdSelected}
@@ -1540,7 +1481,7 @@ export function WtlFacilityShell({
                       </div>
                     ) : null}
                     <div className="flex items-center gap-1">
-                      <span className="standard-detail-hit-label w-16 !text-foreground">통합검색</span>
+                      <span className="standard-detail-hit-label w-16 text-foreground!">통합검색</span>
                       <input
                         type="search"
                         value={keywordDraft}
@@ -1572,7 +1513,7 @@ export function WtlFacilityShell({
                   </p>
                 )}
               </div>
-              {tab && isTabEnabled(tab) && (selectedSource || groupsLoading || !visibleSyncReady) ? (
+              {tab && isTabEnabled(tab) && (selectedSource || groupsLoading || visibleSyncReady!) ? (
                 <WtlFacilityListView
                   rows={
                     visibleSyncReady && groupsReadyTabRef.current === tab
@@ -1584,7 +1525,7 @@ export function WtlFacilityShell({
                       ? total
                       : 0
                   }
-                  loading={loading || groupsLoading || !visibleSyncReady}
+                  loading={loading || groupsLoading || visibleSyncReady!}
                   loadingMore={loadingMore}
                   error={
                     visibleSyncReady && groupsReadyTabRef.current === tab
@@ -1647,6 +1588,7 @@ export function WtlFacilityShell({
               schema={selectedSource?.schema}
               showFacilityInfoLink={title === '설비관리' || title === '이력관리'}
               showHistoryCard={title === '설비관리' || title === '이력관리'}
+              serviceName={title}
               onClose={() => {
                 setSelectedId(null)
                 setSelectedRow(null)
@@ -1677,6 +1619,31 @@ export function WtlFacilityShell({
           onClose={clearFacilityInfoPreview}
         />
       ) : null}
+
+      <SecurityPledgeModal
+        open={shpPledgeOpen}
+        onOpenChange={setShpPledgeOpen}
+        tableKorName={facilityKorName}
+        onSubmit={async (pledgeName) => {
+          if (!selectedSource) return { success: false, error: '대상 없음' }
+          setShpExporting(true)
+          try {
+            return await postDataRequestJson('/api/data-request/submit-wtl-facility-shp', {
+              pledgeName,
+              table: selectedSource.tableName,
+              schema: selectedSource.schema,
+              tableKorName: facilityKorName,
+              keyword,
+              areaWkts5181:
+                showLocationFilter && effectiveAreaWkts5181.length > 0
+                  ? effectiveAreaWkts5181
+                  : null,
+            })
+          } finally {
+            setShpExporting(false)
+          }
+        }}
+      />
     </>
   )
 }

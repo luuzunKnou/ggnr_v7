@@ -623,7 +623,7 @@ export function WimsInfoPanel({
           </div>
         </section>
 
-        <section className="flex min-h-0 flex-[2] flex-col overflow-hidden">
+        <section className="flex min-h-0 flex-2 flex-col overflow-hidden">
           <p className="mb-1 shrink-0 font-medium text-foreground">WIMS 검침이력</p>
           <div className="mb-1 flex w-full shrink-0 items-center gap-1">
             <label className="flex min-w-0 items-center gap-1 text-muted-foreground">

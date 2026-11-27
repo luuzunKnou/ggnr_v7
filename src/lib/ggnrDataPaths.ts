@@ -49,6 +49,8 @@ export const GGNR_DATA_PATHS = {
   smallPublic: 'file_data/small_public',
   /** 소규모 공공시설 dbf·shp */
   smallPublicShp: 'file_data/small_public/shp',
+  /** 데이터요청(보안서약) SHP 등 저장 */
+  dataRequest: 'data_request',
 } as const;
 
 /** ensureBaseStructure 가 생성하는 루트 폴더 */
@@ -73,5 +75,6 @@ export const GGNR_BASE_STRUCTURE = [
   GGNR_DATA_PATHS.policyMap,
   GGNR_DATA_PATHS.digitalMap,
   GGNR_DATA_PATHS.drawingDisplay,
+  GGNR_DATA_PATHS.dataRequest,
   GGNR_DATA_PATHS.meta,
 ] as const;

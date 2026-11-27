@@ -67,17 +67,32 @@ async function main() {
       `SELECT perm_key, perm_name FROM perm WHERE perm_name = $1 LIMIT 1`,
       [PERM_NAME]
     );
+    let permKey: number;
     if (existing.rowCount) {
-      console.log(`[${project}/${type}] exists ${PERM_NAME} key=${existing.rows[0].perm_key}`);
-      return;
+      permKey = Number(existing.rows[0].perm_key);
+      console.log(`[${project}/${type}] exists ${PERM_NAME} key=${permKey}`);
+    } else {
+      const inserted = await client.query(
+        `INSERT INTO perm (perm_name, perm_is_hidden, perm_etc)
+         VALUES ($1, false, $2)
+         RETURNING perm_key, perm_name`,
+        [PERM_NAME, '부서 팀장 — 사용자관리 공통 권한·데이터 요청 승인']
+      );
+      permKey = Number(inserted.rows[0].perm_key);
+      console.log(`[${project}/${type}] inserted`, inserted.rows[0]);
     }
-    const inserted = await client.query(
-      `INSERT INTO perm (perm_name, perm_is_hidden, perm_etc)
-       VALUES ($1, false, $2)
-       RETURNING perm_key, perm_name`,
-      [PERM_NAME, '팀장 표시용 권한']
+
+    // 이미 «팀장»을 가진 사용자는 부서관리자 플래그 맞춤
+    const synced = await client.query(
+      `UPDATE usr u
+       SET usr_is_manager = EXISTS (
+         SELECT 1 FROM up_map m
+         WHERE m.usr_id = u.usr_id AND m.perm_key = $1
+       )
+       WHERE COALESCE(u.usr_is_del, false) = false`,
+      [permKey]
     );
-    console.log(`[${project}/${type}] inserted`, inserted.rows[0]);
+    console.log(`[${project}/${type}] usr_is_manager sync rowCount=${synced.rowCount ?? 0}`);
   } finally {
     await client.end();
   }

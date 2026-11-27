@@ -6,6 +6,7 @@ import { Button } from '@/app/shadcnComponents/ui/button';
 import { cn } from '@/lib/utils';
 import { withBasePath } from '@/lib/basePath';
 import { recordDataViewLog } from '@/lib/recordDataViewLog';
+import { requestAttachmentPledge } from '@/app/(pages)/_components/securityPledge/attachmentPledgeGate';
 import type { AttrRow, WorkFileItem, WorkUnitItem } from './aerialMediaTypes';
 import { fileMissingGeom } from './aerialLocationParse';
 import { AttributeSection, MissingGeomMark, SectionTitle, StatusBadge } from './AerialMediaUi';
@@ -614,13 +615,19 @@ export function DroneFileDetailPanel({ file, files = [], onClose, onDelete, onEd
       window.alert('다운로드 경로가 없습니다.');
       return;
     }
-    const a = document.createElement('a');
-    a.href = aerialMediaUrl(file.relativePath, true);
-    a.download = file.name;
-    a.rel = 'noopener';
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
+    if (
+      requestAttachmentPledge({
+        mode: 'managed',
+        source: 'aerial',
+        paths: [file.relativePath.replace(/\\/g, '/')],
+        tableKorName: file.name || '정사영상',
+      })
+    ) {
+      return;
+    }
+    window.alert(
+      '보안서약 화면을 열 수 없습니다. 페이지를 새로고침한 뒤 다시 시도해 주세요.'
+    );
   };
 
   const openViewer = () => {

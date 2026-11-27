@@ -1,3 +1,5 @@
+// TODO: 보안서약 일시 비활성화 — 이후 확인 후 주석 해제 필요 (레이어 SHP/엑셀 권한·tableName 연동)
+// import { writeExcelWorkbookWithPledge } from '@/app/(pages)/_components/securityPledge/excelPledgeGate'
 import { applyThinBorders } from '../smallPublicExcelStyle'
 import { todayYmd } from './smallPublicPlanCalc'
 import {
@@ -127,5 +129,8 @@ export async function exportSmallPublicPlanExcel(list: PlanDbRow[], startYear: n
   XLSX.utils.book_append_sheet(wb, ws, '중기계획 명세서')
   XLSX.utils.book_append_sheet(wb, wsSummary, '읍면별 종합표')
   const scope = [`${startYear}`, emd].filter(Boolean).join('_')
-  XLSX.writeFile(wb, `소규모공공시설_정비계획_${scope}_${todayYmd().replace(/-/g, '')}.xlsx`)
+  const fileName = `소규모공공시설_정비계획_${scope}_${todayYmd().replace(/-/g, '')}.xlsx`
+  // TODO: 보안서약 일시 비활성화 — 이후 확인 후 주석 해제 필요
+  // writeExcelWorkbookWithPledge(XLSX, wb, fileName, '소규모공공시설 정비계획')
+  XLSX.writeFile(wb, fileName)
 }

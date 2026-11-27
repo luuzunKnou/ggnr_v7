@@ -71,6 +71,37 @@ export async function fetchPublicLayerSggNames(): Promise<string[]> {
   }
 }
 
+/** 서약서 등 — 첫 시군구명만 (프로세스 내 캐시) */
+let cachedFirstSggName: string | undefined;
+
+export async function fetchFirstPublicLayerSggName(): Promise<string> {
+  if (cachedFirstSggName !== undefined) return cachedFirstSggName;
+  try {
+    const { nameCol } = await resolveSggNameCodeCols();
+    if (!nameCol) {
+      cachedFirstSggName = '';
+      return '';
+    }
+    const res = await db.execute(
+      sql.raw(
+        `SELECT trim(${quoteIdent(nameCol)}::text) AS sgg_nm
+         FROM public_layer.sgg
+         WHERE ${quoteIdent(nameCol)} IS NOT NULL
+           AND trim(${quoteIdent(nameCol)}::text) <> ''
+         LIMIT 1`
+      )
+    );
+    const n = String(
+      ((res.rows?.[0] ?? {}) as { sgg_nm?: unknown }).sgg_nm ?? ''
+    ).trim();
+    cachedFirstSggName = n;
+    return n;
+  } catch {
+    cachedFirstSggName = '';
+    return '';
+  }
+}
+
 /** 목록·상세 주소 접두 제거용 — sgg 1행 + 코드→시도명 */
 export async function fetchPublicLayerAddressPrefixes(): Promise<PublicLayerAddressPrefixes> {
   try {

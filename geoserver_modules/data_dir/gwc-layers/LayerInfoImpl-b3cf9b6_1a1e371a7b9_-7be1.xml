@@ -1,5 +1,9 @@
 <GeoServerTileLayer>
+<<<<<<<< HEAD:geoserver_modules/data_dir/gwc-layers/LayerInfoImpl--210e710e_1a1f780e02f_-7f89.xml
+  <id>LayerInfoImpl--210e710e:1a1f780e02f:-7f89</id>
+========
   <id>LayerInfoImpl-b3cf9b6:1a1e371a7b9:-7be1</id>
+>>>>>>>> origin/master:geoserver_modules/data_dir/gwc-layers/LayerInfoImpl-b3cf9b6_1a1e371a7b9_-7be1.xml
   <enabled>true</enabled>
   <inMemoryCached>true</inMemoryCached>
   <name>ggnr:sd_tsunami_emergency_evac_site</name>

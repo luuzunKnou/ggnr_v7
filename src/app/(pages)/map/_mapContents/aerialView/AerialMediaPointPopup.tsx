@@ -6,6 +6,7 @@ import { createPortal } from 'react-dom';
 import Overlay from 'ol/Overlay';
 import { getTransform } from 'ol/proj';
 import { Download, X } from 'lucide-react';
+import { requestAttachmentPledge } from '@/app/(pages)/_components/securityPledge/attachmentPledgeGate';
 import { useMapContext } from '../../_mapComponents/MapContext';
 import { ServiceFileImagePreview } from '../../_mapComponents/standard/ServiceFileImagePreview';
 import { fileCoord5181 } from './aerialLocationParse';
@@ -94,13 +95,19 @@ export function AerialMediaPointPopup({
       window.alert('다운로드 경로가 없습니다.');
       return;
     }
-    const a = document.createElement('a');
-    a.href = mediaUrl(file.relativePath, { download: true });
-    a.download = file.name;
-    a.rel = 'noopener';
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
+    if (
+      requestAttachmentPledge({
+        mode: 'managed',
+        source: 'aerial',
+        paths: [file.relativePath.replace(/\\/g, '/')],
+        tableKorName: file.name || '정사영상',
+      })
+    ) {
+      return;
+    }
+    window.alert(
+      '보안서약 화면을 열 수 없습니다. 페이지를 새로고침한 뒤 다시 시도해 주세요.'
+    );
   };
 
   return createPortal(

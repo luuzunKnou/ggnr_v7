@@ -70,6 +70,7 @@ import {
 } from './layerClickFacilityInfo'
 import { resolveWtlNetworkRowEditTarget } from '../wtlAdmin/networkMap/WtlNetworkMapAttachmentSection'
 import { openLayerClickDetailBlank } from './openLayerClickDetailBlank'
+import { recordDataViewLog } from '@/lib/recordDataViewLog'
 
 const DETAIL_WIDTH = 'min(520px, calc(100vw - 2rem))'
 const DETAIL_WIDTH_FALLBACK_PX = 520
@@ -830,6 +831,37 @@ export function LayerClickDetailFloating({
     if (!networkItem || !fields.length) return null
     return resolveWtlNetworkRowEditTarget(networkItem, fields)
   }, [networkItem, fields])
+
+  const viewLogServiceName =
+    writeSerEng === 'wtlNetworkMap' ? '관망조회' : '데이터조회'
+
+  // 데이터 이력관리에 조회 저장을 위해 추가
+  // 레이어명 = 화면 레이어(define). fields 로딩 후 1회(키 확정)
+  useEffect(() => {
+    if (!open || !editTarget || !selected || fieldsLoading) return
+    const logTable = String(selected.tableName ?? '')
+      .trim()
+      .replace(/^.*\./, '')
+      .toLowerCase()
+    if (!logTable) return
+    recordDataViewLog({
+      tableName: logTable,
+      keyField: editTarget.keyField,
+      keyValue: editTarget.keyValue,
+      tableKorName: String(selected.korName ?? '').trim() || undefined,
+      serviceName: viewLogServiceName,
+    })
+  }, [
+    open,
+    fieldsLoading,
+    selected?.key,
+    selected?.tableName,
+    selected?.korName,
+    editTarget?.keyField,
+    editTarget?.keyValue,
+    viewLogServiceName,
+  ])
+
   const showEditButton =
     Boolean(writeSerEng) &&
     canWrite &&
@@ -1093,7 +1125,7 @@ export function LayerClickDetailFloating({
             <p className="m-0">제목을 두 번 클릭하면 최소화됩니다</p>
             <p className="m-0">제목을 끌면 창을 옮길 수 있습니다</p>
             <p className="m-0">
-              제목을 우클릭하면 고정 창·새 창으로 열 수 있습니다
+              헤더에서 고정창·새 창으로 열 수 있습니다
             </p>
           </div>
           <button
@@ -1215,7 +1247,7 @@ export function LayerClickDetailFloating({
       }
     >
       {pickListMode ? (
-        <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto overflow-x-hidden py-1">
+        <div className="scrollbar-thin max-h-[240px] min-h-0 flex-1 overflow-y-auto overflow-x-hidden py-1">
           <ul className="m-0 list-none p-0" role="listbox" aria-label="레이어 선택">
             {hits.map((hit) => {
               const label = hitLabel(hit)
@@ -1273,8 +1305,8 @@ export function LayerClickDetailFloating({
                     <span className="flex shrink-0 items-center gap-0.5">
                       <button
                         type="button"
-                        title="고정창으로 보기"
-                        aria-label="고정창으로 보기"
+                        title="고정창으로 전환"
+                        aria-label="고정창으로 전환"
                         onClick={(e) => {
                           e.stopPropagation()
                           setListHighlightKey(hit.key)
@@ -1459,6 +1491,7 @@ export function LayerClickDetailFloating({
           fields={fields}
           relatedChildAsModal
           relatedModalAnchorHostRef={panelRef}
+          serviceName={viewLogServiceName}
         />
       ) : null}
       {showOpenFullDetail || canToggleDetail || showEditButton || editing ? (
@@ -1543,6 +1576,7 @@ export function LayerClickDetailFloating({
     {facilityInfo ? (
       <WtlMappedFacilityFloating
         target={facilityInfo}
+        serviceName={viewLogServiceName}
         onClose={() => {
           setFacilityInfo(null)
           setFacilityInfoAnchor(null)

@@ -32,7 +32,7 @@ export function WtlSupplyBusyToast({ message }: Props) {
 
   return createPortal(
     <div
-      className="pointer-events-none fixed z-[45]"
+      className="pointer-events-none fixed z-45"
       style={{ top: 16, left: centerX, transform: 'translateX(-50%)' }}
     >
       <div

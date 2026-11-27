@@ -14,6 +14,8 @@ import {
   pushMockNewOdorAlert,
   useOdorAlertStore,
 } from './odorAlertStore'
+import { cn } from '@/lib/utils'
+import { MAP_UI_Z_CLASS } from '@/lib/mapUiZIndex'
 
 const LOGIN_POPUP_KEY = 'odor_alert_login_popup_shown'
 
@@ -88,7 +90,12 @@ export function OdorAlertPopupHost({
     mode === 'preview' ? '경보창 미리보기' : mode === 'login' ? '미인지 경보 안내' : '신규 경보 발생'
 
   return (
-    <div className="pointer-events-auto fixed bottom-4 right-4 z-[70] w-[min(100vw-2rem,360px)]">
+    <div
+      className={cn(
+        'pointer-events-auto fixed bottom-4 right-4 w-[min(100vw-2rem,360px)]',
+        MAP_UI_Z_CLASS.nestedDialog
+      )}
+    >
       <div className="rounded-lg border border-border bg-card p-3 shadow-xl">
         <div className="flex items-start justify-between gap-2">
           <div>

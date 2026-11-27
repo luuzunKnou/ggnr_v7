@@ -12,6 +12,7 @@ import {
   type DefineFieldLike,
 } from '../../../_mapComponents/standard/defineLayerRowUtils'
 import {
+  downloadServiceFilePreviewItemsZip,
   ServiceFileImagePreview,
   type ServiceFilePreviewItem,
 } from '../../../_mapComponents/standard/ServiceFileImagePreview'
@@ -223,7 +224,9 @@ export function WtlNetworkMapAttachmentSection({ item, fields, canEdit = true }:
   const downloadSelected = useCallback(() => {
     if (!target) return
     const list = query.files.filter((f) => selectedNames.has(f.name))
-    for (const f of list) {
+    if (list.length === 0) return
+    if (list.length === 1) {
+      const f = list[0]!
       triggerServiceFileDownload(
         serviceFileDataDownloadUrl(
           SER_ENG,
@@ -232,6 +235,19 @@ export function WtlNetworkMapAttachmentSection({ item, fields, canEdit = true }:
           f.name
         ),
         f.name
+      )
+    } else {
+      void downloadServiceFilePreviewItemsZip(
+        list.map((f) => ({
+          url: serviceFileDataDownloadUrl(
+            SER_ENG,
+            target.layerSegment,
+            target.keyValue,
+            f.name
+          ),
+          fileName: f.name,
+        })),
+        `${target.layerDisplayName || '첨부'}_선택 첨부파일.zip`
       )
     }
     setDownloadMenuOpen(false)
@@ -459,7 +475,7 @@ export function WtlNetworkMapAttachmentSection({ item, fields, canEdit = true }:
                     aria-label={
                       canPreview ? `${f.name} 크게 보기` : `${f.name} 다운로드`
                     }
-                    className="group flex cursor-pointer items-center gap-2 rounded-lg border border-border/80 bg-card p-1 transition-colors hover:bg-muted/30 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                    className="group flex cursor-pointer items-center gap-2 rounded-lg border border-border/80 bg-card p-1 transition-colors hover:bg-muted/30 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
                     onClick={activateRow}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' || e.key === ' ') {
@@ -468,7 +484,7 @@ export function WtlNetworkMapAttachmentSection({ item, fields, canEdit = true }:
                       }
                     }}
                   >
-                    <div className="relative flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-muted/50">
+                    <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted/50">
                       <span
                         className={cn(
                           'transition-opacity',
@@ -596,21 +612,27 @@ export function WtlNetworkMapAttachmentSection({ item, fields, canEdit = true }:
                   role="menu"
                   className="absolute bottom-full right-0 z-30 mb-1 min-w-[10.5rem] overflow-visible rounded-md border border-border bg-popover py-1 shadow-lg"
                 >
-                  <a
+                  <button
+                    type="button"
                     role="menuitem"
-                    href={serviceFileDataZipDownloadUrl(
-                      SER_ENG,
-                      target.layerSegment,
-                      target.keyValue,
-                      { layerDisplayName: target.layerDisplayName }
-                    )}
-                    download
                     title="전체 내려받기"
                     className="flex w-full cursor-pointer px-3 py-2 text-left text-xs text-foreground transition-colors hover:bg-muted/50"
-                    onClick={() => setDownloadMenuOpen(false)}
+                    onClick={() => {
+                      setDownloadMenuOpen(false)
+                      const zipUrl = serviceFileDataZipDownloadUrl(
+                        SER_ENG,
+                        target.layerSegment,
+                        target.keyValue,
+                        { layerDisplayName: target.layerDisplayName }
+                      )
+                      triggerServiceFileDownload(
+                        zipUrl,
+                        `${target.layerDisplayName || '첨부'}_첨부파일.zip`
+                      )
+                    }}
                   >
                     전체 내려받기
-                  </a>
+                  </button>
                   <button
                     type="button"
                     role="menuitem"

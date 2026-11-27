@@ -22,6 +22,8 @@ import {
 import { lonLatToView, useMapViewProjection } from './topoMapProjection'
 import {
   createUndergroundFacilityLayers,
+  findUndergroundFacilityServiceLayer,
+  reapplyUndergroundFacilityServiceWms,
   UNDERGROUND_FACILITY_LAYERS,
 } from '../../../../_mapComponents/layerFactory/undergroundFacilityLayerFactory'
 import {
@@ -362,13 +364,20 @@ export function useWtlTopologyMapLayer({
         })
     }
 
-    // 같은 테이블의 기존 지하시설물 레이어는 투명으로 가린다(선택 상태는 그대로)
+    // 본 지도 지하시설물 묶음 GetMap에서 동일 테이블만 잠시 제외(선택 상태는 유지)
+    const ufService = findUndergroundFacilityServiceLayer(map)
+    if (ufService) {
+      ufService.set('ufTempHideTables', [...wanted])
+      reapplyUndergroundFacilityServiceWms(map)
+    }
+    // 레거시 테이블당 레이어는 투명 처리
     const hidden: BaseLayer[] = []
     map
       .getLayers()
       .getArray()
       .forEach((l) => {
         if (l.get('undergroundFacilityLayer') !== true) return
+        if (l.get('undergroundFacilityServiceLayer')) return
         if (!wanted.has(String(l.get('layerTableName') ?? ''))) return
         if (typeof l.get(HIDE_PREV_KEY) === 'number') return
         l.set(HIDE_PREV_KEY, l.getOpacity())
@@ -379,6 +388,10 @@ export function useWtlTopologyMapLayer({
     return () => {
       cancelled = true
       layers.forEach((layer) => map.removeLayer(layer))
+      if (ufService) {
+        ufService.unset('ufTempHideTables')
+        reapplyUndergroundFacilityServiceWms(map)
+      }
       hidden.forEach((l) => {
         const prev = l.get(HIDE_PREV_KEY)
         if (typeof prev === 'number') l.setOpacity(prev)

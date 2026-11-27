@@ -126,11 +126,11 @@ export function LayerManagementPanel({
   return (
     <>
       <div
-        className="fixed inset-0 z-[100] bg-black/50"
+        className="fixed inset-0 z-100 bg-black/50"
         onClick={onClose}
         aria-hidden
       />
-      <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[101] w-[960px] h-[85vh] flex flex-col bg-muted/40 rounded-[10px] shadow-2xl border border-border overflow-hidden">
+      <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-101 w-[960px] h-[85vh] flex flex-col bg-muted/40 rounded-[10px] shadow-2xl border border-border overflow-hidden">
         {/* Header */}
         <div className="shrink-0 px-4 py-2.5 bg-[#F1F9FB] border-b border-border">
           <div className="flex items-center justify-between">
