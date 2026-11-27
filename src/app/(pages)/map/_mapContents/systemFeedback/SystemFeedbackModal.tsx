@@ -26,6 +26,7 @@ import {
   submitSystemFeedbackToGnms,
   type GnmsSystemFeedbackFile,
 } from '@/lib/gnmsSystemFeedbackBrowser';
+import { VillagePatrolSuggestInput } from '@/app/(pages)/map/_mapContents/safty/villagePatrol/VillagePatrolSuggestInput';
 import { SystemFeedbackAttachments } from './SystemFeedbackAttachments';
 import { SystemFeedbackEditor } from './SystemFeedbackEditor';
 
@@ -56,8 +57,6 @@ type Props = {
   open: boolean;
   onClose: () => void;
 };
-
-const NONE = '';
 
 /** call → { success, data: serviceReturn } 이고 serviceReturn 이 { ok, data } 인 경우 */
 function unwrapServiceData<T>(res: unknown): T | null {
@@ -123,7 +122,8 @@ export function SystemFeedbackModal({ open, onClose }: Props) {
   const superUser = isSuperUser(usrId);
 
   const [serviceOpts, setServiceOpts] = useState<ServiceOpt[]>([]);
-  const [serviceEng, setServiceEng] = useState(NONE);
+  /** 기능 표시·입력값(목록 선택 또는 자유 입력) */
+  const [serviceLabel, setServiceLabel] = useState('');
   const [sfKey, setSfKey] = useState<number | null>(null);
   const [contentHtml, setContentHtml] = useState('');
   const [mode, setMode] = useState<'create' | 'view'>('create');
@@ -145,15 +145,25 @@ export function SystemFeedbackModal({ open, onClose }: Props) {
   const editorImageFilesRef = useRef<{ file: File; url: string }[]>([]);
   const draftKeyRef = useRef<number | null>(null);
 
-  const serviceKor = useMemo(() => {
-    if (!serviceEng) return '선택 없음';
-    return serviceOpts.find((s) => s.ser_eng === serviceEng)?.ser_kor ?? serviceEng;
-  }, [serviceEng, serviceOpts]);
+  const serviceKorOptions = useMemo(
+    () => serviceOpts.map((s) => s.ser_kor).filter(Boolean),
+    [serviceOpts]
+  );
 
-  const defaultServiceEng = useMemo(() => {
-    if (!openedToken || !serviceOpts.length) return NONE;
+  const resolvedService = useMemo(() => {
+    const label = serviceLabel.trim();
+    if (!label) return { serviceEng: null as string | null, serviceKor: '선택 없음' };
+    const byKor = serviceOpts.find((s) => s.ser_kor === label);
+    if (byKor) return { serviceEng: byKor.ser_eng, serviceKor: byKor.ser_kor };
+    const byEng = serviceOpts.find((s) => s.ser_eng === label);
+    if (byEng) return { serviceEng: byEng.ser_eng, serviceKor: byEng.ser_kor };
+    return { serviceEng: null, serviceKor: label };
+  }, [serviceLabel, serviceOpts]);
+
+  const defaultServiceLabel = useMemo(() => {
+    if (!openedToken || !serviceOpts.length) return '';
     const match = serviceOpts.find((s) => getOpenedKeyForSerEng(s.ser_eng) === openedToken);
-    return match?.ser_eng ?? NONE;
+    return match?.ser_kor ?? '';
   }, [openedToken, serviceOpts]);
 
   const loadServices = useCallback(async () => {
@@ -235,17 +245,22 @@ export function SystemFeedbackModal({ open, onClose }: Props) {
         }).catch(() => {});
         draftKeyRef.current = null;
       }
+      const draftLabel = defaultServiceLabel;
+      const draftResolved = (() => {
+        const label = draftLabel.trim();
+        if (!label) return { serviceEng: null as string | null, serviceKor: '선택 없음' };
+        const byKor = serviceOpts.find((s) => s.ser_kor === label);
+        if (byKor) return { serviceEng: byKor.ser_eng, serviceKor: byKor.ser_kor };
+        return { serviceEng: null, serviceKor: label };
+      })();
       const res = await call('', 'POST', {
         service: 'systemFeedbackService',
         action: 'createDraft',
         params: {
           usrName,
           systemKey: systemKey || null,
-          serviceEng: defaultServiceEng || null,
-          serviceKor:
-            defaultServiceEng
-              ? serviceOpts.find((s) => s.ser_eng === defaultServiceEng)?.ser_kor ?? defaultServiceEng
-              : '선택 없음',
+          serviceEng: draftResolved.serviceEng,
+          serviceKor: draftResolved.serviceKor,
         },
       });
       const data = unwrapServiceData<Detail>(res);
@@ -253,7 +268,7 @@ export function SystemFeedbackModal({ open, onClose }: Props) {
       if (!key) throw new Error('초안 생성 실패');
       setSfKey(key);
       draftKeyRef.current = key;
-      setServiceEng(defaultServiceEng);
+      setServiceLabel(draftLabel);
     } catch (e) {
       setSfKey(null);
       const msg =
@@ -266,7 +281,7 @@ export function SystemFeedbackModal({ open, onClose }: Props) {
     } finally {
       setDraftLoading(false);
     }
-  }, [usrName, systemKey, defaultServiceEng, serviceOpts]);
+  }, [usrName, systemKey, defaultServiceLabel, serviceOpts]);
 
   useEffect(() => {
     if (!open) return;
@@ -330,7 +345,8 @@ export function SystemFeedbackModal({ open, onClose }: Props) {
       setViewDetail(data);
       setSfKey(data.sfKey);
       setContentHtml(data.contentHtml ?? '');
-      setServiceEng(data.serviceEng ?? NONE);
+      const kor = String(data.serviceKor ?? '').trim();
+      setServiceLabel(kor && kor !== '선택 없음' ? kor : String(data.serviceEng ?? '').trim());
     } catch (e) {
       setStatusMsg(e instanceof Error ? e.message : '조회 실패');
     }
@@ -389,8 +405,8 @@ export function SystemFeedbackModal({ open, onClose }: Props) {
           sfKey,
           usrName,
           systemKey: systemKey || null,
-          serviceEng: serviceEng || null,
-          serviceKor,
+          serviceEng: resolvedService.serviceEng,
+          serviceKor: resolvedService.serviceKor,
           contentHtml: html,
         },
       });
@@ -554,34 +570,40 @@ export function SystemFeedbackModal({ open, onClose }: Props) {
           </div>
 
           <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden px-3 py-2.5">
-            <label className="block shrink-0 space-y-1">
-              <span className="text-xs font-medium text-muted-foreground">기능</span>
-              <select
-                className="h-8 w-full cursor-pointer rounded border border-input bg-white px-2 text-xs disabled:opacity-70 dark:bg-background"
-                value={serviceEng}
-                disabled={mode === 'view' || draftLoading}
-                onChange={(e) => setServiceEng(e.target.value)}
-                title="기능 선택"
-              >
-                <option value={NONE}>선택 없음</option>
-                {serviceOpts.map((s) => (
-                  <option key={s.ser_eng} value={s.ser_eng}>
-                    {s.ser_kor}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <div className="flex shrink-0 gap-2">
+              <label className="min-w-0 flex-1 space-y-1">
+                <span className="text-xs font-medium text-muted-foreground">기능</span>
+                {mode === 'view' || draftLoading ? (
+                  <input
+                    type="text"
+                    value={serviceLabel || '선택 없음'}
+                    disabled
+                    title="기능"
+                    className="h-8 w-full rounded border border-input bg-white px-2 text-xs text-foreground disabled:cursor-not-allowed disabled:bg-slate-50 disabled:opacity-70 dark:bg-background dark:disabled:bg-muted/40"
+                  />
+                ) : (
+                  <VillagePatrolSuggestInput
+                    value={serviceLabel}
+                    onChange={setServiceLabel}
+                    options={serviceKorOptions}
+                    placeholder="기능 입력 또는 선택"
+                    aria-label="기능"
+                    className="h-8 w-full rounded border border-input bg-white px-2 text-xs text-foreground outline-none focus-visible:ring-1 focus-visible:ring-ring dark:bg-background"
+                  />
+                )}
+              </label>
 
-            <label className="block shrink-0 space-y-1">
-              <span className="text-xs font-medium text-muted-foreground">작성자</span>
-              <input
-                type="text"
-                value={mode === 'view' ? viewDetail?.usrName ?? usrName : usrName}
-                disabled
-                title="작성자"
-                className="h-8 w-full rounded border border-input bg-white px-2 text-xs text-foreground disabled:cursor-not-allowed disabled:bg-slate-50 dark:bg-background dark:disabled:bg-muted/40"
-              />
-            </label>
+              <label className="w-[36%] shrink-0 space-y-1">
+                <span className="text-xs font-medium text-muted-foreground">작성자</span>
+                <input
+                  type="text"
+                  value={mode === 'view' ? viewDetail?.usrName ?? usrName : usrName}
+                  disabled
+                  title="작성자"
+                  className="h-8 w-full rounded border border-input bg-white px-2 text-xs text-foreground disabled:cursor-not-allowed disabled:bg-slate-50 dark:bg-background dark:disabled:bg-muted/40"
+                />
+              </label>
+            </div>
 
             <div className="flex min-h-0 flex-1 flex-col gap-1">
               <span className="shrink-0 text-xs font-medium text-muted-foreground">내용</span>

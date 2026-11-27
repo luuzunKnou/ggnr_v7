@@ -1166,17 +1166,33 @@ function sanitizeInstallFolderKey(raw: string): string {
   return cut;
 }
 
+/** 새 폴더 생성 — 설치 매뉴얼과 동일하게 C:\htdocs 아래에 둔다 */
+const SIBLING_HTDOCS_DIR = 'C:\\htdocs';
+
 function resolveSiblingInstallDir(folderKey: string): string {
-  const cwd = path.resolve(process.cwd());
-  const parent = path.dirname(cwd);
-  const name = `${path.basename(cwd)}_${sanitizeInstallFolderKey(folderKey)}`;
-  const target = path.resolve(parent, name);
-  const rel = path.relative(parent, target);
+  const key = sanitizeInstallFolderKey(folderKey);
+  const target = path.resolve(SIBLING_HTDOCS_DIR, key);
+  const rel = path.relative(SIBLING_HTDOCS_DIR, target);
   if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) {
     throw new Error('설치 폴더 경로가 올바르지 않습니다.');
   }
+  const cwd = path.resolve(process.cwd());
   if (target.toLowerCase() === cwd.toLowerCase()) {
     throw new Error('설치 폴더가 현재 실행 폴더와 같습니다.');
+  }
+  return target;
+}
+
+function resolveSiblingZipPath(fileName: string, folderKey: string): string {
+  const raw = path.basename((fileName || '').replace(/\\/g, '/')).trim();
+  const safe =
+    raw && raw !== '.' && raw !== '..' && !raw.includes('..')
+      ? raw
+      : `source_${sanitizeInstallFolderKey(folderKey)}.zip`;
+  const target = path.resolve(SIBLING_HTDOCS_DIR, safe.endsWith('.zip') ? safe : `${safe}.zip`);
+  const rel = path.relative(SIBLING_HTDOCS_DIR, target);
+  if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) {
+    throw new Error('압축 파일 경로가 올바르지 않습니다.');
   }
   return target;
 }
@@ -1354,7 +1370,10 @@ async function tailSiblingStarterLog(params: {
   );
 }
 
-/** 상위 폴더에 새 설치. 빌드는 그 폴더의 설치 스크립트가 현재 프로젝트·구분으로 수행 */
+/**
+ * C:\htdocs에 ZIP 복사 → 해당 폴더에 압축 해제 → 00_make_ggnr_starter.bat 실행.
+ * 실패해도 압축 파일·해제 폴더는 삭제하지 않는다.
+ */
 async function applySourceZipAsSibling(options: ApplySourceZipOptions): Promise<ApplySourceZipResult> {
   if (process.platform !== 'win32') {
     throw new Error('새 폴더 생성은 윈도우 서비스 설치에서만 사용할 수 있습니다.');
@@ -1374,6 +1393,7 @@ async function applySourceZipAsSibling(options: ApplySourceZipOptions): Promise<
   const port = await resolveSiblingAppPort();
   const folderKey = (installFolderKey ?? '').trim() || version;
   const targetDir = resolveSiblingInstallDir(folderKey);
+  const zipInHtdocs = resolveSiblingZipPath(fileName, folderKey);
   if (await pathExists(targetDir)) {
     throw new Error(`이미 같은 버전 폴더가 있습니다: ${targetDir}`);
   }
@@ -1383,13 +1403,9 @@ async function applySourceZipAsSibling(options: ApplySourceZipOptions): Promise<
     throw new Error('다른 최신소스 적용이 진행 중입니다. 완료 후 다시 시도하세요.');
   }
 
-  const tmpBase = path.join(os.tmpdir(), 'ggnr_source_update', `sibling_${Date.now()}`);
-  const extractDir = path.join(tmpBase, 'extracted');
-  let createdTarget = false;
   let buildOk = false;
   let historyRecorded = false;
-  /** 실패 시 해제 폴더·ZIP 임시본 유지 (설치 bat 확인용). 성공 시 finally에서 삭제 */
-  let keepExtractDir = false;
+  let installRoot = targetDir;
   const historyVersion = resolveAppliedVersionLabel(version);
   const ipTrim = clientIp?.trim() || undefined;
   const netLabel = includeNodeModules ? '폐쇄망' : '개방망';
@@ -1422,14 +1438,28 @@ async function applySourceZipAsSibling(options: ApplySourceZipOptions): Promise<
   };
 
   try {
-    await emit('merge-apply', `새 폴더 생성 준비. 폴더=${targetDir}`, { mergeStep: 'extract' });
+    await fs.mkdir(SIBLING_HTDOCS_DIR, { recursive: true });
+    await emit(
+      'merge-apply',
+      `새 폴더 생성 준비. 압축=${zipInHtdocs} 해제=${targetDir}`,
+      { mergeStep: 'extract' }
+    );
     const stat = await fs.stat(zipPath);
-    await fs.mkdir(extractDir, { recursive: true });
+
+    const srcZip = path.resolve(zipPath);
+    if (srcZip.toLowerCase() !== zipInHtdocs.toLowerCase()) {
+      await emit('merge-apply', `압축 파일을 ${SIBLING_HTDOCS_DIR}에 복사 중...`, {
+        mergeStep: 'extract',
+      });
+      await fs.copyFile(srcZip, zipInHtdocs);
+    }
+
+    await fs.mkdir(targetDir, { recursive: true });
     await emit('merge-apply', 'ZIP 압축 해제 중...', { mergeStep: 'extract' });
     await withNativeExtractProgress({
-      zipPath,
-      extractDir,
-      extract: () => extractZip(zipPath, extractDir),
+      zipPath: zipInHtdocs,
+      extractDir: targetDir,
+      extract: () => extractZip(zipInHtdocs, targetDir),
       onPulse: (pulse) =>
         emit('merge-apply', pulse.message, {
           mergeStep: 'extract',
@@ -1437,41 +1467,25 @@ async function applySourceZipAsSibling(options: ApplySourceZipOptions): Promise<
           ...(pulse.totalBytes != null ? { totalBytes: pulse.totalBytes } : {}),
         }),
     });
-    const zipHasStarter = await zipContainsStarterBat(zipPath);
-    const extractedRoot = await findStarterBatRoot(extractDir);
+
+    const zipHasStarter = await zipContainsStarterBat(zipInHtdocs);
+    const extractedRoot = await findStarterBatRoot(targetDir);
     if (!extractedRoot) {
-      keepExtractDir = true;
-      const top = await describeExtractTop(extractDir);
+      const top = await describeExtractTop(targetDir);
       if (zipHasStarter) {
         throw new Error(
-          `받은 소스 ZIP에는 설치 파일이 있으나 압축 해제 후 찾지 못했습니다. 해제 폴더=${extractDir} 상위=${top}`
+          `받은 소스 ZIP에는 설치 파일이 있으나 압축 해제 후 찾지 못했습니다. 해제 폴더=${targetDir} 상위=${top} 압축=${zipInHtdocs}`
         );
       }
       throw new Error(
-        `받은 소스에 설치 파일이 없습니다. 해제 폴더=${extractDir} 상위=${top}`
+        `받은 소스에 설치 파일이 없습니다. 해제 폴더=${targetDir} 상위=${top} 압축=${zipInHtdocs}`
       );
     }
-    await emit('merge-apply', `설치 루트 확인: ${path.basename(extractedRoot)}`);
+    installRoot = extractedRoot;
+    await emit('merge-apply', `설치 루트 확인: ${installRoot}`);
 
-    if (await pathExists(targetDir)) {
-      throw new Error(`이미 같은 버전 폴더가 있습니다: ${targetDir}`);
-    }
-    await emit('merge-apply', '새 폴더로 복사 중...');
-    createdTarget = true;
-    {
-      let elapsed = 0;
-      const timer = setInterval(() => {
-        elapsed += 5;
-        void emit('merge-apply', `새 폴더로 복사 중... (${elapsed}초 경과)`);
-      }, 5000);
-      try {
-        await fs.cp(extractedRoot, targetDir, { recursive: true });
-      } finally {
-        clearInterval(timer);
-      }
-    }
-    if (!(await pathExists(path.join(targetDir, STARTER_BAT_NAME)))) {
-      throw new Error('새 폴더에 설치 파일을 만들지 못했습니다.');
+    if (!(await pathExists(path.join(installRoot, STARTER_BAT_NAME)))) {
+      throw new Error(`새 폴더에 설치 파일이 없습니다. 해제 폴더=${installRoot}`);
     }
 
     const npmSync: 'Y' | 'N' = includeNodeModules ? 'N' : 'Y';
@@ -1480,13 +1494,13 @@ async function applySourceZipAsSibling(options: ApplySourceZipOptions): Promise<
       `설치 스크립트를 실행합니다. 프로젝트=${project} 구분=${envName} 포트=${port} 의존성=${npmSync}`
     );
     const { ps1Path, logPath } = await writeSiblingLauncher({
-      targetDir,
+      targetDir: installRoot,
       project,
       envName,
       port,
       npmSync,
     });
-    await spawnDetachedStarterWindow(ps1Path, targetDir);
+    await spawnDetachedStarterWindow(ps1Path, installRoot);
     const tailed = await tailSiblingStarterLog({
       logPath,
       emit: async (phase, message, logLine) => {
@@ -1495,10 +1509,12 @@ async function applySourceZipAsSibling(options: ApplySourceZipOptions): Promise<
     });
     buildOk = tailed.buildOk;
     if (tailed.failed || !tailed.buildOk) {
-      throw new Error('설치 스크립트가 실패했습니다. 설치 창의 메시지를 확인하세요.');
+      throw new Error(
+        `설치 스크립트가 실패했습니다. 설치 창의 메시지를 확인하세요. (해제 폴더 유지: ${installRoot})`
+      );
     }
 
-    const successMessage = `새 폴더 생성. 설치 폴더 ${targetDir}. 프로젝트 ${project}, 구분 ${envName}, 포트 ${port}. ${netLabel}. 빌드 후 서비스를 새 폴더로 다시 등록합니다.`;
+    const successMessage = `새 폴더 생성. 설치 폴더 ${installRoot}. 프로젝트 ${project}, 구분 ${envName}, 포트 ${port}. ${netLabel}. 빌드 후 서비스를 새 폴더로 다시 등록합니다.`;
     const hist = await recordVersionHistory({
       historyType: 'apply_latest',
       status: 'success',
@@ -1516,12 +1532,12 @@ async function applySourceZipAsSibling(options: ApplySourceZipOptions): Promise<
       version,
       fileName,
       downloadedBytes: stat.size,
-      extractedRoot: targetDir,
+      extractedRoot: installRoot,
       appliedFiles: 0,
       skippedFiles: 0,
       skippedSamples: [],
       applyLayout: layout,
-      installDir: targetDir,
+      installDir: installRoot,
       geoserver: {
         stopped: false,
         started: false,
@@ -1541,28 +1557,24 @@ async function applySourceZipAsSibling(options: ApplySourceZipOptions): Promise<
       pendingSchemaConfirm: false,
     };
   } catch (err) {
-    keepExtractDir = true;
     const message = err instanceof Error ? err.message : String(err);
-    if (createdTarget && !buildOk) {
-      await fs.rm(targetDir, { recursive: true, force: true }).catch((rmErr) => {
-        console.error('[SourceCodeUpload] 실패한 설치 폴더 삭제 실패', rmErr);
-      });
-    }
     const withKeep =
-      message.includes('해제 폴더=')
+      message.includes('해제 폴더')
         ? message
-        : `${message} (해제 폴더 유지: ${extractDir})`;
-    console.warn(`[SourceCodeUpload] 새 폴더 생성 실패 — 해제 폴더 유지: ${extractDir}`);
+        : `${message} (해제 폴더 유지: ${installRoot}, 압축 유지: ${zipInHtdocs})`;
+    console.warn(
+      `[SourceCodeUpload] 새 폴더 생성 실패 — 삭제하지 않음. 해제=${installRoot} 압축=${zipInHtdocs}`
+    );
     await recordFail(withKeep);
     const tagged = new Error(withKeep) as Error & { historyRecorded?: boolean };
     tagged.historyRecorded = historyRecorded;
     throw tagged;
   } finally {
     releaseSourceApplyLock(lockOwner);
-    if (keepExtractDir) {
-      console.warn(`[SourceCodeUpload] sibling 임시 유지: ${tmpBase}`);
-    } else {
-      await fs.rm(tmpBase, { recursive: true, force: true }).catch(() => {});
+    if (!buildOk) {
+      console.warn(
+        `[SourceCodeUpload] sibling 유지: extract=${installRoot} zip=${zipInHtdocs}`
+      );
     }
   }
 }
@@ -1890,6 +1902,13 @@ function spawnAsync(command: string, args: string[]): Promise<void> {
 async function extractZip(zipPath: string, destDir: string): Promise<void> {
   await fs.mkdir(destDir, { recursive: true });
   if (process.platform === 'win32') {
+    /** tar(bsdtar)가 대용량·`./` 접두 ZIP에서 Expand-Archive보다 안정적 */
+    try {
+      await spawnAsync('tar', ['-xf', zipPath, '-C', destDir]);
+      return;
+    } catch (tarErr) {
+      console.warn('[SourceCodeUpload] tar 압축 해제 실패 — Expand-Archive로 재시도', tarErr);
+    }
     await spawnAsync('powershell', [
       '-NoProfile',
       '-ExecutionPolicy',
