@@ -46,6 +46,19 @@ export function buildGnmsBaseDataExportUrl(gnmsUrl: string): string {
   return `${base}/api/base-data/export`;
 }
 
+/**
+ * GNMS_URL 또는 gnms-config 의 version API base → 불편신고 수신 URL
+ * (`…/gnms/api/system-feedback`)
+ */
+export function buildGnmsSystemFeedbackUrl(gnmsUrlOrVersionBase: string): string {
+  const raw = String(gnmsUrlOrVersionBase ?? '').trim();
+  const stripped = raw.replace(/\/api\/source\/version\/?$/i, '');
+  const base = normalizeGnmsOrigin(stripped || DEFAULT_GNMS_URL);
+  if (!base) return '';
+  if (/\/api\/system-feedback$/i.test(base)) return base;
+  return `${base}/api/system-feedback`;
+}
+
 /** sync export URL → async 시작 URL (`…/export/async`) */
 export function buildGnmsBaseDataExportAsyncUrl(exportUrl: string): string {
   const base = String(exportUrl ?? '').trim().replace(/\/+$/, '');

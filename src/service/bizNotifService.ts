@@ -11,17 +11,18 @@ import { getUseFeeBinding } from '@/lib/useFeeBinding';
 import { getOccupationLedgerBinding } from '@/lib/occupationLedgerBinding';
 import { getSystemList } from '@/service/configService';
 import { listDueConsAlerts } from '@/service/consAlertService';
+import { listDataRequestNotifications } from '@/service/dataRequestService';
 
 export type BizNotifItem = {
   id: string;
   notifKey: string;
-  category: '만료임박' | '미납임박' | '위치없음' | '공사알림';
+  category: '만료임박' | '미납임박' | '위치없음' | '공사알림' | '데이터요청';
   title: string;
   name: string;
   listKey: string;
   read: boolean;
   important: true;
-  target: 'ledger' | 'fee' | 'aerial';
+  target: 'ledger' | 'fee' | 'aerial' | 'dataRequest' | 'dataRequestApprove';
   targetId: string;
   /** URL system= 필터용 — systemList 메뉴에 해당 ser_eng 가 있는 시스템 */
   systemScope: string;
@@ -215,14 +216,31 @@ export async function listMyBizNotifications(params?: {
     .trim()
     .toLowerCase();
 
-  const [occupExpiryRes, feeRes] = await Promise.all([
+  const [occupExpiryRes, feeRes, dataReqRes] = await Promise.all([
     getOccupationLedgerExpiryNotifications({ withinDays }),
     getUseFeeUnpaidDueNotifications({ withinDays }),
+    listDataRequestNotifications({ withinDays }),
   ]);
 
   const candidates: Omit<BizNotifItem, 'read'>[] = [];
   for (const row of await listMissingDroneGeomNotifications()) {
     candidates.push(row);
+  }
+
+  for (const row of dataReqRes.items ?? []) {
+    candidates.push({
+      id: row.notifKey,
+      notifKey: row.notifKey,
+      category: '데이터요청',
+      title: row.title,
+      name: row.name,
+      listKey: row.listKey,
+      important: true,
+      target: row.target,
+      targetId: String(row.fileGroupKey),
+      serEng: row.target === 'dataRequestApprove' ? 'dataRequestApprove' : 'dataRequest',
+      systemScope: '',
+    });
   }
 
   for (const row of occupExpiryRes.items ?? []) {
@@ -284,8 +302,9 @@ export async function listMyBizNotifications(params?: {
     });
   }
 
+  // 데이터요청은 시스템 소속 없음 — system 필터가 있어도 항상 포함
   const scoped = system
-    ? candidates.filter((c) => c.systemScope === system)
+    ? candidates.filter((c) => c.category === '데이터요청' || c.systemScope === system)
     : candidates;
 
   const stateMap = await loadStateMap(
@@ -305,14 +324,16 @@ export async function listMyBizNotifications(params?: {
     미납임박: 1,
     위치없음: 2,
     공사알림: 3,
+    데이터요청: 4,
   };
   items.sort((a, b) => {
     const byCategory = categoryOrder[a.category] - categoryOrder[b.category];
     if (byCategory !== 0) return byCategory;
-    return a.listKey.localeCompare(b.listKey);
+    // 카테고리 내 최신순 (listKey 날짜·시각 내림차순)
+    return b.listKey.localeCompare(a.listKey);
   });
 
-  const err = [occupExpiryRes.error, feeRes.error]
+  const err = [occupExpiryRes.error, feeRes.error, dataReqRes.error]
     .filter((e): e is string => Boolean(e) && !isAbsentTableError(e))
     .join(' | ');
   return err ? { items, error: err } : { items };

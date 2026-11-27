@@ -75,7 +75,7 @@ function ParcelListV1({
                 className={cn(
                   'cursor-pointer border-b border-border align-middle transition-colors',
                   isSelected
-                    ? 'border-l-[3px] border-l-primary bg-primary/[0.11] ring-1 ring-inset ring-primary/20 hover:bg-primary/[0.14]'
+                    ? 'border-l-[3px] border-l-primary bg-primary/11 ring-1 ring-inset ring-primary/20 hover:bg-primary/14'
                     : 'border-l-[3px] border-l-transparent hover:bg-muted/50'
                 )}
               >

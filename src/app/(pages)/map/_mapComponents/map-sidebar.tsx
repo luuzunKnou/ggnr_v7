@@ -60,9 +60,9 @@ function SidebarButton({ icon, label, onClick, isActive, disabled, iconOnly, cla
       aria-label={labelPlain}
       className={cn(
         'flex w-[65px] flex-col items-center justify-center text-white/90 hover:bg-white/10 hover:text-white',
-        'dark:text-white/85 dark:hover:bg-white/12 dark:hover:text-white',
+        'dark_v2:text-white/85 dark_v2:hover:bg-white/12 dark_v2:hover:text-white',
         iconOnly ? 'py-2.5' : 'pb-[7px] pt-[7px]',
-        isActive && 'bg-white/20 text-white dark:bg-white/15 dark:text-white',
+        isActive && 'bg-white/20 text-white dark_v2:bg-white/15 dark_v2:text-white',
         disabled && 'pointer-events-none cursor-not-allowed opacity-35 hover:bg-transparent',
         className
       )}
@@ -303,14 +303,14 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
       data-map-sidebar
       className={cn(
         'fixed left-0 top-0 z-50 flex h-screen w-[65px] flex-col items-center overflow-hidden pt-2 backdrop-blur-sm',
-        /* 라이트·다크 모두 지도가 비치는 반투명 (다크는 블러 유지) */
+        /* 라이트·일반다크: 지도 비치는 반투명 / odor_ph dark_v2: SCADA 패널톤 */
         'bg-black/40',
-        'dark:border-r dark:border-border dark:bg-background/70 dark:backdrop-blur-md'
+        'dark_v2:border-r dark_v2:border-border dark_v2:bg-background/70 dark_v2:backdrop-blur-md'
       )}
     >
       <Link
         href="/"
-        className="mb-1.5 flex h-[38px] w-[65px] shrink-0 items-center justify-center rounded hover:bg-white/10 dark:hover:bg-white/10"
+        className="mb-1.5 flex h-[38px] w-[65px] shrink-0 items-center justify-center rounded hover:bg-white/10 dark_v2:hover:bg-white/10"
         title="메인으로"
       >
         <Image
@@ -334,7 +334,7 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
           {navHover && canScrollUp && (
             <button
               type="button"
-              className="absolute left-0 right-0 top-0 z-[2] flex h-6 items-center justify-center bg-gradient-to-b from-black/55 to-transparent text-white/90 dark:from-background/90"
+              className="absolute left-0 right-0 top-0 z-2 flex h-6 items-center justify-center bg-gradient-to-b from-black/55 to-transparent text-white/90 dark_v2:from-background/90"
               aria-label="메뉴 위로 스크롤"
               onMouseEnter={() => startNavScrollHold(-1)}
               onMouseLeave={stopNavScrollHold}
@@ -396,7 +396,7 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
           {navHover && canScrollDown && (
             <button
               type="button"
-              className="absolute bottom-0 left-0 right-0 z-[2] flex h-6 items-center justify-center bg-gradient-to-t from-black/55 to-transparent text-white/90 dark:from-background/90"
+              className="absolute bottom-0 left-0 right-0 z-2 flex h-6 items-center justify-center bg-gradient-to-t from-black/55 to-transparent text-white/90 dark_v2:from-background/90"
               aria-label="메뉴 아래로 스크롤"
               onMouseEnter={() => startNavScrollHold(1)}
               onMouseLeave={stopNavScrollHold}
@@ -406,7 +406,7 @@ export function MapSidebar({ indexLogoSrc }: { indexLogoSrc: string }) {
           )}
         </nav>
         {/* 계정 구역 */}
-        <div className="relative mt-1 flex w-full shrink-0 flex-col border-t border-white/15 pb-[5px] pt-1 dark:border-white/10">
+        <div className="relative mt-1 flex w-full shrink-0 flex-col border-t border-white/15 pb-[5px] pt-1 dark_v2:border-white/10">
           <div ref={myInfoAnchorRef} className="w-full">
             <SidebarButton
               icon={

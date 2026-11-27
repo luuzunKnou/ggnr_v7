@@ -45,7 +45,7 @@ export function WtlSupplyAlertToast({ message, onDismiss }: Props) {
 
   return createPortal(
     <div
-      className="pointer-events-none fixed z-[200]"
+      className="pointer-events-none fixed z-200"
       style={{ top: '50%', left: centerX, transform: 'translate(-50%, -50%)' }}
     >
       <div

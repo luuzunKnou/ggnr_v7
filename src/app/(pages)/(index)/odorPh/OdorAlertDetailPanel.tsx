@@ -10,6 +10,7 @@ import {
   type TrendRange,
 } from '@/app/(pages)/(index)/odorPh/odorAlertDetailMock'
 import type { OdorAlertItem } from '@/app/(pages)/(index)/odorPh/odorPhDashboardMock'
+import { downloadExcelWithPledge } from '@/app/(pages)/_components/securityPledge/excelPledgeGate'
 import { cn } from '@/lib/utils'
 
 const OdorAlertPpmChart = dynamic(
@@ -68,29 +69,29 @@ function downloadTrendCsv(opts: {
   const blob = new Blob(['\uFEFF' + lines.join('\r\n')], {
     type: 'text/csv;charset=utf-8',
   })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
   const safeName = opts.sensorKorNm.replace(/[\\/:*?"<>|]/g, '_').slice(0, 40)
-  a.href = url
-  a.download = `악취경향_${safeName}_${TREND_RANGE_FILE[opts.range]}.csv`
-  a.rel = 'noopener'
-  document.body.appendChild(a)
-  a.click()
-  a.remove()
-  URL.revokeObjectURL(url)
+  const fileName = `악취경향_${safeName}_${TREND_RANGE_FILE[opts.range]}.csv`
+  //		TODO : 악취 기능 연결 레이어 테이블의 SHP/엑셀(엑셀) 권한 적용 필요 (tableName·tableNames 전달)
+  downloadExcelWithPledge({
+    data: blob,
+    fileName,
+    tableKorName: fileName.replace(/\.csv$/i, '') || '악취경향',
+  })
 }
 
-const MAINT_PAGE_SIZE = 5
+const MAINT_PAGE_SIZE = 7
 
 const SEARCH_INPUT_CLASS =
   'standard-search-input focus:border-primary focus:ring-0 focus:ring-offset-0'
 
-type MaintSortKey = 'at' | 'summary'
+type MaintSortKey = 'date' | 'category' | 'inspector' | 'content'
 type SortDir = 'asc' | 'desc'
 
 const MAINT_COLUMNS: Array<{ key: MaintSortKey; label: string; className: string }> = [
-  { key: 'at', label: '일시', className: 'w-[36%]' },
-  { key: 'summary', label: '내용', className: '' },
+  { key: 'date', label: '일자', className: 'w-[18%]' },
+  { key: 'category', label: '구분', className: 'w-[20%]' },
+  { key: 'inspector', label: '점검자', className: 'w-[16%]' },
+  { key: 'content', label: '내용', className: '' },
 ]
 
 type Props = {
@@ -98,8 +99,7 @@ type Props = {
 }
 
 function compareMaint(a: MaintenanceRow, b: MaintenanceRow, key: MaintSortKey): number {
-  if (key === 'at') return a.at.localeCompare(b.at, 'ko')
-  return a.summary.localeCompare(b.summary, 'ko')
+  return a[key].localeCompare(b[key], 'ko')
 }
 
 function Section({
@@ -231,7 +231,7 @@ export function OdorAlertDetailPanel({ alert }: Props) {
   const [maintKeyword, setMaintKeyword] = useState('')
   const [maintPage, setMaintPage] = useState(1)
   const [maintSort, setMaintSort] = useState<{ key: MaintSortKey; dir: SortDir }>({
-    key: 'at',
+    key: 'date',
     dir: 'desc',
   })
 
@@ -240,7 +240,11 @@ export function OdorAlertDetailPanel({ alert }: Props) {
     let list = detail.maintenance
     if (kw) {
       list = list.filter(
-        (row) => row.at.toLowerCase().includes(kw) || row.summary.toLowerCase().includes(kw)
+        (row) =>
+          row.date.toLowerCase().includes(kw) ||
+          row.category.toLowerCase().includes(kw) ||
+          row.inspector.toLowerCase().includes(kw) ||
+          row.content.toLowerCase().includes(kw)
       )
     }
     const sign = maintSort.dir === 'asc' ? 1 : -1
@@ -429,7 +433,7 @@ export function OdorAlertDetailPanel({ alert }: Props) {
               <tbody>
                 {pagedMaint.length === 0 ? (
                   <tr>
-                    <td colSpan={2} className="standard-table-empty">
+                    <td colSpan={4} className="standard-table-empty">
                       이력이 없습니다.
                     </td>
                   </tr>
@@ -438,12 +442,24 @@ export function OdorAlertDetailPanel({ alert }: Props) {
                     <tr key={row.id} className="standard-list-row">
                       <td
                         className="standard-table-td-compact border-r border-border/60 tabular-nums"
-                        title={row.at}
+                        title={row.date}
                       >
-                        {row.at}
+                        {row.date}
                       </td>
-                      <td className="standard-table-td-compact" title={row.summary}>
-                        {row.summary}
+                      <td
+                        className="standard-table-td-compact border-r border-border/60"
+                        title={row.category}
+                      >
+                        {row.category}
+                      </td>
+                      <td
+                        className="standard-table-td-compact border-r border-border/60"
+                        title={row.inspector}
+                      >
+                        {row.inspector}
+                      </td>
+                      <td className="standard-table-td-compact" title={row.content}>
+                        {row.content}
                       </td>
                     </tr>
                   ))

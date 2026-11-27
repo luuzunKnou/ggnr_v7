@@ -5,6 +5,10 @@ import { Button } from '@/app/shadcnComponents/ui/button';
 import { call } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { RefreshCw, Check, X, Search, Download, FileSpreadsheet } from 'lucide-react';
+import {
+  downloadLayerShp,
+  triggerBlobDownload,
+} from '@/app/(pages)/dev/_components/layerManager/layerListDownload';
 
 type ExcelDataStatusRow = {
   tableName: string;
@@ -35,64 +39,34 @@ export function ExlDataStatusTab({ relativePath, onPathChange }: Props) {
   const [downloadingExcel, setDownloadingExcel] = useState<string | null>(null);
   const [downloadingShp, setDownloadingShp] = useState<string | null>(null);
 
-  const triggerBlobDownload = (blob: Blob, filename: string) => {
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = filename;
-    a.rel = 'noopener';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(a.href);
-  };
-
   const handleExcelDownload = useCallback(async (pathRel: string | null, tableName: string) => {
     const path =
       pathRel?.trim() ||
       `excel_data/${tableName.replace(/[^a-zA-Z0-9_]/g, '_')}.xlsx`;
     const key = `excel:${path}`;
     setDownloadingExcel(key);
-    console.log('[ExlDataStatusTab] Excel download start', path);
     try {
       const q = new URLSearchParams({ path });
       const res = await fetch(`/api/download/excel?${q.toString()}`);
       if (!res.ok) {
-        const errText = await res.text().catch(() => '');
-        console.warn('[ExlDataStatusTab] Excel download failed', res.status, errText);
         throw new Error(res.status === 403 ? '접근 불가' : res.status === 404 ? '파일 없음' : '다운로드 실패');
       }
       const blob = await res.blob();
       const name = path.split(/[/\\]/).pop() ?? 'download.xlsx';
       triggerBlobDownload(blob, name);
-      console.log('[ExlDataStatusTab] Excel download ok', name, blob.size);
     } catch (e) {
-      console.error('[ExlDataStatusTab] Excel download', e);
       alert(e instanceof Error ? e.message : 'Excel 다운로드 실패');
     } finally {
       setDownloadingExcel(null);
     }
   }, []);
 
-  const handleShpDownload = useCallback(async (tableName: string) => {
+  const handleShpDownload = useCallback(async (tableName: string, _tableKorName?: string) => {
     if (!tableName?.trim()) return;
     setDownloadingShp(tableName);
-    console.log('[ExlDataStatusTab] SHP download start', tableName);
     try {
-      const res = await fetch('/api/download/shp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tableName }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        console.warn('[ExlDataStatusTab] SHP failed', data);
-        throw new Error(typeof data?.error === 'string' ? data.error : 'SHP export failed');
-      }
-      const blob = await res.blob();
-      triggerBlobDownload(blob, `${tableName}.zip`);
-      console.log('[ExlDataStatusTab] SHP download ok', blob.size);
+      await downloadLayerShp(tableName, 'layer');
     } catch (e) {
-      console.error('[ExlDataStatusTab] SHP download', e);
       alert(e instanceof Error ? e.message : 'SHP 다운로드 실패');
     } finally {
       setDownloadingShp(null);
@@ -227,7 +201,7 @@ export function ExlDataStatusTab({ relativePath, onPathChange }: Props) {
                       size="sm"
                       className="h-7 px-1.5 gap-0.5"
                       disabled={!r.table || !!downloadingExcel || !!downloadingShp}
-                      onClick={() => handleShpDownload(r.tableName)}
+                      onClick={() => handleShpDownload(r.tableName, r.tableKorName)}
                       title="DB 테이블을 EPSG:5181 SHP(zip)로 다운로드"
                     >
                       <Download className="w-3.5 h-3.5" />
@@ -246,6 +220,7 @@ export function ExlDataStatusTab({ relativePath, onPathChange }: Props) {
           {filtered.length}건 표시 (전체 {rows.length}건)
         </div>
       )}
+
     </div>
   );
 }

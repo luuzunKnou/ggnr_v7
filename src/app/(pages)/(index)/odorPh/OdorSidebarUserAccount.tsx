@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Ellipsis, User } from 'lucide-react'
 import { useSession } from 'next-auth/react'
+import { withBasePathNav } from '@/lib/basePath'
 import { cn } from '@/lib/utils'
 import {
   hasProtoUnreadNotifications,
@@ -13,6 +14,7 @@ import {
   ImportantNotifSidebarBubble,
   UserAccountProtoPanel,
 } from '@/app/(pages)/map/_mapContents/prototypes/UserAccountProtoPanel'
+import { SystemFeedbackModal } from '@/app/(pages)/map/_mapContents/systemFeedback/SystemFeedbackModal'
 import { isOdorAlertNotif } from '@/app/(pages)/(index)/odorPh/odorIndexAlertNotifSeed'
 
 type Props = {
@@ -28,6 +30,7 @@ type Props = {
 export function OdorSidebarUserAccount({ collapsed, onOpenAlertNotif }: Props) {
   const { data: session, status } = useSession()
   const [open, setOpen] = useState(false)
+  const [systemFeedbackOpen, setSystemFeedbackOpen] = useState(false)
   const [protoNotifUnread, setProtoNotifUnread] = useState(false)
   const myInfoAnchorRef = useRef<HTMLDivElement>(null)
 
@@ -58,7 +61,7 @@ export function OdorSidebarUserAccount({ collapsed, onOpenAlertNotif }: Props) {
 
   const panelClassName = collapsed ? 'left-14' : 'left-[16.5rem]'
   const sideModalClassName = cn(
-    'fixed bottom-[7px] z-[130] flex w-[400px] flex-col overflow-hidden rounded-[5px] border border-border bg-background shadow-2xl',
+    'fixed bottom-[7px] z-130 flex w-[400px] flex-col overflow-hidden rounded-[5px] border border-border bg-background shadow-2xl',
     collapsed ? 'left-[calc(3.5rem+340px+8px)]' : 'left-[calc(16.5rem+340px+8px)]'
   )
 
@@ -107,9 +110,14 @@ export function OdorSidebarUserAccount({ collapsed, onOpenAlertNotif }: Props) {
         <ImportantNotifSidebarBubble anchorRef={myInfoAnchorRef} />
       </div>
 
+      <SystemFeedbackModal
+        open={systemFeedbackOpen}
+        onClose={() => setSystemFeedbackOpen(false)}
+      />
       <UserAccountProtoPanel
         open={open}
         onClose={() => setOpen(false)}
+        onOpenSystemFeedback={() => setSystemFeedbackOpen(true)}
         onOpenLedger={(item) => {
           if (isOdorAlertNotif(item)) {
             onOpenAlertNotif?.(item)
@@ -117,6 +125,14 @@ export function OdorSidebarUserAccount({ collapsed, onOpenAlertNotif }: Props) {
           }
         }}
         onOpenFee={() => undefined}
+        onOpenDataRequest={(item) => {
+          const href =
+            item.target === 'dataRequestApprove'
+              ? '/data-request-approve'
+              : '/data-request'
+          setOpen(false)
+          window.location.assign(withBasePathNav(href))
+        }}
         panelClassName={panelClassName}
         sideModalClassName={sideModalClassName}
       />

@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, type ReactNode } from "react"
+import { Suspense, useEffect, useRef, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
 import { signOut, useSession } from "next-auth/react"
 import { withBasePathNav } from "@/lib/basePath"
@@ -13,6 +13,7 @@ import { UserManager } from "@/app/(pages)/dev/_components/UserManager"
 import { LayerManagerContent } from "@/app/(pages)/dev/_components/LayerManagerContent"
 import { LayerManagerUploadButtons } from "@/app/(pages)/dev/_components/layerManager/LayerManagerUploadButtons"
 import { DataHistoryManagerContent } from "@/app/(pages)/dev/_components/DataHistoryManagerContent"
+import { DataRequestApproveClient } from "@/app/(pages)/data-request-approve/DataRequestApproveClient"
 import { SignUpApprove } from "@/app/(pages)/dev/_components/SignUpApprove"
 import { UserMgmtHistory } from "@/app/(pages)/dev/_components/UserMgmtHistory"
 import { UserAccessStats } from "@/app/(pages)/dev/_components/UserAccessStats"
@@ -42,7 +43,7 @@ const SYS_MANAGER_MENU_GROUPS: readonly AdminConsoleMenuGroup[] = [
     id: "dataManagement",
     label: "데이터관리",
     icon: Database,
-    menuIds: ["layerManager", "dataHistoryManager"],
+    menuIds: ["layerManager", "dataHistoryManager", "dataRequestApprove"],
   },
   {
     id: "usageStats",
@@ -86,6 +87,8 @@ function getSysAdminDescription(menuId: string): string {
       return "레이어 목록·SHP/Excel 업데이트 이력·설정(Layer/Field/Code)·오류수정 및 SHP·Excel 업로드 진입 화면입니다."
     case "dataHistoryManager":
       return "지도·SHP·Excel 데이터 변경·조회·내보내기 이력을 한곳에서 검색·조회합니다."
+    case "dataRequestApprove":
+      return "보안서약 후 접수된 데이터 요청을 승인·반려합니다."
     case "featureUsageStats":
       return "기능(서비스)별 사용 횟수·현황 통계 (구현 예정)"
     case "userAccessStats":
@@ -133,6 +136,18 @@ function renderSysAdminContent(menuId: string): ReactNode {
       return (
         <div className="flex flex-col overflow-hidden min-h-0 h-[calc(100vh-14rem)]">
           <DataHistoryManagerContent />
+        </div>
+      )
+    case "dataRequestApprove":
+      return (
+        <div className="flex flex-col overflow-hidden min-h-0 h-[calc(100vh-14rem)]">
+          <Suspense
+            fallback={
+              <div className="py-8 text-center text-sm text-muted-foreground">불러오는 중…</div>
+            }
+          >
+            <DataRequestApproveClient embedded />
+          </Suspense>
         </div>
       )
     case "featureUsageStats":

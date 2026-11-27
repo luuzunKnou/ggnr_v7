@@ -928,7 +928,7 @@ export function LayerRowGeomEditHandler({
   if (drawPhase === "drawing" || drawPhase === "managed") {
     return (
       <div
-        className="pointer-events-none absolute z-[15] flex -translate-x-1/2 flex-col items-center gap-1.5"
+        className="pointer-events-none absolute z-15 flex -translate-x-1/2 flex-col items-center gap-1.5"
         style={
           centerPixel
             ? { left: centerPixel.x, top: hintTopPx }
@@ -944,7 +944,7 @@ export function LayerRowGeomEditHandler({
   return (
     <div
       ref={toolbarRef}
-      className="pointer-events-none fixed z-[1200] flex flex-col items-start gap-1.5"
+      className="pointer-events-none fixed z-1200 flex flex-col items-start gap-1.5"
       style={
         toolbarPlacement
           ? { left: toolbarPlacement.left, top: toolbarPlacement.top }

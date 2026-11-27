@@ -21,6 +21,11 @@ import {
 } from '@/lib/mapLayerGeometryOrder'
 import '../../../_mapComponents/config/projections'
 import { WORKSPACE } from '../../../_mapComponents/layerFactory/serviceLayerFactory'
+import {
+  findUndergroundFacilityServiceLayer,
+  reapplyUndergroundFacilityServiceWms,
+  UNDERGROUND_FACILITY_LAYERS,
+} from '../../../_mapComponents/layerFactory/undergroundFacilityLayerFactory'
 import { useMapContext } from '../../../_mapComponents/MapContext'
 import {
   buildWtlNetSearchCql,
@@ -401,8 +406,8 @@ export function useWtlNetworkMapLayer({
   }, [mapContext?.mapInstanceRef, mapContext?.mapReady])
 
   /**
-   * 지하시설물 WMS에 검색 CQL 적용.
-   * 분할 레이어는 layerCqlFilter(div_query)와 AND.
+   * 지하시설물 묶음 WMS에 검색 CQL 적용.
+   * 분할 레이어는 layerCqlByTable(div_query)와 AND.
    * Set/객체 deps 대신 서명 문자열로 무한 갱신 방지.
    */
   useEffect(() => {
@@ -418,9 +423,31 @@ export function useWtlNetworkMapLayer({
       for (const k of enabledLayerKeys) activeKeys.add(k)
     }
 
+    const serviceLayer = findUndergroundFacilityServiceLayer(map)
+    if (serviceLayer) {
+      const searchByTable: Record<string, string> = {}
+      for (const opt of UNDERGROUND_FACILITY_LAYERS) {
+        const t = String(opt.tableName ?? '').trim()
+        if (!t) continue
+        const def = matchWtlNetLayerDefForTable(t, activeKeys)
+        if (!def) continue
+        const search = buildWtlNetSearchCql(def, searchFilter)
+        if (!search || search === 'INCLUDE') continue
+        searchByTable[t] = search
+      }
+      serviceLayer.set('layerSearchCqlByTable', searchByTable)
+      reapplyUndergroundFacilityServiceWms(map)
+      return () => {
+        serviceLayer.set('layerSearchCqlByTable', {})
+        reapplyUndergroundFacilityServiceWms(map)
+      }
+    }
+
+    // 레거시: 테이블당 ImageWMS
     const touched: ImageLayer<ImageWMS>[] = []
     for (const raw of map.getLayers().getArray()) {
       if (!raw.get('undergroundFacilityLayer')) continue
+      if (raw.get('undergroundFacilityServiceLayer')) continue
       const layer = raw as ImageLayer<ImageWMS>
       const tableName = String(layer.get('layerTableName') ?? '').trim()
       if (!tableName) continue

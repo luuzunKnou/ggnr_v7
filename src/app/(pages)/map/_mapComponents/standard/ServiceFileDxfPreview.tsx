@@ -262,7 +262,7 @@ export function ServiceFileDxfPreview({ url, fileName, onClose }: Props) {
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[500] flex flex-col bg-black/92"
+      className="fixed inset-0 z-500 flex flex-col bg-black/92"
       role="dialog"
       aria-modal="true"
       aria-label="DXF 미리보기"

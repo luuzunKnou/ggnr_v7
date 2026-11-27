@@ -24,6 +24,12 @@ type Props = {
   historyOpen: boolean
   /** true면 업체(agency) 필터 UI 표시 — odor-index 전용 */
   showAgencyFilter?: boolean
+  /** 패널 제목 (기본: 경보 보기) */
+  title?: string
+  /** 패널 부제 */
+  description?: string
+  /** 쓰기 권한 판정용 ser_eng (기본: 경보 보기) */
+  writeSerEng?: string
 }
 
 function gradeBadgeClass(grade: number | null): string {
@@ -65,9 +71,12 @@ export function OdorAlertListPanel({
   onOpenHistory,
   historyOpen,
   showAgencyFilter = false,
+  title = '경보 보기',
+  description = '언제·어디서 경보가 났는지 목록',
+  writeSerEng = ODOR_ALERT_SER_ENG,
 }: Props) {
   const { alerts } = useOdorAlertStore()
-  const canWrite = useSerWriteAccess(ODOR_ALERT_SER_ENG)
+  const canWrite = useSerWriteAccess(writeSerEng)
   const [tab, setTab] = useState<OdorAlertViewTab>('all')
   const [gradeFilter, setGradeFilter] = useState<OdorAlertGradeFilter>('all')
   const [kindFilter, setKindFilter] = useState<OdorAlertKindFilter>('all')
@@ -118,8 +127,8 @@ export function OdorAlertListPanel({
     <div className="flex h-full min-h-0 flex-col bg-card">
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-2">
         <div>
-          <h2 className="text-sm font-semibold text-foreground">경보 보기</h2>
-          <p className="text-[10px] text-muted-foreground">언제·어디서 경보가 났는지 목록</p>
+          <h2 className="text-sm font-semibold text-foreground">{title}</h2>
+          <p className="text-[10px] text-muted-foreground">{description}</p>
         </div>
         <div className="flex items-center gap-1">
           <button

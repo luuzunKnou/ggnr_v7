@@ -738,13 +738,13 @@ export function MapSearchBar({
 
   return (
     <>
-      {/* 좌측: 주소검색 — body 포털. 결과창 열림 시 z-[45]로 우측 메뉴(z-40) 위 */}
+      {/* 좌측: 주소검색 — body 포털. 결과창 열림 시 z-45로 우측 메뉴(z-40) 위 */}
       {searchBarPortalReady &&
         createPortal(
       <div
         className={cn(
           'pointer-events-none fixed top-4',
-          addressPanelOpen ? 'z-[45]' : 'z-40'
+          addressPanelOpen ? 'z-45' : 'z-40'
         )}
         style={{ left: `${leftOffset}px` }}
       >

@@ -1040,7 +1040,7 @@ export function WtlTopologyPanel({
                         className={cn(
                           'cursor-pointer border-b border-border hover:bg-primary/5',
                           selectedId === row.id &&
-                            'bg-primary/[0.12] ring-1 ring-inset ring-primary/25',
+                            'bg-primary/12 ring-1 ring-inset ring-primary/25',
                           hidden && 'opacity-60'
                         )}
                         onClick={() => toggleIssueRow(row.id)}

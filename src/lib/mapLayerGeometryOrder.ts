@@ -315,6 +315,7 @@ export function sortLayerNamesForWmsStack(
 function isGeometryStackableWmsLayer(layer: BaseLayer): boolean {
   if (!layer.get('layerTableName')) return false;
   if (layer.get('serviceLayer')) return false;
+  if (layer.get('undergroundFacilityServiceLayer')) return false;
   if (layer.get('safetyMapGeoLayer')) return false;
   const z = layer.getZIndex();
   if (z != null && z >= 100) return false;

@@ -1,5 +1,9 @@
 <GeoServerTileLayer>
+<<<<<<<< HEAD:geoserver_modules/data_dir/gwc-layers/LayerInfoImpl--210e710e_1a1f780e02f_-7f87.xml
+  <id>LayerInfoImpl--210e710e:1a1f780e02f:-7f87</id>
+========
   <id>LayerInfoImpl--3d479f4d:1a1f7c2d9fb:-7fa1</id>
+>>>>>>>> origin/master:geoserver_modules/data_dir/gwc-layers/LayerInfoImpl--3d479f4d_1a1f7c2d9fb_-7fa1.xml
   <enabled>true</enabled>
   <inMemoryCached>true</inMemoryCached>
   <name>ggnr:sd_heat_mitigation_facility</name>
@@ -12,10 +16,17 @@
       <gridSetName>EPSG:4326</gridSetName>
       <extent>
         <coords>
+<<<<<<<< HEAD:geoserver_modules/data_dir/gwc-layers/LayerInfoImpl--210e710e_1a1f780e02f_-7f87.xml
+          <double>128.32953590497206</double>
+          <double>36.30608633544393</double>
+          <double>128.79048024149247</double>
+          <double>36.42666223683584</double>
+========
           <double>128.71600810471452</double>
           <double>35.79922938085491</double>
           <double>128.85198610330022</double>
           <double>35.92042321326513</double>
+>>>>>>>> origin/master:geoserver_modules/data_dir/gwc-layers/LayerInfoImpl--3d479f4d_1a1f7c2d9fb_-7fa1.xml
         </coords>
       </extent>
     </gridSubset>

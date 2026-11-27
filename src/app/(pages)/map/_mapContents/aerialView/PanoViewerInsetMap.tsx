@@ -23,7 +23,7 @@ import { createBasicSectionLayers } from '../../_mapComponents/layerFactory/basi
 import { createJimokLayers } from '../../_mapComponents/layerFactory/jimokLayerFactory';
 import { createOwnershipLayers } from '../../_mapComponents/layerFactory/ownershipLayerFactory';
 import { createThematicMapLayers } from '../../_mapComponents/layerFactory/thematicMapLayerFactory';
-import { createUndergroundFacilityLayers } from '../../_mapComponents/layerFactory/undergroundFacilityLayerFactory';
+import { createUndergroundFacilityServiceLayer } from '../../_mapComponents/layerFactory/undergroundFacilityLayerFactory';
 import { createSafetydataMapLayers } from '../../_mapComponents/layerFactory/safetydataMapLayerFactory';
 import { createServiceLayer } from '../../_mapComponents/layerFactory/serviceLayerFactory';
 import { syncSecondaryLayersFromPrimary } from '../mapSplit/syncSecondaryLayersFromPrimary';
@@ -148,11 +148,11 @@ export function PanoViewerInsetMap({
         ...createJimokLayers(),
         ...createOwnershipLayers(),
         ...createThematicMapLayers(),
-        ...createUndergroundFacilityLayers(),
         ...createSafetydataMapLayers(),
       ],
       interactions: [new DragPan(), new MouseWheelZoom(), new DoubleClickZoom(), new PinchZoom()],
     });
+    map.addLayer(createUndergroundFacilityServiceLayer());
     map.addLayer(createServiceLayer());
     const mirrorRegistry: DynamicMirrorRegistry = new globalThis.Map();
     const syncMainLayers = () => syncSecondaryLayersFromPrimary(main, map, mirrorRegistry);

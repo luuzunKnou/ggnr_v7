@@ -534,7 +534,7 @@ export function MapSplitterGutter({
           aria-hidden
           title={ratioTitle}
           className={cn(
-            'pointer-events-auto absolute z-[1] bg-transparent',
+            'pointer-events-auto absolute z-1 bg-transparent',
             ratioCursor,
             isHorizontal
               ? 'inset-y-0 left-1/2 w-2.5 -translate-x-1/2'
@@ -587,14 +587,14 @@ export function MapSplitterGutter({
         <div className="inline-grid items-center">
           <div className={cn('col-start-1 row-start-1', stackClass, 'gap-1')}>
             {canCollapse ? (
-              <div className="relative z-[1] shrink-0">
+              <div className="relative z-1 shrink-0">
                 <MapSplitControlButton
                   title={expandButtonTitle}
                   active={false}
                   iconActiveColor={MAP_SPLIT_GUTTER_ICON_COLOR.expandToggle.active}
                   iconInactiveColor={MAP_SPLIT_GUTTER_ICON_COLOR.expandToggle.inactive}
                   className={cn(
-                    'relative z-[2]',
+                    'relative z-2',
                     offsetMoveEnabled ? 'cursor-grab active:cursor-grabbing' : undefined
                   )}
                   onPointerDown={handleExpandPointerDown}

@@ -6,6 +6,7 @@ import { useResolvedThemeSafe } from '@/app/(pages)/(index)/theme-provider'
 import { WTL_LAYER_SHAPE_DEFS } from '@/lib/wtlLayerShapeDefs'
 import { SECTION_DEFAULT_HALF_WIDTH_M } from '@/app/(pages)/dev/_components/threeJs/groundSection'
 import { ViewportCompass } from '@/app/(pages)/dev/_components/threeJs/ViewportCompass'
+import { WtlNetworkSectionMouseHint } from './WtlNetworkSectionMouseHint'
 import { DATA_QUERY_SELECTION_PULSE_STEP } from '@/lib/mapDataQueryMapHighlight'
 import { cn } from '@/lib/utils'
 import {
@@ -1191,16 +1192,19 @@ export function WtlNetworkSectionThreeJsTab({
           <div ref={hostRef} className="absolute inset-0" />
           <div
             ref={tipRef}
-            className="pointer-events-none absolute z-[2] hidden max-w-[320px] min-w-[200px] rounded border border-border bg-background px-2.5 py-2 shadow-md"
+            className="pointer-events-none absolute z-2 hidden max-w-[320px] min-w-[200px] rounded border border-border bg-background px-2.5 py-2 shadow-md"
             style={{ display: 'none' }}
           />
           {viewReady && !error ? (
-            <ViewportCompass getCamera={getCamera} onClick={faceNorth} />
+            <>
+              <WtlNetworkSectionMouseHint />
+              <ViewportCompass getCamera={getCamera} onClick={faceNorth} />
+            </>
           ) : null}
           {busy || !viewReady ? (
             <p
               className={cn(
-                'pointer-events-none absolute inset-0 z-[1] flex items-center justify-center text-[11px]',
+                'pointer-events-none absolute inset-0 z-1 flex items-center justify-center text-[11px]',
                 isDark ? 'text-slate-400' : 'text-slate-500'
               )}
             >

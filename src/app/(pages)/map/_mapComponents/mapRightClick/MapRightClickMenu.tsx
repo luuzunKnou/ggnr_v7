@@ -181,7 +181,7 @@ export default function MapRightClickMenu() {
       ? createPortal(
           // FMS와 동일 파란 토스트 · 위치는 보이는 지도 중앙(우측 필지정보 패널 제외)
           <div
-            className="pointer-events-none fixed z-[200]"
+            className="pointer-events-none fixed z-200"
             style={{
               top: toastCenter.y,
               left: toastCenter.x,

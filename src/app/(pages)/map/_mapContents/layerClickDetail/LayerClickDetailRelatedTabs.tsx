@@ -20,6 +20,8 @@ type Props = {
   relatedChildAsModal?: boolean
   /** 지도 기본 모달 루트 — 자식 상세 좌측·위 배치 기준 */
   relatedModalAnchorHostRef?: RefObject<HTMLElement | null>
+  /** 데이터 이력관리 조회 서비스명 */
+  serviceName?: string | null
 }
 
 /**
@@ -34,6 +36,7 @@ export function LayerClickDetailRelatedTabs({
   mapTabContent,
   relatedChildAsModal = false,
   relatedModalAnchorHostRef,
+  serviceName,
 }: Props) {
   const item = useMemo(() => layerClickHitToNetworkRow(hit), [hit])
   const onRelatedMapLayer = useCallback((_next: WtlNetworkDetailRelatedOverlay) => {
@@ -50,6 +53,7 @@ export function LayerClickDetailRelatedTabs({
       mapTabContent={mapTabContent}
       relatedChildAsModal={relatedChildAsModal}
       relatedModalAnchorHostRef={relatedModalAnchorHostRef}
+      serviceName={serviceName}
     />
   )
 }

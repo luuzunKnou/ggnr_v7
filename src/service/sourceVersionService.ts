@@ -28,6 +28,7 @@ import { decodeChildOutput } from '@/lib/decodeChildOutput';
 import {
   isPrebuildTsxAvailable,
   NPM_INSTALL_DEV_ARGS,
+  resolveNpmBuildEnv,
   resolveNpmInstallEnv,
 } from '@/lib/npmApplyEnv';
 
@@ -784,9 +785,13 @@ async function executePreparedSourceApplyCommit(
         });
       }
       await emit('build', '사전 빌드…');
-      await spawnNpmWithApplyLog(['run', 'build'], async (line) => {
-        await emit('build', line.startsWith('build:') ? line : `build: ${line}`);
-      });
+      await spawnNpmWithApplyLog(
+        ['run', 'build'],
+        async (line) => {
+          await emit('build', line.startsWith('build:') ? line : `build: ${line}`);
+        },
+        resolveNpmBuildEnv()
+      );
     }
 
     await fs.rm(tmpBase, { recursive: true, force: true }).catch(() => {});
@@ -1161,17 +1166,33 @@ function sanitizeInstallFolderKey(raw: string): string {
   return cut;
 }
 
+/** 새 폴더 생성 — 설치 매뉴얼과 동일하게 C:\htdocs 아래에 둔다 */
+const SIBLING_HTDOCS_DIR = 'C:\\htdocs';
+
 function resolveSiblingInstallDir(folderKey: string): string {
-  const cwd = path.resolve(process.cwd());
-  const parent = path.dirname(cwd);
-  const name = `${path.basename(cwd)}_${sanitizeInstallFolderKey(folderKey)}`;
-  const target = path.resolve(parent, name);
-  const rel = path.relative(parent, target);
+  const key = sanitizeInstallFolderKey(folderKey);
+  const target = path.resolve(SIBLING_HTDOCS_DIR, key);
+  const rel = path.relative(SIBLING_HTDOCS_DIR, target);
   if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) {
     throw new Error('설치 폴더 경로가 올바르지 않습니다.');
   }
+  const cwd = path.resolve(process.cwd());
   if (target.toLowerCase() === cwd.toLowerCase()) {
     throw new Error('설치 폴더가 현재 실행 폴더와 같습니다.');
+  }
+  return target;
+}
+
+function resolveSiblingZipPath(fileName: string, folderKey: string): string {
+  const raw = path.basename((fileName || '').replace(/\\/g, '/')).trim();
+  const safe =
+    raw && raw !== '.' && raw !== '..' && !raw.includes('..')
+      ? raw
+      : `source_${sanitizeInstallFolderKey(folderKey)}.zip`;
+  const target = path.resolve(SIBLING_HTDOCS_DIR, safe.endsWith('.zip') ? safe : `${safe}.zip`);
+  const rel = path.relative(SIBLING_HTDOCS_DIR, target);
+  if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) {
+    throw new Error('압축 파일 경로가 올바르지 않습니다.');
   }
   return target;
 }
@@ -1349,7 +1370,10 @@ async function tailSiblingStarterLog(params: {
   );
 }
 
-/** 상위 폴더에 새 설치. 빌드는 그 폴더의 설치 스크립트가 현재 프로젝트·구분으로 수행 */
+/**
+ * C:\htdocs에 ZIP 복사 → 해당 폴더에 압축 해제 → 00_make_ggnr_starter.bat 실행.
+ * 실패해도 압축 파일·해제 폴더는 삭제하지 않는다.
+ */
 async function applySourceZipAsSibling(options: ApplySourceZipOptions): Promise<ApplySourceZipResult> {
   if (process.platform !== 'win32') {
     throw new Error('새 폴더 생성은 윈도우 서비스 설치에서만 사용할 수 있습니다.');
@@ -1369,6 +1393,7 @@ async function applySourceZipAsSibling(options: ApplySourceZipOptions): Promise<
   const port = await resolveSiblingAppPort();
   const folderKey = (installFolderKey ?? '').trim() || version;
   const targetDir = resolveSiblingInstallDir(folderKey);
+  const zipInHtdocs = resolveSiblingZipPath(fileName, folderKey);
   if (await pathExists(targetDir)) {
     throw new Error(`이미 같은 버전 폴더가 있습니다: ${targetDir}`);
   }
@@ -1378,11 +1403,9 @@ async function applySourceZipAsSibling(options: ApplySourceZipOptions): Promise<
     throw new Error('다른 최신소스 적용이 진행 중입니다. 완료 후 다시 시도하세요.');
   }
 
-  const tmpBase = path.join(os.tmpdir(), 'ggnr_source_update', `sibling_${Date.now()}`);
-  const extractDir = path.join(tmpBase, 'extracted');
-  let createdTarget = false;
   let buildOk = false;
   let historyRecorded = false;
+  let installRoot = targetDir;
   const historyVersion = resolveAppliedVersionLabel(version);
   const ipTrim = clientIp?.trim() || undefined;
   const netLabel = includeNodeModules ? '폐쇄망' : '개방망';
@@ -1415,14 +1438,28 @@ async function applySourceZipAsSibling(options: ApplySourceZipOptions): Promise<
   };
 
   try {
-    await emit('merge-apply', `새 폴더 생성 준비. 폴더=${targetDir}`, { mergeStep: 'extract' });
+    await fs.mkdir(SIBLING_HTDOCS_DIR, { recursive: true });
+    await emit(
+      'merge-apply',
+      `새 폴더 생성 준비. 압축=${zipInHtdocs} 해제=${targetDir}`,
+      { mergeStep: 'extract' }
+    );
     const stat = await fs.stat(zipPath);
-    await fs.mkdir(extractDir, { recursive: true });
+
+    const srcZip = path.resolve(zipPath);
+    if (srcZip.toLowerCase() !== zipInHtdocs.toLowerCase()) {
+      await emit('merge-apply', `압축 파일을 ${SIBLING_HTDOCS_DIR}에 복사 중...`, {
+        mergeStep: 'extract',
+      });
+      await fs.copyFile(srcZip, zipInHtdocs);
+    }
+
+    await fs.mkdir(targetDir, { recursive: true });
     await emit('merge-apply', 'ZIP 압축 해제 중...', { mergeStep: 'extract' });
     await withNativeExtractProgress({
-      zipPath,
-      extractDir,
-      extract: () => extractZip(zipPath, extractDir),
+      zipPath: zipInHtdocs,
+      extractDir: targetDir,
+      extract: () => extractZip(zipInHtdocs, targetDir),
       onPulse: (pulse) =>
         emit('merge-apply', pulse.message, {
           mergeStep: 'extract',
@@ -1430,31 +1467,25 @@ async function applySourceZipAsSibling(options: ApplySourceZipOptions): Promise<
           ...(pulse.totalBytes != null ? { totalBytes: pulse.totalBytes } : {}),
         }),
     });
-    const extractedRoot = await pickExtractedRoot(extractDir);
-    const starterBat = path.join(extractedRoot, '00_make_ggnr_starter.bat');
-    if (!(await pathExists(starterBat))) {
-      throw new Error('받은 소스에 설치 파일이 없습니다.');
-    }
 
-    if (await pathExists(targetDir)) {
-      throw new Error(`이미 같은 버전 폴더가 있습니다: ${targetDir}`);
-    }
-    await emit('merge-apply', '새 폴더로 복사 중...');
-    createdTarget = true;
-    {
-      let elapsed = 0;
-      const timer = setInterval(() => {
-        elapsed += 5;
-        void emit('merge-apply', `새 폴더로 복사 중... (${elapsed}초 경과)`);
-      }, 5000);
-      try {
-        await fs.cp(extractedRoot, targetDir, { recursive: true });
-      } finally {
-        clearInterval(timer);
+    const zipHasStarter = await zipContainsStarterBat(zipInHtdocs);
+    const extractedRoot = await findStarterBatRoot(targetDir);
+    if (!extractedRoot) {
+      const top = await describeExtractTop(targetDir);
+      if (zipHasStarter) {
+        throw new Error(
+          `받은 소스 ZIP에는 설치 파일이 있으나 압축 해제 후 찾지 못했습니다. 해제 폴더=${targetDir} 상위=${top} 압축=${zipInHtdocs}`
+        );
       }
+      throw new Error(
+        `받은 소스에 설치 파일이 없습니다. 해제 폴더=${targetDir} 상위=${top} 압축=${zipInHtdocs}`
+      );
     }
-    if (!(await pathExists(path.join(targetDir, '00_make_ggnr_starter.bat')))) {
-      throw new Error('새 폴더에 설치 파일을 만들지 못했습니다.');
+    installRoot = extractedRoot;
+    await emit('merge-apply', `설치 루트 확인: ${installRoot}`);
+
+    if (!(await pathExists(path.join(installRoot, STARTER_BAT_NAME)))) {
+      throw new Error(`새 폴더에 설치 파일이 없습니다. 해제 폴더=${installRoot}`);
     }
 
     const npmSync: 'Y' | 'N' = includeNodeModules ? 'N' : 'Y';
@@ -1463,13 +1494,13 @@ async function applySourceZipAsSibling(options: ApplySourceZipOptions): Promise<
       `설치 스크립트를 실행합니다. 프로젝트=${project} 구분=${envName} 포트=${port} 의존성=${npmSync}`
     );
     const { ps1Path, logPath } = await writeSiblingLauncher({
-      targetDir,
+      targetDir: installRoot,
       project,
       envName,
       port,
       npmSync,
     });
-    await spawnDetachedStarterWindow(ps1Path, targetDir);
+    await spawnDetachedStarterWindow(ps1Path, installRoot);
     const tailed = await tailSiblingStarterLog({
       logPath,
       emit: async (phase, message, logLine) => {
@@ -1478,10 +1509,12 @@ async function applySourceZipAsSibling(options: ApplySourceZipOptions): Promise<
     });
     buildOk = tailed.buildOk;
     if (tailed.failed || !tailed.buildOk) {
-      throw new Error('설치 스크립트가 실패했습니다. 설치 창의 메시지를 확인하세요.');
+      throw new Error(
+        `설치 스크립트가 실패했습니다. 설치 창의 메시지를 확인하세요. (해제 폴더 유지: ${installRoot})`
+      );
     }
 
-    const successMessage = `새 폴더 생성. 설치 폴더 ${targetDir}. 프로젝트 ${project}, 구분 ${envName}, 포트 ${port}. ${netLabel}. 빌드 후 서비스를 새 폴더로 다시 등록합니다.`;
+    const successMessage = `새 폴더 생성. 설치 폴더 ${installRoot}. 프로젝트 ${project}, 구분 ${envName}, 포트 ${port}. ${netLabel}. 빌드 후 서비스를 새 폴더로 다시 등록합니다.`;
     const hist = await recordVersionHistory({
       historyType: 'apply_latest',
       status: 'success',
@@ -1499,12 +1532,12 @@ async function applySourceZipAsSibling(options: ApplySourceZipOptions): Promise<
       version,
       fileName,
       downloadedBytes: stat.size,
-      extractedRoot: targetDir,
+      extractedRoot: installRoot,
       appliedFiles: 0,
       skippedFiles: 0,
       skippedSamples: [],
       applyLayout: layout,
-      installDir: targetDir,
+      installDir: installRoot,
       geoserver: {
         stopped: false,
         started: false,
@@ -1525,18 +1558,24 @@ async function applySourceZipAsSibling(options: ApplySourceZipOptions): Promise<
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    if (createdTarget && !buildOk) {
-      await fs.rm(targetDir, { recursive: true, force: true }).catch((rmErr) => {
-        console.error('[SourceCodeUpload] 실패한 설치 폴더 삭제 실패', rmErr);
-      });
-    }
-    await recordFail(message);
-    const tagged = new Error(message) as Error & { historyRecorded?: boolean };
+    const withKeep =
+      message.includes('해제 폴더')
+        ? message
+        : `${message} (해제 폴더 유지: ${installRoot}, 압축 유지: ${zipInHtdocs})`;
+    console.warn(
+      `[SourceCodeUpload] 새 폴더 생성 실패 — 삭제하지 않음. 해제=${installRoot} 압축=${zipInHtdocs}`
+    );
+    await recordFail(withKeep);
+    const tagged = new Error(withKeep) as Error & { historyRecorded?: boolean };
     tagged.historyRecorded = historyRecorded;
     throw tagged;
   } finally {
     releaseSourceApplyLock(lockOwner);
-    await fs.rm(tmpBase, { recursive: true, force: true }).catch(() => {});
+    if (!buildOk) {
+      console.warn(
+        `[SourceCodeUpload] sibling 유지: extract=${installRoot} zip=${zipInHtdocs}`
+      );
+    }
   }
 }
 
@@ -1863,6 +1902,13 @@ function spawnAsync(command: string, args: string[]): Promise<void> {
 async function extractZip(zipPath: string, destDir: string): Promise<void> {
   await fs.mkdir(destDir, { recursive: true });
   if (process.platform === 'win32') {
+    /** tar(bsdtar)가 대용량·`./` 접두 ZIP에서 Expand-Archive보다 안정적 */
+    try {
+      await spawnAsync('tar', ['-xf', zipPath, '-C', destDir]);
+      return;
+    } catch (tarErr) {
+      console.warn('[SourceCodeUpload] tar 압축 해제 실패 — Expand-Archive로 재시도', tarErr);
+    }
     await spawnAsync('powershell', [
       '-NoProfile',
       '-ExecutionPolicy',
@@ -1875,10 +1921,13 @@ async function extractZip(zipPath: string, destDir: string): Promise<void> {
   await spawnAsync('unzip', ['-oq', zipPath, '-d', destDir]);
 }
 
+const STARTER_BAT_NAME = '00_make_ggnr_starter.bat';
+const STARTER_BAT_SEARCH_DEPTH = 6;
+
 /** ZIP 해제 루트 — 단일 폴더만 있으면 반복 unwrap (폴더1→폴더2→소스). 프로젝트 표식 있으면 중단 */
 async function pickExtractedRoot(extractDir: string): Promise<string> {
   const isProjectRoot = (names: string[]) =>
-    names.includes('package.json') || names.includes('00_make_ggnr_starter.bat');
+    names.includes('package.json') || names.includes(STARTER_BAT_NAME);
 
   let current = extractDir;
   for (let depth = 0; depth < 5; depth++) {
@@ -1894,6 +1943,132 @@ async function pickExtractedRoot(extractDir: string): Promise<string> {
     return current;
   }
   return current;
+}
+
+/** ZIP central directory에 설치 bat 엔트리가 있는지 (경로·`./` 접두 무관) */
+async function zipContainsStarterBat(zipPath: string): Promise<boolean> {
+  let fh: Awaited<ReturnType<typeof fs.open>> | null = null;
+  try {
+    fh = await fs.open(zipPath, 'r');
+    const { size } = await fh.stat();
+    if (size < 22) return false;
+    const tailLen = Math.min(65_557, size);
+    const buf = Buffer.alloc(tailLen);
+    await fh.read(buf, 0, tailLen, size - tailLen);
+    let eocd = -1;
+    for (let i = buf.length - 22; i >= 0; i--) {
+      if (buf[i] === 0x50 && buf[i + 1] === 0x4b && buf[i + 2] === 0x05 && buf[i + 3] === 0x06) {
+        eocd = i;
+        break;
+      }
+    }
+    if (eocd < 0) return false;
+    const totalEntries = buf.readUInt16LE(eocd + 10);
+    const cdSize = buf.readUInt32LE(eocd + 12);
+    const cdOffset = buf.readUInt32LE(eocd + 16);
+    if (totalEntries === 0xffff || cdSize === 0xffffffff || cdOffset === 0xffffffff) {
+      return zipContainsStarterBatWin32(zipPath);
+    }
+    if (cdSize === 0 || cdOffset + cdSize > size) return false;
+    const cd = Buffer.alloc(cdSize);
+    await fh.read(cd, 0, cdSize, cdOffset);
+    let off = 0;
+    let counted = 0;
+    const needle = STARTER_BAT_NAME.toLowerCase();
+    while (off + 46 <= cd.length && counted < totalEntries) {
+      if (cd.readUInt32LE(off) !== 0x02014b50) break;
+      const nameLen = cd.readUInt16LE(off + 28);
+      const extraLen = cd.readUInt16LE(off + 30);
+      const commentLen = cd.readUInt16LE(off + 32);
+      const name = cd.subarray(off + 46, off + 46 + nameLen).toString('utf8').replace(/\\/g, '/');
+      const base = name.split('/').pop()?.toLowerCase() ?? '';
+      if (base === needle) return true;
+      counted += 1;
+      off += 46 + nameLen + extraLen + commentLen;
+    }
+    return false;
+  } catch {
+    return zipContainsStarterBatWin32(zipPath);
+  } finally {
+    await fh?.close().catch(() => undefined);
+  }
+}
+
+async function zipContainsStarterBatWin32(zipPath: string): Promise<boolean> {
+  if (process.platform !== 'win32') return false;
+  const literal = zipPath.replace(/'/g, "''");
+  const script = [
+    "Add-Type -AssemblyName System.IO.Compression.FileSystem",
+    `$z = [System.IO.Compression.ZipFile]::OpenRead('${literal}')`,
+    'try {',
+    `  @($z.Entries | Where-Object { $_.Name -ieq '${STARTER_BAT_NAME}' }).Count -gt 0`,
+    '} finally { $z.Dispose() }',
+  ].join('; ');
+  try {
+    const { code, stdout } = await new Promise<{ code: number; stdout: string }>((resolve, reject) => {
+      const child = spawn('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script], {
+        shell: false,
+        windowsHide: true,
+      });
+      let stdout = '';
+      child.stdout?.on('data', (c: Buffer | string) => {
+        stdout += typeof c === 'string' ? c : c.toString('utf8');
+      });
+      child.on('error', reject);
+      child.on('close', (c) => resolve({ code: c ?? 1, stdout }));
+    });
+    if (code !== 0) return false;
+    return /true/i.test(stdout.trim().split(/\r?\n/).pop() ?? '');
+  } catch {
+    return false;
+  }
+}
+
+async function describeExtractTop(extractDir: string): Promise<string> {
+  try {
+    const entries = await fs.readdir(extractDir, { withFileTypes: true });
+    if (entries.length === 0) return '(비어 있음)';
+    return entries
+      .slice(0, 12)
+      .map((e) => `${e.isDirectory() ? '[D]' : '[F]'}${e.name}`)
+      .join(', ');
+  } catch {
+    return '(읽기 실패)';
+  }
+}
+
+/**
+ * 설치 bat이 있는 실제 소스 루트.
+ * unwrap 후 없으면 하위 폴더를 제한 깊이로 탐색 (`./버전폴더/...`·이중 래핑 대비).
+ */
+async function findStarterBatRoot(extractDir: string): Promise<string | null> {
+  const picked = await pickExtractedRoot(extractDir);
+  if (await pathExists(path.join(picked, STARTER_BAT_NAME))) return picked;
+
+  const queue: Array<{ dir: string; depth: number }> = [{ dir: extractDir, depth: 0 }];
+  const seen = new Set<string>();
+  while (queue.length > 0) {
+    const item = queue.shift();
+    if (!item) break;
+    const { dir, depth } = item;
+    const key = path.resolve(dir).toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    if (await pathExists(path.join(dir, STARTER_BAT_NAME))) return dir;
+    if (depth >= STARTER_BAT_SEARCH_DEPTH) continue;
+    let entries;
+    try {
+      entries = await fs.readdir(dir, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      if (entry.name === 'node_modules' || entry.name === '.git' || entry.name === '.next') continue;
+      queue.push({ dir: path.join(dir, entry.name), depth: depth + 1 });
+    }
+  }
+  return null;
 }
 
 function isBusyLockError(err: unknown): boolean {

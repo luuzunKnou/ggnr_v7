@@ -144,6 +144,9 @@ function parseMapSourceIds(raw: unknown): WtlNetMapSourceId[] {
  * DB에 geom 데이터가 있는 테이블 우선, 없으면 테이블만 있는 것.
  * (저수조: wtl_tank_ps / wtl_rsrv_ps)
  */
+/** 출처×논리테이블 → 물리 테이블 (프로세스 수명 캐시) */
+const physicalTableBySourceCache = new Map<string, string | null>();
+
 async function resolvePhysicalTableInSource(
   source: WtlNetMapSourceDef,
   baseTable: string
@@ -152,6 +155,10 @@ async function resolvePhysicalTableInSource(
     .trim()
     .toLowerCase();
   if (!base) return null;
+  const cacheKey = `${source.id}\0${base}`;
+  if (physicalTableBySourceCache.has(cacheKey)) {
+    return physicalTableBySourceCache.get(cacheKey)!;
+  }
   const remapped = String(source.remapTable(base) ?? '')
     .trim()
     .toLowerCase();
@@ -164,16 +171,29 @@ async function resolvePhysicalTableInSource(
         .filter(Boolean)
     ),
   ];
-  if (ordered.length === 0) return null;
+  if (ordered.length === 0) {
+    physicalTableBySourceCache.set(cacheKey, null);
+    return null;
+  }
   const existing = await existingLayerTables(ordered);
-  if (existing.size === 0) return null;
+  if (existing.size === 0) {
+    physicalTableBySourceCache.set(cacheKey, null);
+    return null;
+  }
   const withData = await layerTablesWithGeomRows([...existing]);
   for (const name of ordered) {
-    if (withData.has(name)) return name;
+    if (withData.has(name)) {
+      physicalTableBySourceCache.set(cacheKey, name);
+      return name;
+    }
   }
   for (const name of ordered) {
-    if (existing.has(name)) return name;
+    if (existing.has(name)) {
+      physicalTableBySourceCache.set(cacheKey, name);
+      return name;
+    }
   }
+  physicalTableBySourceCache.set(cacheKey, null);
   return null;
 }
 
@@ -534,6 +554,31 @@ function parseGeom(raw: unknown): GeoJSON.Geometry | null {
 
 const tableExistsCache = new Map<string, boolean>();
 const columnExistsCache = new Map<string, boolean>();
+/** layer 테이블 geom SRID (프로세스 수명 캐시) */
+const tableSridCache = new Map<string, number | null>();
+
+async function resolveTableSrid(physicalTable: string): Promise<number | null> {
+  const key = String(physicalTable ?? '')
+    .trim()
+    .toLowerCase();
+  if (!key) return null;
+  if (tableSridCache.has(key)) return tableSridCache.get(key)!;
+  const tbl = key.replace(/"/g, '""');
+  try {
+    const res = await db.execute(
+      sql.raw(
+        `SELECT ST_SRID(geom) AS srid FROM layer."${tbl}" WHERE geom IS NOT NULL LIMIT 1`
+      )
+    );
+    const srid = Number((res.rows?.[0] as { srid?: number } | undefined)?.srid);
+    const val = Number.isFinite(srid) && srid > 0 ? srid : null;
+    tableSridCache.set(key, val);
+    return val;
+  } catch {
+    tableSridCache.set(key, null);
+    return null;
+  }
+}
 
 async function tableExists(table: string): Promise<boolean> {
   const key = table.toLowerCase();
@@ -629,10 +674,14 @@ async function collectListWheres(
   if (opts.bbox && opts.bbox.length === 4) {
     const [minX, minY, maxX, maxY] = opts.bbox;
     const tbl = String(physicalTable ?? def.table ?? '').replace(/"/g, '""');
-    // ST_SRID(t.geom) 은 행마다 계산되어 공간 색인을 못 탄다. 테이블 SRID 를 한 번만 읽어 상수 범위로 비교.
-    const env = tbl
-      ? `ST_Transform(ST_MakeEnvelope(${minX},${minY},${maxX},${maxY},3857), (SELECT ST_SRID(geom) FROM layer."${tbl}" WHERE geom IS NOT NULL LIMIT 1))`
-      : `ST_Transform(ST_MakeEnvelope(${minX},${minY},${maxX},${maxY},3857), 5181)`;
+    // ST_SRID(t.geom) 행마다 계산 금지 → 테이블 SRID 캐시(없으면 서브쿼리 폴백)
+    const cachedSrid = tbl ? await resolveTableSrid(tbl) : null;
+    const env =
+      cachedSrid != null
+        ? `ST_Transform(ST_MakeEnvelope(${minX},${minY},${maxX},${maxY},3857), ${cachedSrid})`
+        : tbl
+          ? `ST_Transform(ST_MakeEnvelope(${minX},${minY},${maxX},${maxY},3857), (SELECT ST_SRID(geom) FROM layer."${tbl}" WHERE geom IS NOT NULL LIMIT 1))`
+          : `ST_Transform(ST_MakeEnvelope(${minX},${minY},${maxX},${maxY},3857), 5181)`;
     wheres.push(`(t.geom && ${env} AND ST_Intersects(t.geom, ${env}))`);
   }
 
@@ -1130,6 +1179,85 @@ export async function getWtlNetworkList(params: ListParams = {}): Promise<{
     return (order.get(ka) ?? 0) - (order.get(kb) ?? 0);
   });
   return { rows, total, page, pageSize };
+}
+
+export type WtlNetworkListBatchSlot = {
+  /** 클라이언트 슬롯 키 (출처:레이어 등) */
+  key: string;
+  layerKey: string;
+  mapSources?: string[];
+};
+
+export type WtlNetworkListBatchBox = {
+  rows: WtlNetworkRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+};
+
+/**
+ * 시설목록 배치 — 슬롯(레이어×출처) N개를 한 요청으로 조회.
+ * 슬롯마다 getWtlNetworkList(page)와 동일 결과. 빈 슬롯은 boxes에 넣지 않음.
+ */
+export async function getWtlNetworkListBatch(
+  params: Omit<ListParams, 'layerKeys' | 'mapSources' | 'limit'> & {
+    slots?: WtlNetworkListBatchSlot[];
+  } = {}
+): Promise<{ boxes: Record<string, WtlNetworkListBatchBox> }> {
+  const slots = (params.slots ?? [])
+    .map((s) => ({
+      key: String(s?.key ?? '').trim(),
+      layerKey: String(s?.layerKey ?? '').trim(),
+      mapSources: Array.isArray(s?.mapSources)
+        ? s.mapSources.map((id) => String(id).trim()).filter(Boolean)
+        : [],
+    }))
+    .filter((s) => s.key && s.layerKey);
+  const boxes: Record<string, WtlNetworkListBatchBox> = {};
+  if (slots.length === 0) return { boxes };
+
+  // 재질 번들·물리테이블 캐시를 한 워커에서 공유
+  await ensureMaterialTopBundle();
+
+  const shared: Omit<ListParams, 'layerKeys' | 'mapSources'> = {
+    bbox: params.bbox,
+    keyword: params.keyword,
+    yearFrom: params.yearFrom,
+    yearTo: params.yearTo,
+    diameterFrom: params.diameterFrom,
+    diameterTo: params.diameterTo,
+    materials: params.materials,
+    emdCode: params.emdCode,
+    riCode: params.riCode,
+    supplyBlock: params.supplyBlock,
+    areaWkts5181: params.areaWkts5181,
+    withGeom: params.withGeom === true,
+    page: params.page,
+    pageSize: params.pageSize,
+  };
+
+  await Promise.all(
+    slots.map(async (slot) => {
+      try {
+        const result = await getWtlNetworkList({
+          ...shared,
+          layerKeys: [slot.layerKey],
+          mapSources: slot.mapSources.length > 0 ? slot.mapSources : undefined,
+        });
+        if (result.total <= 0 && result.rows.length === 0) return;
+        boxes[slot.key] = {
+          rows: result.rows,
+          total: result.total,
+          page: result.page,
+          pageSize: result.pageSize,
+        };
+      } catch (e) {
+        console.error('[getWtlNetworkListBatch]', slot.key, e);
+      }
+    })
+  );
+
+  return { boxes };
 }
 
 function materialChoicesFromBundle(bundle: MaterialTopBundle): string[] {
@@ -1668,6 +1796,45 @@ function defineTableIdxForSort(names: readonly (string | null | undefined)[]): n
   return 999999;
 }
 
+/** 스키마 테이블 목록·가용키 API 프로세스 캐시 TTL (DDL 드묾) */
+const WTL_NET_SCHEMA_TABLES_TTL_MS = 90_000;
+
+type SchemaTablesCacheEntry = { at: number; tables: Set<string> };
+const schemaTablesCache = new Map<'layer' | 'public_layer', SchemaTablesCacheEntry>();
+
+type AvailableLayerKeysCacheEntry = {
+  at: number;
+  value: {
+    availableKeys: string[];
+    physicalBySource: Record<string, Record<string, string>>;
+  };
+};
+const availableLayerKeysCache = new Map<string, AvailableLayerKeysCacheEntry>();
+
+/** pg_tables 스키마 전체 (소문자) — TTL 내 재사용 */
+async function loadSchemaTableNames(
+  schema: 'layer' | 'public_layer'
+): Promise<Set<string>> {
+  const hit = schemaTablesCache.get(schema);
+  if (hit && Date.now() - hit.at < WTL_NET_SCHEMA_TABLES_TTL_MS) {
+    return hit.tables;
+  }
+  const res = await db.execute(
+    sql.raw(
+      `SELECT lower(tablename) AS t
+       FROM pg_catalog.pg_tables
+       WHERE schemaname = '${schema}'`
+    )
+  );
+  const tables = new Set(
+    (res.rows ?? [])
+      .map((r) => String((r as { t?: string }).t ?? '').trim().toLowerCase())
+      .filter(Boolean)
+  );
+  schemaTablesCache.set(schema, { at: Date.now(), tables });
+  return tables;
+}
+
 /** layer·public_layer 실테이블 존재 여부 (소문자 테이블명 Set) */
 async function existingTablesInSchema(
   schema: 'layer' | 'public_layer',
@@ -1679,16 +1846,19 @@ async function existingTablesInSchema(
     ),
   ];
   if (names.length === 0) return new Set();
-  const inList = names.map((n) => `'${esc(n)}'`).join(',');
-  const res = await db.execute(
-    sql.raw(
-      `SELECT lower(table_name) AS t
-       FROM information_schema.tables
-       WHERE table_schema = '${schema}'
-         AND lower(table_name) IN (${inList})`
-    )
-  );
-  return new Set((res.rows ?? []).map((r) => String((r as { t?: string }).t ?? '')));
+  const all = await loadSchemaTableNames(schema);
+  const out = new Set<string>();
+  for (const n of names) {
+    if (all.has(n)) out.add(n);
+  }
+  return out;
+}
+
+function availableLayerKeysCacheKey(
+  sourceIds: string[],
+  keys: string[]
+): string {
+  return `${[...sourceIds].sort().join('\0')}\n${[...keys].sort().join('\0')}`;
 }
 
 /**
@@ -1709,6 +1879,19 @@ export async function listWtlNetworkAvailableLayerKeys(params: {
   if (keys.length === 0) return { availableKeys: [], physicalBySource: {} };
 
   const sourceIds = parseMapSourceIds(params.mapSources);
+  const cacheKey = availableLayerKeysCacheKey(sourceIds, keys);
+  const cached = availableLayerKeysCache.get(cacheKey);
+  if (cached && Date.now() - cached.at < WTL_NET_SCHEMA_TABLES_TTL_MS) {
+    return {
+      availableKeys: [...cached.value.availableKeys],
+      physicalBySource: Object.fromEntries(
+        Object.entries(cached.value.physicalBySource).map(([sid, byKey]) => [
+          sid,
+          { ...byKey },
+        ])
+      ),
+    };
+  }
   const sources = sourceIds
     .map((id) => resolveWtlNetMapSource(id))
     .filter((s): s is WtlNetMapSourceDef => Boolean(s));
@@ -1850,27 +2033,50 @@ export async function listWtlNetworkAvailableLayerKeys(params: {
     if (ok) availableKeys.push(plan.key);
   }
 
-  /** 한글명 후보 중 데이터 있는 물리 테이블 — 출처×키 */
+  /**
+   * 출처×키 → 물리 테이블.
+   * 테이블 존재(layerExist)만으로 고른다 — 키마다 geom LIMIT 1을 치면
+   * 가용키 API가 레이어 WMS 표시를 가로막는다.
+   * (geom 우선 해석은 상세·목록 등 resolvePhysicalTableInSource 경로 유지)
+   */
   const physicalBySource: Record<string, Record<string, string>> = {};
-  await Promise.all(
-    sources.map(async (source) => {
-      const byKey: Record<string, string> = {};
-      await Promise.all(
-        availableKeys.map(async (key) => {
-          const def = getWtlNetLayerDef(key);
-          const base = String(def?.table ?? key)
-            .trim()
-            .toLowerCase();
-          if (!base) return;
-          const phys = await resolvePhysicalTableInSource(source, base);
-          if (phys) byKey[key] = phys;
-        })
-      );
-      if (Object.keys(byKey).length > 0) physicalBySource[source.id] = byKey;
-    })
-  );
+  for (const source of sources) {
+    const byKey: Record<string, string> = {};
+    for (const key of availableKeys) {
+      const def = getWtlNetLayerDef(key);
+      const base = String(def?.table ?? key)
+        .trim()
+        .toLowerCase();
+      if (!base) continue;
+      const remapped = String(source.remapTable(base) ?? '')
+        .trim()
+        .toLowerCase();
+      const sameKorInGroup = listWtlNetSameKorTablesInGroup(source.tables, base);
+      const ordered = [
+        ...new Set(
+          [...sameKorInGroup, remapped, base]
+            .map((n) => String(n ?? '').trim().toLowerCase())
+            .filter(Boolean)
+        ),
+      ];
+      const pick = ordered.find((n) => layerExist.has(n)) ?? null;
+      // physicalTableBySourceCache(geom 우선)와 별개 — 목록·상세는 resolve 경로 유지
+      if (pick) byKey[key] = pick;
+    }
+    if (Object.keys(byKey).length > 0) physicalBySource[source.id] = byKey;
+  }
 
-  return { availableKeys, physicalBySource };
+  const value = { availableKeys, physicalBySource };
+  availableLayerKeysCache.set(cacheKey, {
+    at: Date.now(),
+    value: {
+      availableKeys: [...availableKeys],
+      physicalBySource: Object.fromEntries(
+        Object.entries(physicalBySource).map(([sid, byKey]) => [sid, { ...byKey }])
+      ),
+    },
+  });
+  return value;
 }
 
 /** 가압장·정수장 상세 하단 연관 탭 후보 */
@@ -2316,41 +2522,47 @@ export async function getWtlNetworkStatusStats(params: {
     listOpts.layerKeys,
     null
   );
-  const dipMap = new Map<string, number>();
-  const mopMap = new Map<string, { label: string; meters: number }>();
-  const yearMap = new Map<string, number>();
-  const saaMap = new Map<string, { label: string; meters: number }>();
+  const enabledKeySet =
+    listOpts.layerKeys == null ? null : new Set(listOpts.layerKeys.map((k) => k.toLowerCase()));
 
-  await Promise.all(
-    pipeSources.map(async ({ physicalTable: base, def }) => {
-      const lenCol = String(def.lengthCol ?? (await resolvePipeLengthCol(base))).replace(
-        /"/g,
-        '""'
-      );
-      const dipCol = String(
-        def.diameterCol ?? (await resolvePipeDiameterCol(base))
-      ).replace(/"/g, '""');
-      const tbl = base.replace(/"/g, '""');
-      const whereParts = await collectListWheres(def, listOpts, base);
-      const whereSql = whereParts.length > 0 ? whereParts.join(' AND ') : 'TRUE';
-      const [hasDip, hasMop, hasYear, hasSaa] = await Promise.all([
-        dipCol ? tableHasColumn(base, dipCol) : Promise.resolve(false),
-        tableHasColumn(base, 'mop_cde'),
-        tableHasColumn(base, 'ist_ymd'),
-        tableHasColumn(base, 'saa_cde'),
-      ]);
-      const dipExpr = hasDip ? `t."${dipCol}"::text` : `NULL::text`;
-      const mopExpr = hasMop ? `t.mop_cde::text` : `NULL::text`;
-      const yearExpr = hasYear
-        ? `NULLIF(SUBSTRING(TRIM(t.ist_ymd::text), 1, 4), '')`
-        : `NULL::text`;
-      const saaExpr = hasSaa
-        ? `CASE WHEN t.saa_cde IS NULL OR TRIM(t.saa_cde::text) = '' THEN '미분류' ELSE TRIM(t.saa_cde::text) END`
-        : `NULL::text`;
-      try {
-        const res = await db.execute(
-          sql.raw(
-            `SELECT
+  /** 관로 통계(구경·재질·연도·관경)와 시설 개수를 병렬로 — 서로 직렬 대기하지 않음 */
+  const [pipeAgg, facilityCounts] = await Promise.all([
+    (async () => {
+      const dipMap = new Map<string, number>();
+      const mopMap = new Map<string, { label: string; meters: number }>();
+      const yearMap = new Map<string, number>();
+      const saaMap = new Map<string, { label: string; meters: number }>();
+
+      await Promise.all(
+        pipeSources.map(async ({ physicalTable: base, def }) => {
+          const lenCol = String(def.lengthCol ?? (await resolvePipeLengthCol(base))).replace(
+            /"/g,
+            '""'
+          );
+          const dipCol = String(
+            def.diameterCol ?? (await resolvePipeDiameterCol(base))
+          ).replace(/"/g, '""');
+          const tbl = base.replace(/"/g, '""');
+          const whereParts = await collectListWheres(def, listOpts, base);
+          const whereSql = whereParts.length > 0 ? whereParts.join(' AND ') : 'TRUE';
+          const [hasDip, hasMop, hasYear, hasSaa] = await Promise.all([
+            dipCol ? tableHasColumn(base, dipCol) : Promise.resolve(false),
+            tableHasColumn(base, 'mop_cde'),
+            tableHasColumn(base, 'ist_ymd'),
+            tableHasColumn(base, 'saa_cde'),
+          ]);
+          const dipExpr = hasDip ? `t."${dipCol}"::text` : `NULL::text`;
+          const mopExpr = hasMop ? `t.mop_cde::text` : `NULL::text`;
+          const yearExpr = hasYear
+            ? `NULLIF(SUBSTRING(TRIM(t.ist_ymd::text), 1, 4), '')`
+            : `NULL::text`;
+          const saaExpr = hasSaa
+            ? `CASE WHEN t.saa_cde IS NULL OR TRIM(t.saa_cde::text) = '' THEN '미분류' ELSE TRIM(t.saa_cde::text) END`
+            : `NULL::text`;
+          try {
+            const res = await db.execute(
+              sql.raw(
+                `SELECT
                CASE
                  WHEN GROUPING(dip_code) = 0 AND GROUPING(mop_code) = 1 AND GROUPING(yr) = 1 AND GROUPING(saa) = 1 THEN 'dip'
                  WHEN GROUPING(mop_code) = 0 AND GROUPING(dip_code) = 1 AND GROUPING(yr) = 1 AND GROUPING(saa) = 1 THEN 'mop'
@@ -2370,102 +2582,107 @@ export async function getWtlNetworkStatusStats(params: {
                WHERE ${whereSql}
              ) s
              GROUP BY GROUPING SETS ((dip_code), (mop_code), (yr), (saa))`
-          )
-        );
-        for (const row of res.rows ?? []) {
-          const r = row as { kind?: unknown; code?: unknown; byc_len?: number };
-          const kind = asStr(r.kind);
-          const meters = Number(r.byc_len) || 0;
-          const code = asStr(r.code);
-          if (!kind || !code) continue;
-          if (kind === 'dip') {
-            const label = diameterStatLabel(code);
-            dipMap.set(label, (dipMap.get(label) ?? 0) + meters);
-          } else if (kind === 'mop') {
-            const label = mopLabel(code);
-            const display = label === '—' ? code : label;
-            const prev = mopMap.get(code);
-            mopMap.set(code, { label: display, meters: (prev?.meters ?? 0) + meters });
-          } else if (kind === 'year') {
-            if (!/^\d{4}$/.test(code)) continue;
-            yearMap.set(code, (yearMap.get(code) ?? 0) + meters);
-          } else if (kind === 'saa') {
-            const kor = code === '미분류' ? '미분류' : saaLabel(code);
-            const display = kor === '—' ? code : kor;
-            const prev = saaMap.get(code);
-            saaMap.set(code, { label: display, meters: (prev?.meters ?? 0) + meters });
-          }
-        }
-      } catch (e) {
-        console.error('[getWtlNetworkStatusStats]', def.key, base, e);
-      }
-    })
-  );
-
-  const byDiameter = [...dipMap.entries()].map(([label, meters]) => {
-    const n = Number(String(label).replace(/[^\d.]/g, ''));
-    return {
-      label,
-      meters,
-      sort: Number.isFinite(n) ? n : MATERIAL_SORT_LAST,
-    };
-  });
-  const byMaterial = [...mopMap.entries()].map(([code, row]) => ({
-    label: row.label,
-    meters: row.meters,
-    sort: mopCdeSortKey(code, row.label),
-  }));
-  const byYear = [...yearMap.entries()].map(([label, meters]) => ({
-    label,
-    meters,
-    sort: Number(label) || 0,
-  }));
-  const bySaa = [...saaMap.entries()].map(([code, row]) => ({
-    label: row.label,
-    meters: row.meters,
-    code,
-  }));
-
-  const enabledKeySet =
-    listOpts.layerKeys == null ? null : new Set(listOpts.layerKeys.map((k) => k.toLowerCase()));
-  const facilityCounts = await Promise.all(
-    STATUS_FACILITY_LAYERS.filter(
-      (fac) => !enabledKeySet || enabledKeySet.has(fac.key.toLowerCase())
-    ).map(async (fac) => {
-      const def = getWtlNetLayerDef(fac.key);
-      let count = 0;
-      if (def?.table) {
-        const seen = new Set<string>();
-        const jobs: Promise<number>[] = [];
-        for (const source of selectedSources) {
-          const physicalTable = await resolvePhysicalTableInSource(source, def.table);
-          if (!physicalTable || seen.has(physicalTable)) continue;
-          seen.add(physicalTable);
-          jobs.push(
-            (async () => {
-              const tbl = physicalTable.replace(/"/g, '""');
-              const whereParts = await collectListWheres(def, listOpts, physicalTable);
-              const whereSql = whereParts.length > 0 ? whereParts.join(' AND ') : 'TRUE';
-              try {
-                const res = await db.execute(
-                  sql.raw(
-                    `SELECT COUNT(*)::int AS n FROM layer."${tbl}" t WHERE ${whereSql}`
-                  )
-                );
-                return Number((res.rows?.[0] as { n?: number } | undefined)?.n) || 0;
-              } catch {
-                return 0;
+              )
+            );
+            for (const row of res.rows ?? []) {
+              const r = row as { kind?: unknown; code?: unknown; byc_len?: number };
+              const kind = asStr(r.kind);
+              const meters = Number(r.byc_len) || 0;
+              const code = asStr(r.code);
+              if (!kind || !code) continue;
+              if (kind === 'dip') {
+                const label = diameterStatLabel(code);
+                dipMap.set(label, (dipMap.get(label) ?? 0) + meters);
+              } else if (kind === 'mop') {
+                const label = mopLabel(code);
+                const display = label === '—' ? code : label;
+                const prev = mopMap.get(code);
+                mopMap.set(code, { label: display, meters: (prev?.meters ?? 0) + meters });
+              } else if (kind === 'year') {
+                if (!/^\d{4}$/.test(code)) continue;
+                yearMap.set(code, (yearMap.get(code) ?? 0) + meters);
+              } else if (kind === 'saa') {
+                const kor = code === '미분류' ? '미분류' : saaLabel(code);
+                const display = kor === '—' ? code : kor;
+                const prev = saaMap.get(code);
+                saaMap.set(code, { label: display, meters: (prev?.meters ?? 0) + meters });
               }
-            })()
-          );
-        }
-        const parts = await Promise.all(jobs);
-        count = parts.reduce((sum, n) => sum + n, 0);
-      }
-      return { label: fac.label, count };
-    })
-  );
+            }
+          } catch (e) {
+            console.error('[getWtlNetworkStatusStats]', def.key, base, e);
+          }
+        })
+      );
 
+      return {
+        byDiameter: [...dipMap.entries()].map(([label, meters]) => {
+          const n = Number(String(label).replace(/[^\d.]/g, ''));
+          return {
+            label,
+            meters,
+            sort: Number.isFinite(n) ? n : MATERIAL_SORT_LAST,
+          };
+        }),
+        byMaterial: [...mopMap.entries()].map(([code, row]) => ({
+          label: row.label,
+          meters: row.meters,
+          sort: mopCdeSortKey(code, row.label),
+        })),
+        byYear: [...yearMap.entries()].map(([label, meters]) => ({
+          label,
+          meters,
+          sort: Number(label) || 0,
+        })),
+        bySaa: [...saaMap.entries()].map(([code, row]) => ({
+          label: row.label,
+          meters: row.meters,
+          code,
+        })),
+      };
+    })(),
+    Promise.all(
+      STATUS_FACILITY_LAYERS.filter(
+        (fac) => !enabledKeySet || enabledKeySet.has(fac.key.toLowerCase())
+      ).map(async (fac) => {
+        const def = getWtlNetLayerDef(fac.key);
+        let count = 0;
+        const logicalTable = def?.table ? String(def.table).trim() : ''
+        if (def && logicalTable) {
+          const resolved = await Promise.all(
+            selectedSources.map((source) => resolvePhysicalTableInSource(source, logicalTable))
+          );
+          const seen = new Set<string>();
+          const jobs: Promise<number>[] = [];
+          for (const physicalTable of resolved) {
+            if (!physicalTable || seen.has(physicalTable)) continue;
+            seen.add(physicalTable);
+            jobs.push(
+              (async () => {
+                const tbl = physicalTable.replace(/"/g, '""');
+                const whereParts = await collectListWheres(def, listOpts, physicalTable);
+                const whereSql = whereParts.length > 0 ? whereParts.join(' AND ') : 'TRUE';
+                try {
+                  const res = await db.execute(
+                    sql.raw(
+                      `SELECT COUNT(*)::int AS n FROM layer."${tbl}" t WHERE ${whereSql}`
+                    )
+                  );
+                  return Number((res.rows?.[0] as { n?: number } | undefined)?.n) || 0;
+                } catch {
+                  return 0;
+                }
+              })()
+            );
+          }
+          const parts = await Promise.all(jobs);
+          count = parts.reduce((sum, n) => sum + n, 0);
+        }
+        return { label: fac.label, count };
+      })
+    ),
+  ]);
+
+  const { byDiameter, byMaterial, byYear, bySaa } = pipeAgg;
   const roundMeters = (m: number) => Math.round(m * 1000) / 1000;
 
   return {

@@ -194,7 +194,7 @@ export function WtlSupplyPathPanel({ active = true }: Props) {
                       className={cn(
                         'cursor-pointer border-b border-border hover:bg-primary/5',
                         selectedId === row.id &&
-                          'bg-primary/[0.12] ring-1 ring-inset ring-primary/25'
+                          'bg-primary/12 ring-1 ring-inset ring-primary/25'
                       )}
                       onClick={() => {
                         if (!analyzing) void analyze(row.id)

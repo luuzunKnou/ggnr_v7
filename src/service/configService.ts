@@ -9,6 +9,7 @@ import { existsSync, readdirSync, readFileSync, writeFileSync } from "fs"
 import { join } from "path"
 import { unstable_noStore as noStore } from "next/cache"
 import { getGeoServerInternalBase } from "@/lib/geoserverUrl"
+import { buildFeatureListReportBuffer } from "@/service/featureListReportExcel"
 
 /** package.json 이 있는 디렉터리를 프로젝트 루트로 사용 (Next 등에서 cwd 가 달라도 동작) */
 function getProjectRoot(): string {
@@ -214,6 +215,18 @@ export function saveCommonRuntimeEnvRows(params: { rows: { key: string; value: s
 export function getSystemKorName(): string {
   const name = getRuntimeEnvVars().SYSTEM_KOR_NAME?.trim()
   return name || "공간정보 통합관리 플랫폼"
+}
+
+/** runtime.env 의 SYSTEM_NAME / SYSTEM_KOR_NAME (GNMS 전송 등). UI 표시용 아님 */
+export function getSystemIdentity(_params?: unknown): {
+  systemName: string
+  systemKorName: string
+} {
+  const vars = getRuntimeEnvVars()
+  return {
+    systemName: vars.SYSTEM_NAME?.trim() ?? "",
+    systemKorName: vars.SYSTEM_KOR_NAME?.trim() || getSystemKorName(),
+  }
 }
 
 /**
@@ -1408,6 +1421,12 @@ export type SerConfigLayerRule = {
   url_property?: string | null
 }
 
+export type SerRemarkItem = {
+  func_type?: string | null
+  func_content?: string | null
+  func_desc?: string | null
+}
+
 export type SerConfigItem = {
   ser_menu: string | null
   ser_cat: string | null
@@ -1426,6 +1445,8 @@ export type SerConfigItem = {
   ser_svg: string | null
   /** 지도 식별 시 패널 열림 + 레이어별 동작 (예: open_scan) */
   ser_layers?: SerConfigLayerRule[] | null
+  /** 기능 UI·설명 (보고서 엑셀용). main/extra + 내용·설명 */
+  ser_remark?: SerRemarkItem[] | null
 }
 
 /**
@@ -1452,27 +1473,99 @@ export function saveServiceList(params: { ser: SerConfigItem[] }): { saved: numb
   if (!Array.isArray(ser)) {
     throw new Error("ser 배열이 필요합니다.")
   }
-  const normalized = ser.map((s) => ({
-    ser_menu: s.ser_menu ?? null,
-    ser_cat: s.ser_cat ?? null,
-    ser_kor: s.ser_kor ?? null,
-    ser_eng: s.ser_eng ?? null,
-    ser_type: s.ser_type ?? null,
-    ser_work_type: s.ser_work_type ?? null,
-    ser_is_private: s.ser_is_private ?? null,
-    ser_has_contents: s.ser_has_contents ?? null,
-    ser_has_file: s.ser_has_file ?? null,
-    ser_data_table: s.ser_data_table ?? null,
-    ser_data_query: s.ser_data_query ?? null,
-    ser_idx: s.ser_idx ?? null,
-    ser_url: s.ser_url ?? null,
-    ser_is_del: s.ser_is_del ?? null,
-    ser_svg: s.ser_svg ?? null,
-  }))
+  // UI가 ser_remark/ser_layers 를 안 보내면 기존 파일 값 유지
+  const prevByEng = new Map<string, SerConfigItem>()
+  try {
+    const prev = getServiceList().ser
+    for (const p of prev) {
+      const eng = (p.ser_eng ?? "").trim()
+      if (eng) prevByEng.set(eng, p)
+    }
+  } catch {
+    /* ignore */
+  }
+  const normalized = ser.map((s) => {
+    const eng = (s.ser_eng ?? "").trim()
+    const prev = eng ? prevByEng.get(eng) : undefined
+    const row: SerConfigItem = {
+      ser_menu: s.ser_menu ?? null,
+      ser_cat: s.ser_cat ?? null,
+      ser_kor: s.ser_kor ?? null,
+      ser_eng: s.ser_eng ?? null,
+      ser_type: s.ser_type ?? null,
+      ser_work_type: s.ser_work_type ?? null,
+      ser_is_private: s.ser_is_private ?? null,
+      ser_has_contents: s.ser_has_contents ?? null,
+      ser_has_file: s.ser_has_file ?? null,
+      ser_data_table: s.ser_data_table ?? null,
+      ser_data_query: s.ser_data_query ?? null,
+      ser_idx: s.ser_idx ?? null,
+      ser_url: s.ser_url ?? null,
+      ser_is_del: s.ser_is_del ?? null,
+      ser_svg: s.ser_svg ?? prev?.ser_svg ?? null,
+    }
+    if (Array.isArray(s.ser_layers)) row.ser_layers = s.ser_layers
+    else if (Array.isArray(prev?.ser_layers)) row.ser_layers = prev!.ser_layers
+    if (s.ser_remark === null) row.ser_remark = null
+    else if (Array.isArray(s.ser_remark)) {
+      row.ser_remark = s.ser_remark.map((r) => ({
+        func_type: r?.func_type ?? null,
+        func_content: r?.func_content ?? null,
+        func_desc: r?.func_desc ?? null,
+      }))
+    } else if (prev && "ser_remark" in prev) {
+      row.ser_remark = prev.ser_remark ?? null
+    }
+    return row
+  })
   const content = JSON.stringify({ ser: normalized }, null, 2)
   const serviceListPath = resolveConfigPath("serviceList.config")
   writeFileSync(serviceListPath, content, "utf-8")
   return { saved: normalized.length }
+}
+
+/**
+ * 현재 프로젝트 ENABLED_SYSTEMS 기준 기능 목록 보고서 엑셀 (base64).
+ * 시트: 시스템별 기능목록 / 기능목록별 설명
+ * — 메인 포털(index: 공지·자료실·데이터요청)은 ENABLED_SYSTEMS 에 없어도 포함.
+ */
+export function exportFeatureListReport(_params?: unknown): {
+  fileName: string
+  base64: string
+} {
+  noStore()
+  const { systems: enabled } = getSystemList()
+  const systems = [...enabled]
+  if (!systems.some((s) => (s.sys_key ?? "").trim() === "index")) {
+    const indexSys = getSystemListAll().systems.find(
+      (s) => (s.sys_key ?? "").trim() === "index"
+    )
+    if (indexSys) {
+      const disabled = getDisabledServiceEngSet()
+      systems.unshift({
+        ...indexSys,
+        serviceList: (indexSys.serviceList ?? []).filter(
+          (eng) => !disabled.has(String(eng).trim())
+        ),
+      })
+    }
+  }
+  const { ser } = getServiceList()
+  const projectId = (process.env.GGNR_PROJECT ?? "").trim() || "project"
+  const { buffer, fileName } = buildFeatureListReportBuffer({
+    systems: systems.map((s) => ({
+      sys_key: s.sys_key,
+      sys_kor: s.sys_kor ?? null,
+      serviceList: Array.isArray(s.serviceList) ? s.serviceList : [],
+    })),
+    services: ser.map((s) => ({
+      ser_kor: s.ser_kor,
+      ser_eng: s.ser_eng,
+      ser_remark: s.ser_remark ?? null,
+    })),
+    projectId,
+  })
+  return { fileName, base64: buffer.toString("base64") }
 }
 
 /** runtime.env ENABLED_SYSTEMS 원문 (필지분석 시설 카탈로그 필터) */

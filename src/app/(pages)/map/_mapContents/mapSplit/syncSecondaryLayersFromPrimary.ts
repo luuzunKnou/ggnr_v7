@@ -59,10 +59,15 @@ export function syncSecondaryLayersFromPrimary(
 ): void {
   const secondaryByKey = new globalThis.Map<string, BaseLayer>();
   let secondaryService: BaseLayer | undefined;
+  let secondaryUfService: BaseLayer | undefined;
   for (const layer of secondary.getLayers().getArray()) {
     if (layer.get(MAP_SPLIT_MIRROR_TWIN)) continue;
     if (layer.get('serviceLayer')) {
       secondaryService = layer;
+      continue;
+    }
+    if (layer.get('undergroundFacilityServiceLayer')) {
+      secondaryUfService = layer;
       continue;
     }
     const key = layerMatchKey(layer);
@@ -75,6 +80,20 @@ export function syncSecondaryLayersFromPrimary(
       if (secondaryService) {
         copyVisibility(pLayer, secondaryService);
         copySourceParams(pLayer, secondaryService);
+      }
+      continue;
+    }
+    if (pLayer.get('undergroundFacilityServiceLayer')) {
+      if (secondaryUfService) {
+        copyVisibility(pLayer, secondaryUfService);
+        const pSrc = (pLayer as Layer<Source>).getSource?.() as ParamsSource | null;
+        const sAsLayer = secondaryUfService as Layer<Source>;
+        // 본맵에서 소스 제거(체크 해제) 시 보조맵도 같이 비움 — 이전 이미지 잔상 방지
+        if (!pSrc) {
+          sAsLayer.setSource?.(null);
+        } else {
+          copySourceParams(pLayer, secondaryUfService);
+        }
       }
       continue;
     }

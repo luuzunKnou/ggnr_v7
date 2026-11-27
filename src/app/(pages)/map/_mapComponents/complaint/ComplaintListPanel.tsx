@@ -928,8 +928,8 @@ export default function ComplaintListPanel({
                     className={cn(
                       'w-full text-left rounded-[10px] border px-3 py-2.5 transition-colors',
                       isSelected
-                        ? 'border-primary/45 bg-primary/[0.03] shadow-[0_0_0_2px_rgba(37,99,235,0.12)]'
-                        : 'border-border bg-card hover:border-primary/35 hover:bg-primary/[0.03]'
+                        ? 'border-primary/45 bg-primary/3 shadow-[0_0_0_2px_rgba(37,99,235,0.12)]'
+                        : 'border-border bg-card hover:border-primary/35 hover:bg-primary/3'
                     )}
                   >
                     <div className="flex items-start justify-between gap-2">
@@ -968,7 +968,7 @@ export default function ComplaintListPanel({
                     </div>
                     <div className="mt-2 flex flex-wrap gap-1">
                       {category ? (
-                        <span className="inline-flex items-center rounded border border-primary/20 bg-primary/[0.06] px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                        <span className="inline-flex items-center rounded border border-primary/20 bg-primary/6 px-1.5 py-0.5 text-[10px] font-medium text-primary">
                           #{category}
                         </span>
                       ) : null}
@@ -1005,7 +1005,7 @@ export default function ComplaintListPanel({
                   className={cn(
                     'w-full text-left rounded-lg border px-3 py-2 transition-colors',
                     isSelected
-                      ? 'border-primary/30 bg-primary/[0.03] ring-1 ring-primary/15'
+                      ? 'border-primary/30 bg-primary/3 ring-1 ring-primary/15'
                       : 'border-border/80 bg-card hover:border-border hover:bg-muted/20'
                   )}
                 >

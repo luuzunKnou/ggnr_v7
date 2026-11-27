@@ -29,7 +29,7 @@ function sleep(ms: number) {
 
 /**
  * 선택 레이어 → 단일 DXF/DWG.
- * 서버에서 변환이 길어서 브라우저가 끊기지 않도록 잡 시작 → 폴링 → 파일 받기로 처리.
+ * 개발자 모드: 서약 없이 변환 완료 후 바로 저장.
  */
 export async function downloadLayersCad(
   layers: {
@@ -115,20 +115,24 @@ export async function downloadLayersCad(
     throw new Error("CAD 변환 시간이 너무 깁니다. 레이어·라벨을 줄인 뒤 다시 시도하세요.")
   }
 
-  // fetch+blob 은 대용량에서 Failed to fetch 가 나기 쉬움 → 브라우저 기본 다운로드 사용
-  onProgress?.("파일 저장 중…")
-  const url = `/api/download/cad?jobId=${encodeURIComponent(jobId)}&download=1`
-  const a = document.createElement("a")
-  a.href = url
-  a.download = fileName
-  a.rel = "noopener"
-  document.body.appendChild(a)
-  a.click()
-  document.body.removeChild(a)
+  const dlRes = await fetch(
+    `/api/download/cad?jobId=${encodeURIComponent(jobId)}&download=1`,
+    { credentials: "include", cache: "no-store" }
+  )
+  if (!dlRes.ok) {
+    const data = await dlRes.json().catch(() => ({}))
+    throw new Error(typeof data?.error === "string" ? data.error : "CAD 파일 받기 실패")
+  }
+  const blob = await dlRes.blob()
+  triggerBlobDownload(blob, fileName)
 }
 
-/** 업로드 원본 Excel/CSV 파일 다운로드 */
-export async function downloadLayerExcel(pathRel: string | null, tableName: string) {
+/** 업로드 원본 Excel/CSV 파일 다운로드 (개발자 모드: 서약 없음) */
+export async function downloadLayerExcel(
+  pathRel: string | null,
+  tableName: string,
+  _schema: "layer" | "public_layer" = "layer"
+) {
   const path =
     pathRel?.trim() || `excel_data/${tableName.replace(/[^a-zA-Z0-9_]/g, "_")}.xlsx`
   const q = new URLSearchParams({ path })
@@ -141,7 +145,7 @@ export async function downloadLayerExcel(pathRel: string | null, tableName: stri
   triggerBlobDownload(blob, name)
 }
 
-/** DB 테이블 → CSV 내보내기 (교차 다운로드) */
+/** DB 테이블 → CSV 내보내기 (개발자 모드: 서약 없음) */
 export async function downloadLayerCsvFromDb(
   tableName: string,
   schema: "layer" | "public_layer"
@@ -159,5 +163,6 @@ export async function downloadLayerCsvFromDb(
   const cd = res.headers.get("Content-Disposition") ?? ""
   const m = /filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i.exec(cd)
   const rawName = m?.[1] ? decodeURIComponent(m[1]) : m?.[2]
-  triggerBlobDownload(blob, rawName?.trim() || `${tableName}.csv`)
+  const fileName = rawName?.trim() || `${tableName}.csv`
+  triggerBlobDownload(blob, fileName)
 }

@@ -261,7 +261,7 @@ export function ServiceFileExcelPreviewStage({
                 <tr key={`r-${ri}`} className="border-b border-zinc-100">
                   <th
                     scope="row"
-                    className="sticky left-0 z-[1] border-r border-zinc-200 bg-zinc-50 px-2 py-1 text-right text-[10px] font-normal tabular-nums text-zinc-400"
+                    className="sticky left-0 z-1 border-r border-zinc-200 bg-zinc-50 px-2 py-1 text-right text-[10px] font-normal tabular-nums text-zinc-400"
                   >
                     {ri + 1}
                   </th>

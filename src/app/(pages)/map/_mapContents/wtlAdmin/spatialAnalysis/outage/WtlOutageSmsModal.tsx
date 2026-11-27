@@ -117,7 +117,7 @@ export function WtlOutageSmsModal({
   })
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/35 p-4">
+    <div className="fixed inset-0 z-80 flex items-center justify-center bg-black/35 p-4">
       <div className="flex h-[min(90vh,640px)] w-full max-w-3xl flex-col overflow-hidden rounded-md border border-border bg-background shadow-lg">
         <div className="flex shrink-0 items-center justify-between border-b border-border px-3 py-2">
           <span className="text-sm font-semibold text-foreground">문자발송</span>
@@ -256,7 +256,7 @@ export function WtlOutageSmsModal({
                           className={cn(
                             'border-b border-border',
                             hasPhone ? 'cursor-pointer hover:bg-primary/5' : 'opacity-50',
-                            checked && hasPhone && 'bg-primary/[0.06]'
+                            checked && hasPhone && 'bg-primary/6'
                           )}
                           onClick={() => toggleOne(row.id, hasPhone)}
                         >

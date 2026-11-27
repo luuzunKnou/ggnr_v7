@@ -183,7 +183,7 @@ export function CadastralZoomHint({
 
   return (
     <div
-      className="pointer-events-none fixed z-[45]"
+      className="pointer-events-none fixed z-45"
       style={{
         top: placement.top,
         left: placement.left,

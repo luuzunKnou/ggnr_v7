@@ -123,7 +123,7 @@ export function MeterNumberSuggestInput({
         ? createPortal(
             <div
               ref={dropdownRef}
-              className="fixed z-[9999] max-h-48 overflow-y-auto rounded border border-border bg-background shadow-lg"
+              className="fixed z-9999 max-h-48 overflow-y-auto rounded border border-border bg-background shadow-lg"
               style={{ left: rect.left, top: rect.top, width: Math.max(rect.width, 200) }}
             >
               {loading ? (

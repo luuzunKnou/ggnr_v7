@@ -85,6 +85,8 @@ type Props = {
    * 지도 기본 모달 루트 — 있으면 자식 상세를 그 좌측(공간 없으면 위)에 배치.
    */
   relatedModalAnchorHostRef?: RefObject<HTMLElement | null>
+  /** 데이터 이력관리 조회 서비스명 (펌프현황 등 자식 상세) */
+  serviceName?: string | null
 }
 
 type ActiveTab = 'map' | 'attach' | 'dataHistory' | 'wimsHistory' | string
@@ -110,7 +112,7 @@ function RelatedListSkeleton({
       aria-label="목록 불러오는 중"
       title="목록 불러오는 중"
     >
-      <thead className="sticky top-0 z-[3]">
+      <thead className="sticky top-0 z-3">
         <tr>
           {Array.from({ length: cols }, (_, i) => (
             <th
@@ -200,6 +202,7 @@ export function WtlNetworkDetailRelatedTabs({
   mapTabContent,
   relatedChildAsModal = false,
   relatedModalAnchorHostRef,
+  serviceName = '관망조회',
 }: Props) {
   const hasMapTab = mapTabContent != null
   const mapContext = useMapContext()
@@ -723,7 +726,7 @@ export function WtlNetworkDetailRelatedTabs({
               ) : (
                 /* border-collapse+sticky 는 th 보더·배경이 깨져 tbody가 비침 → separate 고정 */
                 <table className="w-full min-w-0 table-fixed border-separate border-spacing-0 text-left text-[11px]">
-                  <thead className="sticky top-0 z-[3]">
+                  <thead className="sticky top-0 z-3">
                     <tr>
                       {listFields.map((f, i) => {
                         const key = String(f.define_field_name ?? '').trim()
@@ -795,12 +798,13 @@ export function WtlNetworkDetailRelatedTabs({
       </div>
       {relatedChildAsModal && relatedDetail ? (
         <WtlFacilityRelatedDetailFloating
-          key={`related-${relatedDetail.ogcFid ?? selectedIdx ?? 0}-${relatedDetailAnchor?.left ?? 'd'}-${relatedDetailAnchor?.top ?? 'd'}`}
+          key={`related-${activeTable}-${relatedDetail.ogcFid ?? selectedIdx ?? 0}`}
           title={activeRelatedLabel}
           row={relatedDetail}
           bundle={listBundle}
           table={activeTable}
           schema="layer"
+          serviceName={serviceName}
           anchorPosition={relatedDetailAnchor}
           onClose={() => {
             setRelatedDetail(null)

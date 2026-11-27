@@ -8,7 +8,7 @@ export const ODOR_INDEX_MENUS = [
   { id: 'home', label: '홈', icon: Home },
   { id: 'controlMap', label: '관제 지도' },
   { id: 'alertList', label: '경보 목록' },
-  { id: 'alertView2', label: '경보보기2' },
+  { id: 'alertView2', label: '경보목록2' },
   { id: 'complaintManage', label: '민원 관리' },
   { id: 'actionHistory', label: '조치 내역' },
   { id: 'reportView', label: '보고서 조회' },
@@ -50,15 +50,15 @@ export function getOdorIndexMenuDescription(menuId: string): string {
     case 'alertList':
       return '악취, 장애 경보 목록입니다'
     case 'alertView2':
-      return '지도 경보 보기와 동일한 목업 목록·인지·이력입니다'
+      return '경보 목록·미인지/미복귀·등급·일괄/단건 인지·장애 유형·해제 이력(P21)'
     case 'complaintManage':
       return '악취 관련 민원을 조회·관리합니다 (목업)'
     case 'actionHistory':
       return '민원·경보에 대한 조치 내역을 봅니다 (목업)'
     case 'reportView':
-      return '운영 보고서를 조회합니다 (목업)'
+      return '저감장치·경보·민원·조치 일·월보를 조회합니다 (목업)'
     case 'systemStatus':
-      return '시스템 상태와 통신 현황을 확인합니다 (목업)'
+      return '통신 목록에서 서버·업체·센서 상태와 두절 경보를 확인합니다 (목업)'
     default:
       return ''
   }

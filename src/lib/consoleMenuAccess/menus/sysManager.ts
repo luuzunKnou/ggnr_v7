@@ -9,6 +9,7 @@ export const SYS_MANAGER_CONSOLE_MENUS = [
   { id: 'landLinkageQueryLog', label: 'KRAS 개인정보 관리' },
   { id: 'layerManager', label: '레이어 관리' },
   { id: 'dataHistoryManager', label: '데이터 이력관리' },
+  { id: 'dataRequestApprove', label: '데이터 승인' },
   { id: 'featureUsageStats', label: '기능별 사용현황' },
   { id: 'userAccessStats', label: '사용자 접속현황' },
   { id: 'userMgmtHistory', label: '사용자 관리 이력' },

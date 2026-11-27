@@ -44,10 +44,16 @@ type Props = {
   points: TrendPoint[]
   thresholdPpm: number
   zones: PpmZoneBounds
+  className?: string
 }
 
 /** 경향 — 표7 배경·자동가동 기준선·가동/정지 마커 */
-export function OdorAlertTrendChart({ points, thresholdPpm, zones }: Props) {
+export function OdorAlertTrendChart({
+  points,
+  thresholdPpm,
+  zones,
+  className,
+}: Props) {
   const chartData = useMemo<ChartData>(() => {
     const labels = points.map((p) => p.label)
     return {
@@ -150,7 +156,7 @@ export function OdorAlertTrendChart({ points, thresholdPpm, zones }: Props) {
   )
 
   return (
-    <div className="h-[200px] w-full shrink-0">
+    <div className={className ?? 'h-[200px] w-full shrink-0'}>
       <Chart type="line" data={chartData} options={chartOptions} />
     </div>
   )

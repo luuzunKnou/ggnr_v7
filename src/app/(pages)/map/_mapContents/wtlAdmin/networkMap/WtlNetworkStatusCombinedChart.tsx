@@ -91,6 +91,9 @@ function isSaaMatrix(data: unknown): data is WtlNetworkSaaMatrix {
   )
 }
 
+/** material=관재질별 시리즈·범례 / total=교차표 총계 행만(단일 막대) */
+export type WtlNetworkStatusChartSeriesMode = 'material' | 'total'
+
 type Props = {
   mapSources: string[]
   listFilter: WtlNetworkStatusListFilter
@@ -98,13 +101,19 @@ type Props = {
   className?: string
   /** LengthTable SectionTitle 과 동일 톤 */
   solidHeader?: boolean
+  /** 그래프만=total(총계·범례 없음), 그래프 및 도표=material */
+  seriesMode?: WtlNetworkStatusChartSeriesMode
   /** 현재 탭(관경/연도/관용도)에 맞는 도표 확대 모달 */
   onExpand?: (kind: WtlNetworkStatusChartKind) => void
+  /** 외곽 «관로 통계» 헤더 안에 넣을 때 — 자체 테두리·제목 숨김 */
+  embedded?: boolean
 }
 
 /**
  * 관경·연도·관용도 상세(교차표)와 동일 데이터 —
- * X=관경/연도/관용도, 시리즈(범례)=관재질, Y=연장(m)
+ * X=관경/연도/관용도, Y=연장(m).
+ * seriesMode=material → 시리즈·범례=관재질 /
+ * seriesMode=total → 총계 행만·관재질 범례 없음.
  *
  * 필터 변경 시에만 3종 매트릭스를 한 번에 조회.
  * 탭·관재질 범례는 캐시 데이터에서 표시/가림만 한다.
@@ -114,7 +123,9 @@ export function WtlNetworkStatusCombinedChart({
   listFilter,
   className,
   solidHeader = false,
+  seriesMode = 'material',
   onExpand,
+  embedded = false,
 }: Props) {
   const theme = useResolvedThemeSafe()
   const isDark = theme === 'dark'
@@ -193,10 +204,29 @@ export function WtlNetworkStatusCombinedChart({
     }
   }, [mapSourcesParam, listFilterParam])
 
+  const useTotalOnly = seriesMode === 'total'
+
   const chartPayload = useMemo(() => {
     if (kind === 'saa') {
       if (!saaMatrix) return null
       const columns = saaMatrix.columns
+      if (useTotalOnly) {
+        const totalRow = saaMatrix.rows.find((r) => r.isTotal)
+        if (!totalRow) return null
+        const activeCols = columns.filter(
+          (c) => Number(totalRow.lengths[c] ?? 0) > 0
+        )
+        return {
+          labels: activeCols.map((c) => saaMatrix.columnLabels[c] ?? c),
+          series: [
+            {
+              label: totalRow.label || '총계',
+              data: activeCols.map((c) => Number(totalRow.lengths[c] ?? 0)),
+            },
+          ],
+          xAxisTitle: '관용도',
+        }
+      }
       /** 연장(Y)이 있는 관재질만 범례 시리즈로 */
       const rows = saaMatrix.rows.filter(
         (r) =>
@@ -221,6 +251,23 @@ export function WtlNetworkStatusCombinedChart({
     const matrix = kind === 'year' ? yearMatrix : dipMatrix
     if (!matrix) return null
     const columns = matrix.columns
+    if (useTotalOnly) {
+      const totalRow = matrix.rows.find((r) => r.isTotal)
+      if (!totalRow) return null
+      const activeCols = columns.filter(
+        (c) => Number(totalRow.lengths[c] ?? 0) > 0
+      )
+      return {
+        labels: activeCols,
+        series: [
+          {
+            label: totalRow.label || '총계',
+            data: activeCols.map((c) => Number(totalRow.lengths[c] ?? 0)),
+          },
+        ],
+        xAxisTitle: kind === 'year' ? '연도' : '관경',
+      }
+    }
     const rows = matrix.rows.filter(
       (r) =>
         !r.isTotal &&
@@ -239,9 +286,9 @@ export function WtlNetworkStatusCombinedChart({
       })),
       xAxisTitle: kind === 'year' ? '연도' : '관경',
     }
-  }, [kind, dipMatrix, yearMatrix, saaMatrix])
+  }, [kind, dipMatrix, yearMatrix, saaMatrix, useTotalOnly])
 
-  /** 관경/연도/관용도마다 관재질을 나란히 비교 — 그룹(비누적) 막대. 가림은 hidden만 */
+  /** material: 관재질 그룹 막대. total: 총계 단일 막대. 가림은 material만 */
   const chartData = useMemo<ChartData<'bar'> | null>(() => {
     if (!chartPayload || chartPayload.labels.length === 0) return null
     const { labels, series } = chartPayload
@@ -254,16 +301,22 @@ export function WtlNetworkStatusCombinedChart({
         data: s.data,
         backgroundColor: SERIES_COLORS[colorIdx % SERIES_COLORS.length],
         borderWidth: 0,
-        barPercentage: 0.85,
-        categoryPercentage: 0.7,
-        hidden: hiddenMaterials.has(s.label),
+        barPercentage: useTotalOnly ? 0.65 : 0.85,
+        categoryPercentage: useTotalOnly ? 0.8 : 0.7,
+        hidden: useTotalOnly ? false : hiddenMaterials.has(s.label),
       })),
     }
-  }, [chartPayload, hiddenMaterials])
+  }, [chartPayload, hiddenMaterials, useTotalOnly])
 
   const tickColor = isDark ? 'rgba(255,255,255,0.7)' : 'rgba(15,23,42,0.65)'
   const gridColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(15,23,42,0.08)'
-  const xAxisTitle = chartPayload?.xAxisTitle ?? '관경'
+  const xAxisTitle = useTotalOnly
+    ? kind === 'year'
+      ? '연도별 총계'
+      : kind === 'saa'
+        ? '관용도별 총계'
+        : '관경별 총계'
+    : (chartPayload?.xAxisTitle ?? '관경')
   const yAxisTitle = '연장'
 
   const chartOptions = useMemo<ChartOptions<'bar'>>(
@@ -285,6 +338,7 @@ export function WtlNetworkStatusCombinedChart({
           callbacks: {
             label: (ctx: TooltipItem<'bar'>) => {
               const v = typeof ctx.parsed.y === 'number' ? ctx.parsed.y : 0
+              if (useTotalOnly) return formatLengthMeters(v)
               return `${ctx.dataset.label ?? ''}: ${formatLengthMeters(v)}`
             },
           },
@@ -326,7 +380,7 @@ export function WtlNetworkStatusCombinedChart({
         },
       },
     }),
-    [tickColor, gridColor, xAxisTitle, yAxisTitle]
+    [tickColor, gridColor, xAxisTitle, yAxisTitle, useTotalOnly]
   )
 
   const toggleMaterial = (label: string) => {
@@ -338,37 +392,42 @@ export function WtlNetworkStatusCombinedChart({
     })
   }
 
+  const expandBtn = onExpand ? (
+    <button
+      type="button"
+      onClick={() => onExpand(kind)}
+      className="cursor-pointer shrink-0 rounded p-0.5 text-muted-foreground/70 transition-colors hover:bg-muted hover:text-foreground/90"
+      title="통계 도표 보기"
+      aria-label="통계 도표 보기"
+    >
+      <Scaling className="h-3.5 w-3.5" />
+    </button>
+  ) : null
+
   return (
-    <section
+    <div
       className={cn(
-        'flex shrink-0 flex-col overflow-hidden rounded border border-border bg-background',
+        'flex shrink-0 flex-col overflow-hidden bg-background',
+        !embedded && 'rounded border border-border',
         className
       )}
     >
-      <div
-        className={
-          solidHeader
-            ? 'standard-map-float-header shrink-0 gap-1.5 px-2 py-1 text-xs'
-            : 'flex shrink-0 items-center justify-between gap-1.5 border-b border-border bg-muted/50 px-2 py-1 text-xs font-medium text-foreground'
-        }
-      >
-        <div className="flex min-w-0 items-center gap-1.5">
-          <span className="h-3 w-0.5 shrink-0 rounded-sm bg-primary" aria-hidden />
-          <span className="truncate">관로 연장 그래프</span>
+      {!embedded ? (
+        <div
+          className={
+            solidHeader
+              ? 'standard-map-float-header shrink-0 gap-1.5 px-2 py-1 text-xs'
+              : 'flex shrink-0 items-center justify-between gap-1.5 border-b border-border bg-muted/50 px-2 py-1 text-xs font-medium text-foreground'
+          }
+        >
+          <div className="flex min-w-0 items-center gap-1.5">
+            <span className="h-3 w-0.5 shrink-0 rounded-sm bg-primary" aria-hidden />
+            <span className="truncate">관로 통계</span>
+          </div>
+          {expandBtn}
         </div>
-        {onExpand ? (
-          <button
-            type="button"
-            onClick={() => onExpand(kind)}
-            className="cursor-pointer shrink-0 rounded p-0.5 text-muted-foreground/70 transition-colors hover:bg-muted hover:text-foreground/90"
-            title="확대"
-            aria-label="확대"
-          >
-            <Scaling className="h-3.5 w-3.5" />
-          </button>
-        ) : null}
-      </div>
-      <div className="standard-filter-chips shrink-0 overflow-x-auto px-1.5 py-1">
+      ) : null}
+      <div className="standard-filter-chips shrink-0 items-center overflow-x-auto px-1.5 py-1">
         {CHART_KIND_OPTIONS.map((opt) => {
           const on = opt.id === kind
           return (
@@ -386,10 +445,11 @@ export function WtlNetworkStatusCombinedChart({
             </button>
           )
         })}
+        {embedded ? <div className="ml-auto flex shrink-0 items-center">{expandBtn}</div> : null}
       </div>
-      {/* 그래프 본체 높이 200px 고정 — 좌측 관재질 목록만 이 높이 안에서 스크롤 */}
+      {/* 그래프 본체 높이 200px 고정 — material일 때만 좌측 관재질 목록 스크롤 */}
       <div className="flex h-50 min-h-50 w-full min-w-0 shrink-0 overflow-hidden">
-        {chartData && chartData.datasets.length > 0 ? (
+        {!useTotalOnly && chartData && chartData.datasets.length > 0 ? (
           <aside
             className="flex h-full w-22 shrink-0 flex-col overflow-hidden border-r border-border"
             title="관재질 범례"
@@ -447,6 +507,6 @@ export function WtlNetworkStatusCombinedChart({
           )}
         </div>
       </div>
-    </section>
+    </div>
   )
 }

@@ -19,6 +19,11 @@ import {
   Menu,
   XCircle,
 } from 'lucide-react';
+import {
+  parseServiceFileDownloadToPledge,
+  parseServiceFileUrlsToMultiPledge,
+  requestAttachmentPledge,
+} from '@/app/(pages)/_components/securityPledge/attachmentPledgeGate';
 import { cn } from '@/lib/utils';
 import { MAP_UI_Z_CLASS } from '@/lib/mapUiZIndex';
 import { zoomPreviewAtPointer } from './previewZoomAtCursor';
@@ -63,8 +68,11 @@ function escapeHtml(s: string): string {
     .replace(/"/g, '&quot;');
 }
 
-/** 쿠키 인증이 필요한 동일 출처 URL — Blob으로 받아 파일 저장 */
+/** 쿠키 인증이 필요한 동일 출처 URL — Blob으로 받아 파일 저장 (첨부 API는 보안서약 경유) */
 export async function downloadServiceFilePreviewBlob(url: string, fileName: string): Promise<void> {
+  const pledge = parseServiceFileDownloadToPledge(url, fileName);
+  if (pledge && requestAttachmentPledge(pledge)) return;
+
   const res = await fetch(url, { credentials: 'include' });
   if (!res.ok) throw new Error('download failed');
   const blob = await res.blob();
@@ -96,12 +104,15 @@ function uniqueZipEntryName(fileName: string, used: Set<string>): string {
   return next;
 }
 
-/** 미리보기 목록 전체를 ZIP으로 저장 */
+/** 미리보기 목록 전체를 ZIP으로 저장 (첨부 API는 보안서약 경유) */
 export async function downloadServiceFilePreviewItemsZip(
   items: { url: string; fileName: string }[],
   zipFileName: string
 ): Promise<void> {
   if (items.length === 0) throw new Error('empty');
+  const multi = parseServiceFileUrlsToMultiPledge(items, zipFileName);
+  if (multi && requestAttachmentPledge(multi)) return;
+
   const { zipSync } = await import('fflate');
   const zipEntries: Record<string, Uint8Array> = {};
   const usedNames = new Set<string>();

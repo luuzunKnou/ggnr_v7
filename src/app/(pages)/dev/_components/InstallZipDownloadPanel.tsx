@@ -546,7 +546,7 @@ export function InstallZipDownloadPanel() {
       const downloadUrl =
         buildJson.downloadUrl ??
         `/api/source/version/install-zip/download?progressId=${encodeURIComponent(buildJson.progressId ?? progressId)}`;
-      const fileName = buildJson.zipName ?? `source_install_${Date.now()}.zip`;
+      const fileName = buildJson.zipName ?? `${Date.now()}.zip`;
 
       setProgress((p) => ({ ...p, message: 'ZIP 다운로드 중...', pct: 90 }));
       pushLog('스트림 다운로드 시작');

@@ -176,7 +176,7 @@ export function WtlNetworkMapSectionModal({
   const place = [pipe?.eupmyeon, pipe?.ri].filter(Boolean).join(' ')
 
   return createPortal(
-    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/40 p-6" onClick={onClose}>
+    <div className="fixed inset-0 z-80 flex items-center justify-center bg-black/40 p-6" onClick={onClose}>
       <div
         className="flex max-h-[90vh] w-[min(760px,100%)] flex-col overflow-hidden rounded-md bg-background shadow-lg"
         onClick={(e) => e.stopPropagation()}

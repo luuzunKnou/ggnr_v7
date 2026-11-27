@@ -142,6 +142,20 @@ export function buildMeterLocationReportHtml(args: {
     <span>필지 ${args.parcelCount}건</span>
   </div>`
 
+  const zoneNavHtml =
+    args.zones.length === 0
+      ? ''
+      : `<aside class="zone-nav">
+    <nav class="zone-nav-inner" aria-label="구역 목록">
+      ${args.zones
+        .map((z, idx) => {
+          const label = esc(z.zoneLabel) || `구역 ${idx + 1}`
+          return `<button type="button" class="zone-nav-item" data-zone-id="zone-${idx}" title="${label}">${label}</button>`
+        })
+        .join('')}
+    </nav>
+  </aside>`
+
   const zoneBlocks =
     args.zones.length === 0
       ? `${headHtml}<div class="zone-empty">표시할 구역이 없습니다.</div>`
@@ -159,7 +173,7 @@ export function buildMeterLocationReportHtml(args: {
             const meterCount = z.meters.length
             const parcelCount = Math.max(0, Number(z.parcelCount) || 0)
             // thead에 h2 — 인쇄 시 페이지가 갈라져도 헤더 반복
-            return `<section class="${cls}">
+            return `<section class="${cls}" id="zone-${idx}">
   ${first ? headHtml : ''}
   <table class="zone-flow">
     <thead>
@@ -200,16 +214,47 @@ export function buildMeterLocationReportHtml(args: {
     color-scheme:light;
     --rpt-bg:#ffffff;--rpt-fg:#1a1a1a;--rpt-muted:#8a8a8a;--rpt-line:#e5e5e5;
     --rpt-head:#f5f5f5;--rpt-soft:#fafafa;--rpt-strong:#1a1a1a;--rpt-accent:#334155;
-    --rpt-fail-bg:#fef2f2;--rpt-fail-fg:#b91c1c;--rpt-fail-line:#fecaca;--rpt-map:#e2e8f0
+    --rpt-fail-bg:#fef2f2;--rpt-fail-fg:#b91c1c;--rpt-fail-line:#fecaca;--rpt-map:#e2e8f0;
+    --rpt-primary:#0F91B2;--rpt-aside-bg:rgba(245,245,245,.8)
   }
   html.dark{
     color-scheme:dark;
     --rpt-bg:#1a1a1a;--rpt-fg:#fafafa;--rpt-muted:#b3b3b3;--rpt-line:rgba(255,255,255,.16);
     --rpt-head:#3a3a3a;--rpt-soft:#2a2a2a;--rpt-strong:#fafafa;--rpt-accent:#8a8a8a;
-    --rpt-fail-bg:#3a2424;--rpt-fail-fg:#fca5a5;--rpt-fail-line:#7f1d1d;--rpt-map:#2a2a2a
+    --rpt-fail-bg:#3a2424;--rpt-fail-fg:#fca5a5;--rpt-fail-line:#7f1d1d;--rpt-map:#2a2a2a;
+    --rpt-primary:#0F91B2;--rpt-aside-bg:rgba(58,58,58,.8)
   }
-  html,body{background:var(--rpt-bg);color:var(--rpt-fg)}
-  body{font-family:"Malgun Gothic","Apple SD Gothic Neo",sans-serif;font-size:12px;margin:16px 20px;line-height:1.45}
+  html,body{background:var(--rpt-bg);color:var(--rpt-fg);height:100%}
+  body{
+    font-family:"Malgun Gothic","Apple SD Gothic Neo",sans-serif;font-size:12px;
+    margin:0;line-height:1.45;overflow:hidden
+  }
+  /* 설치 매뉴얼(InstallManual) 좌측 목차 패널과 동일 골격 */
+  .report-layout{
+    display:flex;height:100%;min-height:0;background:var(--rpt-bg);color:var(--rpt-fg);
+    border:1px solid var(--rpt-line);box-sizing:border-box
+  }
+  .report-main{flex:1;min-width:0;min-height:0;overflow:auto;padding:16px 20px;box-sizing:border-box}
+  .zone-nav{
+    display:flex;flex-direction:column;flex:0 0 8rem;width:8rem;min-height:0;
+    border-right:1px solid var(--rpt-line);background:var(--rpt-aside-bg);box-sizing:border-box
+  }
+  .zone-nav-inner{
+    display:flex;flex-direction:column;gap:20px;flex:1;min-height:0;
+    overflow:auto;padding:8px;box-sizing:border-box
+  }
+  .zone-nav-item{
+    display:block;width:100%;box-sizing:border-box;cursor:pointer;
+    border:0;border-radius:2px;background:transparent;color:var(--rpt-fg);
+    text-align:left;font:inherit;font-size:12px;font-weight:500;line-height:1.375;
+    padding:4px 4px 4px 10px;word-break:keep-all
+  }
+  .zone-nav-item:hover{
+    background:rgba(15,145,178,.05);color:var(--rpt-primary)
+  }
+  .zone-nav-item.is-active{
+    background:rgba(15,145,178,.08);color:var(--rpt-primary);font-weight:600
+  }
   .doc-head{border-bottom:2px solid var(--rpt-strong);padding-bottom:10px;margin-bottom:12px}
   /* 모달 헤더와 제목 중복 — 화면에서는 h1만 숨기고 작성일시 등 메타는 유지 */
   .doc-head h1{display:none}
@@ -258,7 +303,14 @@ export function buildMeterLocationReportHtml(args: {
     html,body{
       background:#ffffff;color:#1a1a1a;
       -webkit-print-color-adjust:exact;print-color-adjust:exact;
-      width:100%;height:100%;margin:0;padding:0;
+      width:100%;height:auto;margin:0;padding:0;overflow:visible
+    }
+    .zone-nav{display:none !important}
+    .report-layout{
+      display:block;height:auto;min-height:0;border:0;overflow:visible
+    }
+    .report-main{
+      width:100%;overflow:visible;padding:0
     }
     .foot{display:none}
     .doc-head{
@@ -375,7 +427,55 @@ export function buildMeterLocationReportHtml(args: {
 </style>
 </head>
 <body>
-  ${zoneBlocks}
+  <div class="report-layout">
+    ${zoneNavHtml}
+    <div class="report-main">
+      ${zoneBlocks}
+    </div>
+  </div>
+  <script>
+  (function () {
+    var nav = document.querySelector('.zone-nav-inner');
+    var main = document.querySelector('.report-main');
+    if (!nav || !main) return;
+    var items = Array.prototype.slice.call(nav.querySelectorAll('.zone-nav-item'));
+    var sections = items
+      .map(function (btn) {
+        return document.getElementById(btn.getAttribute('data-zone-id') || '');
+      })
+      .filter(Boolean);
+    var lockUntil = 0;
+    function setActive(id) {
+      items.forEach(function (btn) {
+        btn.classList.toggle('is-active', btn.getAttribute('data-zone-id') === id);
+      });
+    }
+    /** 스크롤 컨테이너 상단에 가장 가까운(이미 지나간) 구역을 활성으로 */
+    function syncActiveFromScroll() {
+      if (Date.now() < lockUntil) return;
+      var mainTop = main.getBoundingClientRect().top;
+      var marker = mainTop + 12;
+      var activeId = sections[0] && sections[0].id;
+      for (var i = 0; i < sections.length; i++) {
+        var sec = sections[i];
+        if (sec.getBoundingClientRect().top <= marker) activeId = sec.id;
+      }
+      if (activeId) setActive(activeId);
+    }
+    items.forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var id = btn.getAttribute('data-zone-id');
+        var el = id ? document.getElementById(id) : null;
+        if (!el) return;
+        setActive(id);
+        lockUntil = Date.now() + 800;
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    });
+    if (items.length) setActive(items[0].getAttribute('data-zone-id'));
+    main.addEventListener('scroll', syncActiveFromScroll, { passive: true });
+  })();
+  </script>
 </body>
 </html>`
 }

@@ -11,8 +11,14 @@ export type TrendPoint = {
 
 export type MaintenanceRow = {
   id: string
-  at: string
-  summary: string
+  /** 일자 (YYYY-MM-DD) */
+  date: string
+  /** 구분 */
+  category: string
+  /** 점검자 */
+  inspector: string
+  /** 내용 */
+  content: string
 }
 
 /** 환경부 표7 스타일 — 정상·주의·경보 ppm 구간 */
@@ -38,10 +44,18 @@ export type OdorAlertDetailMock = {
     agency: string
     emdNm: string
     model: string
+    /** 기기 종류 */
+    kind: string
+    /** 전원 상태 */
+    power: '정상' | '이상'
+    /** 고장 여부 */
+    fault: boolean
   }
   comm: {
     online: boolean
     rate: number
+    /** 통신 안내(목업) */
+    statusNote: string
   }
   trends: Record<TrendRange, TrendPoint[]>
   maintenance: MaintenanceRow[]
@@ -122,22 +136,26 @@ export function buildOdorAlertDetailMock(alert: OdorAlertItem): OdorAlertDetailM
     return `${d.getMonth() + 1}/${d.getDate()}`
   })
 
-  const maintenanceSeeds: Array<{ at: string; summary: string }> = [
-    { at: '2026-11-10 14:20', summary: '센서 교정 및 필터 교체' },
-    { at: '2026-10-22 09:40', summary: '통신 모듈 점검' },
-    { at: '2026-09-05 16:05', summary: '저감설비 정기 점검' },
-    { at: '2026-08-18 11:30', summary: '펌웨어 업데이트' },
-    { at: '2026-07-29 13:15', summary: '전원부 이상 점검' },
-    { at: '2026-06-12 10:00', summary: '현장 교정 작업' },
-    { at: '2026-05-03 15:45', summary: '하우징 청소 및 방수 점검' },
-    { at: '2026-04-17 08:50', summary: '안테나·통신 케이블 교체' },
-    { at: '2026-03-08 14:10', summary: '저감설비 노즐 청소' },
-    { at: '2026-02-21 09:20', summary: '연간 정기 유지보수' },
+  const inspectors = ['김점검', '이현장', '박설비', '최통신']
+  const categories = ['정기점검', '교정', '수리', '교체', '청소']
+  const maintenanceSeeds: Array<{ date: string; category: string; content: string }> = [
+    { date: '2026-11-10', category: '교정', content: '센서 교정 및 필터 교체' },
+    { date: '2026-10-22', category: '정기점검', content: '통신 모듈 점검' },
+    { date: '2026-09-05', category: '정기점검', content: '저감설비 정기 점검' },
+    { date: '2026-08-18', category: '교체', content: '펌웨어 업데이트' },
+    { date: '2026-07-29', category: '수리', content: '전원부 이상 점검' },
+    { date: '2026-06-12', category: '교정', content: '현장 교정 작업' },
+    { date: '2026-05-03', category: '청소', content: '하우징 청소 및 방수 점검' },
+    { date: '2026-04-17', category: '교체', content: '안테나·통신 케이블 교체' },
+    { date: '2026-03-08', category: '청소', content: '저감설비 노즐 청소' },
+    { date: '2026-02-21', category: '정기점검', content: '연간 정기 유지보수' },
   ]
   const maintenance: MaintenanceRow[] = maintenanceSeeds.map((row, i) => ({
     id: `${alert.id}-m${i + 1}`,
-    at: row.at,
-    summary: row.summary,
+    date: row.date,
+    category: row.category || categories[i % categories.length],
+    inspector: inspectors[i % inspectors.length],
+    content: row.content,
   }))
 
   return {
@@ -153,10 +171,14 @@ export function buildOdorAlertDetailMock(alert: OdorAlertItem): OdorAlertDetailM
       agency: alert.agency,
       emdNm: alert.emdNm,
       model: alert.agency === '디오솔류션' ? 'ODOR-D200' : 'ODOR-G100',
+      kind: alert.agency === '디오솔류션' ? '복합악취센서' : '황화수소센서',
+      power: rand() > 0.12 ? '정상' : '이상',
+      fault: rand() > 0.9,
     },
     comm: {
       online,
       rate,
+      statusNote: '서버~통신 경보 상태 보기',
     },
     trends: {
       '24h': trends24h,

@@ -23,6 +23,7 @@ chcp 65001 >nul
 ::   NSSM_OBJECT_NAME / NSSM_OBJECT_PASS (demo G: share)
 :: - on failure: pause + C:\logs\nssm_install_last.log
 :: - on success: pause unless GGNR_NSSM_FROM_STARTER=1
+:: - after start: poll SERVICE_RUNNING up to 60s (START_PENDING ok; one brief STOPPED for AppExit Restart)
 :: =============================================================================
 
 set "SERVICE_NAME=GGNR_V7"
@@ -257,11 +258,9 @@ if errorlevel 1 (
 )
 
 echo [서비스등록] 시작 직후 상태를 확인합니다...
-timeout /t 3 /nobreak >nul
-"%NSSM%" status %SERVICE_NAME%
-"%NSSM%" status %SERVICE_NAME% | findstr /I /C:"SERVICE_RUNNING" >nul
+call :wait_service_running 60
 if errorlevel 1 (
-  echo [오류] 등록은 되었으나 서비스가 바로 멈췄습니다.
+  echo [오류] 등록은 되었으나 서비스가 기동 확인에 실패했습니다.
   echo        시작 파일의 구분이 운영인지, 기동 오류 로그를 확인하세요.
   echo        표준 출력: %LOG_OUT%
   echo        오류 출력: %LOG_ERR%
@@ -304,6 +303,8 @@ if "!KEEP_OPEN!"=="1" (
 exit /b 0
 
 :fail_end
+if not defined EXIT_EC set "EXIT_EC=1"
+if "!EXIT_EC!"=="" set "EXIT_EC=1"
 echo.
 echo ===== 실패 =====
 echo [오류] 서비스 등록에 실패했습니다 ^(종료=!EXIT_EC!^). 위 메시지를 확인하세요.
@@ -323,8 +324,55 @@ pause >nul
 goto :eof
 
 :log_line
-echo %~1>> "%INSTALL_LOG%"
+:: Redirection must come first. `echo …=1>>file` is parsed as handle `1>>` and drops the code.
+>>"%INSTALL_LOG%" echo(%~1
 goto :eof
+
+:: Poll nssm status until SERVICE_RUNNING (or timeout seconds).
+:: START_PENDING / CONTINUE_PENDING are treated as still starting.
+:: One brief STOPPED/PAUSED is tolerated once (AppExit Restart) then must recover.
+:wait_service_running
+set "WAIT_MAX=%~1"
+if not defined WAIT_MAX set "WAIT_MAX=60"
+set /a WAIT_LEFT=%WAIT_MAX%
+set "SAW_DOWN=0"
+echo [서비스등록] 최대 %WAIT_MAX%초 동안 서비스 기동을 확인합니다...
+:wait_service_loop
+if !WAIT_LEFT! LEQ 0 goto :wait_service_fail
+set "SVC_STATUS="
+for /f "delims=" %%S in ('"%NSSM%" status %SERVICE_NAME% 2^>nul') do set "SVC_STATUS=%%S"
+if /i "!SVC_STATUS!"=="SERVICE_RUNNING" (
+  echo [확인] 서비스 상태 = SERVICE_RUNNING ^(남은 대기 !WAIT_LEFT!초^)
+  exit /b 0
+)
+if /i "!SVC_STATUS!"=="SERVICE_START_PENDING" (
+  echo [서비스등록] 시작 중... ^(!SVC_STATUS!^) 남은 !WAIT_LEFT!초
+  goto :wait_service_sleep
+)
+if /i "!SVC_STATUS!"=="SERVICE_CONTINUE_PENDING" (
+  echo [서비스등록] 재개 중... ^(!SVC_STATUS!^) 남은 !WAIT_LEFT!초
+  goto :wait_service_sleep
+)
+:: brief down after start: nssm AppExit Restart may bring it back
+if /i "!SVC_STATUS!"=="SERVICE_STOPPED" if "!SAW_DOWN!"=="0" (
+  set "SAW_DOWN=1"
+  echo [서비스등록] 잠시 중지됨. 자동 재시작을 기다립니다... ^(!SVC_STATUS!^)
+  goto :wait_service_sleep
+)
+if /i "!SVC_STATUS!"=="SERVICE_PAUSED" if "!SAW_DOWN!"=="0" (
+  set "SAW_DOWN=1"
+  echo [서비스등록] 잠시 일시중지. 복구를 기다립니다... ^(!SVC_STATUS!^)
+  goto :wait_service_sleep
+)
+echo [서비스등록] 현재 상태=!SVC_STATUS! 남은 !WAIT_LEFT!초
+:wait_service_sleep
+timeout /t 2 /nobreak >nul
+set /a WAIT_LEFT-=2
+goto :wait_service_loop
+:wait_service_fail
+echo [오류] %WAIT_MAX%초 안에 SERVICE_RUNNING 이 되지 않았습니다. 마지막 상태=!SVC_STATUS!
+"%NSSM%" status %SERVICE_NAME%
+exit /b 1
 
 :force_clear_before_stop
 "%NSSM%" set %SERVICE_NAME% AppStopMethodSkip 1 >nul 2>&1

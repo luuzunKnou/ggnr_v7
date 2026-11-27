@@ -44,7 +44,7 @@ export function WtlFacilityPlantView({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <div className={cn('flex min-h-0 flex-col overflow-hidden', selected ? 'flex-[3]' : 'flex-1')}>
+      <div className={cn('flex min-h-0 flex-col overflow-hidden', selected ? 'flex-3' : 'flex-1')}>
         <div className="min-h-0 flex-1 overflow-auto">
           <table className="w-full table-fixed border-collapse text-left text-xs">
             <thead className="sticky top-0 bg-muted">
@@ -61,7 +61,7 @@ export function WtlFacilityPlantView({
                   key={plant.id}
                   className={cn(
                     'cursor-pointer border-b border-border hover:bg-primary/5',
-                    selectedPlantId === plant.id && 'bg-primary/[0.12] ring-1 ring-inset ring-primary/25'
+                    selectedPlantId === plant.id && 'bg-primary/12 ring-1 ring-inset ring-primary/25'
                   )}
                   onClick={() => onSelectPlant(plant)}
                 >
@@ -80,7 +80,7 @@ export function WtlFacilityPlantView({
       </div>
 
       {selected && (
-        <div className="flex min-h-0 flex-[7] flex-col overflow-hidden border-t-2 border-primary/30 bg-background">
+        <div className="flex min-h-0 flex-7 flex-col overflow-hidden border-t-2 border-primary/30 bg-background">
           <div className="min-h-0 flex-1 overflow-auto">
             <AttrRows
               rows={[
@@ -113,7 +113,7 @@ export function WtlFacilityPlantView({
                     key={item.id}
                     className={cn(
                       'cursor-pointer border-b border-border hover:bg-primary/5',
-                      selectedEquipId === item.id && 'bg-primary/[0.12] ring-1 ring-inset ring-primary/25'
+                      selectedEquipId === item.id && 'bg-primary/12 ring-1 ring-inset ring-primary/25'
                     )}
                     onClick={() => onSelectEquip(item)}
                   >
