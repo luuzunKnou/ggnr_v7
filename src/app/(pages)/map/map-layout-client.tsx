@@ -240,6 +240,7 @@ import {
   SMALL_PUBLIC_CANDIDATE_OPENED_KEY,
   SMALL_PUBLIC_INSPECTION_OPENED_KEY,
   SMALL_PUBLIC_PLAN_OPENED_KEY,
+  SMALL_PUBLIC_BUDGET_OPENED_KEY,
 } from "./_mapContents/smallPublic/smallPublicConfig"
 import { SmallPublicCandidateShell } from "./_mapContents/smallPublic/candidate/SmallPublicCandidate.shell"
 import { SmallPublicInspectionShell } from "./_mapContents/smallPublic/inspection/SmallPublicInspection.shell"

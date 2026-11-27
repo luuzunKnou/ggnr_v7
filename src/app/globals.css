@@ -5,7 +5,7 @@
 
 @custom-variant dark (&:is(.dark *, .dark_v2 *));
 /* odor_ph SCADA 전용 — 일반 .dark 에는 적용하지 않음 */
-@custom-variant dark_v2 (&:is(.dark_v2 *));)
+@custom-variant dark_v2 (&:is(.dark_v2 *));
 
 /* S-Core Dream (public/font/SCDREAM1~9.OTF) — 상대경로로 basePath 반영 */
 @font-face {
