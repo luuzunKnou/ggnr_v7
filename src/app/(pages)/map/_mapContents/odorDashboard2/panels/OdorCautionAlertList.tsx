@@ -4,13 +4,12 @@ import { useEffect, useMemo, useState } from 'react'
 import { ChevronsRight } from 'lucide-react'
 import {
   MOCK_CAUTION_ALERTS,
-  formatAlertTime,
-  gradeDotColor,
   sortCautionAlerts,
   type OdorAlertItem,
 } from '@/app/(pages)/(index)/odorPh/odorPhDashboardMock'
 import { cn } from '@/lib/utils'
 import { ODOR_DASHBOARD2_ALERT_PAGE_SIZE } from '../odorDashboard2Config'
+import { OdorAlertCardItem } from './OdorAlertCardItem'
 
 type Props = {
   items?: OdorAlertItem[]
@@ -87,21 +86,11 @@ export function OdorCautionAlertList({
           </button>
         </div>
       ) : null}
-      <p
-        className={cn(
-          'mb-1.5 shrink-0 text-[11px] text-muted-foreground',
-          hideHeader && 'px-2 pt-2'
-        )}
-      >
+      <p className="mb-1.5 shrink-0 px-1.5 text-[11px] text-muted-foreground">
         3등급 주의 경보 · 미인지 우선
       </p>
 
-      <div
-        className={cn(
-          'standard-filter-chips mb-1.5 shrink-0',
-          hideHeader && 'px-2'
-        )}
-      >
+      <div className="standard-filter-chips mb-1.5 shrink-0 px-1.5">
         <button
           type="button"
           title="전체"
@@ -130,88 +119,22 @@ export function OdorCautionAlertList({
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded border border-border">
-        <div className="standard-list-scroll min-h-0 flex-1">
-          <table className="standard-list-table">
-            <thead className="standard-table-thead">
-              <tr>
-                <th className="standard-table-th standard-table-th-left">지점</th>
-                <th className="standard-table-th standard-table-th-left w-[20%]">발생</th>
-                <th className="standard-table-th standard-table-th-left w-[14%]">농도</th>
-                <th className="standard-table-th standard-table-th-left w-[14%]">인지</th>
-              </tr>
-            </thead>
-            <tbody>
-              {paged.length === 0 ? (
-                <tr>
-                  <td colSpan={4} className="standard-table-empty">
-                    주의 경보가 없습니다.
-                  </td>
-                </tr>
-              ) : (
-                paged.map((row) => {
-                  const selected = selectedAlertId === row.id
-                  return (
-                    <tr
-                      key={row.id}
-                      role="button"
-                      tabIndex={0}
-                      title={`${row.sensorKorNm} 상세`}
-                      onClick={() => onSelectAlert?.(row)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault()
-                          onSelectAlert?.(row)
-                        }
-                      }}
-                      className={cn(
-                        'standard-list-row cursor-pointer',
-                        selected && 'standard-list-row-selected'
-                      )}
-                    >
-                      <td className="standard-table-td-text" title={row.sensorKorNm}>
-                        <span className="flex min-w-0 items-center gap-1.5">
-                          <span
-                            className="h-2 w-2 shrink-0 rounded-full"
-                            style={{ backgroundColor: gradeDotColor(row.grade) }}
-                            title={`${row.grade}등급`}
-                            aria-label={`${row.grade}등급`}
-                          />
-                          <span className="min-w-0">
-                            <span className="block truncate font-medium">{row.sensorKorNm}</span>
-                            <span className="block truncate text-[10px] text-muted-foreground">
-                              {row.sensorNm} · {row.agency}
-                              {row.abatementRunning ? ' · 가동' : ''}
-                            </span>
-                          </span>
-                        </span>
-                      </td>
-                      <td
-                        className="standard-table-td-date"
-                        title={formatAlertTime(row.occurredAt)}
-                      >
-                        {formatAlertTime(row.occurredAt)}
-                      </td>
-                      <td className="standard-table-td-date tabular-nums font-semibold">
-                        {row.ppm.toFixed(1)}
-                      </td>
-                      <td className="standard-table-td-compact">
-                        <span
-                          className={cn(
-                            'standard-status-badge',
-                            row.confirmed
-                              ? 'standard-status-badge-muted'
-                              : 'standard-status-badge-primary'
-                          )}
-                        >
-                          {row.confirmed ? '인지' : '미인지'}
-                        </span>
-                      </td>
-                    </tr>
-                  )
-                })
-              )}
-            </tbody>
-          </table>
+        <div className="standard-list-scroll min-h-0 flex-1 px-1.5 py-1.5">
+          {paged.length === 0 ? (
+            <p className="standard-table-empty px-2 py-6 text-center">주의 경보가 없습니다.</p>
+          ) : (
+            <ul className="flex flex-col gap-1.5">
+              {paged.map((row) => (
+                <li key={row.id}>
+                  <OdorAlertCardItem
+                    alert={row}
+                    selected={selectedAlertId === row.id}
+                    onSelect={onSelectAlert}
+                  />
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
         <div className="standard-list-footer flex shrink-0 items-center justify-between gap-2">
           <span className="tabular-nums">

@@ -166,7 +166,7 @@ export function OdorGradeDistributionPanel({
     <section
       className={cn(
         'flex min-h-0 flex-col overflow-hidden',
-        hideMiniMap ? 'h-auto shrink-0 p-2' : 'h-full border border-border p-3'
+        hideMiniMap ? 'h-auto shrink-0' : 'h-full border border-border p-3'
       )}
     >
       {!hideMiniMap ? (

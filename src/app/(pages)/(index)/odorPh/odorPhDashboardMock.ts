@@ -589,7 +589,7 @@ export function sortCautionAlerts(items: OdorAlertItem[]): OdorAlertItem[] {
   });
 }
 
-/** YYYY-MM-DD HH:MM */
+/** YYYY-MM-DD HH:mm:ss */
 export function formatAlertTime(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
@@ -598,7 +598,8 @@ export function formatAlertTime(iso: string): string {
   const dd = String(d.getDate()).padStart(2, '0');
   const hh = String(d.getHours()).padStart(2, '0');
   const mi = String(d.getMinutes()).padStart(2, '0');
-  return `${yyyy}-${mm}-${dd} ${hh}:${mi}`;
+  const ss = String(d.getSeconds()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd} ${hh}:${mi}:${ss}`;
 }
 
 export function gradeDotColor(grade: OdorGrade): string {

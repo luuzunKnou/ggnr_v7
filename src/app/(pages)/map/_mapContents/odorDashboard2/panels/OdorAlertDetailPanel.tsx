@@ -315,10 +315,11 @@ export function OdorAlertDetailPanel({
   const [deviceSettingsOpen, setDeviceSettingsOpen] = useState(false)
   const [maintKeyword, setMaintKeyword] = useState('')
   const [maintPage, setMaintPage] = useState(1)
-  const [maintSort, setMaintSort] = useState<{ key: MaintSortKey; dir: SortDir }>({
-    key: 'date',
-    dir: 'desc',
-  })
+  /** null = 정렬 해제(원복, 원본 순서). 동일 컬럼 3클릭 시 null */
+  const [maintSort, setMaintSort] = useState<{
+    key: MaintSortKey
+    dir: SortDir
+  } | null>(null)
 
   useEffect(() => {
     setCompareStationIds([currentStationId])
@@ -377,6 +378,7 @@ export function OdorAlertDetailPanel({
           row.content.toLowerCase().includes(kw)
       )
     }
+    if (!maintSort) return list
     const sign = maintSort.dir === 'asc' ? 1 : -1
     return [...list].sort((a, b) => sign * compareMaint(a, b, maintSort.key))
   }, [detail.maintenance, maintKeyword, maintSort])
@@ -396,10 +398,15 @@ export function OdorAlertDetailPanel({
     return filteredMaint.slice(start, start + MAINT_PAGE_SIZE)
   }, [filteredMaint, maintPage])
 
+  /** 1:초기방향 → 2:반대 → 3:원복(null). 일자는 초기 내림차순 */
   const toggleMaintSort = (key: MaintSortKey) => {
-    setMaintSort((prev) =>
-      prev.key === key ? { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' }
-    )
+    const initialDir: SortDir = key === 'date' ? 'desc' : 'asc'
+    const opposite: SortDir = initialDir === 'asc' ? 'desc' : 'asc'
+    setMaintSort((prev) => {
+      if (!prev || prev.key !== key) return { key, dir: initialDir }
+      if (prev.dir === initialDir) return { key, dir: opposite }
+      return null
+    })
   }
 
   const commDot =
@@ -689,13 +696,20 @@ export function OdorAlertDetailPanel({
             <thead className="standard-table-thead">
               <tr>
                 {MAINT_COLUMNS.map((col) => {
-                  const active = maintSort.key === col.key
+                  const active = Boolean(maintSort && maintSort.key === col.key)
+                  const dir = active ? maintSort!.dir : null
+                  const initialDir: SortDir = col.key === 'date' ? 'desc' : 'asc'
                   const Icon = !active
                     ? ArrowUpDown
-                    : maintSort.dir === 'asc'
+                    : dir === 'asc'
                       ? ArrowUp
                       : ArrowDown
                   const tight = col.key !== 'content'
+                  const sortTitle = !active
+                    ? `${col.label} 정렬`
+                    : dir === initialDir
+                      ? `${col.label} 방향 바꾸기`
+                      : `${col.label} 정렬 해제`
                   return (
                     <th
                       key={col.key}
@@ -706,7 +720,7 @@ export function OdorAlertDetailPanel({
                     >
                       <button
                         type="button"
-                        title={`${col.label} 정렬`}
+                        title={sortTitle}
                         onClick={() => toggleMaintSort(col.key)}
                         className={cn(
                           'standard-sort-button standard-sort-button-left cursor-pointer',

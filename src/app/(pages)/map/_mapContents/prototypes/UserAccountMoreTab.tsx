@@ -3,8 +3,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Check, ChevronLeft, ChevronRight, Mail, PackageCheck, Plus, RotateCcw, Settings2, X } from 'lucide-react'
-import { PackageArrowBendUpLeft } from '@/app/(pages)/_components/icons/PackageArrowBendUpLeft'
+import {
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  ChevronUp,
+  MessageSquareWarning,
+  Plus,
+  RotateCcw,
+  Settings2,
+  X,
+} from 'lucide-react'
 import { call } from '@/lib/api'
 import { getBasePath, withBasePath, withBasePathNav } from '@/lib/basePath'
 import { getOpenedKeyForSerEng } from '@/lib/mapServiceOpened'
@@ -13,16 +22,18 @@ import { openShapeEditorMapWindow } from '@/lib/shapeEditorWindow'
 
 type Props = {
   onClosePanel: () => void
-  /** 촬영요청·알림 옆 칸이 열려 있으면 바로가기 설정을 닫음 */
+  /** 바로가기 설정 옆 칸이 열려 있을 때 닫기용 */
   suppressSettings?: boolean
   onOpenSettings?: () => void
   matchHeightPx?: number | null
   /** 바깥 막에서 내 정보 칸을 빼 단추가 눌리게 함 */
   overlayClipPath?: string
-  /** 관리자·팀장·슈퍼 — «데이터 승인» 공통 메뉴 표시 */
-  showDataApprove?: boolean
   /** 시스템 불편신고 플로팅 모달 */
   onOpenSystemFeedback?: () => void
+  /** 처리 대기 승인요청 건수 (내 메뉴 배너) */
+  pendingApproveCount?: number
+  /** 배너 클릭 → 승인요청 탭 */
+  onOpenApproveTab?: () => void
 }
 
 type ServiceItem = {
@@ -38,8 +49,7 @@ type SystemItem = {
 }
 
 const FAVORITES_STORAGE_KEY = 'ggnr.proto.moreFavorites'
-const ALWAYS_SHOW_ENGS_BASE = ['notice', 'board', 'dataRequest', 'systemFeedback'] as const
-const DATA_APPROVE_ENG = 'dataRequestApprove'
+const ALWAYS_SHOW_ENGS_BASE = ['notice', 'board', 'systemFeedback'] as const
 const SYSTEM_FEEDBACK_ENG = 'systemFeedback'
 
 type FavItem = ServiceItem & { token: string }
@@ -64,9 +74,7 @@ function migrateFavoriteTokens(tokens: string[], systems: SystemItem[]): string[
       ? token
       : eng === 'notice' ||
           eng === 'board' ||
-          eng === 'dataRequest' ||
-          eng === SYSTEM_FEEDBACK_ENG ||
-          eng === DATA_APPROVE_ENG
+          eng === SYSTEM_FEEDBACK_ENG
         ? eng
         : (() => {
             const first = systems.find((s) => s.serviceList.includes(eng))
@@ -97,7 +105,14 @@ function projectHintFromBasePath(): string {
 /** 추가 단추 테두리까지 포함한 칸 높이 — 비었을 때·있을 때 줄이 흔들리지 않게 */
 const FAVORITE_SLOT =
   'box-border flex flex-col items-center justify-center gap-0.5 rounded-sm border px-0.5 py-1.5'
-const ICON_LABEL = 'w-full truncate text-center text-[11px] leading-tight'
+const FAVORITE_EMPTY_SLOT = `${FAVORITE_SLOT} h-[78px]`
+const ICON_LABEL =
+  'w-full whitespace-nowrap text-center text-[11px] font-normal leading-tight text-[#8A8A8A]'
+/** 공통 메뉴 버튼 라벨 — 섹션 타이틀과 별개 */
+const COMMON_MENU_LABEL =
+  'w-full whitespace-nowrap text-center text-[11px] font-normal leading-tight text-[#1A1A1A]'
+const COMMON_ITEM =
+  'flex flex-col items-center gap-1 rounded-sm px-0.5 py-1 text-foreground hover:bg-muted/50'
 
 function loadFavorites(): string[] {
   try {
@@ -239,20 +254,15 @@ function FavoriteStrip({
 }
 
 function ServiceGlyph({ item }: { item: ServiceItem }) {
-  if (item.ser_eng === 'dataRequest') {
-    return <PackageArrowBendUpLeft className="h-5 w-5 shrink-0" strokeWidth={2} aria-hidden />
-  }
-  if (item.ser_eng === DATA_APPROVE_ENG) {
-    return <PackageCheck className="h-5 w-5 shrink-0" strokeWidth={2} aria-hidden />
-  }
   if (item.ser_eng === SYSTEM_FEEDBACK_ENG) {
-    return <Mail className="h-5 w-5 shrink-0" strokeWidth={2} aria-hidden />
+    // 공지·자료실 ser_svg stroke 1.5와 맞춤
+    return <MessageSquareWarning className="h-6 w-6 shrink-0" strokeWidth={1.5} aria-hidden />
   }
   const svgRaw = item.ser_svg?.trim() ?? ''
   if (svgRaw.startsWith('<')) {
     return (
       <span
-        className="h-5 w-5 shrink-0 [&_svg]:h-full [&_svg]:w-full [&_svg]:fill-none [&_svg]:stroke-current"
+        className="h-6 w-6 shrink-0 [&_svg]:h-full [&_svg]:w-full [&_svg]:fill-none [&_svg]:stroke-current"
         dangerouslySetInnerHTML={{ __html: svgRaw }}
       />
     )
@@ -261,7 +271,7 @@ function ServiceGlyph({ item }: { item: ServiceItem }) {
   const iconSrc = withBasePath(`/image/serviceListIcon/${iconKey}.svg`)
   return (
     <span
-      className="inline-block h-5 w-5 shrink-0 bg-current"
+      className="inline-block h-6 w-6 shrink-0 bg-current"
       style={{
         WebkitMaskImage: `url(${iconSrc})`,
         maskImage: `url(${iconSrc})`,
@@ -284,8 +294,9 @@ export function UserAccountMoreTab({
   onOpenSettings,
   matchHeightPx = null,
   overlayClipPath,
-  showDataApprove = false,
   onOpenSystemFeedback,
+  pendingApproveCount = 0,
+  onOpenApproveTab,
 }: Props) {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -298,11 +309,7 @@ export function UserAccountMoreTab({
   const [settingOpen, setSettingOpen] = useState(false)
   const [draft, setDraft] = useState<string[]>([])
 
-  const alwaysShowEngs = useMemo(() => {
-    const base: string[] = [...ALWAYS_SHOW_ENGS_BASE]
-    if (showDataApprove) base.push(DATA_APPROVE_ENG)
-    return base
-  }, [showDataApprove])
+  const alwaysShowEngs = useMemo(() => [...ALWAYS_SHOW_ENGS_BASE], [])
 
   useEffect(() => {
     setFavorites(loadFavorites())
@@ -369,9 +376,6 @@ export function UserAccountMoreTab({
     if (!map.has('board')) {
       map.set('board', { ser_eng: 'board', ser_kor: '자료실', ser_svg: null })
     }
-    if (!map.has('dataRequest')) {
-      map.set('dataRequest', { ser_eng: 'dataRequest', ser_kor: '데이터 요청', ser_svg: null })
-    }
     if (!map.has(SYSTEM_FEEDBACK_ENG)) {
       map.set(SYSTEM_FEEDBACK_ENG, {
         ser_eng: SYSTEM_FEEDBACK_ENG,
@@ -379,18 +383,8 @@ export function UserAccountMoreTab({
         ser_svg: null,
       })
     }
-    if (showDataApprove) {
-      const existing = map.get(DATA_APPROVE_ENG)
-      map.set(DATA_APPROVE_ENG, {
-        ser_eng: DATA_APPROVE_ENG,
-        ser_kor: '데이터 승인',
-        ser_svg: existing?.ser_svg ?? null,
-      })
-    } else {
-      map.delete(DATA_APPROVE_ENG)
-    }
     return map
-  }, [services, bootProject, showDataApprove])
+  }, [services, bootProject])
 
   const homeSysByEng = useMemo(() => {
     const map = new Map<string, string>()
@@ -483,7 +477,7 @@ export function UserAccountMoreTab({
           ? `${window.location.pathname}${window.location.search}`
           : ''
       const href =
-        (eng === 'dataRequest' || eng === DATA_APPROVE_ENG) && fromPath
+        eng === 'dataRequest' && fromPath
           ? `${portal}?from=${encodeURIComponent(fromPath)}`
           : portal
       window.location.assign(withBasePathNav(href))
@@ -598,15 +592,28 @@ export function UserAccountMoreTab({
       : null
 
   return (
-    <div className="flex shrink-0 flex-col">
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
       {settingsModal}
+      <div className="shrink-0 border-b border-border p-[10px]">
+        <button
+          type="button"
+          title="승인요청 탭 열기"
+          onClick={() => onOpenApproveTab?.()}
+          className="flex w-full items-center justify-between gap-2 rounded-[4px] border border-[#E3E3E3] px-2.5 py-2 text-left text-[10px] text-[#696969] hover:bg-muted/40"
+        >
+          <span className="min-w-0 flex-1">
+            처리 대기 중인 승인요청이 {pendingApproveCount}건 있습니다.
+          </span>
+          <ChevronUp className="h-4 w-4 shrink-0 text-[#696969]" aria-hidden />
+        </button>
+      </div>
       <div className="shrink-0 border-b border-border px-2.5 pb-1.5 pt-1.5">
         <div className="mb-1 flex items-center justify-between">
-          <p className="text-[11px] font-medium text-muted-foreground">즐겨찾기</p>
+          <p className="text-[11px] font-normal text-[#8A8A8A]">즐겨찾기</p>
           <button
             type="button"
             onClick={openSettings}
-            className="rounded-sm p-0.5 text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+            className="rounded-sm p-0.5 text-[#8A8A8A] hover:bg-muted/60 hover:text-foreground"
             title="바로가기 설정"
           >
             <Settings2 className="h-4 w-4" />
@@ -616,7 +623,7 @@ export function UserAccountMoreTab({
           <button
             type="button"
             onClick={openSettings}
-            className={`${FAVORITE_SLOT} w-full border-dashed border-border text-muted-foreground hover:bg-muted/40`}
+            className={`${FAVORITE_EMPTY_SLOT} w-full border-dashed border-border text-[#8A8A8A] hover:bg-muted/40`}
           >
             <span className="flex h-8 w-8 items-center justify-center">
               <Plus className="h-5 w-5" />
@@ -629,23 +636,23 @@ export function UserAccountMoreTab({
       </div>
 
       <div className="shrink-0">
-        <p className="px-2.5 pt-1.5 text-[11px] font-medium text-muted-foreground">공통</p>
+        <p className="px-[10px] pt-1.5 text-[11px] font-normal text-[#8A8A8A]">공통</p>
         {basicItems.length === 0 ? (
           <p className="px-3 py-5 text-center text-xs text-muted-foreground">표시할 기능이 없습니다.</p>
         ) : (
-          <div className="grid grid-cols-4 px-1 py-1.5">
+          <div className="flex flex-wrap gap-x-2 gap-y-2 px-[10px] py-[14px]">
             {basicItems.map((item) => (
               <button
                 key={item.ser_eng}
                 type="button"
                 onClick={() => openService(item.ser_eng)}
-                className="flex flex-col items-center gap-0.5 rounded-sm px-0.5 py-1.5 text-foreground hover:bg-muted/50"
+                className={COMMON_ITEM}
                 title={item.ser_kor}
               >
-                <span className="flex h-8 w-8 items-center justify-center">
+                <span className="flex h-[43px] w-[43px] shrink-0 items-center justify-center [&_svg]:h-6 [&_svg]:w-6">
                   <ServiceGlyph item={item} />
                 </span>
-                <span className={ICON_LABEL}>{item.ser_kor}</span>
+                <span className={COMMON_MENU_LABEL}>{item.ser_kor}</span>
               </button>
             ))}
           </div>

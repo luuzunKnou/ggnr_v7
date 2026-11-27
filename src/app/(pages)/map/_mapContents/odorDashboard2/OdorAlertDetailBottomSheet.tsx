@@ -26,6 +26,8 @@ type Props = {
   rightPx?: number
   /** 주의 경보 목록과 동일 bottom */
   bottomPx?: number
+  /** 주의 경보 목록 패널 높이(px) — 있으면 상세 모달 높이로 사용 */
+  matchHeightPx?: number | null
   stations?: OdorStationRow[]
   onClose: () => void
 }
@@ -45,6 +47,7 @@ export function OdorAlertDetailBottomSheet({
   leftPx,
   rightPx: rightPxProp,
   bottomPx = DEFAULT_BOTTOM,
+  matchHeightPx = null,
   stations = [],
   onClose,
 }: Props) {
@@ -83,6 +86,11 @@ export function OdorAlertDetailBottomSheet({
     ODOR_DASHBOARD2_FLOAT_RIGHT_INSET + ODOR_DASHBOARD2_FLOAT_ALERT_WIDTH + RIGHT_GAP
   const toggleBody = () => setBodyOpen((v) => !v)
 
+  const openHeightStyle =
+    bodyOpen && matchHeightPx != null && matchHeightPx > 0
+      ? { height: matchHeightPx }
+      : undefined
+
   return createPortal(
     <div
       className={cn(
@@ -93,12 +101,17 @@ export function OdorAlertDetailBottomSheet({
         'z-30',
         'transition-transform duration-300 ease-out',
         entered ? 'translate-y-0' : 'translate-y-full',
-        bodyOpen ? 'h-[48vh]' : 'h-auto'
+        bodyOpen
+          ? matchHeightPx != null && matchHeightPx > 0
+            ? null
+            : 'h-[48vh]'
+          : 'h-auto'
       )}
       style={{
         left: leftPx,
         bottom: bottomPx,
         right: rightPx,
+        ...openHeightStyle,
       }}
       role="dialog"
       aria-modal="true"
@@ -153,7 +166,7 @@ export function OdorAlertDetailBottomSheet({
         )}
         style={bodyOpen ? odorMapFloatBodyOpacityStyle() : undefined}
       >
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-2">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-[4px]">
           <OdorAlertDetailPanel
             key={mountedAlert.id}
             alert={mountedAlert}

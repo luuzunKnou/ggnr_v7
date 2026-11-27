@@ -229,7 +229,6 @@ import {
   ODOR_ALERT_OPENED_KEY,
 } from "./_mapContents/odorAlert/odorAlertConfig"
 import { OdorAlertShell } from "./_mapContents/odorAlert/OdorAlert.shell"
-import { OdorAlertPopupHost } from "./_mapContents/odorAlert/OdorAlertPopupHost"
 import {
   ODOR_DASHBOARD2_OPENED_KEY,
 } from "./_mapContents/odorDashboard2/odorDashboard2Config"
@@ -275,6 +274,7 @@ import {
   writeLastMapSystemKey,
 } from "./_mapComponents/hooks/useMapStatePersist"
 import { call } from "@/lib/api"
+import { withBasePathNav } from "@/lib/basePath"
 import { MapSidebar } from "./_mapComponents/map-sidebar"
 import { MapSearchBar } from "./_mapComponents/map-search-bar"
 import { MapContextProvider, useMapContext } from "./_mapComponents/MapContext"
@@ -3791,6 +3791,18 @@ function MapLayoutContent({
               }
               setShootingRequestDetailId(newId)
             }}
+            onOpenDetail={(id) => {
+              setMyInfoShootingModalId(null)
+              setProtoUserAccountOpen(false)
+              const current = new URLSearchParams(Array.from(searchParams.entries()))
+              if (!isUavAdminSystemKey(systemKeyFromUrl)) {
+                current.set("system", "uav")
+              }
+              current.set("opened", SHOOTING_APPROVAL_OPENED_KEY)
+              pushMapQuery(current)
+              setShootingRequestDetailId(id)
+              setShootingRequestListMode("approval")
+            }}
           />
           {policyMapOpen && (
             <div className="pointer-events-auto shrink-0">
@@ -4747,7 +4759,6 @@ function MapLayoutContent({
               onClose={handleCloseOdorSystemStatus}
             />
           )}
-          <OdorAlertPopupHost enabled={systemKeyFromUrl === "odorAdmin"} />
           <div className="flex-1 min-w-0 relative">
             <div className="pointer-events-auto">
               <MapSearchBar
@@ -4997,6 +5008,14 @@ function MapLayoutContent({
                   })
                   setOpened([AERIAL_DRONE_OPENED_KEY])
                   setProtoUserAccountOpen(false)
+                }}
+                onOpenDataRequest={(item) => {
+                  const href =
+                    item.target === "dataRequestApprove"
+                      ? "/data-request-approve"
+                      : "/data-request"
+                  setProtoUserAccountOpen(false)
+                  window.location.assign(withBasePathNav(href))
                 }}
               />
             </div>

@@ -255,7 +255,7 @@ export function OdorDeviceStatusPanel({
     <section
       className={cn(
         'flex h-full min-h-0 flex-col overflow-hidden',
-        hideHeader ? 'p-2' : 'border border-border p-2'
+        hideHeader ? null : 'border border-border p-2'
       )}
     >
       {!hideHeader ? (

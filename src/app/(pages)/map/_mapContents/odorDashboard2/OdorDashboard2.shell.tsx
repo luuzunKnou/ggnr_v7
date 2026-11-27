@@ -4,6 +4,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   useSyncExternalStore,
   type CSSProperties,
@@ -17,6 +18,7 @@ import { OdorRecentAlertList } from './panels/OdorRecentAlertList'
 import { OdorCautionAlertList } from './panels/OdorCautionAlertList'
 import {
   buildDashboardGradeMock,
+  sortCautionAlerts,
   type OdorAlertItem,
 } from '@/app/(pages)/(index)/odorPh/odorPhDashboardMock'
 import type { OdorSensorListItem } from '@/service/odorSensorService'
@@ -31,7 +33,6 @@ import { useOdorDashboard2GradeLayer } from './useOdorDashboard2GradeLayer'
 import { consumePendingOdorStationFocus } from '@/app/(pages)/(index)/odorPh/systemStatus/odorSystemStatusFocus'
 import { withBasePath } from '@/lib/basePath'
 import { cn } from '@/lib/utils'
-import { MapFloatResizableFrame } from '../../_mapComponents/MapFloatResizableFrame'
 import { MAP_LAYER_PANEL_SURFACE_CLASS } from '../../_mapComponents/mapControlPanel/mapLayerPanelLayout'
 import {
   ODOR_MAP_FLOAT_SURFACE_OPACITY_RESET_CLASS,
@@ -40,12 +41,8 @@ import {
 } from '../odorMapFloatOpacity'
 import {
   ODOR_DASHBOARD2_DETAIL_LEFT_GAP,
-  ODOR_DASHBOARD2_FLOAT_ALERT_MAX_WIDTH,
-  ODOR_DASHBOARD2_FLOAT_ALERT_MIN_WIDTH,
   ODOR_DASHBOARD2_FLOAT_ALERT_WIDTH,
   ODOR_DASHBOARD2_FLOAT_RIGHT_INSET,
-  ODOR_DASHBOARD2_FLOAT_STATS_MAX_WIDTH,
-  ODOR_DASHBOARD2_FLOAT_STATS_MIN_WIDTH,
   ODOR_DASHBOARD2_FLOAT_STATS_WIDTH,
   ODOR_DASHBOARD2_SER_ENG,
   ODOR_DASHBOARD2_UI_MODE_OPTIONS,
@@ -210,7 +207,7 @@ function FloatCollapsiblePanel({
       {open ? (
         <div
           className={cn(
-            'flex min-h-0 flex-1 flex-col overflow-hidden',
+            'flex min-h-0 flex-1 flex-col overflow-hidden p-[4px]',
             bodyClassName
           )}
           style={odorMapFloatBodyOpacityStyle()}
@@ -256,13 +253,10 @@ export function OdorDashboard2Shell({
     caution: true,
   })
   const [detailAlert, setDetailAlert] = useState<OdorAlertItem | null>(null)
-  const [floatGradeWidth, setFloatGradeWidth] = useState(ODOR_DASHBOARD2_FLOAT_STATS_WIDTH)
-  const [floatDeviceWidth, setFloatDeviceWidth] = useState(ODOR_DASHBOARD2_FLOAT_STATS_WIDTH)
-  const [floatRecentWidth, setFloatRecentWidth] = useState(ODOR_DASHBOARD2_FLOAT_ALERT_WIDTH)
-  const [floatCautionWidth, setFloatCautionWidth] = useState(ODOR_DASHBOARD2_FLOAT_ALERT_WIDTH)
+  const cautionPanelRef = useRef<HTMLDivElement>(null)
+  const [cautionPanelHeight, setCautionPanelHeight] = useState<number | null>(null)
 
   const isFloating = uiMode === 'floating'
-  const floatLeftMaxWidth = Math.max(floatGradeWidth, floatDeviceWidth)
   const legacyWidth = Math.max(MIN_WIDTH, viewport - leftOffsetPx)
 
   useEffect(() => {
@@ -282,6 +276,20 @@ export function OdorDashboard2Shell({
   }, [isFloating, legacyWidth, onTotalWidthChange])
 
   useEffect(() => () => onTotalWidthChange(0), [onTotalWidthChange])
+
+  useEffect(() => {
+    if (!isFloating || !panelOpen.caution) {
+      setCautionPanelHeight(null)
+      return
+    }
+    const el = cautionPanelRef.current
+    if (!el) return
+    const sync = () => setCautionPanelHeight(Math.round(el.getBoundingClientRect().height))
+    sync()
+    const ro = new ResizeObserver(sync)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [isFloating, panelOpen.caution, panelOpen.recent])
 
   const loadSensors = useCallback(async () => {
     setLoading(true)
@@ -324,6 +332,21 @@ export function OdorDashboard2Shell({
     [sensors, points]
   )
 
+  /** 실센서 지점 기준 경보 카드 — 클릭 시 지도 이동과 동일 키 사용 */
+  const recentAlertItems = useMemo(() => {
+    if (stationRows.length === 0) return undefined
+    return [...stationRows]
+      .sort((a, b) => b.ppm - a.ppm)
+      .map(stationRowToAlertItem)
+  }, [stationRows])
+
+  const cautionAlertItems = useMemo(() => {
+    if (stationRows.length === 0) return undefined
+    return sortCautionAlerts(
+      stationRows.filter((r) => r.grade === 3).map(stationRowToAlertItem)
+    )
+  }, [stationRows])
+
   const [deviceHeaderRight, setDeviceHeaderRight] = useState<ReactNode>(null)
 
   useOdorDashboard2GradeLayer({
@@ -348,13 +371,21 @@ export function OdorDashboard2Shell({
     setDetailAlert(row ? stationRowToAlertItem(row) : null)
   }
 
-  /** 동일 경보 행 재클릭 시 상세 닫기 */
+  /** 동일 경보 행 재클릭 시 상세 닫기 — 선택 시 지점 목록과 동일하게 지도 이동 */
   const handleSelectAlert = (alert: OdorAlertItem) => {
     setDetailAlert((prev) => {
       if (prev?.id === alert.id) {
         setHighlightSensorKey(null)
         return null
       }
+      const row =
+        stationRows.find(
+          (r) =>
+            alert.id === `st-${r.id}` ||
+            r.sensorKorNm === alert.sensorKorNm ||
+            (r.sensorNm === alert.sensorNm && r.agency === alert.agency)
+        ) ?? null
+      setHighlightSensorKey(row?.id ?? null)
       return alert
     })
   }
@@ -409,75 +440,62 @@ export function OdorDashboard2Shell({
         className="pointer-events-none fixed inset-0 z-30"
         data-ser-eng={ODOR_DASHBOARD2_SER_ENG}
       >
-        {/* 좌측: 패널별 독립 너비(우측 핸들) */}
+        {/* 좌측: 고정 폭 패널 */}
         <div
           className="pointer-events-none absolute flex flex-col gap-2 overflow-hidden"
           style={{
             left: floatLeft,
             top: 60,
+            width: ODOR_DASHBOARD2_FLOAT_STATS_WIDTH,
             maxHeight: 'calc(100vh - 70px)',
             height: 'calc(100vh - 70px)',
           }}
         >
-          <MapFloatResizableFrame
-            width={floatGradeWidth}
-            minWidth={ODOR_DASHBOARD2_FLOAT_STATS_MIN_WIDTH}
-            maxWidth={ODOR_DASHBOARD2_FLOAT_STATS_MAX_WIDTH}
-            onWidthChange={setFloatGradeWidth}
-            resizeEdge="right"
-            className="pointer-events-none shrink-0"
-          >
-            <FloatCollapsiblePanel
-              title="악취 등급 분포"
-              open={panelOpen.grade}
-              onToggle={() => togglePanel('grade')}
-              className="shrink-0"
-              bodyClassName="!flex-none"
-              headerRight={
-                <>
-                  <UiModeSelect
-                    id="odor-dashboard-ui-mode-float"
-                    value={uiMode}
-                    onChange={setUiMode}
-                    className="border-slate-200 bg-white text-slate-800 dark:border-white/20 dark:bg-black/40 dark:text-white/90"
-                  />
-                  <button
-                    type="button"
-                    className="standard-map-float-header-close inline-flex h-7 w-7 items-center justify-center"
-                    onClick={onClose}
-                    title="닫기"
-                    aria-label="닫기"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                </>
-              }
-            >
-              <div className="flex shrink-0 items-center gap-1.5 border-b border-slate-100 px-2 py-1 dark:border-white/10">
-                {headerActions}
-              </div>
-              {error ? (
-                <p className="shrink-0 px-2 py-1 text-[11px] text-destructive">{error}</p>
-              ) : null}
-              <div className="shrink-0 overflow-hidden">
-                <OdorGradeDistributionPanel
-                  counts={gradeCounts}
-                  points={points}
-                  emdStatuses={emdStatuses}
-                  sensors={sensors}
-                  highlightSensorKey={highlightSensorKey}
-                  hideMiniMap
+          <FloatCollapsiblePanel
+            title="악취 등급 분포"
+            open={panelOpen.grade}
+            onToggle={() => togglePanel('grade')}
+            className="shrink-0"
+            bodyClassName="!flex-none"
+            headerRight={
+              <>
+                <UiModeSelect
+                  id="odor-dashboard-ui-mode-float"
+                  value={uiMode}
+                  onChange={setUiMode}
+                  className="border-slate-200 bg-white text-slate-800 dark:border-white/20 dark:bg-black/40 dark:text-white/90"
                 />
-              </div>
-            </FloatCollapsiblePanel>
-          </MapFloatResizableFrame>
+                <button
+                  type="button"
+                  className="standard-map-float-header-close inline-flex h-7 w-7 items-center justify-center"
+                  onClick={onClose}
+                  title="닫기"
+                  aria-label="닫기"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </>
+            }
+          >
+            <div className="flex shrink-0 items-center gap-1.5 border-b border-slate-100 px-2 py-1 dark:border-white/10">
+              {headerActions}
+            </div>
+            {error ? (
+              <p className="shrink-0 px-2 py-1 text-[11px] text-destructive">{error}</p>
+            ) : null}
+            <div className="shrink-0 overflow-hidden">
+              <OdorGradeDistributionPanel
+                counts={gradeCounts}
+                points={points}
+                emdStatuses={emdStatuses}
+                sensors={sensors}
+                highlightSensorKey={highlightSensorKey}
+                hideMiniMap
+              />
+            </div>
+          </FloatCollapsiblePanel>
 
-          <MapFloatResizableFrame
-            width={floatDeviceWidth}
-            minWidth={ODOR_DASHBOARD2_FLOAT_STATS_MIN_WIDTH}
-            maxWidth={ODOR_DASHBOARD2_FLOAT_STATS_MAX_WIDTH}
-            onWidthChange={setFloatDeviceWidth}
-            resizeEdge="right"
+          <div
             className={cn(
               'pointer-events-none',
               panelOpen.device ? 'min-h-0 flex-1' : 'shrink-0'
@@ -501,27 +519,23 @@ export function OdorDashboard2Shell({
                 />
               </div>
             </FloatCollapsiblePanel>
-          </MapFloatResizableFrame>
+          </div>
         </div>
 
-        {/* 우측: 패널별 독립 너비(좌측 핸들) */}
+        {/* 우측: 고정 폭 경보 패널 */}
         <div
           className="pointer-events-none absolute flex flex-col items-end gap-2"
           style={{
             right: ODOR_DASHBOARD2_FLOAT_RIGHT_INSET,
             bottom: 12,
             top: 60,
+            width: ODOR_DASHBOARD2_FLOAT_ALERT_WIDTH,
             height: 'calc(100vh - 72px)',
           }}
         >
-          <MapFloatResizableFrame
-            width={floatRecentWidth}
-            minWidth={ODOR_DASHBOARD2_FLOAT_ALERT_MIN_WIDTH}
-            maxWidth={ODOR_DASHBOARD2_FLOAT_ALERT_MAX_WIDTH}
-            onWidthChange={setFloatRecentWidth}
-            resizeEdge="left"
+          <div
             className={cn(
-              'pointer-events-none',
+              'pointer-events-none w-full',
               panelOpen.recent
                 ? panelOpen.caution
                   ? 'min-h-0 flex-1 basis-0'
@@ -538,6 +552,7 @@ export function OdorDashboard2Shell({
             >
               <div className="min-h-0 flex-1 overflow-hidden">
                 <OdorRecentAlertList
+                  items={recentAlertItems}
                   onGoAlertList={onOpenAlertList}
                   hideHeader
                   onSelectAlert={handleSelectAlert}
@@ -545,16 +560,12 @@ export function OdorDashboard2Shell({
                 />
               </div>
             </FloatCollapsiblePanel>
-          </MapFloatResizableFrame>
+          </div>
 
-          <MapFloatResizableFrame
-            width={floatCautionWidth}
-            minWidth={ODOR_DASHBOARD2_FLOAT_ALERT_MIN_WIDTH}
-            maxWidth={ODOR_DASHBOARD2_FLOAT_ALERT_MAX_WIDTH}
-            onWidthChange={setFloatCautionWidth}
-            resizeEdge="left"
+          <div
+            ref={cautionPanelRef}
             className={cn(
-              'pointer-events-none',
+              'pointer-events-none w-full',
               panelOpen.caution
                 ? panelOpen.recent
                   ? 'min-h-0 flex-1 basis-0'
@@ -571,6 +582,7 @@ export function OdorDashboard2Shell({
             >
               <div className="min-h-0 flex-1 overflow-hidden">
                 <OdorCautionAlertList
+                  items={cautionAlertItems}
                   onGoAlertList={onOpenAlertList}
                   hideHeader
                   onSelectAlert={handleSelectAlert}
@@ -578,7 +590,7 @@ export function OdorDashboard2Shell({
                 />
               </div>
             </FloatCollapsiblePanel>
-          </MapFloatResizableFrame>
+          </div>
         </div>
 
       </div>,
@@ -586,8 +598,9 @@ export function OdorDashboard2Shell({
         )}
         <OdorAlertDetailBottomSheet
           alert={detailAlert}
-          leftPx={floatLeft + floatLeftMaxWidth + ODOR_DASHBOARD2_DETAIL_LEFT_GAP}
+          leftPx={floatLeft + ODOR_DASHBOARD2_FLOAT_STATS_WIDTH + ODOR_DASHBOARD2_DETAIL_LEFT_GAP}
           bottomPx={12}
+          matchHeightPx={cautionPanelHeight}
           stations={stationRows}
           onClose={handleCloseDetail}
         />
