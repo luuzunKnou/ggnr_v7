@@ -8,10 +8,12 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronUp,
+  FileLock,
   Plus,
   RotateCcw,
   Settings2,
   X,
+  type LucideIcon,
 } from 'lucide-react'
 import { call } from '@/lib/api'
 import { getBasePath, withBasePath, withBasePathNav } from '@/lib/basePath'
@@ -48,8 +50,9 @@ type SystemItem = {
 }
 
 const FAVORITES_STORAGE_KEY = 'ggnr.proto.moreFavorites'
-const ALWAYS_SHOW_ENGS_BASE = ['notice', 'board', 'systemFeedback'] as const
+const ALWAYS_SHOW_ENGS_BASE = ['notice', 'board', 'systemFeedback', 'dataRequest'] as const
 const SYSTEM_FEEDBACK_ENG = 'systemFeedback'
+const DATA_REQUEST_ENG = 'dataRequest'
 
 type FavItem = ServiceItem & { token: string }
 
@@ -73,7 +76,8 @@ function migrateFavoriteTokens(tokens: string[], systems: SystemItem[]): string[
       ? token
       : eng === 'notice' ||
           eng === 'board' ||
-          eng === SYSTEM_FEEDBACK_ENG
+          eng === SYSTEM_FEEDBACK_ENG ||
+          eng === DATA_REQUEST_ENG
         ? eng
         : (() => {
             const first = systems.find((s) => s.serviceList.includes(eng))
@@ -260,6 +264,11 @@ const COMMON_MENU_ICON_EXT: Record<string, 'png'> = {
   [SYSTEM_FEEDBACK_ENG]: 'png',
 }
 
+/** 공통 메뉴 Lucide 아이콘 */
+const COMMON_MENU_LUCIDE: Record<string, LucideIcon> = {
+  [DATA_REQUEST_ENG]: FileLock,
+}
+
 function MaskGlyph({ src }: { src: string }) {
   return (
     <span
@@ -280,6 +289,10 @@ function MaskGlyph({ src }: { src: string }) {
 }
 
 function ServiceGlyph({ item }: { item: ServiceItem }) {
+  const LucideGlyph = COMMON_MENU_LUCIDE[item.ser_eng]
+  if (LucideGlyph) {
+    return <LucideGlyph className="h-6 w-6 shrink-0" strokeWidth={1} aria-hidden />
+  }
   const commonExt = COMMON_MENU_ICON_EXT[item.ser_eng]
   if (commonExt) {
     const iconKey = SERVICE_ICON_ALIASES[item.ser_eng] ?? item.ser_eng
@@ -399,6 +412,12 @@ export function UserAccountMoreTab({
         ser_svg: null,
       })
     }
+    const dataReqExisting = map.get(DATA_REQUEST_ENG)
+    map.set(DATA_REQUEST_ENG, {
+      ser_eng: DATA_REQUEST_ENG,
+      ser_kor: '데이터 요청',
+      ser_svg: dataReqExisting?.ser_svg ?? null,
+    })
     return map
   }, [services, bootProject])
 

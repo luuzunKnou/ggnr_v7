@@ -28,7 +28,7 @@ import { UserAccountApproveTab } from './UserAccountApproveTab'
 const PANEL_SHELL_ROUND = 'rounded-[5px]'
 const USER_ACCOUNT_PANEL_HEIGHT = ''
 /** 3탭 본문 공통 높이(px) — 모달 높이 조절은 이 값 */
-const TAB_BODY_HEIGHT_PX = 240
+const TAB_BODY_HEIGHT_PX = 285
 const PANEL_ROUND = 'rounded-sm'
 const BUBBLE_ROUND = 'rounded-[2px]'
 const TEXT_BODY = 'text-xs'
