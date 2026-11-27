@@ -6,11 +6,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/app/shadcnCo
 import {
   fetchParcelLandModalList,
   fetchParcelTabData,
-  fetchPersonInfoMaskEnabled,
+  fetchPersonInfoMaskState,
   type ParcelLandModalKind,
   type ParcelTabData,
 } from './api';
-import { formatPersonField } from './landPersonInfoMask';
+import { formatPersonField, maskParcelLandModalRows } from './landPersonInfoMask';
 import {
   BuildingDataSourceLine,
   LandLinkageLegendText,
@@ -209,8 +209,8 @@ export type LandInfoParcelPanelProps = {
   narrow?: boolean;
   /** 토지기본정보에서 숨길 항목명 (상위 화면에 이미 있는 항목) */
   hideBasicFields?: string[];
-  /** «행망 미사용: …» 안내 숨김 (VWorld 대체 조회 시 안내가 필요 없는 화면) */
-  hideKrasSkipReason?: boolean;
+  /** 연계 조회 이력 접속페이지 (예: privateLandAnalysis) */
+  auditChannel?: string;
 };
 
 export function LandInfoParcelPanel({
@@ -222,7 +222,7 @@ export function LandInfoParcelPanel({
   parcelError: parcelErrorProp,
   narrow = false,
   hideBasicFields,
-  hideKrasSkipReason = false,
+  auditChannel,
 }: LandInfoParcelPanelProps) {
   const controlled = parcelDataProp !== undefined;
   const [internalData, setInternalData] = useState<ParcelTabData>({
@@ -240,11 +240,14 @@ export function LandInfoParcelPanel({
   const [modalRows, setModalRows] = useState<string[][]>([]);
   const [modalMessage, setModalMessage] = useState<string | null>(null);
   const [personInfoMask, setPersonInfoMask] = useState(false);
+  const [personInfoMaskWide, setPersonInfoMaskWide] = useState(false);
 
   useEffect(() => {
     let alive = true;
-    void fetchPersonInfoMaskEnabled().then((enabled) => {
-      if (alive) setPersonInfoMask(enabled);
+    void fetchPersonInfoMaskState().then((state) => {
+      if (!alive) return;
+      setPersonInfoMask(state.enabled);
+      setPersonInfoMaskWide(state.maskWide);
     });
     return () => {
       alive = false;
@@ -258,11 +261,12 @@ export function LandInfoParcelPanel({
   useEffect(() => {
     if (controlled) return;
     const trimmed = String(pnu ?? '').trim();
-    if (!trimmed || !vworldKey) return;
+    // 이력만 남기려는 경우(사유지분석 등) vworldKey 없이도 서버 연계 호출
+    if (!trimmed || (!vworldKey && !auditChannel)) return;
     let alive = true;
     setInternalFetching(true);
     setInternalError(null);
-    fetchParcelTabData({ pnu: trimmed, vworldKey })
+    fetchParcelTabData({ pnu: trimmed, vworldKey, auditChannel })
       .then((data) => {
         if (!alive) return;
         setInternalData(data);
@@ -278,7 +282,7 @@ export function LandInfoParcelPanel({
     return () => {
       alive = false;
     };
-  }, [controlled, pnu, vworldKey]);
+  }, [controlled, pnu, vworldKey, auditChannel]);
 
   const showBasic = (key: string) => !hideBasicFields?.includes(key);
   const latestChar = parcelData.characteristics[0];
@@ -327,9 +331,16 @@ export function LandInfoParcelPanel({
 
     setModalFetching(true);
     try {
-      const res = await fetchParcelLandModalList({ pnu: trimmed, kind });
+      const [res, maskState] = await Promise.all([
+        fetchParcelLandModalList({ pnu: trimmed, kind }),
+        fetchPersonInfoMaskState(),
+      ]);
+      setPersonInfoMask(maskState.enabled);
+      setPersonInfoMaskWide(maskState.maskWide);
       setModalHeaders(res.headers);
-      setModalRows(res.rows);
+      setModalRows(
+        maskState.enabled ? maskParcelLandModalRows(kind, res.rows, true) : res.rows
+      );
       setModalMessage(res.error || res.message || (res.rows.length ? null : '조회 결과가 없습니다.'));
     } catch {
       setModalMessage('조회에 실패했습니다.');
@@ -367,11 +378,6 @@ export function LandInfoParcelPanel({
             <p className="text-[11px] text-muted-foreground">연계 데이터 없음</p>
           ) : null}
           {parcelData.source ? <ParcelLandLinkageSourceText source={parcelData.source} /> : null}
-          {parcelData.krasSkipReason && !hideKrasSkipReason ? (
-            <p className="text-[11px] leading-relaxed text-amber-800">
-              행망 미사용: {parcelData.krasSkipReason}
-            </p>
-          ) : null}
           <LandLinkageLegendText source={parcelData.source} />
           <section className="space-y-1.5">
             <p className="text-xs font-semibold text-foreground">토지기본정보</p>
@@ -463,7 +469,7 @@ export function LandInfoParcelPanel({
               />
               <LinkageCell
                 k="등록번호"
-                v={getField(latestPossession, ['dregno', 'DREGNO'])}
+                v={formatPersonField(getField(latestPossession, ['dregno', 'DREGNO']), personInfoMaskWide)}
                 source={parcelData.source}
                 narrow={narrow}
               />
@@ -487,7 +493,10 @@ export function LandInfoParcelPanel({
               )}
               <LinkageCell
                 k="주소"
-                v={getField(latestPossession, ['ownerAddr', 'address'])}
+                v={formatPersonField(
+                  getField(latestPossession, ['ownerAddr', 'address']),
+                  personInfoMaskWide
+                )}
                 source={parcelData.source}
                 narrow={narrow}
                 span

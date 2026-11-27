@@ -474,13 +474,15 @@ table.standard-detail-attr-table tr:last-child > .standard-detail-attr-cell-bord
 }
 
 .standard-detail-attr-value.standard-detail-attr-value-title,
-.dark .standard-detail-attr-value.standard-detail-attr-value-title {
+.dark .standard-detail-attr-value.standard-detail-attr-value-title,
+.dark_v2 .standard-detail-attr-value.standard-detail-attr-value-title {
   font-weight: 500;
   color: var(--primary);
 }
 
 td.standard-detail-attr-value.standard-detail-attr-value-title,
-.dark td.standard-detail-attr-value.standard-detail-attr-value-title {
+.dark td.standard-detail-attr-value.standard-detail-attr-value-title,
+.dark_v2 td.standard-detail-attr-value.standard-detail-attr-value-title {
   font-weight: 500;
   color: var(--primary);
 }

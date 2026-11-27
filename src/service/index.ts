@@ -68,6 +68,8 @@ import * as mapAnalyseService from './mapAnalyseService';
 import * as elevationService from './elevationService';
 import * as floodRiskService from './floodRiskService';
 import * as landLinkageService from './landLinkageService';
+import * as landLinkageQueryLogService from './landLinkageQueryLogService';
+import * as krasPiiPermissionService from './krasPiiPermissionService';
 import * as seumService from './seumService';
 /** API `service: 'seumPermitService'` 호환 — seumService와 동일 모듈 */
 import * as seumPermitService from './seumService';
@@ -94,6 +96,7 @@ import * as thematicMapService from './thematicMapService';
 import * as roadWorkHandbookService from './roadWorkHandbookService';
 import * as qgisLayerControlService from './qgisLayerControlService';
 import * as userDataUploadService from './userDataUploadService';
+import * as myMapService from './myMapService';
 import * as systemControlService from './systemControlService';
 import * as splitLayerService from './splitLayerService';
 import * as dashboardStatsService from './dashboardStatsService';
@@ -180,6 +183,8 @@ export {
   elevationService,
   floodRiskService,
   landLinkageService,
+  landLinkageQueryLogService,
+  krasPiiPermissionService,
   seumService,
   seumPermitService,
   memoService,
@@ -203,6 +208,7 @@ export {
   roadWorkHandbookService,
   qgisLayerControlService,
   userDataUploadService,
+  myMapService,
   systemControlService,
   splitLayerService,
   dashboardStatsService,

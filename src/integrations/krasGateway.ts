@@ -6,6 +6,7 @@ import iconv from 'iconv-lite';
 
 import { KRAS_DOWNLOAD_TIMEOUT_MS } from '@/integrations/krasLayerSync.config';
 import { appendLinkageError } from '@/integrations/linkageErrorLog';
+import { redactKrasFaultBody } from '@/lib/personInfoMask';
 import { getLandLinkageConfig } from '@/service/configService';
 
 export type KrasConn = {
@@ -157,10 +158,11 @@ function redactConnKey(text: string): string {
 }
 
 export function logKrasGatewayFault(url: string, title: string, body: string): void {
+  const safeBody = redactKrasFaultBody(body.trim());
   void appendLinkageError({
     system: linkageSystemFromUrl(url),
     title,
-    detail: `요청: ${redactKrasUrl(url)}\n\n${body.trim() || '(본문 없음)'}`,
+    detail: `요청: ${redactKrasUrl(url)}\n\n${safeBody || '(본문 없음)'}`,
   });
 }
 

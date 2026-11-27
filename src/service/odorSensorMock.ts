@@ -29,4 +29,8 @@ export const MOCK_ODOR_SENSORS_FROM_DB: ReadonlyArray<OdorSensorMockRow> = [
   { sensorKey: 15, agency: '가람환경기술', sensorNm: 'A15', sensorKorNm: '공영주차장', lon: 129.36990931679844, lat: 36.034156326540426 },
   { sensorKey: 16, agency: '디오솔류션', sensorNm: '1', sensorKorNm: '영일대 #1', lon: 129.37991790741498, lat: 36.06059337875942 },
   { sensorKey: 17, agency: '디오솔류션', sensorNm: '4', sensorKorNm: '영일대 #4', lon: 129.38475206012723, lat: 36.0645066274399 },
+  { sensorKey: 18, agency: '삼도환경', sensorNm: 'S1', sensorKorNm: '해도항 #1', lon: 129.375412, lat: 36.048216 },
+  { sensorKey: 19, agency: '삼도환경', sensorNm: 'S2', sensorKorNm: '해도항 #2', lon: 129.376891, lat: 36.049104 },
+  { sensorKey: 20, agency: '삼도환경', sensorNm: 'S3', sensorKorNm: '송도해변', lon: 129.372055, lat: 36.051883 },
+  { sensorKey: 21, agency: '삼도환경', sensorNm: 'S4', sensorKorNm: '죽도시장 인근', lon: 129.365812, lat: 36.029447 },
 ];

@@ -387,6 +387,7 @@ export async function listAnalyzeLandRows(params: {
 /** 토지이용계획 — 서버는 행망(KRAS000025). 브이월드는 클라 점진 로딩 */
 export async function fetchLandUseZonesByPnus(params: {
   pnus?: string[];
+  groupKey?: string;
 }): Promise<FetchLandUseZonesResult> {
   return fetchLandUseZonesByPnusLinkage(params);
 }
@@ -394,6 +395,7 @@ export async function fetchLandUseZonesByPnus(params: {
 /** 토지현황 표시 행만 연계 보강 — 소유·지목 통계는 점진 로딩에서 재집계 */
 export async function enrichParcelLandRows(params: {
   landRows?: AnalyzeLandRowResult[];
+  groupKey?: string;
 }): Promise<EnrichParcelLandRowsResult> {
   const empty: EnrichParcelLandRowsResult = { ok: false, landRows: [] };
   const input = Array.isArray(params?.landRows) ? params.landRows : [];
@@ -414,7 +416,8 @@ export async function enrichParcelLandRows(params: {
   if (!pnus.length) return { ok: true, landRows: input };
 
   try {
-    const { enrichments, source } = await enrichParcelLandsByPnus({ pnus });
+    const groupKey = String(params.groupKey ?? '').trim() || undefined;
+    const { enrichments, source } = await enrichParcelLandsByPnus({ pnus, groupKey });
     const merged = applyEnrichmentToLandRows(baseRows, enrichments);
     return {
       ok: true,

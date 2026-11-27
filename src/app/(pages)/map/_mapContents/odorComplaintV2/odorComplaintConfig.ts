@@ -1,0 +1,11 @@
+/** 하수악취 V2 민원 관리 — 메뉴·opened 키 */
+
+export const ODOR_COMPLAINT_V2_OPENED_KEY = 'odorComplaintV2'
+export const ODOR_COMPLAINT_V2_SER_ENG = 'odorComplaintV2'
+
+export const ODOR_COMPLAINT_OPENED_KEY = ODOR_COMPLAINT_V2_OPENED_KEY
+export const ODOR_COMPLAINT_SER_ENG = ODOR_COMPLAINT_V2_SER_ENG
+
+export const ODOR_COMPLAINT_PANEL_DEFAULT_WIDTH = 420
+export const ODOR_COMPLAINT_PANEL_MIN_WIDTH = 340
+export const ODOR_COMPLAINT_PANEL_MAX_WIDTH = 560

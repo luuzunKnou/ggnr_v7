@@ -14,7 +14,7 @@ import '../../_mapComponents/config/projections';
 import type { UploadCrsCode } from './userDataUploadConfig';
 import type { RawPreviewGeometry } from './userDataUploadParse';
 
-const LAYER_KEY = 'user-data-upload-preview';
+const DEFAULT_LAYER_KEY = 'user-data-upload-preview';
 
 /** 국내 표시 범위(경위도) — 벗어나면 좌표계가 틀린 것으로 본다 */
 const KOREA_EXTENT_4326: [number, number, number, number] = [124, 33, 132, 39];
@@ -91,7 +91,8 @@ function preparePreview(geometries: RawPreviewGeometry[], crs: UploadCrsCode): P
 export function useUserDataUploadPreviewLayer(
   enabled: boolean,
   geometries: RawPreviewGeometry[],
-  crs: UploadCrsCode | ''
+  crs: UploadCrsCode | '',
+  layerId: string = DEFAULT_LAYER_KEY
 ): UploadPreviewLayerStatus {
   const mapContext = useMapContext();
   const sourceRef = useRef(new VectorSource());
@@ -112,7 +113,7 @@ export function useUserDataUploadPreviewLayer(
         source,
         style: previewStyle,
         zIndex: GEOM_STACK_UI_ZINDEX_MIN + 5,
-        properties: { id: LAYER_KEY, geomStackSkip: true },
+        properties: { id: layerId, geomStackSkip: true },
       });
     }
     const layer = layerRef.current;
@@ -121,7 +122,7 @@ export function useUserDataUploadPreviewLayer(
       map.removeLayer(layer);
       source.clear();
     };
-  }, [mapRef]);
+  }, [mapRef, layerId]);
 
   useEffect(() => {
     const map = mapRef?.current;

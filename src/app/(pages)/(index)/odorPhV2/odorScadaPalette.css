@@ -1,0 +1,101 @@
+/**
+ * odor_ph 전용 관제 다크 팔레트 B·C
+ * html[data-ggnr-project=odor_ph].dark_v2[data-odor-scada-palette]
+ */
+
+html[data-ggnr-project='odor_ph'].dark_v2[data-odor-scada-palette='b'] {
+  --background: #0b1017;
+  --foreground: #dce3ee;
+  --card: #121925;
+  --card-foreground: #dce3ee;
+  --popover: #121925;
+  --popover-foreground: #dce3ee;
+  --secondary: #182131;
+  --secondary-foreground: #dce3ee;
+  --muted: #182131;
+  --muted-foreground: #8b97ab;
+  --accent: #182131;
+  --accent-foreground: #dce3ee;
+  --border: #1e2a3a;
+  --input: #1e2a3a;
+  --sidebar: #121925;
+  --sidebar-foreground: #dce3ee;
+  --sidebar-accent: #182131;
+  --sidebar-accent-foreground: #dce3ee;
+  --sidebar-border: #1e2a3a;
+  --scrollbar-thumb: #2a3a50;
+  --scrollbar-thumb-hover: #3a4e6a;
+}
+
+html[data-ggnr-project='odor_ph'].dark_v2[data-odor-scada-palette='c'] {
+  --background: #0f141b;
+  --foreground: #e2e8f0;
+  --card: #171e28;
+  --card-foreground: #e2e8f0;
+  --popover: #171e28;
+  --popover-foreground: #e2e8f0;
+  --secondary: #1e2734;
+  --secondary-foreground: #e2e8f0;
+  --muted: #1e2734;
+  --muted-foreground: #94a0b3;
+  --accent: #1e2734;
+  --accent-foreground: #e2e8f0;
+  --border: #263041;
+  --input: #263041;
+  --sidebar: #171e28;
+  --sidebar-foreground: #e2e8f0;
+  --sidebar-accent: #1e2734;
+  --sidebar-accent-foreground: #e2e8f0;
+  --sidebar-border: #263041;
+  --scrollbar-thumb: #334155;
+  --scrollbar-thumb-hover: #475569;
+}
+
+/* 좌측 사이드바 — 지도가 비치도록 반투명 + 블러 (팔레트 톤 유지) */
+html[data-ggnr-project='odor_ph'].dark_v2[data-odor-scada-palette='b'] [data-map-sidebar],
+html[data-ggnr-project='odor_ph'].dark_v2[data-odor-scada-palette='c'] [data-map-sidebar] {
+  background-color: color-mix(in srgb, var(--background) 70%, transparent) !important;
+  border-right: 1px solid var(--border);
+  backdrop-filter: blur(10px);
+}
+
+/* 우측 맵 컨트롤 버튼 레일 */
+html[data-ggnr-project='odor_ph'].dark_v2[data-odor-scada-palette='b'] [data-map-control-rail],
+html[data-ggnr-project='odor_ph'].dark_v2[data-odor-scada-palette='c'] [data-map-control-rail] {
+  background-color: color-mix(in srgb, var(--card) 96%, transparent) !important;
+  border-color: var(--border) !important;
+  color: var(--foreground);
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.35);
+}
+
+/* 우측 확장 패널(배경지도·지적도 등) */
+html[data-ggnr-project='odor_ph'].dark_v2[data-odor-scada-palette='b'] .standard-map-float-surface,
+html[data-ggnr-project='odor_ph'].dark_v2[data-odor-scada-palette='c'] .standard-map-float-surface {
+  background-color: color-mix(in srgb, var(--card) 96%, transparent) !important;
+  border-color: var(--border) !important;
+  color: var(--card-foreground);
+  opacity: 1;
+}
+
+html[data-ggnr-project='odor_ph'].dark_v2[data-odor-scada-palette='b'] .standard-map-float-header,
+html[data-ggnr-project='odor_ph'].dark_v2[data-odor-scada-palette='c'] .standard-map-float-header {
+  background-color: color-mix(in srgb, var(--muted) 90%, transparent) !important;
+  color: var(--foreground);
+}
+
+/*
+ * 좌측 업무 사이드 목록 패널 — 통합현황 카드 톤(--card).
+ * data-ggnr-project / 팔레트 속성이 없어도 dark_v2 이면 적용 (미마운트 sync 대비).
+ */
+html.dark_v2 [data-map-side-list-panel] {
+  background-color: var(--card) !important;
+  border-color: var(--border) !important;
+  color: var(--card-foreground);
+}
+
+html[data-ggnr-project='odor_ph'].dark_v2[data-odor-scada-palette='b'] [data-map-side-list-panel],
+html[data-ggnr-project='odor_ph'].dark_v2[data-odor-scada-palette='c'] [data-map-side-list-panel] {
+  background-color: var(--card) !important;
+  border-color: var(--border) !important;
+  color: var(--card-foreground);
+}

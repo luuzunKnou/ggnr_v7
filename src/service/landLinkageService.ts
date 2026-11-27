@@ -19,8 +19,13 @@ import {
   type ParcelLandSource,
 } from '@/lib/parcelLandNormalize';
 import { getLandLinkageConfig } from '@/service/configService';
-import { isPersonInfoMaskEnabled } from '@/service/systemControlService';
+import {
+  getPersonInfoMaskFlagsForSession,
+  shouldMaskPersonInfoForSession,
+} from '@/service/systemControlService';
+import { runWithAuditClientIpHint } from '@/lib/auditClientIpContext';
 import { maskPersonFieldByLength } from '@/lib/personInfoMask';
+import { getSessionUsrId } from '@/lib/auth/guard';
 import {
   PARCEL_ANALYSIS_LINKAGE_CONCURRENCY,
   PARCEL_ANALYSIS_LINKAGE_TIMEOUT_MS,
@@ -31,14 +36,171 @@ import {
   logKrasGatewayFault,
   redactKrasUrl,
 } from '@/integrations/krasGateway';
+import {
+  LLQ_AUDIT_KRAS_SVC_IDS,
+  llqSystemForSvc,
+  scheduleAppendQueryLogs,
+  type QueryLogInsert,
+  type QueryLogStatus,
+} from '@/service/landLinkageQueryLogService';
 
 const KRAS_LAND_QUERY_ID = 'KRAS000002';
 const KRAS_SHARE_QUERY_ID = 'KRAS000003';
 const KRAS_MOVE_HIST_QUERY_ID = 'KRAS000006';
 const KRAS_CHANGE_HIST_QUERY_ID = 'KRAS000007';
 const KRAS_LAND_USE_QUERY_ID = 'KRAS000025';
-const KRAS_LAYER_LIST_QUERY_ID = 'KRAS000037';
+
+/** 필지정보 탭에 실제로 쓰는 조회만 — 공유·이동·변동·공시지가는 모달 시 */
+const PARCEL_INFO_TAB_SVC_IDS = [KRAS_LAND_QUERY_ID, KRAS_LAND_USE_QUERY_ID] as const;
 const KOREPS_PRICE_QUERY_ID = 'KOREPS00011';
+
+/** 같은 사용자·필지 필지정보 이력을 짧은 시간에 한 번만 (Strict Mode·키 재조회·운영 중복 방지) */
+const PARCEL_INFO_AUDIT_DEDUPE_MS = 4000;
+const parcelInfoAuditAtByKey = new Map<string, number>();
+
+function claimParcelInfoAuditSlot(
+  usrId: string | null | undefined,
+  pnu: string,
+  channel: string
+): boolean {
+  const key = `${String(usrId ?? '').trim()}|${channel}|${pnu}`;
+  const now = Date.now();
+  const prev = parcelInfoAuditAtByKey.get(key);
+  if (prev != null && now - prev < PARCEL_INFO_AUDIT_DEDUPE_MS) return false;
+  parcelInfoAuditAtByKey.set(key, now);
+  if (parcelInfoAuditAtByKey.size > 800) {
+    for (const [k, at] of parcelInfoAuditAtByKey) {
+      if (now - at > 60_000) parcelInfoAuditAtByKey.delete(k);
+    }
+  }
+  return true;
+}
+
+/** 필지정보 탭 이력 접속페이지 — 허용 목록 외는 parcelInfo */
+function parcelLandInfoAuditChannel(raw: unknown): string {
+  const c = toStr(raw);
+  if (c === 'privateLandAnalysis' || c === 'cadastralResurvey' || c === 'smallPublicPlan') {
+    return c;
+  }
+  return 'parcelInfo';
+}
+
+type LinkageProbeResult = {
+  xml: string;
+  httpStatus: number;
+  error?: string;
+  ms?: number;
+};
+
+function newLlqGroupKey(): string {
+  return globalThis.crypto?.randomUUID?.() ?? `llq-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function statusFromProbe(probe: LinkageProbeResult): QueryLogStatus {
+  if (probe.error) {
+    if (probe.error.includes('키/주소 없음') || probe.error.includes('호출하지 않음')) return 'skip';
+    return 'fail';
+  }
+  if (!probe.xml.trim()) return 'empty';
+  return 'ok';
+}
+
+function statusFromXmlResult(r: { xml: string; error?: string }, hasRows: boolean): QueryLogStatus {
+  if (r.error) {
+    if (r.error.includes('키/주소 없음') || r.error.includes('호출하지 않음') || r.error.includes('접속정보')) {
+      return 'skip';
+    }
+    return 'fail';
+  }
+  if (!hasRows) return 'empty';
+  return 'ok';
+}
+
+function scheduleKrasSkipLogs(args: {
+  pnu: string;
+  sgg?: string;
+  channel: string;
+  message?: string;
+  svcIds?: readonly string[];
+  groupKey?: string;
+  clientIp?: string | null;
+}) {
+  const groupKey = args.groupKey ?? newLlqGroupKey();
+  const svcIds = args.svcIds ?? LLQ_AUDIT_KRAS_SVC_IDS;
+  const message = args.message?.trim() || undefined;
+  const clientIp = args.clientIp?.trim() || undefined;
+  scheduleAppendQueryLogs(
+    svcIds.map((svcId) => ({
+      groupKey,
+      channel: args.channel,
+      system: llqSystemForSvc(svcId),
+      svcId,
+      pnu: args.pnu,
+      sgg: args.sgg,
+      status: 'skip',
+      message,
+      clientIp,
+    }))
+  );
+}
+
+/** 개발·시연: 행망 미호출이어도 운영과 비슷한 서비스·묶음 형태를 ok로 남겨 UI·보고서 미리보기 */
+const NON_PROD_MIRROR_MESSAGE = '브이월드·공공데이터';
+
+function scheduleNonProdMirrorLogs(args: {
+  pnu: string;
+  sgg?: string;
+  channel: string;
+  svcIds: readonly string[];
+  groupKey?: string;
+  clientIp?: string | null;
+  message?: string;
+}) {
+  const groupKey = args.groupKey ?? newLlqGroupKey();
+  const message = args.message?.trim() || NON_PROD_MIRROR_MESSAGE;
+  const clientIp = args.clientIp?.trim() || undefined;
+  scheduleAppendQueryLogs(
+    args.svcIds.map((svcId) => ({
+      groupKey,
+      channel: args.channel,
+      system: llqSystemForSvc(svcId),
+      svcId,
+      pnu: args.pnu,
+      sgg: args.sgg,
+      status: 'ok',
+      message,
+      clientIp,
+    }))
+  );
+}
+
+function scheduleKrasProbeLogs(args: {
+  pnu: string;
+  sgg?: string;
+  channel: string;
+  groupKey?: string;
+  clientIp?: string | null;
+  probes: Array<{ svcId: string; probe: LinkageProbeResult }>;
+}) {
+  const groupKey = args.groupKey ?? newLlqGroupKey();
+  const clientIp = args.clientIp?.trim() || undefined;
+  const entries: QueryLogInsert[] = args.probes
+    .filter((p) => (LLQ_AUDIT_KRAS_SVC_IDS as readonly string[]).includes(p.svcId))
+    .map((p) => ({
+      groupKey,
+      channel: args.channel,
+      system: llqSystemForSvc(p.svcId),
+      svcId: p.svcId,
+      pnu: args.pnu,
+      sgg: args.sgg,
+      status: statusFromProbe(p.probe),
+      ms: p.probe.ms ?? null,
+      http: p.probe.httpStatus || null,
+      message: p.probe.error || hangmangCallFromProbe(p.svcId, p.probe).detail || null,
+      clientIp,
+    }));
+  scheduleAppendQueryLogs(entries);
+}
 
 export type ParcelLandModalKind = 'share' | 'move' | 'change' | 'price';
 
@@ -150,7 +312,6 @@ function linkageXmlIssue(xml: string): string | null {
 }
 
 type LinkageXmlResult = { xml: string; error?: string };
-type LinkageProbeResult = { xml: string; httpStatus: number; error?: string };
 
 function pickXmlTag(xml: string, tag: string): string {
   const m = xml.match(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`, 'i'));
@@ -221,12 +382,14 @@ async function probeLinkageXml(
   timeoutMs?: number,
   method: 'GET' | 'POST' = 'POST'
 ): Promise<LinkageProbeResult> {
+  const started = Date.now();
   const r = await fetchLinkageXmlResult(url, query, timeoutMs, method);
+  const ms = Date.now() - started;
   if (r.error) {
     const httpMatch = r.error.match(/^HTTP (\d+)/);
-    return { xml: r.xml, httpStatus: httpMatch ? Number(httpMatch[1]) : 0, error: r.error };
+    return { xml: r.xml, httpStatus: httpMatch ? Number(httpMatch[1]) : 0, error: r.error, ms };
   }
-  return { xml: r.xml, httpStatus: 200 };
+  return { xml: r.xml, httpStatus: 200, ms };
 }
 
 async function fetchLinkageXml(
@@ -260,16 +423,31 @@ function hangmangCallFromProbe(svcId: string, probe: LinkageProbeResult): Hangma
 
 function skippedHangmangCalls(reason: string): HangmangCallLine[] {
   return [
-    KRAS_LAYER_LIST_QUERY_ID,
-    KRAS_LAND_QUERY_ID,
-    KRAS_LAND_USE_QUERY_ID,
-    KRAS_SHARE_QUERY_ID,
-    KRAS_MOVE_HIST_QUERY_ID,
-    KRAS_CHANGE_HIST_QUERY_ID,
-    KOREPS_PRICE_QUERY_ID,
-  ].map((svcId) => ({ svcId, called: false, detail: reason }));
+    ...PARCEL_INFO_TAB_SVC_IDS.map((svcId) => ({ svcId, called: false, detail: reason })),
+    {
+      svcId: KRAS_SHARE_QUERY_ID,
+      called: false,
+      detail: reason || '모달 시 조회',
+    },
+    {
+      svcId: KRAS_MOVE_HIST_QUERY_ID,
+      called: false,
+      detail: reason || '모달 시 조회',
+    },
+    {
+      svcId: KRAS_CHANGE_HIST_QUERY_ID,
+      called: false,
+      detail: reason || '모달 시 조회',
+    },
+    {
+      svcId: KOREPS_PRICE_QUERY_ID,
+      called: false,
+      detail: reason || '모달 시 조회',
+    },
+  ];
 }
 
+/** 필지정보 탭용 — 토지대장·이용계획만 호출·이력. 공유·이동·변동·공시지가는 모달 시 */
 async function probeHangmangCalls(
   pnu: string,
   cfg: ReturnType<typeof getLandLinkageConfig>
@@ -277,67 +455,82 @@ async function probeHangmangCalls(
   calls: HangmangCallLine[];
   landXml: string;
   useXml: string;
+  auditProbes: Array<{ svcId: string; probe: LinkageProbeResult }>;
 }> {
   const krasUrl = buildKrasUrl(cfg);
-  const korepsUrl = buildKorepsUrl(cfg);
   const emptyProbe: LinkageProbeResult = { xml: '', httpStatus: 0, error: undefined };
-
   const krasReady = Boolean(krasUrl && cfg.krasKey && cfg.sggCode);
-  const korepsReady = Boolean(korepsUrl);
 
-  const [p037, p002, p025, p003, p006, p007, pKoreps] = await Promise.all([
-    krasReady
-      ? probeLinkageXml(krasUrl!, buildKrasParam(pnu, KRAS_LAYER_LIST_QUERY_ID, cfg), undefined, 'GET')
-      : Promise.resolve({ ...emptyProbe, error: '키/주소 없음' }),
+  const [p002, p025] = await Promise.all([
     krasReady
       ? probeLinkageXml(krasUrl!, buildKrasParam(pnu, KRAS_LAND_QUERY_ID, cfg), undefined, 'GET')
       : Promise.resolve({ ...emptyProbe, error: '키/주소 없음' }),
     krasReady
       ? probeLinkageXml(krasUrl!, buildKrasParam(pnu, KRAS_LAND_USE_QUERY_ID, cfg), undefined, 'GET')
       : Promise.resolve({ ...emptyProbe, error: '키/주소 없음' }),
-    krasReady
-      ? probeLinkageXml(krasUrl!, buildKrasParam(pnu, KRAS_SHARE_QUERY_ID, cfg), undefined, 'GET')
-      : Promise.resolve({ ...emptyProbe, error: '키/주소 없음' }),
-    krasReady
-      ? probeLinkageXml(krasUrl!, buildKrasParam(pnu, KRAS_MOVE_HIST_QUERY_ID, cfg), undefined, 'GET')
-      : Promise.resolve({ ...emptyProbe, error: '키/주소 없음' }),
-    krasReady
-      ? probeLinkageXml(krasUrl!, buildKrasParam(pnu, KRAS_CHANGE_HIST_QUERY_ID, cfg), undefined, 'GET')
-      : Promise.resolve({ ...emptyProbe, error: '키/주소 없음' }),
-    korepsReady
-      ? probeLinkageXml(
-          korepsUrl!,
-          buildKrasParam(pnu, KOREPS_PRICE_QUERY_ID, cfg, cfg.korepsKey),
-          undefined,
-          'POST'
-        )
-      : Promise.resolve({ ...emptyProbe, error: '키/주소 없음' }),
   ]);
 
   return {
     calls: [
-      hangmangCallFromProbe(KRAS_LAYER_LIST_QUERY_ID, p037),
       hangmangCallFromProbe(KRAS_LAND_QUERY_ID, p002),
       hangmangCallFromProbe(KRAS_LAND_USE_QUERY_ID, p025),
-      hangmangCallFromProbe(KRAS_SHARE_QUERY_ID, p003),
-      hangmangCallFromProbe(KRAS_MOVE_HIST_QUERY_ID, p006),
-      hangmangCallFromProbe(KRAS_CHANGE_HIST_QUERY_ID, p007),
-      hangmangCallFromProbe(KOREPS_PRICE_QUERY_ID, pKoreps),
+      { svcId: KRAS_SHARE_QUERY_ID, called: false, detail: '모달 시 조회' },
+      { svcId: KRAS_MOVE_HIST_QUERY_ID, called: false, detail: '모달 시 조회' },
+      { svcId: KRAS_CHANGE_HIST_QUERY_ID, called: false, detail: '모달 시 조회' },
+      { svcId: KOREPS_PRICE_QUERY_ID, called: false, detail: '모달 시 조회' },
     ],
     landXml: p002.xml,
     useXml: p025.xml,
+    auditProbes: [
+      { svcId: KRAS_LAND_QUERY_ID, probe: p002 },
+      { svcId: KRAS_LAND_USE_QUERY_ID, probe: p025 },
+    ],
   };
 }
 
 async function fetchKrasForPnu(
   pnu: string,
-  cfg: ReturnType<typeof getLandLinkageConfig>
+  cfg: ReturnType<typeof getLandLinkageConfig>,
+  logCtx?: { channel: string; groupKey: string }
 ): Promise<NormalizedParcelLand | null> {
   const url = buildKrasUrl(cfg);
-  if (!url || !cfg.krasKey || !cfg.sggCode) return null;
-  const xml = await fetchLinkageXml(url, buildKrasParam(pnu, KRAS_LAND_QUERY_ID, cfg), undefined, 'GET');
-  const rows = parseKrasLandInfoRows(xml);
+  if (!url || !cfg.krasKey || !cfg.sggCode) {
+    if (logCtx) {
+      scheduleAppendQueryLogs([
+        {
+          groupKey: logCtx.groupKey,
+          channel: logCtx.channel,
+          system: 'kras',
+          svcId: KRAS_LAND_QUERY_ID,
+          pnu,
+          sgg: cfg.sggCode,
+          status: 'skip',
+          message: '토지행정망 접속정보가 없습니다.',
+        },
+      ]);
+    }
+    return null;
+  }
+  const started = Date.now();
+  const r = await fetchLinkageXmlResult(url, buildKrasParam(pnu, KRAS_LAND_QUERY_ID, cfg), undefined, 'GET');
+  const ms = Date.now() - started;
+  const rows = r.error ? [] : parseKrasLandInfoRows(r.xml);
   const row = rows[0];
+  if (logCtx) {
+    scheduleAppendQueryLogs([
+      {
+        groupKey: logCtx.groupKey,
+        channel: logCtx.channel,
+        system: 'kras',
+        svcId: KRAS_LAND_QUERY_ID,
+        pnu,
+        sgg: cfg.sggCode,
+        status: statusFromXmlResult(r, !!row),
+        ms,
+        message: r.error || (!row ? '토지대장 응답에 필지 항목이 없습니다.' : undefined),
+      },
+    ]);
+  }
   if (!row) return null;
   const resolvedPnu = buildPnuFromKrasRow(row) || pnu;
   return normalizeFromKrasRow(resolvedPnu, row);
@@ -345,10 +538,11 @@ async function fetchKrasForPnu(
 
 async function fetchKrasBatch(
   pnus: string[],
-  cfg: ReturnType<typeof getLandLinkageConfig>
+  cfg: ReturnType<typeof getLandLinkageConfig>,
+  logCtx?: { channel: string; groupKey: string }
 ): Promise<ParcelLandEnrichmentMap> {
   const results = await mapPool(pnus, PARCEL_ANALYSIS_LINKAGE_CONCURRENCY, (pnu) =>
-    fetchKrasForPnu(pnu, cfg)
+    fetchKrasForPnu(pnu, cfg, logCtx)
   );
   const out: ParcelLandEnrichmentMap = {};
   pnus.forEach((pnu, idx) => {
@@ -360,25 +554,61 @@ async function fetchKrasBatch(
 
 async function fetchKorepsPriceForPnu(
   pnu: string,
-  cfg: ReturnType<typeof getLandLinkageConfig>
+  cfg: ReturnType<typeof getLandLinkageConfig>,
+  logCtx?: { channel: string; groupKey: string }
 ): Promise<number | null> {
   const url = buildKorepsUrl(cfg);
-  if (!url) return null;
-  const xml = await fetchLinkageXml(
+  if (!url) {
+    if (logCtx) {
+      scheduleAppendQueryLogs([
+        {
+          groupKey: logCtx.groupKey,
+          channel: logCtx.channel,
+          system: 'koreps',
+          svcId: KOREPS_PRICE_QUERY_ID,
+          pnu,
+          sgg: cfg.sggCode,
+          status: 'skip',
+          message: '공시지가 접속정보가 없습니다.',
+        },
+      ]);
+    }
+    return null;
+  }
+  const started = Date.now();
+  const r = await fetchLinkageXmlResult(
     url,
     buildKrasParam(pnu, KOREPS_PRICE_QUERY_ID, cfg, cfg.korepsKey),
     undefined,
     'POST'
   );
-  const latest = pickLatestKorepsPrice(parseKorepsPriceRows(xml));
-  return latest?.pannJiga ?? null;
+  const ms = Date.now() - started;
+  const latest = r.error ? null : pickLatestKorepsPrice(parseKorepsPriceRows(r.xml));
+  const price = latest?.pannJiga ?? null;
+  if (logCtx) {
+    scheduleAppendQueryLogs([
+      {
+        groupKey: logCtx.groupKey,
+        channel: logCtx.channel,
+        system: 'koreps',
+        svcId: KOREPS_PRICE_QUERY_ID,
+        pnu,
+        sgg: cfg.sggCode,
+        status: statusFromXmlResult(r, price != null && price > 0),
+        ms,
+        message: r.error || (price == null || !(price > 0) ? '공시지가 응답 없음' : undefined),
+      },
+    ]);
+  }
+  return price;
 }
 
 /** KRAS에 공시가 없거나 행 없을 때 KOREPS00011로 공시지가 보강 */
 async function applyKorepsPrices(
   pnus: string[],
   enrichments: ParcelLandEnrichmentMap,
-  cfg: ReturnType<typeof getLandLinkageConfig>
+  cfg: ReturnType<typeof getLandLinkageConfig>,
+  logCtx?: { channel: string; groupKey: string }
 ): Promise<{ enrichments: ParcelLandEnrichmentMap; used: boolean }> {
   if (!buildKorepsUrl(cfg)) return { enrichments, used: false };
 
@@ -389,7 +619,7 @@ async function applyKorepsPrices(
   if (!targets.length) return { enrichments, used: false };
 
   const prices = await mapPool(targets, PARCEL_ANALYSIS_LINKAGE_CONCURRENCY, (pnu) =>
-    fetchKorepsPriceForPnu(pnu, cfg)
+    fetchKorepsPriceForPnu(pnu, cfg, logCtx)
   );
 
   const next = { ...enrichments };
@@ -451,6 +681,8 @@ function mergeMaps(...maps: ParcelLandEnrichmentMap[]): ParcelLandEnrichmentMap 
 /** PNU 목록 보강 — 서버는 행망(KRAS → KOREPS 공시). 브이월드는 클라이언트 JSONP. */
 export async function enrichParcelLandsByPnus(params: {
   pnus: string[];
+  /** 이용계획 등과 같은 사용자 동작이면 공유 */
+  groupKey?: string;
 }): Promise<{ enrichments: ParcelLandEnrichmentMap; source: ParcelLandSource | 'mixed' | 'db' }> {
   const cfg = getLandLinkageConfig();
   const unique = [...new Set((params.pnus ?? []).map((p) => toStr(p)).filter((p) => /^\d{19}$/.test(p)))];
@@ -459,15 +691,32 @@ export async function enrichParcelLandsByPnus(params: {
 
   let enrichments: ParcelLandEnrichmentMap = {};
   const usedSources = new Set<ParcelLandSource>();
+  const groupKey = toStr(params.groupKey) || newLlqGroupKey();
 
   if (cfg.useKras) {
-    const kras = await fetchKrasBatch(pnus, cfg);
+    const kras = await fetchKrasBatch(pnus, cfg, {
+      channel: 'parcelAnalysis',
+      groupKey,
+    });
     enrichments = mergeMaps(enrichments, kras);
     if (Object.keys(kras).length) usedSources.add('kras');
 
-    const koreps = await applyKorepsPrices(pnus, enrichments, cfg);
+    const koreps = await applyKorepsPrices(pnus, enrichments, cfg, {
+      channel: 'parcelAnalysis',
+      groupKey,
+    });
     enrichments = koreps.enrichments;
     if (koreps.used) usedSources.add('koreps');
+  } else {
+    for (const pnu of pnus) {
+      scheduleNonProdMirrorLogs({
+        pnu,
+        sgg: cfg.sggCode,
+        channel: 'parcelAnalysis',
+        svcIds: [KRAS_LAND_QUERY_ID],
+        groupKey,
+      });
+    }
   }
 
   let source: ParcelLandSource | 'mixed' | 'db' = 'db';
@@ -479,18 +728,59 @@ export async function enrichParcelLandsByPnus(params: {
 
 async function fetchKrasLandUseZonesForPnu(
   pnu: string,
-  cfg: ReturnType<typeof getLandLinkageConfig>
+  cfg: ReturnType<typeof getLandLinkageConfig>,
+  logCtx?: { channel: string; groupKey: string }
 ): Promise<string[]> {
   const url = buildKrasUrl(cfg);
-  if (!url || !cfg.krasKey || !cfg.sggCode) return [];
-  const xml = await fetchLinkageXml(url, buildKrasParam(pnu, KRAS_LAND_USE_QUERY_ID, cfg), undefined, 'GET');
-  const rows = parseKrasBodyFieldMaps(xml);
-  return zonesFromKrasLandUseRows(rows);
+  if (!url || !cfg.krasKey || !cfg.sggCode) {
+    if (logCtx) {
+      scheduleAppendQueryLogs([
+        {
+          groupKey: logCtx.groupKey,
+          channel: logCtx.channel,
+          system: 'kras',
+          svcId: KRAS_LAND_USE_QUERY_ID,
+          pnu,
+          sgg: cfg.sggCode,
+          status: 'skip',
+          message: '토지행정망 접속정보가 없습니다.',
+        },
+      ]);
+    }
+    return [];
+  }
+  const started = Date.now();
+  const r = await fetchLinkageXmlResult(
+    url,
+    buildKrasParam(pnu, KRAS_LAND_USE_QUERY_ID, cfg),
+    undefined,
+    'GET'
+  );
+  const ms = Date.now() - started;
+  const zones = r.error ? [] : zonesFromKrasLandUseRows(parseKrasBodyFieldMaps(r.xml));
+  if (logCtx) {
+    scheduleAppendQueryLogs([
+      {
+        groupKey: logCtx.groupKey,
+        channel: logCtx.channel,
+        system: 'kras',
+        svcId: KRAS_LAND_USE_QUERY_ID,
+        pnu,
+        sgg: cfg.sggCode,
+        status: statusFromXmlResult(r, zones.length > 0),
+        ms,
+        message: r.error || (!zones.length ? '이용계획 응답 없음' : undefined),
+      },
+    ]);
+  }
+  return zones;
 }
 
 /** 토지이용계획 용도지역 — 서버는 행망(KRAS)만. 브이월드는 클라이언트 JSONP. */
 export async function fetchLandUseZonesByPnus(params: {
   pnus?: string[];
+  /** 토지대장 보강 등과 같은 사용자 동작이면 공유 */
+  groupKey?: string;
 }): Promise<{ ok: boolean; zonesByPnu: Record<string, string[]>; error?: string }> {
   const empty = { ok: false as const, zonesByPnu: {} as Record<string, string[]> };
   const cfg = getLandLinkageConfig();
@@ -498,16 +788,27 @@ export async function fetchLandUseZonesByPnus(params: {
   if (!unique.length) return { ok: true, zonesByPnu: {} };
 
   const zonesByPnu: Record<string, string[]> = {};
+  const groupKey = toStr(params.groupKey) || newLlqGroupKey();
 
   try {
     if (cfg.useKras) {
       const krasResults = await mapPool(unique, PARCEL_ANALYSIS_LINKAGE_CONCURRENCY, (pnu) =>
-        fetchKrasLandUseZonesForPnu(pnu, cfg)
+        fetchKrasLandUseZonesForPnu(pnu, cfg, { channel: 'parcelAnalysis', groupKey })
       );
       unique.forEach((pnu, i) => {
         const zones = krasResults[i] ?? [];
         if (zones.length) zonesByPnu[pnu] = zones;
       });
+    } else {
+      for (const pnu of unique) {
+        scheduleNonProdMirrorLogs({
+          pnu,
+          sgg: cfg.sggCode,
+          channel: 'parcelAnalysis',
+          svcIds: [KRAS_LAND_USE_QUERY_ID],
+          groupKey,
+        });
+      }
     }
 
     return { ok: true, zonesByPnu };
@@ -546,7 +847,12 @@ async function fetchKrasLandUseRowsForPnu(
 }
 
 /** 우클릭 필지정보 탭 — 서버는 행망(KRAS)만. 브이월드는 클라이언트 JSONP. */
-export async function fetchParcelLandInfoTab(params: { pnu?: string }): Promise<
+export async function fetchParcelLandInfoTab(params: {
+  pnu?: string;
+  clientIp?: string;
+  /** 이력 접속페이지. 사유지분석 상세 등 */
+  channel?: string;
+}): Promise<
   ParcelLandInfoTabData & {
     ok: boolean;
     error?: string;
@@ -555,32 +861,61 @@ export async function fetchParcelLandInfoTab(params: { pnu?: string }): Promise<
   }
 > {
   const pnu = toStr(params.pnu);
+  const clientIp = toStr(params.clientIp) || undefined;
+  const channel = parcelLandInfoAuditChannel(params.channel);
   const empty = { ...emptyParcelLandInfoTab(), ok: false as const };
   if (!/^\d{19}$/.test(pnu)) return { ...empty, error: '유효한 PNU(19자리)가 필요합니다.' };
 
   const cfg = getLandLinkageConfig();
-  const ggnrEnv = (process.env.GGNR_ENV ?? '').trim() || '(없음)';
+  const sessionUsrId = await getSessionUsrId().catch(() => null);
+  const writeAudit = claimParcelInfoAuditSlot(sessionUsrId, pnu, channel);
 
   try {
     if (!cfg.useKras) {
-      const krasSkipReason = `개발 실행(GGNR_ENV=${ggnrEnv})이라 행망을 호출하지 않음`;
-      console.warn(`[landLinkage] 필지정보 행망 건너뜀 pnu=${pnu} ${krasSkipReason}`);
+      // 개발·시연: 행망 미호출이어도 운영과 같이 토지대장·이용계획 묶음(ok)으로 이력 미리보기
+      if (writeAudit) {
+        scheduleNonProdMirrorLogs({
+          pnu,
+          sgg: cfg.sggCode,
+          channel,
+          svcIds: PARCEL_INFO_TAB_SVC_IDS,
+          clientIp,
+        });
+      }
       return {
         ...emptyParcelLandInfoTab(),
         ok: true,
-        krasSkipReason,
-        hangmangCalls: skippedHangmangCalls(krasSkipReason),
+        hangmangCalls: skippedHangmangCalls(''),
       };
     }
 
     const probed = await probeHangmangCalls(pnu, cfg);
+    if (writeAudit) {
+      scheduleKrasProbeLogs({
+        pnu,
+        sgg: cfg.sggCode,
+        channel,
+        clientIp,
+        probes: probed.auditProbes,
+      });
+    }
     const landRow = parseKrasLandInfoRows(probed.landXml)[0] ?? null;
     const useRows = parseKrasBodyFieldMaps(probed.useXml);
     const krasTab = mapKrasToParcelLandInfoTab(landRow, useRows);
-    if (await isPersonInfoMaskEnabled()) {
-      krasTab.possessions = krasTab.possessions.map((row) =>
-        row.ownerNm ? { ...row, ownerNm: maskPersonFieldByLength(row.ownerNm) } : row
-      );
+    // 소유자명: 통합제어 또는 KRAS 권한 회수 / 등록번호·주소: KRAS 권한 회수만(v6 필지정보 범위)
+    const { maskOwnerNm, maskWide } = await getPersonInfoMaskFlagsForSession();
+    if (maskOwnerNm || maskWide) {
+      krasTab.possessions = krasTab.possessions.map((row) => {
+        const next = { ...row };
+        if (maskOwnerNm && next.ownerNm) {
+          next.ownerNm = maskPersonFieldByLength(next.ownerNm);
+        }
+        if (maskWide) {
+          if (next.dregno) next.dregno = maskPersonFieldByLength(next.dregno);
+          if (next.ownerAddr) next.ownerAddr = maskPersonFieldByLength(next.ownerAddr);
+        }
+        return next;
+      });
     }
     if (hasParcelLandInfoTabData(krasTab)) {
       return { ...krasTab, ok: true, hangmangCalls: probed.calls };
@@ -600,6 +935,16 @@ export async function fetchParcelLandInfoTab(params: { pnu?: string }): Promise<
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     console.warn(`[landLinkage] 필지정보 행망 예외 pnu=${pnu} ${msg}`);
+    if (writeAudit) {
+      scheduleKrasSkipLogs({
+        pnu,
+        sgg: cfg.sggCode,
+        channel,
+        message: msg,
+        svcIds: PARCEL_INFO_TAB_SVC_IDS,
+        clientIp,
+      });
+    }
     return { ...empty, error: msg, krasSkipReason: msg, hangmangCalls: skippedHangmangCalls(msg) };
   }
 }
@@ -644,28 +989,92 @@ export async function fetchKorepsPriceHistory(params: { pnu?: string }): Promise
   const pnu = toStr(params.pnu);
   if (!/^\d{19}$/.test(pnu)) return { rows: [], error: '유효한 PNU(19자리)가 필요합니다.' };
   const cfg = getLandLinkageConfig();
-  if (!cfg.useKras) return { rows: [], message: '개발 실행이라 공시지가 행망을 호출하지 않음' };
+  const groupKey = newLlqGroupKey();
+  const channel = 'officialPrice';
+  if (!cfg.useKras) {
+    scheduleNonProdMirrorLogs({
+      pnu,
+      sgg: cfg.sggCode,
+      channel,
+      svcIds: [KOREPS_PRICE_QUERY_ID],
+      groupKey,
+    });
+    return { rows: [] };
+  }
   const url = buildKorepsUrl(cfg);
-  if (!url) return { rows: [], message: '공시지가 접속정보가 없습니다.' };
+  if (!url) {
+    scheduleKrasSkipLogs({
+      pnu,
+      sgg: cfg.sggCode,
+      channel,
+      message: '공시지가 접속정보가 없습니다.',
+      svcIds: [KOREPS_PRICE_QUERY_ID],
+      groupKey,
+    });
+    return { rows: [], message: '공시지가 접속정보가 없습니다.' };
+  }
   try {
+    const started = Date.now();
     const r = await fetchLinkageXmlResult(
       url,
       buildKrasParam(pnu, KOREPS_PRICE_QUERY_ID, cfg, cfg.korepsKey),
       undefined,
       'POST'
     );
-    if (r.error) return { rows: [], error: r.error };
-    return {
-      rows: parseKorepsPriceRows(r.xml).map((item) => ({
-        year: item.baseYear,
-        month: item.baseMon,
-        price: item.pannJiga,
-        announceDate: item.pannYmd,
-        remark: item.remark,
-      })),
-    };
+    const ms = Date.now() - started;
+    if (r.error) {
+      scheduleAppendQueryLogs([
+        {
+          groupKey,
+          channel,
+          system: 'koreps',
+          svcId: KOREPS_PRICE_QUERY_ID,
+          pnu,
+          sgg: cfg.sggCode,
+          status: 'fail',
+          ms,
+          message: r.error,
+        },
+      ]);
+      return { rows: [], error: r.error };
+    }
+    const rows = parseKorepsPriceRows(r.xml).map((item) => ({
+      year: item.baseYear,
+      month: item.baseMon,
+      price: item.pannJiga,
+      announceDate: item.pannYmd,
+      remark: item.remark,
+    }));
+    scheduleAppendQueryLogs([
+      {
+        groupKey,
+        channel,
+        system: 'koreps',
+        svcId: KOREPS_PRICE_QUERY_ID,
+        pnu,
+        sgg: cfg.sggCode,
+        status: statusFromXmlResult(r, rows.length > 0),
+        ms,
+        http: 200,
+        message: rows.length ? undefined : '요청된 공시지가 데이터가 없습니다.',
+      },
+    ]);
+    return { rows };
   } catch (e: unknown) {
-    return { rows: [], error: e instanceof Error ? e.message : String(e) };
+    const message = e instanceof Error ? e.message : String(e);
+    scheduleAppendQueryLogs([
+      {
+        groupKey,
+        channel,
+        system: 'koreps',
+        svcId: KOREPS_PRICE_QUERY_ID,
+        pnu,
+        sgg: cfg.sggCode,
+        status: 'fail',
+        message,
+      },
+    ]);
+    return { rows: [], error: message };
   }
 }
 
@@ -673,6 +1082,23 @@ export async function fetchKorepsPriceHistory(params: { pnu?: string }): Promise
 export async function fetchParcelLandModalList(params: {
   pnu?: string;
   kind?: ParcelLandModalKind;
+  clientIp?: string;
+}): Promise<{
+  ok: boolean;
+  kind: ParcelLandModalKind | null;
+  headers: string[];
+  rows: string[][];
+  message?: string;
+  error?: string;
+}> {
+  const clientIp = toStr(params.clientIp) || undefined;
+  return runWithAuditClientIpHint(clientIp, () => fetchParcelLandModalListInner(params));
+}
+
+async function fetchParcelLandModalListInner(params: {
+  pnu?: string;
+  kind?: ParcelLandModalKind;
+  clientIp?: string;
 }): Promise<{
   ok: boolean;
   kind: ParcelLandModalKind | null;
@@ -683,6 +1109,7 @@ export async function fetchParcelLandModalList(params: {
 }> {
   const pnu = toStr(params.pnu);
   const kind = params.kind;
+  const clientIp = toStr(params.clientIp) || undefined;
   if (!kind || !['share', 'move', 'change', 'price'].includes(kind)) {
     return { ok: false, kind: null, headers: [], rows: [], error: '조회 종류가 필요합니다.' };
   }
@@ -691,29 +1118,73 @@ export async function fetchParcelLandModalList(params: {
   }
 
   const cfg = getLandLinkageConfig();
+  const modalSvcId =
+    kind === 'share'
+      ? KRAS_SHARE_QUERY_ID
+      : kind === 'move'
+        ? KRAS_MOVE_HIST_QUERY_ID
+        : kind === 'change'
+          ? KRAS_CHANGE_HIST_QUERY_ID
+          : null;
+
   if (!cfg.useKras) {
+    const mirrorSvcId = modalSvcId ?? (kind === 'price' ? KOREPS_PRICE_QUERY_ID : null);
+    if (mirrorSvcId) {
+      scheduleNonProdMirrorLogs({
+        pnu,
+        sgg: cfg.sggCode,
+        channel: 'parcelModal',
+        svcIds: [mirrorSvcId],
+        clientIp,
+      });
+    }
     return {
       ok: true,
       kind,
       headers: [],
       rows: [],
-      message: `개발 실행(GGNR_ENV=${(process.env.GGNR_ENV ?? '').trim() || '(없음)'})이라 행망을 호출하지 않음`,
     };
   }
 
   try {
     if (kind === 'price') {
+      const groupKey = newLlqGroupKey();
       const url = buildKorepsUrl(cfg);
       if (!url) {
+        scheduleKrasSkipLogs({
+          pnu,
+          sgg: cfg.sggCode,
+          channel: 'parcelModal',
+          message: '공시지가 접속정보가 없습니다.',
+          svcIds: [KOREPS_PRICE_QUERY_ID],
+          groupKey,
+        });
         return { ok: true, kind, headers: [], rows: [], message: '공시지가 접속정보가 없습니다.' };
       }
+      const started = Date.now();
       const r = await fetchLinkageXmlResult(
         url,
         buildKrasParam(pnu, KOREPS_PRICE_QUERY_ID, cfg, cfg.korepsKey),
         undefined,
         'POST'
       );
-      if (r.error) return { ok: false, kind, headers: [], rows: [], error: r.error };
+      const ms = Date.now() - started;
+      if (r.error) {
+        scheduleAppendQueryLogs([
+          {
+            groupKey,
+            channel: 'parcelModal',
+            system: 'koreps',
+            svcId: KOREPS_PRICE_QUERY_ID,
+            pnu,
+            sgg: cfg.sggCode,
+            status: 'fail',
+            ms,
+            message: r.error,
+          },
+        ]);
+        return { ok: false, kind, headers: [], rows: [], error: r.error };
+      }
       const parsed = parseKorepsPriceRows(r.xml);
       const headers = ['공시지가', '공시일자', '기준년도', '기준월', '지번', '비고'];
       const rows = parsed.map((item) => [
@@ -723,6 +1194,20 @@ export async function fetchParcelLandModalList(params: {
         item.baseMon ? `${item.baseMon}월` : '-',
         item.jigaJibn || '-',
         item.remark || '-',
+      ]);
+      scheduleAppendQueryLogs([
+        {
+          groupKey,
+          channel: 'parcelModal',
+          system: 'koreps',
+          svcId: KOREPS_PRICE_QUERY_ID,
+          pnu,
+          sgg: cfg.sggCode,
+          status: statusFromXmlResult(r, rows.length > 0),
+          ms,
+          http: 200,
+          message: rows.length ? undefined : '요청된 공시지가 데이터가 없습니다.',
+        },
       ]);
       return {
         ok: true,
@@ -735,19 +1220,59 @@ export async function fetchParcelLandModalList(params: {
 
     const url = buildKrasUrl(cfg);
     if (!url || !cfg.krasKey || !cfg.sggCode) {
+      if (modalSvcId) {
+        scheduleKrasSkipLogs({
+          pnu,
+          sgg: cfg.sggCode,
+          channel: 'parcelModal',
+          message: '토지행정망 접속정보가 없습니다.',
+          svcIds: [modalSvcId],
+        });
+      }
       return { ok: true, kind, headers: [], rows: [], message: '토지행정망 접속정보가 없습니다.' };
     }
 
-    const svcId =
-      kind === 'share'
-        ? KRAS_SHARE_QUERY_ID
-        : kind === 'move'
-          ? KRAS_MOVE_HIST_QUERY_ID
-          : KRAS_CHANGE_HIST_QUERY_ID;
+    const svcId = modalSvcId!;
+    const started = Date.now();
     const r = await fetchLinkageXmlResult(url, buildKrasParam(pnu, svcId, cfg), undefined, 'GET');
-    if (r.error) return { ok: false, kind, headers: [], rows: [], error: r.error };
+    const ms = Date.now() - started;
+    if (r.error) {
+      scheduleAppendQueryLogs([
+        {
+          groupKey: newLlqGroupKey(),
+          channel: 'parcelModal',
+          system: 'kras',
+          svcId,
+          pnu,
+          sgg: cfg.sggCode,
+          status: statusFromXmlResult(r, false),
+          ms,
+          message: r.error,
+        },
+      ]);
+      return { ok: false, kind, headers: [], rows: [], error: r.error };
+    }
     let maps = parseKrasBodyFieldMaps(r.xml);
-    const ownerNm = (await isPersonInfoMaskEnabled())
+    const logModalOk = (rowCount: number, emptyMessage: string) => {
+      scheduleAppendQueryLogs([
+        {
+          groupKey: newLlqGroupKey(),
+          channel: 'parcelModal',
+          system: 'kras',
+          svcId,
+          pnu,
+          sgg: cfg.sggCode,
+          status: statusFromXmlResult(r, rowCount > 0),
+          ms,
+          http: 200,
+          message: rowCount > 0 ? undefined : emptyMessage,
+        },
+      ]);
+    };
+    // 공유인·변동연혁 소유자명 — 통합제어와 동일 범위·방식 (이동연혁은 소유자명 없음)
+    const maskOwnerNm =
+      kind === 'share' || kind === 'change' ? await shouldMaskPersonInfoForSession() : false;
+    const ownerNm = maskOwnerNm
       ? (item: KrasBodyRecord) => maskPersonFieldByLength(toStr(item.OWNER_NM) || '-')
       : (item: KrasBodyRecord) => toStr(item.OWNER_NM) || '-';
 
@@ -773,12 +1298,14 @@ export async function fetchParcelLandModalList(params: {
         formatKrasYmd(toStr(item.OWN_RGT_CHG_YMD)) || '-',
         formatKrasYmd(toStr(item.OWN_RGT_CHG_DEL_YMD)) || '-',
       ]);
+      const emptyMessage = '요청된 대상지의 공유지연명부 정보가 없습니다.';
+      logModalOk(rows.length, emptyMessage);
       return {
         ok: true,
         kind,
         headers,
         rows,
-        message: rows.length ? undefined : '요청된 대상지의 공유지연명부 정보가 없습니다.',
+        message: rows.length ? undefined : emptyMessage,
       };
     }
 
@@ -809,12 +1336,14 @@ export async function fetchParcelLandModalList(params: {
           relJoined || '-',
         ];
       });
+      const emptyMessage = '요청된 이동연혁 데이터가 없습니다.';
+      logModalOk(rows.length, emptyMessage);
       return {
         ok: true,
         kind,
         headers,
         rows,
-        message: rows.length ? undefined : '요청된 이동연혁 데이터가 없습니다.',
+        message: rows.length ? undefined : emptyMessage,
       };
     }
 
@@ -828,15 +1357,26 @@ export async function fetchParcelLandModalList(params: {
       formatKrasYmd(toStr(item.DYMD)) || '-',
       toStr(item.SHR_CNT) ? `${toStr(item.SHR_CNT)}명` : '-',
     ]);
+    const emptyMessage = '요청된 변동연혁 데이터가 없습니다.';
+    logModalOk(rows.length, emptyMessage);
     return {
       ok: true,
       kind,
       headers,
       rows,
-      message: rows.length ? undefined : '요청된 변동연혁 데이터가 없습니다.',
+      message: rows.length ? undefined : emptyMessage,
     };
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
+    if (modalSvcId) {
+      scheduleKrasSkipLogs({
+        pnu,
+        sgg: cfg.sggCode,
+        channel: 'parcelModal',
+        message: msg,
+        svcIds: [modalSvcId],
+      });
+    }
     return { ok: false, kind, headers: [], rows: [], error: msg };
   }
 }

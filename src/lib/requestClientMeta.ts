@@ -112,3 +112,76 @@ export function pickClientIpFromRequest(req: NextRequest, bodyIp?: string): stri
     osFallback: isLoopbackIp(normalizeClientIp(serverIp)),
   });
 }
+
+function collectIpsFromHeaderBag(get: (name: string) => string | null): string[] {
+  const out: string[] = [];
+  const push = (raw?: string | null) => {
+    const n = normalizeClientIp(raw);
+    if (n && !out.includes(n)) out.push(n);
+  };
+
+  const xff = get('x-forwarded-for');
+  if (xff) {
+    for (const part of xff.split(',')) push(part);
+  }
+
+  const forwarded = get('forwarded');
+  if (forwarded) {
+    for (const segment of forwarded.split(',')) {
+      const m = /(?:^|;)\s*for=(?:"?\[?)([^\]";]+)/i.exec(segment);
+      if (m?.[1]) push(m[1]);
+    }
+  }
+
+  push(get('x-real-ip'));
+  push(get('true-client-ip'));
+  push(get('cf-connecting-ip'));
+  push(get('x-client-ip'));
+  push(get('x-cluster-client-ip'));
+  return out;
+}
+
+/**
+ * 감사 이력용 IP — 망 구성이 달라도 최대한 자리 IP를 고른다.
+ * 우선순위: body 사설 IP → 헤더 체인 사설 IP → 헤더 비루프백 IP
+ * (서버 NIC fallback 없음 — 감사에 서버 IP를 쓰지 않음)
+ */
+export function pickAuditClientIp(
+  headerGet: (name: string) => string | null,
+  bodyIp?: string | null
+): string | undefined {
+  const body = normalizeClientIp(bodyIp);
+  if (body && isPrivateIpv4(body) && !isLoopbackIp(body)) return body;
+
+  const fromHeaders = collectIpsFromHeaderBag(headerGet);
+  const privateHeader = fromHeaders.find((ip) => isPrivateIpv4(ip) && !isLoopbackIp(ip));
+  if (privateHeader) return privateHeader;
+
+  const anyHeader = fromHeaders.find((ip) => !isLoopbackIp(ip));
+  if (anyHeader) return anyHeader;
+
+  if (body && !isLoopbackIp(body)) return body;
+  return undefined;
+}
+
+/** Next 요청 헤더(+선택 body/ALS 힌트)에서 감사 IP 해석 */
+export async function resolveAuditClientIp(bodyIp?: string | null): Promise<string | undefined> {
+  let hint = bodyIp;
+  if (!String(hint ?? '').trim()) {
+    try {
+      const { getAuditClientIpHint } = await import('@/lib/auditClientIpContext');
+      hint = getAuditClientIpHint();
+    } catch {
+      hint = bodyIp;
+    }
+  }
+  try {
+    const { headers } = await import('next/headers');
+    const h = await headers();
+    return pickAuditClientIp((name) => h.get(name), hint);
+  } catch {
+    const body = normalizeClientIp(hint);
+    if (body && !isLoopbackIp(body)) return body;
+    return undefined;
+  }
+}

@@ -6,6 +6,7 @@ export const SYS_MANAGER_CONSOLE_MENUS = [
   { id: 'userManager', label: '사용자관리' },
   { id: 'permissionFeature', label: '권한관리' },
   { id: 'accessRequestQueue', label: '권한 신청 처리' },
+  { id: 'landLinkageQueryLog', label: 'KRAS 개인정보 관리' },
   { id: 'layerManager', label: '레이어 관리' },
   { id: 'dataHistoryManager', label: '데이터 이력관리' },
   { id: 'dataRequestApprove', label: '데이터 승인' },

@@ -28,6 +28,7 @@ import { withBasePath } from '@/lib/basePath';
 import { formatAddressStripSidoSigungu } from '@/lib/formatAddressStripAdmin';
 import { copyTextToClipboard } from '@/lib/utils';
 import { findRoadAddressByJibun, getAddressFromCoord } from '../addressSearch/vworldAddressSearch';
+import { prefetchClientMachineIp } from '@/lib/clientMachineIp';
 
 function canCopyAddress(value: string | null | undefined): boolean {
   const t = String(value ?? '').trim();
@@ -144,6 +145,13 @@ export function LandInfoPanelContent({
   const [resolvedRoad, setResolvedRoad] = useState<string | null>(null);
   const [vworldKey, setVworldKey] = useState('');
   const [dataPortalKey, setDataPortalKey] = useState('');
+  const [mapConfigReady, setMapConfigReady] = useState(false);
+  /** 필지번호당 서버 연계(이력) 1회만 — vworldKey 후속 변경으로 중복 적재 방지 */
+  const linkageFetchedPnuRef = useRef('');
+
+  useEffect(() => {
+    prefetchClientMachineIp();
+  }, []);
 
   const [parcelError, setParcelError] = useState<string | null>(null);
   const [parcelFetching, setParcelFetching] = useState(false);
@@ -227,6 +235,7 @@ export function LandInfoPanelContent({
       if (!alive) return;
       setVworldKey(cfg.vworldKey);
       setDataPortalKey(cfg.dataPortalKey);
+      setMapConfigReady(true);
     });
     return () => {
       alive = false;
@@ -255,6 +264,7 @@ export function LandInfoPanelContent({
 
   /** 다른 필지 우클릭 시 — 이전 필지 캐시로 지번·표가 남는 것 방지 (탭이 필지정보가 아니어도) */
   useEffect(() => {
+    linkageFetchedPnuRef.current = '';
     setParcelData({
       characteristics: [],
       landUses: [],
@@ -274,11 +284,14 @@ export function LandInfoPanelContent({
   }, [effectivePnu]);
 
   useEffect(() => {
-    if (!effectivePnu) return;
+    if (!effectivePnu || !mapConfigReady) return;
     let alive = true;
+    const pnu = String(effectivePnu).trim();
+    const skipServerLinkage = linkageFetchedPnuRef.current === pnu;
+    if (!skipServerLinkage) linkageFetchedPnuRef.current = pnu;
     setParcelFetching(true);
     setParcelError(null);
-    fetchParcelTabData({ pnu: effectivePnu, vworldKey })
+    fetchParcelTabData({ pnu, vworldKey, skipServerLinkage })
       .then((data) => {
         if (!alive) return;
         setParcelData(data);
@@ -294,7 +307,7 @@ export function LandInfoPanelContent({
     return () => {
       alive = false;
     };
-  }, [effectivePnu, vworldKey]);
+  }, [effectivePnu, vworldKey, mapConfigReady]);
 
   useLayoutEffect(() => {
     if (activeTab !== 'buildingLedger') {

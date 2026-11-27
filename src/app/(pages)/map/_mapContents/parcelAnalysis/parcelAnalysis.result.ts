@@ -22,6 +22,7 @@ import {
 import type { ParcelAnalysisGroupDef } from './ParcelAnalysis.items';
 import { BASIC_MAP_COMPOSITE_SECTION_ID } from './parcelAnalysis.mapStyle';
 import { formatAddressStripSidoSigungu } from '@/lib/formatAddressStripAdmin';
+import { randomId } from '@/lib/randomId';
 
 export type ParcelAnalysisLandRow = {
   pnu: string;
@@ -661,14 +662,14 @@ async function listLandRows(
   return data?.ok ? (data.landRows ?? []) : [];
 }
 
-async function enrichRows(rows: LandRow[]): Promise<LandRow[]> {
+async function enrichRows(rows: LandRow[], groupKey?: string): Promise<LandRow[]> {
   if (!rows.length) return rows;
   const { vworldKey, useKras } = await fetchLandInfoConfig();
 
   const res = await call('', 'POST', {
     service: 'mapAnalyseService',
     action: 'enrichParcelLandRows',
-    params: { landRows: rows },
+    params: { landRows: rows, groupKey },
   });
   const data = (res?.data ?? res) as { ok?: boolean; landRows?: LandRow[]; error?: string };
   const serverOk = data?.ok !== false;
@@ -740,13 +741,16 @@ async function fetchBuildingChunk(
   };
 }
 
-async function fetchLandUseZones(pnus: string[]): Promise<Record<string, string[]>> {
+async function fetchLandUseZones(
+  pnus: string[],
+  groupKey?: string
+): Promise<Record<string, string[]>> {
   if (!pnus.length) return {};
   const { vworldKey, useKras } = await fetchLandInfoConfig();
   const res = await call('', 'POST', {
     service: 'mapAnalyseService',
     action: 'fetchLandUseZonesByPnus',
-    params: { pnus },
+    params: { pnus, groupKey },
   });
   const data = (res?.data ?? res) as { ok?: boolean; zonesByPnu?: Record<string, string[]> };
   const zonesByPnu = data?.ok ? (data.zonesByPnu ?? {}) : {};
@@ -891,13 +895,16 @@ export async function runParcelAnalysisProgressiveLoad(params: ProgressiveLoadPa
     patchProgress(true);
 
     const chunkTasks: Promise<void>[] = [];
+    // 같은 청크의 토지대장 보강·이용계획은 이력 묶음키 공유 → 목록 1줄
+    const linkageGroupKey =
+      needsEnrich || needsLandUse ? randomId() : undefined;
 
     if (needsEnrich) {
       chunkTasks.push(
         (async () => {
           onEnriching(true);
           try {
-            const enriched = await enrichRows(pageRows);
+            const enriched = await enrichRows(pageRows, linkageGroupKey);
             if (!isCancelled()) {
               allLandRows = mergeEnrichedRows(allLandRows, enriched);
               patchProgress(true);
@@ -936,7 +943,7 @@ export async function runParcelAnalysisProgressiveLoad(params: ProgressiveLoadPa
         (async () => {
           try {
             const pnus = pageRows.map((r) => String(r.pnu ?? '')).filter((p) => /^\d{19}$/.test(p));
-            const zonesByPnu = await fetchLandUseZones(pnus);
+            const zonesByPnu = await fetchLandUseZones(pnus, linkageGroupKey);
             if (!isCancelled()) {
               landUseBuckets = mergeLandUseZoneChunk(
                 landUseBuckets,

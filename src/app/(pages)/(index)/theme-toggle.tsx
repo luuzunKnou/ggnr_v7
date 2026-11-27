@@ -1,6 +1,6 @@
 "use client"
 
-import React from "react"
+import React, { useEffect, useState } from "react"
 import { cn } from "@/lib/utils"
 import { useTheme } from "./theme-provider"
 
@@ -12,7 +12,35 @@ type ThemeToggleProps = {
 
 function ThemeIcon({ className }: { className?: string }) {
   const { resolvedTheme } = useTheme()
+  const [mounted, setMounted] = useState(false)
   const iconClass = cn("block", className)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  /**
+   * SSR·첫 클라이언트 페인트는 동일 플레이스홀더.
+   * localStorage 테마는 mount 이후에만 반영해 hydration mismatch 방지.
+   */
+  if (!mounted) {
+    return (
+      <svg
+        className={iconClass}
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+        aria-hidden
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"
+        />
+      </svg>
+    )
+  }
 
   if (resolvedTheme === "dark") {
     return (

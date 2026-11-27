@@ -1,8 +1,11 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "./standard-utilities.css";
+@import "./(pages)/(index)/odorPhV2/odorScadaPalette.css";
 
-@custom-variant dark (&:is(.dark *));
+@custom-variant dark (&:is(.dark *, .dark_v2 *));
+/* odor_ph SCADA 전용 — 일반 .dark 에는 적용하지 않음 */
+@custom-variant dark_v2 (&:is(.dark_v2 *));
 
 /* S-Core Dream (public/font/SCDREAM1~9.OTF) — 상대경로로 basePath 반영 */
 @font-face {
@@ -193,6 +196,45 @@
   --scrollbar-track: transparent;
 }
 
+/* 다크 팔레트 v2 — odor_ph 에서만 사용중 */
+.dark_v2 {
+  color-scheme: dark;
+  --background: #0f141b;
+  --foreground: #e2e8f0;
+  --card: #171e28;
+  --card-foreground: #e2e8f0;
+  --popover: #171e28;
+  --popover-foreground: #e2e8f0;
+  --primary: #0F91B2;
+  --primary-foreground: #ffffff;
+  --secondary: #1e2734;
+  --secondary-foreground: #e2e8f0;
+  --muted: #1e2734;
+  --muted-foreground: #94a0b3;
+  --accent: #1e2734;
+  --accent-foreground: #e2e8f0;
+  --destructive: #e63946;
+  --border: #263041;
+  --input: #263041;
+  --ring: #8a8a8a;
+  --chart-1: #7c3aed;
+  --chart-2: #10b981;
+  --chart-3: #f59e0b;
+  --chart-4: #ec4899;
+  --chart-5: #f97316;
+  --sidebar: #171e28;
+  --sidebar-foreground: #e2e8f0;
+  --sidebar-primary: #0F91B2;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #1e2734;
+  --sidebar-accent-foreground: #e2e8f0;
+  --sidebar-border: #263041;
+  --sidebar-ring: #8a8a8a;
+  --scrollbar-thumb: #334155;
+  --scrollbar-thumb-hover: #475569;
+  --scrollbar-track: transparent;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -227,16 +269,21 @@
     accent-color: #2563eb;
   }
   .dark input[type="checkbox"],
-  .dark input[type="radio"] {
+  .dark input[type="radio"],
+  .dark_v2 input[type="checkbox"],
+  .dark_v2 input[type="radio"] {
     color-scheme: dark;
     accent-color: var(--primary);
   }
   /* color-scheme:dark 이후에도 우측 파란 accent 유지(다크에서 조금 밝게) */
-  .dark input[type="radio"].background-map-radio-right {
+  .dark input[type="radio"].background-map-radio-right,
+  .dark_v2 input[type="radio"].background-map-radio-right {
     accent-color: #60a5fa;
   }
   .dark input[type="checkbox"]:disabled,
-  .dark input[type="radio"]:disabled {
+  .dark input[type="radio"]:disabled,
+  .dark_v2 input[type="checkbox"]:disabled,
+  .dark_v2 input[type="radio"]:disabled {
     opacity: 0.55;
     filter: none;
   }

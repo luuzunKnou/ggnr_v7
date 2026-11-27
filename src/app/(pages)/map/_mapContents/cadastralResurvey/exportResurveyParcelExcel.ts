@@ -3,7 +3,7 @@ import { writeExcelWorkbookWithPledge } from '@/app/(pages)/_components/security
 import {
   fetchLandInfoConfig,
   fetchParcelTabData,
-  fetchPersonInfoMaskEnabled,
+  fetchPersonInfoMaskState,
   type ParcelTabData,
 } from '../../_mapComponents/landInfo/api'
 import { formatPersonField } from '../../_mapComponents/landInfo/landPersonInfoMask'
@@ -50,7 +50,11 @@ async function fetchAll(
         result = { parcel, data: null, status: '자료없음' }
       } else {
         try {
-          const data = await fetchParcelTabData({ pnu: parcel.id, vworldKey })
+          const data = await fetchParcelTabData({
+            pnu: parcel.id,
+            vworldKey,
+            auditChannel: 'cadastralResurvey',
+          })
           const empty =
             !data.characteristics.length && !data.possessions.length && !data.landUses.length
           result = { parcel, data, status: empty ? '자료없음' : '조회' }
@@ -81,9 +85,9 @@ export async function exportResurveyParcelExcel(args: {
   onProgress: (p: ResurveyExcelProgress) => void
 }): Promise<boolean> {
   const { district, parcels, signal, onProgress } = args
-  const [cfg, maskEnabled] = await Promise.all([
+  const [cfg, maskState] = await Promise.all([
     fetchLandInfoConfig(),
-    fetchPersonInfoMaskEnabled(),
+    fetchPersonInfoMaskState(),
   ])
   onProgress({ done: 0, total: parcels.length })
   const results = await fetchAll(parcels, cfg.vworldKey ?? '', signal, onProgress)
@@ -123,15 +127,19 @@ export async function exportResurveyParcelExcel(args: {
       })
     }
 
-    const maskOwner = maskEnabled && data.source !== 'kras'
+    // 행망은 서버에서 이미 마스킹. 브이월드 등은 클라이언트에서 보정
+    const clientMask = data.source !== 'kras'
+    const maskOwner = maskState.enabled && clientMask
+    const maskWide = maskState.maskWide && clientMask
     for (const own of data.possessions) {
       const ownerNm = field(own, ['ownerNm', 'ownerName'])
+      const ownerAddr = field(own, ['ownerAddr', 'address'])
       ownerRows.push({
         번호: p.seq,
         지번: jibun,
         소유구분: field(own, ['posesnSeCodeNm']),
         소유자명: ownerNm ? formatPersonField(ownerNm, maskOwner) : '',
-        주소: field(own, ['ownerAddr', 'address']),
+        주소: ownerAddr ? formatPersonField(ownerAddr, maskWide) : '',
         공유인수: field(own, ['cnrsPsnCo', 'shareCnt']),
         변동원인: field(own, ['ownshipChgCauseCodeNm']),
         변동일자: field(own, ['ownshipChgDe']),

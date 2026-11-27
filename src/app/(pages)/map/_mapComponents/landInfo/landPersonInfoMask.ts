@@ -3,7 +3,7 @@ import type { ParcelLandModalKind } from './api';
 
 export { maskPersonFieldByLength };
 
-/** 패널 표시 — personInfo ON일 때만 마스킹 */
+/** 패널 표시 — maskEnabled일 때 길이만큼 * */
 export function formatPersonField(value: unknown, maskEnabled: boolean): string {
   const raw = value == null ? '' : String(value).trim();
   if (!raw || raw === '-') return raw || '-';

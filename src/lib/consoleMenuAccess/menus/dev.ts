@@ -10,6 +10,7 @@ export const DEV_CONSOLE_MENUS = [
   { id: 'userManager', label: '사용자관리' },
   { id: 'permissionFeature', label: '권한관리' },
   { id: 'accessRequestQueue', label: '권한 신청 처리' },
+  { id: 'landLinkageQueryLog', label: 'KRAS 개인정보 관리' },
   { id: 'shpFileUploader', label: 'SHP File Uploader' },
   { id: 'exlFileUploader', label: 'Excel File Uploader' },
   { id: 'dataFileUploader', label: '첨부파일 관리' },

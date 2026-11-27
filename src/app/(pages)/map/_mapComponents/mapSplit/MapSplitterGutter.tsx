@@ -226,7 +226,13 @@ export function MapSplitterGutter({
   mapPaddingLeft = 0,
   mapPaddingRight = MAP_SPLIT_CONTROL_RIGHT_MENU_RESERVE_PX,
 }: MapSplitterGutterProps) {
-  const isDark = useResolvedThemeSafe() === 'dark';
+  const resolvedTheme = useResolvedThemeSafe();
+  /** SSR·첫 페인트는 light 클래스 고정 → localStorage dark와 hydration mismatch 방지 */
+  const [themeReady, setThemeReady] = useState(false);
+  useEffect(() => {
+    setThemeReady(true);
+  }, []);
+  const isDark = themeReady && resolvedTheme === 'dark';
   const isHorizontal = orientation === 'horizontal';
   /** 좌우 분할 → 세로 거터 → 버튼 세로 나열 / 상하 분할 → 가로 나열 */
   const stackAlongGutter = isHorizontal;
