@@ -10,6 +10,7 @@ export const SER_ENG_TO_OPENED: Record<string, string> = {
   /** 상하수도 통합 민원관리 (구 통합UI) */
   complaintCommon: 'complaintCommon',
   memo: 'memoManagement',
+  myMap: 'myMap',
   crossSection: 'sectionView',
   waterSupplyWork: 'waterSupply',
   /** 상수도 공사대장 — 하천 공사대장 패널 공용 (consLedgerVariant) */

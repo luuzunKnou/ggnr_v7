@@ -225,6 +225,11 @@ import {
   ODOR_ALERT_VIEW2_OPENED_KEY,
 } from "./_mapContents/odorAlertView2/odorAlertView2Config"
 import { OdorAlertView2Shell } from "./_mapContents/odorAlertView2/OdorAlertView2.shell"
+import { OdorAdminV2Host } from "./_mapContents/odorAdminV2/OdorAdminV2Host"
+import {
+  applyOdorSystemDefaultOpened,
+  ODOR_SYSTEM_KEYS,
+} from "@/lib/odorSystemDefaultOpened"
 import { FmsLinkageListPanel } from "./_mapContents/fmsLinkage/FmsLinkageListPanel"
 import { FmsLinkageDetailPanel } from "./_mapContents/fmsLinkage/FmsLinkageDetailPanel"
 import { isFmsOpenedToken } from "@/lib/fmsLinkage/fmsBinding"
@@ -268,6 +273,19 @@ import {
   USER_DATA_UPLOAD_PANEL_MAX_WIDTH,
   USER_DATA_UPLOAD_PANEL_MIN_WIDTH,
 } from "./_mapContents/userDataUpload/userDataUploadConfig"
+import { MyMapListPanel } from "./_mapContents/myMap/MyMapListPanel"
+import { MyMapCreatePanel } from "./_mapContents/myMap/MyMapCreatePanel"
+import { MyMapDetailPanel } from "./_mapContents/myMap/MyMapDetailPanel"
+import {
+  MY_MAP_DETAIL_DEFAULT_WIDTH,
+  MY_MAP_DETAIL_MAX_WIDTH,
+  MY_MAP_DETAIL_MIN_WIDTH,
+  MY_MAP_OPENED_KEY,
+  MY_MAP_PANEL_DEFAULT_WIDTH,
+  MY_MAP_PANEL_MAX_WIDTH,
+  MY_MAP_PANEL_MIN_WIDTH,
+  matchMyMapDropFiles,
+} from "./_mapContents/myMap/myMapConfig"
 import { DrawingDisplayControl } from "./_mapContents/drawingDisplay/DrawingDisplayControl"
 import {
   DRAWING_DISPLAY_OPENED_KEY,
@@ -882,6 +900,15 @@ function MapLayoutContent({
   )
   const userDataUploadOpen = openedWindows.includes(USER_DATA_UPLOAD_OPENED_KEY)
   const [userDataUploadPanelWidth, setUserDataUploadPanelWidth] = useState(USER_DATA_UPLOAD_PANEL_DEFAULT_WIDTH)
+  const myMapOpen = openedWindows.includes(MY_MAP_OPENED_KEY)
+  const [myMapPanelWidth, setMyMapPanelWidth] = useState(MY_MAP_PANEL_DEFAULT_WIDTH)
+  const [myMapDetailWidth, setMyMapDetailWidth] = useState(MY_MAP_DETAIL_DEFAULT_WIDTH)
+  const [myMapSelectedTable, setMyMapSelectedTable] = useState<string | null>(null)
+  const [myMapListRefreshKey, setMyMapListRefreshKey] = useState(0)
+  const [myMapCreateOpen, setMyMapCreateOpen] = useState(false)
+  const [myMapSeedFiles, setMyMapSeedFiles] = useState<File[] | null>(null)
+  const [myMapCreateKey, setMyMapCreateKey] = useState(0)
+  const myMapDetailOpen = myMapOpen && Boolean(myMapSelectedTable)
   const drawingDisplayOpen = openedWindows.includes(DRAWING_DISPLAY_OPENED_KEY)
   const [drawingDisplayPanelWidth, setDrawingDisplayPanelWidth] = useState(DRAWING_DISPLAY_PANEL_DEFAULT_WIDTH)
   const cadastralResurveyOpen = openedWindows.includes(CADASTRAL_RESURVEY_OPENED_KEY)
@@ -1008,6 +1035,7 @@ function MapLayoutContent({
   const [odorDashboardTotalWidth, setOdorDashboardTotalWidth] = useState(0)
   const [odorAlertTotalWidth, setOdorAlertTotalWidth] = useState(0)
   const [odorAlertView2TotalWidth, setOdorAlertView2TotalWidth] = useState(0)
+  const [odorAdminV2TotalWidth, setOdorAdminV2TotalWidth] = useState(0)
   const [worksRegisterTotalWidth, setWorksRegisterTotalWidth] = useState(0)
   const [wtlAdminEmptyTotalWidth, setWtlAdminEmptyTotalWidth] = useState(0)
   const [protoUserAccountOpen, setProtoUserAccountOpen] = useState(false)
@@ -1303,6 +1331,8 @@ function MapLayoutContent({
     (privateLandAnalysisOpen ? privateLandAnalysisPanelWidth : 0) +
     (privateLandAnalysisDetailOpen ? privateLandAnalysisDetailWidth : 0) +
     (userDataUploadOpen ? userDataUploadPanelWidth : 0) +
+    (myMapOpen ? myMapPanelWidth : 0) +
+    (myMapDetailOpen ? myMapDetailWidth : 0) +
     (drawingDisplayOpen ? drawingDisplayPanelWidth : 0) +
     (cadastralResurveyOpen ? cadastralResurveyPanelWidth : 0) +
     (cadastralResurveyDetailOpen ? cadastralResurveyDetailWidth : 0) +
@@ -1320,7 +1350,8 @@ function MapLayoutContent({
     (riverIllegalOccupationDetailOpen ? riverIllegalOccupationDetailWidth : 0) +
     (odorDashboardOpen ? odorDashboardTotalWidth : 0) +
     (odorAlertOpen ? odorAlertTotalWidth : 0) +
-    (odorAlertView2Open ? odorAlertView2TotalWidth : 0)
+    (odorAlertView2Open ? odorAlertView2TotalWidth : 0) +
+    odorAdminV2TotalWidth
   const searchBarOffset = {
     leftPx: SIDEBAR_WIDTH + totalListPanelWidth + SEARCH_BAR_MARGIN,
     topPx: 16,
@@ -1494,8 +1525,11 @@ function MapLayoutContent({
     privateLandAnalysisPanelLeftPx + (privateLandAnalysisOpen ? privateLandAnalysisPanelWidth : 0)
   const userDataUploadPanelLeftPx =
     privateLandAnalysisDetailLeftPx + (privateLandAnalysisDetailOpen ? privateLandAnalysisDetailWidth : 0)
-  const drawingDisplayPanelLeftPx =
+  const myMapPanelLeftPx =
     userDataUploadPanelLeftPx + (userDataUploadOpen ? userDataUploadPanelWidth : 0)
+  const myMapDetailLeftPx = myMapPanelLeftPx + (myMapOpen ? myMapPanelWidth : 0)
+  const drawingDisplayPanelLeftPx =
+    myMapDetailLeftPx + (myMapDetailOpen ? myMapDetailWidth : 0)
   const cadastralResurveyPanelLeftPx =
     drawingDisplayPanelLeftPx + (drawingDisplayOpen ? drawingDisplayPanelWidth : 0)
   const cadastralResurveyDetailLeftPx =
@@ -1538,6 +1572,8 @@ function MapLayoutContent({
     odorDashboardPanelLeftPx + (odorDashboardOpen ? odorDashboardTotalWidth : 0)
   const odorAlertView2PanelLeftPx =
     odorAlertPanelLeftPx + (odorAlertOpen ? odorAlertTotalWidth : 0)
+  const odorAdminV2PanelLeftPx =
+    odorAlertView2PanelLeftPx + (odorAlertView2Open ? odorAlertView2TotalWidth : 0)
   const mapPaddingLeft = SIDEBAR_WIDTH + totalListPanelWidth
   /** 패딩은 useLayoutEffect — 자식 useEffect(도로대장 fit 등)보다 먼저 적용되어야 함.
    * 거리뷰 ON일 때만 맵 중심(A)을 새 센터마크 위치에 맞춤.
@@ -1901,6 +1937,9 @@ function MapLayoutContent({
    */
   const prevSystemKeyRef = useRef<string | undefined>(undefined)
   const seededLastSystemRef = useRef(false)
+  /** V2만 기본 대시보드 — 닫은 뒤에는 같은 세션에서 재강제 오픈하지 않음 */
+  const odorDefaultOpenedHandledRef = useRef(false)
+  const isOdorSystemKey = ODOR_SYSTEM_KEYS.includes(systemKeyFromUrl)
   const openedParamKey = searchParams.get("opened") ?? ""
   useEffect(() => {
     if (!seededLastSystemRef.current) {
@@ -1919,7 +1958,9 @@ function MapLayoutContent({
 
     if (systemChanged) {
       mapContext?.allLayersOffRef?.current?.()
+      if (isOdorSystemKey) odorDefaultOpenedHandledRef.current = false
     }
+    if (!isOdorSystemKey) odorDefaultOpenedHandledRef.current = false
 
     if (systemListForOpened.length === 0) return
 
@@ -1930,15 +1971,25 @@ function MapLayoutContent({
 
     if (systemChanged) {
       scrubMapSearchParamsOnSystemSwitch(current, systemKeyFromUrl, serviceList)
+      applyOdorSystemDefaultOpened(current, systemKeyFromUrl)
+      if (isOdorSystemKey) odorDefaultOpenedHandledRef.current = true
     } else {
       scrubOpenedNotAllowedForSystem(current, systemKeyFromUrl, serviceList)
+      if (isOdorSystemKey && !odorDefaultOpenedHandledRef.current) {
+        if (openedParamKey) {
+          odorDefaultOpenedHandledRef.current = true
+        } else {
+          applyOdorSystemDefaultOpened(current, systemKeyFromUrl)
+          odorDefaultOpenedHandledRef.current = true
+        }
+      }
     }
 
     if (current.toString() === before) return
 
     router.replace(`/map?${current.toString()}`)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- system·opened·목록 기준
-  }, [systemKeyFromUrl, openedParamKey, systemListForOpened])
+  }, [systemKeyFromUrl, openedParamKey, systemListForOpened, isOdorSystemKey])
 
   const setOpened = (keys: string[]) => {
     updateMapUrl({ opened: keys })
@@ -2209,6 +2260,55 @@ function MapLayoutContent({
   const handleCloseUserDataUpload = () => {
     setOpened(openedWindows.filter((w) => w !== USER_DATA_UPLOAD_OPENED_KEY))
   }
+
+  const handleCloseMyMap = () => {
+    setMyMapCreateOpen(false)
+    setMyMapSelectedTable(null)
+    setMyMapSeedFiles(null)
+    setOpened(openedWindows.filter((w) => w !== MY_MAP_OPENED_KEY))
+  }
+
+  const handleCloseMyMapCreate = () => {
+    setMyMapCreateOpen(false)
+    setMyMapSeedFiles(null)
+  }
+
+  const currentSystemHasMyMap = useMemo(() => {
+    const serviceList =
+      systemListForOpened.find((s) => s.sys_key === systemKeyFromUrl)?.serviceList ?? []
+    return serviceList.includes("myMap")
+  }, [systemListForOpened, systemKeyFromUrl])
+
+  const handleMyMapMapDrop = useCallback(
+    (event: React.DragEvent) => {
+      event.preventDefault()
+      event.stopPropagation()
+      const matched = matchMyMapDropFiles(event.dataTransfer.files)
+      if (!matched) {
+        const n = event.dataTransfer.files?.length ?? 0
+        if (n > 0) {
+          window.alert("shp·shx·dbf 파일 혹은 Excel 파일 업로드를 지원합니다.")
+        }
+        return
+      }
+      if (!currentSystemHasMyMap) {
+        window.alert("이 시스템에서는 나의지도를 사용할 수 없습니다.")
+        return
+      }
+      setMyMapSeedFiles(matched)
+      setMyMapCreateKey((k) => k + 1)
+      setMyMapCreateOpen(true)
+      if (!openedWindows.includes(MY_MAP_OPENED_KEY)) {
+        setOpened([...openedWindows, MY_MAP_OPENED_KEY])
+      }
+    },
+    [currentSystemHasMyMap, openedWindows, setOpened]
+  )
+
+  const handleMyMapMapDragOver = useCallback((event: React.DragEvent) => {
+    event.preventDefault()
+    event.stopPropagation()
+  }, [])
 
   const handleCloseDrawingDisplay = () => {
     setOpened(openedWindows.filter((w) => w !== DRAWING_DISPLAY_OPENED_KEY))
@@ -2768,7 +2868,13 @@ function MapLayoutContent({
             aria-hidden
           />
         )}
-        <div className="absolute inset-0 z-0">{children}</div>
+        <div
+          className="absolute inset-0 z-0"
+          onDragOver={handleMyMapMapDragOver}
+          onDrop={handleMyMapMapDrop}
+        >
+          {children}
+        </div>
 
         <MapSidebar indexLogoSrc={indexLogoSrc} />
         <UsageDataAsNotifBootstrap />
@@ -4260,6 +4366,64 @@ function MapLayoutContent({
               </MapSideListPanel>
             </div>
           )}
+          {myMapOpen && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={myMapPanelWidth}
+                minWidth={MY_MAP_PANEL_MIN_WIDTH}
+                maxWidth={MY_MAP_PANEL_MAX_WIDTH}
+                leftOffsetPx={myMapPanelLeftPx}
+                onWidthChange={setMyMapPanelWidth}
+                serEng="myMap"
+              >
+                <MyMapListPanel
+                  onClose={handleCloseMyMap}
+                  onAdd={() => {
+                    setMyMapSelectedTable(null)
+                    setMyMapSeedFiles(null)
+                    setMyMapCreateKey((k) => k + 1)
+                    setMyMapCreateOpen(true)
+                  }}
+                  selectedTableName={myMapSelectedTable}
+                  onSelectTableName={setMyMapSelectedTable}
+                  refreshKey={myMapListRefreshKey}
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          {myMapCreateOpen && (
+            <MyMapCreatePanel
+              key={myMapCreateKey}
+              open={myMapCreateOpen}
+              initialFiles={myMapSeedFiles}
+              onClose={handleCloseMyMapCreate}
+              onCreated={() => {
+                handleCloseMyMapCreate()
+                setMyMapListRefreshKey((k) => k + 1)
+                if (!openedWindows.includes(MY_MAP_OPENED_KEY)) {
+                  setOpened([...openedWindows, MY_MAP_OPENED_KEY])
+                }
+              }}
+            />
+          )}
+          {myMapDetailOpen && myMapSelectedTable && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={myMapDetailWidth}
+                minWidth={MY_MAP_DETAIL_MIN_WIDTH}
+                maxWidth={MY_MAP_DETAIL_MAX_WIDTH}
+                leftOffsetPx={myMapDetailLeftPx}
+                onWidthChange={setMyMapDetailWidth}
+                serEng="myMap"
+              >
+                <MyMapDetailPanel
+                  tableName={myMapSelectedTable}
+                  onClose={() => setMyMapSelectedTable(null)}
+                  onChanged={() => setMyMapListRefreshKey((k) => k + 1)}
+                />
+              </MapSideListPanel>
+            </div>
+          )}
           {drawingDisplayOpen && (
             <DrawingDisplayControl
               width={drawingDisplayPanelWidth}
@@ -4557,6 +4721,12 @@ function MapLayoutContent({
               onClose={handleCloseOdorAlertView2}
             />
           )}
+          <OdorAdminV2Host
+            openedWindows={openedWindows}
+            setOpened={setOpened}
+            leftOffsetPx={odorAdminV2PanelLeftPx}
+            onTotalWidthChange={setOdorAdminV2TotalWidth}
+          />
           <OdorAlertPopupHost enabled={systemKeyFromUrl === "odorAdmin"} />
           <div className="flex-1 min-w-0 relative">
             <div className="pointer-events-auto">
