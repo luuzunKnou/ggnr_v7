@@ -149,6 +149,12 @@ function collectHostIpv4ViaWebRtc(): Promise<string | undefined> {
   });
 }
 
+/** 캐시된 사설 IP만 동기 반환 — 조회 API를 막지 않을 때 사용 */
+export function peekClientMachineIp(): string | undefined {
+  if (typeof window === 'undefined') return undefined;
+  return cachedIp && isUsableHostIpv4(cachedIp) ? cachedIp : undefined;
+}
+
 /** 브라우저 PC 사설 IPv4 (localhost·공인 IP·접속 URL hostname 미사용) */
 export async function resolveClientMachineIp(): Promise<string | undefined> {
   if (typeof window === 'undefined') return undefined;
@@ -170,7 +176,7 @@ export async function resolveClientMachineIp(): Promise<string | undefined> {
   return undefined;
 }
 
-/** dev 화면 진입 시 미리 조회 — 작업 클릭 전 WebRTC 수집 시간 확보 */
+/** 화면 진입 시 미리 조회 — 필지정보 호출 전에 WebRTC 수집 */
 export function prefetchClientMachineIp(): void {
   if (typeof window === 'undefined') return;
   void resolveClientMachineIp();

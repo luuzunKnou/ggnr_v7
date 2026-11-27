@@ -545,7 +545,7 @@ async function lookupParcel(item: VWorldAddressItem, vworldKey: string): Promise
   const { pnu } = await resolveParcelIdentityLikeMapClick({ coordinate3857, vworldKey, addressHint: jibun })
   if (!pnu) return { jibun }
   const [tab, history] = await Promise.all([
-    fetchParcelTabData({ pnu, vworldKey }).catch(() => null),
+    fetchParcelTabData({ pnu, vworldKey, auditChannel: 'smallPublicPlan' }).catch(() => null),
     fetchVworldOfficialLandPriceHistory({ pnu, vworldKey }).catch(() => []),
   ])
   const ch = tab?.characteristics?.[0] as Row

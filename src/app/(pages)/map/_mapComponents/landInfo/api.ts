@@ -1,6 +1,7 @@
 'use client';
 
 import { call } from '@/lib/api';
+import { peekClientMachineIp, prefetchClientMachineIp } from '@/lib/clientMachineIp';
 import {
   buildDataPortalBuildingUrl,
   fetchDataPortalBuildingText,
@@ -239,33 +240,50 @@ function normalizeParcelTabPayload(
   };
 }
 
-/** 행망이면 KRAS 우선, 없거나 실패하면 브이월드. 호출 여부는 항상 서버에서 받아 표시 */
-export async function fetchParcelTabData(args: { pnu: string; vworldKey: string }) {
+/**
+ * 행망이면 KRAS 우선, 없거나 실패하면 브이월드.
+ * 개발(행망 미사용)이어도 서버 `fetchParcelLandInfoTab`은 항상 호출해 연계 조회 이력을 남긴다.
+ */
+export async function fetchParcelTabData(args: {
+  pnu: string;
+  vworldKey: string;
+  /** true면 서버 필지정보(이력 적재) 생략 — 브이월드만 재조회 */
+  skipServerLinkage?: boolean;
+  /** 이력 접속페이지 — 사유지분석 등 */
+  auditChannel?: string;
+}) {
   const pnu = toStr(args.pnu);
   if (!pnu) return emptyParcelTabData();
 
   let krasSkipReason: string | undefined;
   let hangmangCalls: HangmangCallLine[] | undefined;
   const cfg = await fetchLandInfoConfig();
+  const auditChannel = String(args.auditChannel ?? '').trim() || undefined;
 
-  if (cfg.useKras) {
+  if (!args.skipServerLinkage) {
     try {
+      // WebRTC 대기 금지 — 캐시·서버 헤더로 IP 보완
+      prefetchClientMachineIp();
+      const clientIp = peekClientMachineIp();
       const res = await call('', 'POST', {
         service: 'landLinkageService',
         action: 'fetchParcelLandInfoTab',
-        params: { pnu },
+        params: {
+          pnu,
+          ...(clientIp ? { clientIp } : {}),
+          ...(auditChannel ? { channel: auditChannel } : {}),
+        },
       });
       const payload = (res?.data ?? res) as ParcelTabData & { ok?: boolean; error?: string };
       krasSkipReason = String(payload?.krasSkipReason ?? payload?.error ?? '').trim() || undefined;
       hangmangCalls = Array.isArray(payload?.hangmangCalls) ? payload.hangmangCalls : undefined;
-      if (payload?.ok !== false) {
+      if (cfg.useKras && payload?.ok !== false) {
         const tab = normalizeParcelTabPayload(payload);
         if (hasParcelLandInfoTabData(tab)) return { ...tab, krasSkipReason, hangmangCalls };
+        if (!krasSkipReason) krasSkipReason = '행망 응답을 필지정보에 쓸 수 없어 브이월드로 표시';
       }
-      if (!krasSkipReason) krasSkipReason = '행망 응답을 필지정보에 쓸 수 없어 브이월드로 표시';
     } catch (e) {
-      krasSkipReason =
-        krasSkipReason || (e instanceof Error ? e.message : '행망 조회 실패');
+      krasSkipReason = krasSkipReason || (e instanceof Error ? e.message : '행망 조회 실패');
     }
   }
 
@@ -295,10 +313,12 @@ export async function fetchParcelLandModalList(args: {
   const pnu = toStr(args.pnu);
   if (!pnu) return { ok: false, kind: args.kind, headers: [], rows: [], error: 'PNU 없음' };
   try {
+    prefetchClientMachineIp();
+    const clientIp = peekClientMachineIp();
     const res = await call('', 'POST', {
       service: 'landLinkageService',
       action: 'fetchParcelLandModalList',
-      params: { pnu, kind: args.kind },
+      params: { pnu, kind: args.kind, ...(clientIp ? { clientIp } : {}) },
     });
     const payload = (res?.data ?? res) as ParcelLandModalListResult;
     return {
@@ -315,18 +335,29 @@ export async function fetchParcelLandModalList(args: {
   }
 }
 
-/** 시스템 통합제어 personInfo 켜짐이면 소유자명 마스킹 */
-export async function fetchPersonInfoMaskEnabled(): Promise<boolean> {
+/** 세션 기준 마스킹 — enabled=소유자명, maskWide=등록번호·주소(KRAS 권한 회수) */
+export async function fetchPersonInfoMaskState(): Promise<{
+  enabled: boolean;
+  maskWide: boolean;
+}> {
   try {
     const res = await call('', 'POST', {
       service: 'systemControlService',
       action: 'getPersonInfoMaskEnabled',
     });
-    const payload = (res?.data ?? res) as { enabled?: boolean };
-    return payload?.enabled === true;
+    const payload = (res?.data ?? res) as { enabled?: boolean; maskWide?: boolean };
+    return {
+      enabled: payload?.enabled === true,
+      maskWide: payload?.maskWide === true,
+    };
   } catch {
-    return false;
+    return { enabled: false, maskWide: false };
   }
+}
+
+/** @deprecated fetchPersonInfoMaskState 사용 — 소유자명 마스킹만 */
+export async function fetchPersonInfoMaskEnabled(): Promise<boolean> {
+  return (await fetchPersonInfoMaskState()).enabled;
 }
 
 /** 필지 PNU 기준 최신 공시지가 1건 — 공용 브이월드 클라이언트 */
