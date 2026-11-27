@@ -42,6 +42,8 @@ function toProto(item: BizNotifCachedItem): ProtoNotifItem {
 
 /** 현재 시스템 알림 — 부서업무(serviceList)에 해당 기능이 있을 때만 */
 function notifMatchesActiveSystem(item: BizNotifCachedItem): boolean {
+  // 데이터요청은 계정 단위 화면 — 시스템 필터와 무관하게 표시
+  if (item.category === '데이터요청') return true;
   if (!activeSystem) return true;
   const eng = String(item.serEng ?? '').trim();
   // 메뉴 목록이 있으면 그게 유일한 기준 (도로행정에 도로점용 없으면 안 뜸)

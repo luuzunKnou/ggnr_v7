@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Ellipsis, User } from 'lucide-react'
 import { useSession } from 'next-auth/react'
+import { withBasePathNav } from '@/lib/basePath'
 import { cn } from '@/lib/utils'
 import {
   hasProtoUnreadNotifications,
@@ -124,6 +125,14 @@ export function OdorSidebarUserAccount({ collapsed, onOpenAlertNotif }: Props) {
           }
         }}
         onOpenFee={() => undefined}
+        onOpenDataRequest={(item) => {
+          const href =
+            item.target === 'dataRequestApprove'
+              ? '/data-request-approve'
+              : '/data-request'
+          setOpen(false)
+          window.location.assign(withBasePathNav(href))
+        }}
         panelClassName={panelClassName}
         sideModalClassName={sideModalClassName}
       />

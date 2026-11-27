@@ -1,15 +1,15 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { ChevronDown, ChevronRight, Trash2 } from 'lucide-react'
+import { ChevronUp, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { BIZ_NOTIF_WITHIN_DAYS } from '../bizNotif/bizNotifClient'
 import type { ProtoNotifItem } from '../bizNotif/bizNotifStore'
 
 const NOTIF_ROW =
-  'flex items-center gap-2 border-b border-border/80 py-2 pl-4 pr-3 last:border-b-0 hover:bg-muted/50'
+  'flex items-center gap-2 border-b border-border/80 px-[10px] py-[6px] last:border-b-0 hover:bg-muted/30'
 const BTN_CLEAR =
-  'shrink-0 rounded-sm px-1.5 py-0.5 text-xs leading-none text-muted-foreground hover:text-black'
+  'shrink-0 rounded-sm px-1.5 py-0.5 text-[10px] font-normal leading-none text-[#8A8A8A] hover:text-[#1A1A1A]'
 
 function parseNotifListFields(item: ProtoNotifItem): { useName: string; key: string } {
   if (item.category === '위치없음') {
@@ -17,6 +17,12 @@ function parseNotifListFields(item: ProtoNotifItem): { useName: string; key: str
   }
   if (item.category === '경보') {
     return { useName: item.title || item.name, key: item.listKey || item.name || '경보' }
+  }
+  if (item.category === '데이터요청') {
+    return {
+      useName: `${item.title} · ${item.name}`,
+      key: item.listKey || '—',
+    }
   }
   if (item.listKey) {
     const matched = item.name.match(/^(\S+)\s+(\S+)\s+(.+)$/)
@@ -37,6 +43,7 @@ type Props = {
   onOpenLedger: (item: ProtoNotifItem) => void
   onOpenFee: (item: ProtoNotifItem) => void
   onOpenMissingGeom?: (item: ProtoNotifItem) => void
+  onOpenDataRequest?: (item: ProtoNotifItem) => void
 }
 
 export function UserAccountProtoNotifTab({
@@ -47,12 +54,14 @@ export function UserAccountProtoNotifTab({
   onOpenLedger,
   onOpenFee,
   onOpenMissingGeom,
+  onOpenDataRequest,
 }: Props) {
   const [expiryExpanded, setExpiryExpanded] = useState(true)
   const [feeExpanded, setFeeExpanded] = useState(true)
   const [geomExpanded, setGeomExpanded] = useState(true)
   const [consExpanded, setConsExpanded] = useState(true)
   const [alertExpanded, setAlertExpanded] = useState(true)
+  const [dataReqExpanded, setDataReqExpanded] = useState(true)
 
   const expiryList = useMemo(
     () => items.filter((item) => item.category === '만료임박'),
@@ -74,21 +83,32 @@ export function UserAccountProtoNotifTab({
     () => items.filter((item) => item.category === '경보'),
     [items]
   )
+  const dataReqList = useMemo(
+    () => items.filter((item) => item.category === '데이터요청'),
+    [items]
+  )
 
   const totalCount =
-    expiryList.length + feeList.length + geomList.length + consList.length + alertList.length
+    expiryList.length +
+    feeList.length +
+    geomList.length +
+    consList.length +
+    alertList.length +
+    dataReqList.length
   const unreadCount = items.filter((n) => !n.read).length
 
   const openItem = (item: ProtoNotifItem) => {
     onMarkRead(item)
     if (item.target === 'fee') onOpenFee(item)
     else if (item.target === 'aerial') onOpenMissingGeom?.(item)
-    else onOpenLedger(item)
+    else if (item.target === 'dataRequest' || item.target === 'dataRequestApprove') {
+      onOpenDataRequest?.(item)
+    } else onOpenLedger(item)
   }
 
   if (totalCount === 0) {
     return (
-      <div className="flex min-h-[120px] flex-col items-center justify-center px-3 py-10 text-center text-xs text-muted-foreground">
+      <div className="flex min-h-[120px] flex-col items-center justify-center px-3 py-10 text-center text-[10px] font-normal text-[#8A8A8A]">
         받은 알림이 없습니다.
       </div>
     )
@@ -96,18 +116,18 @@ export function UserAccountProtoNotifTab({
 
   return (
     <>
-      <div className="flex shrink-0 items-center justify-between border-b border-border bg-muted/50 px-3 py-2">
-        <span className="text-xs text-muted-foreground">
-          총 <span className="font-medium tabular-nums text-foreground">{totalCount}</span>건
+      <div className="flex shrink-0 items-center justify-between border-b border-border bg-[#FAFAFA] px-[10px] py-[2px]">
+        <span className="text-[10px] font-normal text-[#8A8A8A]">
+          총 <span className="font-normal tabular-nums text-[#1A1A1A]">{totalCount}</span>건
           {unreadCount > 0 ? (
             <>
               {' '}
               · 미읽음{' '}
-              <span className="font-medium tabular-nums text-red-600">{unreadCount}</span>
+              <span className="font-normal tabular-nums text-[#1A1A1A]">{unreadCount}</span>
             </>
           ) : null}
         </span>
-        <button type="button" className={BTN_CLEAR} onClick={onDismissAll}>
+        <button type="button" className={BTN_CLEAR} onClick={onDismissAll} title="모두 지우기">
           모두 지우기
         </button>
       </div>
@@ -197,6 +217,23 @@ export function UserAccountProtoNotifTab({
             ))}
           </NotifGroup>
         ) : null}
+
+        {dataReqList.length > 0 ? (
+          <NotifGroup
+            summary={`데이터 요청 알림이 ${dataReqList.length}건입니다`}
+            expanded={dataReqExpanded}
+            onToggle={() => setDataReqExpanded((prev) => !prev)}
+          >
+            {dataReqList.map((item) => (
+              <NotifListRow
+                key={item.id}
+                item={item}
+                onOpen={() => openItem(item)}
+                onDelete={() => onDismiss(item)}
+              />
+            ))}
+          </NotifGroup>
+        ) : null}
       </div>
     </>
   )
@@ -217,21 +254,23 @@ function NotifGroup({
     <section className="border-b border-border last:border-b-0">
       <button
         type="button"
-        className="flex w-full items-center gap-2 bg-background px-3 py-2 text-left transition-colors hover:bg-muted/50"
+        className="flex w-full items-center gap-2 bg-background px-[10px] py-[6px] text-left transition-colors hover:bg-muted/40"
         onClick={onToggle}
         aria-expanded={expanded}
       >
-        <span className="min-w-0 flex-1 text-left text-xs font-medium leading-snug text-foreground">
+        <span className="min-w-0 flex-1 text-left text-[10px] font-normal leading-snug text-[#1A1A1A]">
           {summary}
         </span>
-        {expanded ? (
-          <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
-        ) : (
-          <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-        )}
+        <ChevronUp
+          className={cn(
+            'h-4 w-4 shrink-0 text-[#696969] transition-transform',
+            !expanded && 'rotate-180'
+          )}
+          aria-hidden
+        />
       </button>
       {expanded ? (
-        <ul className="border-t border-border/80 bg-background pb-1">{children}</ul>
+        <ul className="border-t border-border/80 bg-[#FAFAFA]">{children}</ul>
       ) : null}
     </section>
   )
@@ -249,48 +288,30 @@ function NotifListRow({
   const { useName, key } = parseNotifListFields(item)
 
   return (
-    <li className={cn(NOTIF_ROW, item.read ? 'bg-sky-50/30' : 'bg-background')}>
-      <span
-        className={cn(
-          'shrink-0 select-none text-base leading-none',
-          item.read ? 'text-muted-foreground/40/70' : 'text-muted-foreground'
-        )}
-        aria-hidden
-      >
-        ·
-      </span>
+    <li className={cn(NOTIF_ROW, item.read ? 'opacity-70' : '')}>
       <button
         type="button"
         className="flex min-w-0 max-w-[calc(100%-2rem)] shrink items-center gap-1.5 text-left"
         onClick={onOpen}
         title={`${useName} | ${key}`}
       >
-        <span
-          className={cn(
-            'truncate text-xs font-medium leading-snug tracking-tight',
-            item.read ? 'text-muted-foreground/80' : 'text-muted-foreground'
-          )}
-        >
+        <span className="truncate text-[10px] font-normal leading-snug tracking-tight text-[#8A8A8A]">
           {useName}
         </span>
-        <span className="shrink-0 text-muted-foreground/40" aria-hidden>
+        <span className="shrink-0 text-[#8A8A8A]/50" aria-hidden>
           |
         </span>
-        <span
-          className={cn(
-            'shrink-0 truncate text-xs tabular-nums leading-snug',
-            item.read ? 'text-muted-foreground/80' : 'text-muted-foreground'
-          )}
-        >
+        <span className="shrink-0 truncate text-[10px] font-normal tabular-nums leading-snug text-[#8A8A8A]">
           {key}
         </span>
       </button>
       <span className="min-w-2 flex-1" aria-hidden />
       <button
         type="button"
-        className="shrink-0 rounded-sm p-1 text-muted-foreground hover:text-black"
+        className="shrink-0 rounded-sm p-1 text-[#8A8A8A] hover:text-[#1A1A1A]"
         onClick={onDelete}
         aria-label="삭제"
+        title="삭제"
       >
         <Trash2 className="h-3.5 w-3.5" />
       </button>

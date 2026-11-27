@@ -878,6 +878,123 @@ function canActOnRow(
   return false;
 }
 
+/** 내 정보 알림 후보 — 승인 대기 / 승인·반려 결과 */
+export type DataRequestNotifCandidate = {
+  notifKey: string;
+  kind: 'pending' | 'result';
+  fileGroupKey: number;
+  title: string;
+  name: string;
+  listKey: string;
+  target: 'dataRequestApprove' | 'dataRequest';
+};
+
+function dataRequestNotifName(row: {
+  fileUserName?: string | null;
+  fileLayerKor?: string | null;
+  fileLayer?: string | null;
+  fileType?: string | null;
+}): string {
+  const who = String(row.fileUserName ?? '').trim() || '요청자';
+  const layer =
+    String(row.fileLayerKor ?? '').trim() ||
+    String(row.fileLayer ?? '').trim() ||
+    '레이어';
+  const typ = String(row.fileType ?? '').trim() || '파일';
+  return `${who} · ${layer} · ${typ}`;
+}
+
+/**
+ * 데이터요청 알림 후보.
+ * - pending: 승인 가능한 대기(P) 건 (팀장/관리자)
+ * - result: 본인 요청의 승인·반려(Y/N), 수동승인만, withinDays 이내
+ */
+export async function listDataRequestNotifications(params?: {
+  withinDays?: number;
+}): Promise<{ items: DataRequestNotifCandidate[]; error?: string }> {
+  const user = await resolveSessionUser();
+  if (!user) return { items: [], error: '로그인이 필요합니다.' };
+
+  const withinDays = Math.max(1, Math.min(365, Math.trunc(Number(params?.withinDays ?? 15))));
+  const items: DataRequestNotifCandidate[] = [];
+
+  try {
+    if (canApproveRole(user)) {
+      const pendingRows = await db
+        .select()
+        .from(dataRequestFile)
+        .where(
+          and(
+            eq(dataRequestFile.fileIsDel, false),
+            eq(dataRequestFile.fileAccept, DRF_ACCEPT_P),
+            inArray(dataRequestFile.fileAcceptAuthor, [DRF_AUTHOR_TEAM, DRF_AUTHOR_ADMIN])
+          )
+        )
+        .orderBy(desc(dataRequestFile.fileDate), desc(dataRequestFile.fileGroupKey));
+
+      const pendingSeen = new Set<number>();
+      for (const row of pendingRows) {
+        if (!canActOnRow(user, row)) continue;
+        const gk = Number(row.fileGroupKey);
+        if (!Number.isFinite(gk) || pendingSeen.has(gk)) continue;
+        pendingSeen.add(gk);
+        const dateLabel = String(row.fileDate ?? '').trim().slice(0, 16) || '—';
+        items.push({
+          notifKey: `data-request-pending:${gk}`,
+          kind: 'pending',
+          fileGroupKey: gk,
+          title: '데이터 승인 대기',
+          name: dataRequestNotifName(row),
+          listKey: dateLabel,
+          target: 'dataRequestApprove',
+        });
+      }
+    }
+
+    const resultRows = await db
+      .select()
+      .from(dataRequestFile)
+      .where(
+        and(
+          eq(dataRequestFile.fileIsDel, false),
+          eq(dataRequestFile.fileUserId, user.usrId),
+          inArray(dataRequestFile.fileAccept, [DRF_ACCEPT_Y, DRF_ACCEPT_N]),
+          inArray(dataRequestFile.fileAcceptAuthor, [DRF_AUTHOR_TEAM, DRF_AUTHOR_ADMIN]),
+          sql`${dataRequestFile.fileAcceptDate} IS NOT NULL`,
+          sql`${dataRequestFile.fileAcceptDate}::date >= (CURRENT_DATE - ${withinDays}::int)`
+        )
+      )
+      .orderBy(desc(dataRequestFile.fileAcceptDate), desc(dataRequestFile.fileGroupKey));
+
+    const resultSeen = new Set<string>();
+    for (const row of resultRows) {
+      const gk = Number(row.fileGroupKey);
+      const accept = String(row.fileAccept ?? '').trim();
+      if (!Number.isFinite(gk) || (accept !== DRF_ACCEPT_Y && accept !== DRF_ACCEPT_N)) continue;
+      const dedupe = `${gk}:${accept}`;
+      if (resultSeen.has(dedupe)) continue;
+      resultSeen.add(dedupe);
+      const approved = accept === DRF_ACCEPT_Y;
+      const dateLabel = String(row.fileAcceptDate ?? '').trim().slice(0, 16) || '—';
+      items.push({
+        notifKey: `data-request-result:${gk}:${accept}`,
+        kind: 'result',
+        fileGroupKey: gk,
+        title: approved ? '데이터 요청 승인' : '데이터 요청 반려',
+        name: dataRequestNotifName(row),
+        listKey: dateLabel,
+        target: 'dataRequest',
+      });
+    }
+
+    return { items };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.warn('[dataRequest] notif load failed:', msg);
+    return { items: [], error: msg };
+  }
+}
+
 export async function listDataRequests(params: ListParams = {}) {
   const user = await resolveSessionUser();
   if (!user) return { success: false as const, error: 'Unauthorized' };

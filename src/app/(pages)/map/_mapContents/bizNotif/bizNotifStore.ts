@@ -2,13 +2,13 @@
 
 export type ProtoNotifItem = {
   id: string
-  category: '만료임박' | '미납임박' | '위치없음' | '공사알림' | '경보'
+  category: '만료임박' | '미납임박' | '위치없음' | '공사알림' | '경보' | '데이터요청'
   title: string
   name: string
   listKey?: string
   read: boolean
   important: boolean
-  target: 'ledger' | 'fee' | 'aerial'
+  target: 'ledger' | 'fee' | 'aerial' | 'dataRequest' | 'dataRequestApprove'
   targetId: string
   notifKey?: string
   systemScope?: string
