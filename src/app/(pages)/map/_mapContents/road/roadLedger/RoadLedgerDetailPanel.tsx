@@ -54,6 +54,8 @@ import {
   getAllRoadLedgerDocLayerIds,
   isRoadLedgerDocGroupActive,
   ROAD_LEDGER_DOC_LAYERS,
+  resolveRoadLedgerDocWmsLayerIdWithFallback,
+  resolveRoadLedgerDocWmsLayers,
   ROAD_LEDGER_DOC_LABELS_WITH_LAYER_COUNT,
   ROAD_LEDGER_RDID_MIN_LEN_FOR_FACILITY_JOIN,
   ROAD_LEDGER_SUMMARY_LAYER_ID,
@@ -433,8 +435,12 @@ export function RoadLedgerDetailPanel({ row, onClose }: Props) {
   const getEffectiveDocLayers = useCallback(
     (key: RoadLedgerDocButtonKey) => {
       const raw = ROAD_LEDGER_DOC_LAYERS[key];
-      if (existingDocLayerIds == null) return raw;
-      return raw.filter((id) => existingDocLayerIds.has(id.toLowerCase()));
+      if (existingDocLayerIds == null) {
+        return resolveRoadLedgerDocWmsLayers(raw);
+      }
+      return raw
+        .filter((id) => existingDocLayerIds.has(id.toLowerCase()))
+        .map((id) => resolveRoadLedgerDocWmsLayerIdWithFallback(id, existingDocLayerIds));
     },
     [existingDocLayerIds]
   );

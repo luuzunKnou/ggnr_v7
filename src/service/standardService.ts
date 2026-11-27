@@ -22,6 +22,7 @@ import { fetchVworldCadastralGeomByPnu } from '@/lib/vworldCadastralGeom';
 import { readDefineLayerCodes } from '@/lib/defineLayerCodeFiles';
 import { isLayerExtraFieldName } from '@/lib/layerExtraField';
 import { mergeProjectSplitIntoTables } from '@/lib/projectSplitLayers';
+import { applyMapServiceWmsLayerAlias } from '@/lib/mapServiceWmsAlias';
 
 const DEFAULT_SCHEMA = 'layer';
 const ALLOWED_SCHEMAS = new Set(['layer', 'public_layer']);
@@ -263,6 +264,61 @@ export async function getTableData(params: {
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     return { rows: [], total: 0, error: msg };
+  }
+}
+
+/**
+ * 원본 테이블 행의 ogc_fid로 OL 하이라이트용 geom을 조회.
+ * WMS 별칭(선형 뷰) geom을 그대로 써서, 낙석방지 등 다른 선형과 같은 선 강조 스타일을 탄다.
+ */
+export async function getMapDisplayGeomsByOgcFids(params: {
+  sourceTable: string;
+  schema?: string;
+  ogcFids?: Array<string | number>;
+}): Promise<{ geomsByOgcFid: Record<string, unknown>; error?: string }> {
+  const sourceTable = String(params?.sourceTable ?? '').trim();
+  if (!sourceTable) return { geomsByOgcFid: {} };
+  const aliasGuess = applyMapServiceWmsLayerAlias(sourceTable);
+  if (aliasGuess.toLowerCase() === sourceTable.toLowerCase()) {
+    return { geomsByOgcFid: {} };
+  }
+
+  const schema = resolveSchema(params?.schema);
+  const aliasTable = await resolveLayerPhysicalRelName(schema, aliasGuess);
+  if (!aliasTable) return { geomsByOgcFid: {} };
+
+  const fids = [
+    ...new Set(
+      (Array.isArray(params?.ogcFids) ? params.ogcFids : [])
+        .map((v) => Number(v))
+        .filter((n) => Number.isFinite(n) && n >= 0)
+    ),
+  ];
+  if (fids.length === 0) return { geomsByOgcFid: {} };
+
+  const safeSchema = schema.replace(/"/g, '""');
+  const safeTable = aliasTable.replace(/"/g, '""');
+  const inList = fids.join(',');
+
+  try {
+    const res = await db.execute(
+      sql.raw(
+        `SELECT ogc_fid,
+                ST_AsGeoJSON(ST_Transform(geom, 4326))::json AS geom
+         FROM "${safeSchema}"."${safeTable}"
+         WHERE ogc_fid IN (${inList})
+           AND geom IS NOT NULL`
+      )
+    );
+    const geomsByOgcFid: Record<string, unknown> = {};
+    for (const row of (res.rows ?? []) as Array<{ ogc_fid?: unknown; geom?: unknown }>) {
+      if (row?.ogc_fid == null || row.geom == null) continue;
+      geomsByOgcFid[String(row.ogc_fid)] = row.geom;
+    }
+    return { geomsByOgcFid };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { geomsByOgcFid: {}, error: msg };
   }
 }
 

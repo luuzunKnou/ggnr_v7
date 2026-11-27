@@ -233,16 +233,20 @@ export function buildSmallPublicReportHtml(
 /** 대상 목록·집계·변동을 시트로 나눠 내려받기 (엑셀 라이브러리는 누를 때만 불러옴) */
 export async function exportSmallPublicReportExcel(
   snap: SmallPublicInspectionReport,
-  prev: SmallPublicInspectionReport | null
+  prev: SmallPublicInspectionReport | null,
+  /** 읍면을 고르면 그 읍면의 시설만(빈 값은 전체) */
+  emd = ''
 ): Promise<void> {
   const XLSX = await import('xlsx-js-style')
   const wb = XLSX.utils.book_new()
+  const inScope = <T extends { emd: string }>(x: T) => !emd || x.emd === emd
+  const rowsAll = snap.rows.filter(inScope)
   const add = (rows: Record<string, unknown>[], name: string) => {
     const ws = XLSX.utils.json_to_sheet(rows)
     applyThinBorders(ws, XLSX.utils)
     XLSX.utils.book_append_sheet(wb, ws, name)
   }
-  const list = snap.rows.map((r, k) => ({
+  const list = rowsAll.map((r, k) => ({
     번호: k + 1,
     관리번호: r.mngNo,
     시설명: r.name,
@@ -256,10 +260,10 @@ export async function exportSmallPublicReportExcel(
   }))
   add(list, '점검대상')
   const cnt = (title: string, entries: [string, number][]) => entries.map(([k, n]) => ({ [title]: k, 곳: n }))
-  add(cnt('읍면', countBy(snap.rows, (r) => r.emd || '—')), '읍면별')
-  add(cnt('유형', countBy(snap.rows, (r) => r.type)), '유형별')
+  add(cnt('읍면', countBy(rowsAll, (r) => r.emd || '—')), '읍면별')
+  add(cnt('유형', countBy(rowsAll, (r) => r.type)), '유형별')
   if (prev) {
-    const c = compareSmallPublicReportRows(snap.rows, prev.rows)
+    const c = compareSmallPublicReportRows(rowsAll, prev.rows.filter(inScope))
     const rows = [
       ...c.added.map((r) => ({ 변동: '신규', 시설명: r.name, 읍면: r.emd, 전년: '', 올해: r.prevClass })),
       ...c.removed.map((r) => ({ 변동: '제외', 시설명: r.name, 읍면: r.emd, 전년: r.prevClass, 올해: '' })),
@@ -267,7 +271,7 @@ export async function exportSmallPublicReportExcel(
     ]
     add(rows.length ? rows : [{ 변동: '변동 없음' }], '전년대비변동')
   }
-  const fileName = `안전점검대상_${snap.year}_${snap.baseDate.replace(/-/g, '')}.xlsx`
+  const fileName = `안전점검대상_${snap.year}${emd ? `_${emd}` : ''}_${snap.baseDate.replace(/-/g, '')}.xlsx`
   //		TODO : 소규모공공 기능 연결 레이어 테이블의 SHP/엑셀(엑셀) 권한 적용 필요 (tableName·tableNames 전달)
   writeExcelWorkbookWithPledge(XLSX, wb, fileName, '안전점검대상')
 }

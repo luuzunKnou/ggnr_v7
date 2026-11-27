@@ -8,6 +8,7 @@
  * - 공통점용: 하천 usage_data_as·도로 rdl_occ_as(공통 칸, +필지·물건지) + 국공유지 public_occupationledger(+_jijuk|_mgj) — 9개
  * - 점사용료: water|road|public_ngl_fee_list — 3개
  * - FMS: road_fms_facility + road_fms_inspection — 2개 (상하수도·건축물도 시설물구분으로 함께)
+ * - 소규모 공공시설: 유형 후보지 6(spf_creek…)·spf_eval·spf_report·spf_check·spf_plan·spf_plan_fac
  * - 차세대 연계: next_gen_linkage.ngl_error_log, ngl_query_table
  * - 토지행정망 파일: land_linkage (목록·토지기본·공시지가)
  * - 메모: memo 및 memo_* 계열
@@ -1851,6 +1852,433 @@ export async function ensureOccupationLedgerTables(result?: EnsureResult): Promi
   return out;
 }
 
+/** 유형별 후보지 공통 컬럼 (geom 타입만 다름). RISK_RANK·SCORE·SURV_* 제외 */
+function spfTypeFacSql(table: string, geomType: 'LineString' | 'Point'): string {
+  return `
+CREATE TABLE IF NOT EXISTS layer.${table} (
+  id bigserial PRIMARY KEY,
+  cons_code text,
+  sisul_name text,
+  shp_code text,
+  emd text,
+  ri text,
+  address text,
+  start_xy text,
+  end_xy text,
+  ben_area text,
+  risk_date text,
+  candidate text,
+  lne text,
+  width text,
+  hight text,
+  parent_cons_code text,
+  parent_fac_name text,
+  geom geometry(${geomType}, 5187)
+);
+CREATE INDEX IF NOT EXISTS ${table}_geom_gix ON layer.${table} USING GIST (geom);
+CREATE INDEX IF NOT EXISTS ${table}_cons_idx ON layer.${table} (cons_code);
+`;
+}
+
+const SPF_TYPE_FAC_SPECS: { table: string; geom: 'LineString' | 'Point'; kor: string }[] = [
+  { table: 'spf_creek', geom: 'LineString', kor: '세천' },
+  { table: 'spf_bridge', geom: 'Point', kor: '소교량' },
+  { table: 'spf_intake', geom: 'Point', kor: '취입보' },
+  { table: 'spf_village', geom: 'LineString', kor: '마을진입로' },
+  { table: 'spf_farm', geom: 'LineString', kor: '농로' },
+  { table: 'spf_drop', geom: 'Point', kor: '낙차공' },
+];
+
+const SPF_EVAL_SQL = `
+CREATE TABLE IF NOT EXISTS layer.spf_eval (
+  id bigserial PRIMARY KEY,
+  cons_code text,
+  eval_date text,
+  evaluator text,
+  result text,
+  remark text
+);
+CREATE INDEX IF NOT EXISTS spf_eval_cons_idx ON layer.spf_eval (cons_code);
+`
+
+const SPF_REPORT_SQL = `
+CREATE TABLE IF NOT EXISTS layer.spf_report (
+  id bigserial PRIMARY KEY,
+  year integer NOT NULL,
+  write_date text,
+  title text,
+  agency text,
+  author text,
+  target_count integer,
+  summary text,
+  CONSTRAINT spf_report_year_key UNIQUE (year)
+);
+`
+
+/** 안전점검 보고서 점검 대상 — 보고서 작성 시점의 대상 관리번호·직전 평가구분 */
+const SPF_REPORT_TARGET_SQL = `
+CREATE TABLE IF NOT EXISTS layer.spf_report_target (
+  id bigserial PRIMARY KEY,
+  report_id integer NOT NULL,
+  cons_code text NOT NULL,
+  prev_class text,
+  prev_date text,
+  CONSTRAINT spf_report_target_key UNIQUE (report_id, cons_code)
+);
+CREATE INDEX IF NOT EXISTS spf_report_target_report_idx ON layer.spf_report_target (report_id);
+`
+
+const SPF_CHECK_SQL = `
+CREATE TABLE IF NOT EXISTS layer.spf_check (
+  id bigserial PRIMARY KEY,
+  cons_code text NOT NULL,
+  report_id integer NOT NULL,
+  risk_score integer,
+  surv_date text,
+  surv_name text,
+  risk_rank text,
+  candidate text,
+  remark text,
+  CONSTRAINT spf_check_report_cons_key UNIQUE (report_id, cons_code)
+);
+CREATE INDEX IF NOT EXISTS spf_check_cons_idx ON layer.spf_check (cons_code);
+`
+
+/** 구형 점검결과 컬럼 → 레이어 영문 코드 */
+const SPF_CHECK_LEGACY_RENAMES: Array<[string, string]> = [
+  ['score', 'risk_score'],
+  ['check_date', 'surv_date'],
+  ['inspector', 'surv_name'],
+  ['grade', 'risk_rank'],
+  ['class_result', 'candidate'],
+];
+
+const SPF_PLAN_SQL = `
+CREATE TABLE IF NOT EXISTS layer.spf_plan (
+  id bigserial PRIMARY KEY,
+  start_year integer NOT NULL,
+  end_year integer NOT NULL,
+  CONSTRAINT spf_plan_years_key UNIQUE (start_year, end_year)
+);
+`
+
+const SPF_PLAN_FAC_SQL = `
+CREATE TABLE IF NOT EXISTS layer.spf_plan_fac (
+  id bigserial PRIMARY KEY,
+  plan_id integer NOT NULL,
+  cons_code text,
+  final_rank integer,
+  workload_m double precision,
+  cost_mil double precision,
+  done_rate double precision,
+  after5_qty double precision,
+  after5_cost_mil double precision,
+  y1_qty double precision,
+  y1_cost_mil double precision,
+  y2_qty double precision,
+  y2_cost_mil double precision,
+  y3_qty double precision,
+  y3_cost_mil double precision,
+  y4_qty double precision,
+  y4_cost_mil double precision,
+  y5_qty double precision,
+  y5_cost_mil double precision,
+  effect_people text,
+  effect_farm_ha text,
+  effect_building text,
+  status text
+);
+CREATE INDEX IF NOT EXISTS spf_plan_fac_plan_idx ON layer.spf_plan_fac (plan_id);
+CREATE INDEX IF NOT EXISTS spf_plan_fac_cons_idx ON layer.spf_plan_fac (cons_code);
+`
+
+/** 소교량 리 묶음 매핑 — group_code 는 정비계획(spf_plan_fac.cons_code)에, cons_code 는 spf_bridge 에 대응 */
+const SPF_BRIDGE_GROUP_SQL = `
+CREATE TABLE IF NOT EXISTS layer.spf_bridge_group (
+  id bigserial PRIMARY KEY,
+  group_code text NOT NULL,
+  ri text NOT NULL,
+  cons_code text NOT NULL,
+  CONSTRAINT spf_bridge_group_cons_key UNIQUE (cons_code)
+);
+CREATE INDEX IF NOT EXISTS spf_bridge_group_code_idx ON layer.spf_bridge_group (group_code);
+`
+
+const SPF_REPORT_TARGET_COMMENTS_SQL = `
+COMMENT ON TABLE layer.spf_report_target IS '안전점검 보고서 점검 대상';
+COMMENT ON COLUMN layer.spf_report_target.id IS '키';
+COMMENT ON COLUMN layer.spf_report_target.report_id IS '보고서키';
+COMMENT ON COLUMN layer.spf_report_target.cons_code IS '관리번호';
+COMMENT ON COLUMN layer.spf_report_target.prev_class IS '직전 평가구분';
+COMMENT ON COLUMN layer.spf_report_target.prev_date IS '직전 점검일';
+`
+
+/** ERD 한글명 → PostgreSQL COMMENT (테이블 존재 후에도 매번 맞춤) */
+const SPF_COMMENTS_SQL = `
+COMMENT ON TABLE layer.spf_creek IS '세천';
+COMMENT ON TABLE layer.spf_bridge IS '소교량';
+COMMENT ON TABLE layer.spf_intake IS '취입보';
+COMMENT ON TABLE layer.spf_village IS '마을진입로';
+COMMENT ON TABLE layer.spf_farm IS '농로';
+COMMENT ON TABLE layer.spf_drop IS '낙차공';
+
+COMMENT ON TABLE layer.spf_eval IS '후보지평가';
+COMMENT ON COLUMN layer.spf_eval.id IS '키';
+COMMENT ON COLUMN layer.spf_eval.cons_code IS '관리번호';
+COMMENT ON COLUMN layer.spf_eval.eval_date IS '평가일';
+COMMENT ON COLUMN layer.spf_eval.evaluator IS '평가자';
+COMMENT ON COLUMN layer.spf_eval.result IS '선정결과';
+COMMENT ON COLUMN layer.spf_eval.remark IS '비고';
+
+COMMENT ON TABLE layer.spf_report IS '안전점검 보고서';
+COMMENT ON COLUMN layer.spf_report.id IS '키';
+COMMENT ON COLUMN layer.spf_report.year IS '점검년도';
+COMMENT ON COLUMN layer.spf_report.write_date IS '작성일';
+COMMENT ON COLUMN layer.spf_report.title IS '제목(보고서명)';
+COMMENT ON COLUMN layer.spf_report.agency IS '점검기관';
+COMMENT ON COLUMN layer.spf_report.author IS '작성자';
+COMMENT ON COLUMN layer.spf_report.target_count IS '대상 수';
+${SPF_REPORT_TARGET_COMMENTS_SQL}
+
+COMMENT ON TABLE layer.spf_check IS '점검결과';
+COMMENT ON COLUMN layer.spf_check.id IS '키';
+COMMENT ON COLUMN layer.spf_check.cons_code IS '관리번호';
+COMMENT ON COLUMN layer.spf_check.report_id IS '보고서키';
+COMMENT ON COLUMN layer.spf_check.risk_score IS '합계점수';
+COMMENT ON COLUMN layer.spf_check.surv_date IS '점검일';
+COMMENT ON COLUMN layer.spf_check.surv_name IS '점검자';
+COMMENT ON COLUMN layer.spf_check.risk_rank IS '등급';
+COMMENT ON COLUMN layer.spf_check.candidate IS '평가구분';
+COMMENT ON COLUMN layer.spf_check.remark IS '기타의견';
+
+COMMENT ON TABLE layer.spf_plan IS '정비계획 연도';
+COMMENT ON COLUMN layer.spf_plan.id IS '키';
+COMMENT ON COLUMN layer.spf_plan.start_year IS '시작연도';
+COMMENT ON COLUMN layer.spf_plan.end_year IS '종료연도';
+
+COMMENT ON TABLE layer.spf_plan_fac IS '정비계획 목록';
+COMMENT ON COLUMN layer.spf_plan_fac.id IS '키';
+COMMENT ON COLUMN layer.spf_plan_fac.plan_id IS '정비연도키';
+COMMENT ON COLUMN layer.spf_plan_fac.cons_code IS '관리번호(소교량은 묶음 관리번호)';
+COMMENT ON COLUMN layer.spf_plan_fac.final_rank IS '최종(우선순위)';
+COMMENT ON COLUMN layer.spf_plan_fac.workload_m IS '사업량(m)';
+COMMENT ON COLUMN layer.spf_plan_fac.cost_mil IS '사업비';
+COMMENT ON COLUMN layer.spf_plan_fac.done_rate IS '정비율(%)';
+COMMENT ON COLUMN layer.spf_plan_fac.after5_qty IS '5개년 후 사업량';
+COMMENT ON COLUMN layer.spf_plan_fac.after5_cost_mil IS '5개년 후 사업비';
+COMMENT ON COLUMN layer.spf_plan_fac.y1_qty IS '1년차 사업량';
+COMMENT ON COLUMN layer.spf_plan_fac.y1_cost_mil IS '1년차 사업비';
+COMMENT ON COLUMN layer.spf_plan_fac.y2_qty IS '2년차 사업량';
+COMMENT ON COLUMN layer.spf_plan_fac.y2_cost_mil IS '2년차 사업비';
+COMMENT ON COLUMN layer.spf_plan_fac.y3_qty IS '3년차 사업량';
+COMMENT ON COLUMN layer.spf_plan_fac.y3_cost_mil IS '3년차 사업비';
+COMMENT ON COLUMN layer.spf_plan_fac.y4_qty IS '4년차 사업량';
+COMMENT ON COLUMN layer.spf_plan_fac.y4_cost_mil IS '4년차 사업비';
+COMMENT ON COLUMN layer.spf_plan_fac.y5_qty IS '5년차 사업량';
+COMMENT ON COLUMN layer.spf_plan_fac.y5_cost_mil IS '5년차 사업비';
+COMMENT ON COLUMN layer.spf_plan_fac.effect_people IS '수혜자';
+COMMENT ON COLUMN layer.spf_plan_fac.effect_farm_ha IS '농경지ha';
+COMMENT ON COLUMN layer.spf_plan_fac.effect_building IS '건물동';
+COMMENT ON COLUMN layer.spf_plan_fac.status IS '상태';
+
+COMMENT ON TABLE layer.spf_bridge_group IS '소교량 리 묶음 매핑';
+COMMENT ON COLUMN layer.spf_bridge_group.id IS '키';
+COMMENT ON COLUMN layer.spf_bridge_group.group_code IS '묶음 관리번호(정비계획 관리번호)';
+COMMENT ON COLUMN layer.spf_bridge_group.ri IS '리';
+COMMENT ON COLUMN layer.spf_bridge_group.cons_code IS '소교량 관리번호';
+`
+
+/** fac_id → cons_code (구 spf_fac 조인 후 fac_id 제거) */
+async function ensureSpfConsCodeFromFacId(
+  table: 'spf_check' | 'spf_eval' | 'spf_plan_fac',
+  out: EnsureResult
+): Promise<void> {
+  try {
+    if (!(await columnExists('layer', table, 'cons_code'))) {
+      await db.execute(sql.raw(`ALTER TABLE layer.${table} ADD COLUMN cons_code text`));
+      out.moved.push(`layer.${table}.cons_code(added)`);
+    }
+    if (await columnExists('layer', table, 'fac_id')) {
+      const hasLegacyFac = await pool.query<{ n: number }>(`
+        SELECT count(*)::int AS n FROM information_schema.tables
+        WHERE table_schema = 'layer' AND table_name = 'spf_fac'
+      `);
+      if ((hasLegacyFac.rows[0]?.n ?? 0) > 0) {
+        await db.execute(
+          sql.raw(`
+            UPDATE layer.${table} t
+            SET cons_code = f.cons_code
+            FROM layer.spf_fac f
+            WHERE t.fac_id = f.id
+              AND (t.cons_code IS NULL OR btrim(t.cons_code) = '')
+          `)
+        );
+      }
+      if (table === 'spf_check') {
+        try {
+          await db.execute(sql.raw(`ALTER TABLE layer.spf_check DROP CONSTRAINT IF EXISTS spf_check_report_fac_key`));
+        } catch {
+          /* ignore */
+        }
+        await db.execute(
+          sql.raw(`
+            DO $$ BEGIN
+              IF NOT EXISTS (
+                SELECT 1 FROM pg_constraint WHERE conname = 'spf_check_report_cons_key'
+              ) THEN
+                ALTER TABLE layer.spf_check
+                  ADD CONSTRAINT spf_check_report_cons_key UNIQUE (report_id, cons_code);
+              END IF;
+            END $$;
+          `)
+        );
+        await db.execute(sql.raw(`ALTER TABLE layer.spf_check ALTER COLUMN cons_code SET NOT NULL`)).catch(() => {
+          /* 빈 행 있으면 스킵 — import 가 채움 */
+        });
+      }
+      await db.execute(sql.raw(`ALTER TABLE layer.${table} DROP COLUMN fac_id`));
+      out.moved.push(`layer.${table}.fac_id(dropped)`);
+    }
+    if (table === 'spf_plan_fac') {
+      for (const col of ['unit_name', 'location'] as const) {
+        if (await columnExists('layer', 'spf_plan_fac', col)) {
+          await db.execute(sql.raw(`ALTER TABLE layer.spf_plan_fac DROP COLUMN ${col}`));
+          out.moved.push(`layer.spf_plan_fac.${col}(dropped)`);
+        }
+      }
+    }
+  } catch (e: unknown) {
+    out.errors.push(`spf ${table} cons_code: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
+
+/** 구형 spf_report 에 개요(summary) 컬럼 추가 */
+async function ensureSpfReportSummaryColumn(out: EnsureResult): Promise<void> {
+  try {
+    await db.execute(sql.raw(`ALTER TABLE layer.spf_report ADD COLUMN IF NOT EXISTS summary text`));
+    await db.execute(sql.raw(`COMMENT ON COLUMN layer.spf_report.summary IS '개요'`));
+  } catch (e: unknown) {
+    out.errors.push(`spf_report summary: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
+
+/** 안전점검 보고서 화면용 — 대상 테이블·개요 컬럼만 보장(서비스에서 지연 호출) */
+export async function ensureSpfReportExtras(result?: EnsureResult): Promise<EnsureResult> {
+  const out: EnsureResult = result ?? { created: [], moved: [], existed: [], errors: [] };
+  await ensureSchemaLayer();
+  await ensureBaseTable({ table: 'spf_report_target', createSql: SPF_REPORT_TARGET_SQL, result: out });
+  await ensureSpfReportSummaryColumn(out);
+  try {
+    await execSqlStatements(SPF_REPORT_TARGET_COMMENTS_SQL);
+  } catch (e: unknown) {
+    out.errors.push(`spf_report_target comments: ${e instanceof Error ? e.message : String(e)}`);
+  }
+  return out;
+}
+
+export async function ensureSpfTables(result?: EnsureResult): Promise<EnsureResult> {
+  const out: EnsureResult = result ?? { created: [], moved: [], existed: [], errors: [] };
+  await ensureSchemaLayer();
+  for (const spec of SPF_TYPE_FAC_SPECS) {
+    await ensureBaseTable({
+      table: spec.table,
+      createSql: spfTypeFacSql(spec.table, spec.geom),
+      result: out,
+    });
+  }
+  const tables: { table: string; createSql: string }[] = [
+    { table: 'spf_eval', createSql: SPF_EVAL_SQL },
+    { table: 'spf_report', createSql: SPF_REPORT_SQL },
+    { table: 'spf_report_target', createSql: SPF_REPORT_TARGET_SQL },
+    { table: 'spf_check', createSql: SPF_CHECK_SQL },
+    { table: 'spf_plan', createSql: SPF_PLAN_SQL },
+    { table: 'spf_plan_fac', createSql: SPF_PLAN_FAC_SQL },
+    { table: 'spf_bridge_group', createSql: SPF_BRIDGE_GROUP_SQL },
+  ];
+  for (const t of tables) {
+    await ensureBaseTable({ table: t.table, createSql: t.createSql, result: out });
+  }
+  await ensureSpfReportSummaryColumn(out);
+  await ensureSpfConsCodeFromFacId('spf_check', out);
+  await ensureSpfConsCodeFromFacId('spf_eval', out);
+  await ensureSpfConsCodeFromFacId('spf_plan_fac', out);
+
+  /** 구 spf_fac → 유형 테이블 1회 이관 후 제거 (이후 SHP import 로 재적재 가능) */
+  try {
+    const legacy = await pool.query<{ n: number }>(`
+      SELECT count(*)::int AS n FROM information_schema.tables
+      WHERE table_schema = 'layer' AND table_name = 'spf_fac'
+    `);
+    if ((legacy.rows[0]?.n ?? 0) > 0) {
+      for (const spec of SPF_TYPE_FAC_SPECS) {
+        const nRes = await pool.query<{ n: number }>(
+          `SELECT count(*)::int AS n FROM layer.${spec.table}`
+        );
+        if ((nRes.rows[0]?.n ?? 0) > 0) continue;
+        const geomExpr =
+          spec.geom === 'Point'
+            ? `CASE WHEN f.geom IS NULL THEN NULL ELSE ST_Multi(ST_CollectionExtract(ST_MakeValid(f.geom), 1)) END`
+            : `CASE
+                 WHEN f.geom IS NULL THEN NULL
+                 WHEN GeometryType(f.geom) IN ('LINESTRING','MULTILINESTRING') THEN ST_LineMerge(f.geom)
+                 ELSE NULL
+               END`;
+        // Point: PointOnSurface 가 안전
+        const geomIns =
+          spec.geom === 'Point'
+            ? `CASE WHEN f.geom IS NULL THEN NULL ELSE ST_PointOnSurface(f.geom) END`
+            : geomExpr;
+        await db.execute(
+          sql.raw(`
+            INSERT INTO layer.${spec.table} (
+              cons_code, sisul_name, shp_code, emd, ri, address,
+              start_xy, end_xy, ben_area, risk_date, candidate, lne, width, hight,
+              parent_cons_code, parent_fac_name, geom
+            )
+            SELECT
+              f.cons_code, f.sisul_name, f.shp_code, f.emd, f.ri, f.address,
+              f.start_xy, f.end_xy, f.ben_area, f.risk_date, f.candidate, f.lne, f.width, f.hight,
+              p.cons_code, f.parent_fac_name,
+              ${geomIns}
+            FROM layer.spf_fac f
+            LEFT JOIN layer.spf_fac p ON p.id = f.parent_fac_id
+            WHERE f.type = '${spec.kor}'
+          `)
+        );
+        out.moved.push(`layer.spf_fac→${spec.table}`);
+      }
+      await db.execute(sql.raw(`DROP TABLE IF EXISTS layer.spf_fac CASCADE`));
+      out.moved.push('layer.spf_fac(dropped)');
+    }
+  } catch (e: unknown) {
+    out.errors.push(`migrate/drop spf_fac: ${e instanceof Error ? e.message : String(e)}`);
+  }
+
+  try {
+    const renameBody = SPF_CHECK_LEGACY_RENAMES.map(
+      ([from, to]) => `
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'layer' AND table_name = 'spf_check' AND column_name = '${from}'
+  ) AND NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'layer' AND table_name = 'spf_check' AND column_name = '${to}'
+  ) THEN
+    ALTER TABLE layer.spf_check RENAME COLUMN ${from} TO ${to};
+  END IF;`
+    ).join('\n');
+    await pool.query(`DO $$ BEGIN\n${renameBody}\nEND $$;`);
+  } catch (e: unknown) {
+    out.errors.push(`spf_check rename: ${e instanceof Error ? e.message : String(e)}`);
+  }
+  try {
+    await execSqlStatements(SPF_COMMENTS_SQL);
+  } catch (e: unknown) {
+    out.errors.push(`spf comments: ${e instanceof Error ? e.message : String(e)}`);
+  }
+  return out;
+}
+
 /** FMS water|road|public × facility·inspection (6개) */
 export async function ensureFmsTables(result?: EnsureResult): Promise<EnsureResult> {
   const out: EnsureResult = result ?? { created: [], moved: [], existed: [], errors: [] };
@@ -2776,6 +3204,7 @@ export async function ensureLayerAppTables(): Promise<EnsureResult> {
     await ensureOccupationLedgerTables(result);
     await ensureNglFeeListTables(result);
     await ensureFmsTables(result);
+    await ensureSpfTables(result);
     await ensureNextGenLinkageTables(result);
     await ensureMemoTables(result);
     await ensureComplaintTables(result);

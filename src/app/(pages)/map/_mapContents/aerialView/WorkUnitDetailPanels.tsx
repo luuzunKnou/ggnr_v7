@@ -4,6 +4,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { Play, Plus, FileImage, FileVideo, MapPin, Download, Trash2, X } from 'lucide-react';
 import { Button } from '@/app/shadcnComponents/ui/button';
 import { cn } from '@/lib/utils';
+import { withBasePath } from '@/lib/basePath';
 import { recordDataViewLog } from '@/lib/recordDataViewLog';
 import { requestAttachmentPledge } from '@/app/(pages)/_components/securityPledge/attachmentPledgeGate';
 import type { AttrRow, WorkFileItem, WorkUnitItem } from './aerialMediaTypes';
@@ -583,7 +584,7 @@ type DroneFileProps = {
 function aerialMediaUrl(relativePath: string, download = false): string {
   const q = new URLSearchParams({ path: relativePath.replace(/\\/g, '/') });
   if (download) q.set('download', '1');
-  return `/api/aerial/media?${q.toString()}`;
+  return withBasePath(`/api/aerial/media?${q.toString()}`);
 }
 
 export function DroneFileDetailPanel({ file, files = [], onClose, onDelete, onEditGeom }: DroneFileProps) {

@@ -13,8 +13,10 @@ import {
 import {
   createDataQuerySelectionRowHighlightStyle,
   DATA_QUERY_SELECTION_PULSE_STEP,
-  insertLayerBelowServiceLayer,
 } from '@/lib/mapDataQueryMapHighlight'
+
+/** 공사대장 포커스(9999)보다 위 — 메뉴를 열어도 클릭 선택 반짝이가 가려지지 않게 */
+const LAYER_CLICK_DETAIL_HIGHLIGHT_Z = Math.max(GEOM_STACK_UI_ZINDEX_MIN, 12000)
 
 /** 맵 속성 키 — 관망·시설·기본 모달 공통 선택자 레이어 */
 export const LAYER_CLICK_DETAIL_HIGHLIGHT_KEY = 'layerClickDetailHighlight'
@@ -113,7 +115,10 @@ function ensureEntry(map: OLMap): MapEntry {
   let entry = entries.get(map)
   if (entry) {
     const layers = map.getLayers().getArray()
-    if (layers.includes(entry.layer)) return entry
+    if (layers.includes(entry.layer)) {
+      entry.layer.setZIndex(LAYER_CLICK_DETAIL_HIGHLIGHT_Z)
+      return entry
+    }
     stopPulse(entry)
     entries.delete(map)
   }
@@ -121,7 +126,7 @@ function ensureEntry(map: OLMap): MapEntry {
   const source = new VectorSource()
   const layer = new VectorLayer({
     source,
-    zIndex: GEOM_STACK_UI_ZINDEX_MIN,
+    zIndex: LAYER_CLICK_DETAIL_HIGHLIGHT_Z,
     renderOrder: compareFeaturesByGeometryStackOrder,
     style: createSelectionStyle(() => {
       const e = entries.get(map)
@@ -130,7 +135,8 @@ function ensureEntry(map: OLMap): MapEntry {
   })
   layer.set(LAYER_GEOM_STACK_SKIP_KEY, true)
   layer.set(LAYER_CLICK_DETAIL_HIGHLIGHT_KEY, true)
-  insertLayerBelowServiceLayer(map, layer)
+  // 예전: WMS 아래 insert → 공사대장 벡터(890~9999)에 가려짐. 맨 위 add.
+  map.addLayer(layer)
 
   entry = {
     layer,

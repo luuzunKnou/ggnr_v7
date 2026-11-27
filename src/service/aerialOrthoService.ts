@@ -10,14 +10,13 @@ import { tifUnit } from '@/database/schema/tif_unit';
 import { workUnit } from '@/database/schema/work_unit';
 import { getSessionUsrId } from '@/lib/auth/guard';
 import { readSystemControl, writeSystemControl } from '@/lib/systemControlStore';
+import { resolveGgnrDataDir } from '@/lib/turbopackFsPath';
 import {
   aerialWorkUnitRelativeDir,
   isAerialUploadKind,
   sanitizeAerialFolderName,
 } from '@/lib/aerialUploadPaths';
 import { detectTifSourceCrs, runAerialOrthoTifToXyz, runAerialSatelliteTifToXyz } from '@/service/orthophotoService';
-
-const GGNR_DATA_DIR = process.env.GGNR_DATA_DIR ?? 'd:\\ggnr_data_dir';
 
 /** 드론영상 표시 줌 제한 — 최대줌은 설정 파일, 켜짐 여부는 시스템 통합제어 */
 const ORTHO_ZOOM_LIMIT_REL = path.join('config', 'aerial_ortho_zoom_limit.json');
@@ -40,7 +39,7 @@ function nowIso(): string {
 }
 
 function getBaseDir(): string {
-  return GGNR_DATA_DIR;
+  return resolveGgnrDataDir();
 }
 
 function resolveWithinBase(relativeDir: string): { abs: string; rel: string } | null {

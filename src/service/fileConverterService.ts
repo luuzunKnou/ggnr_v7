@@ -14,8 +14,9 @@ import iconv from 'iconv-lite';
 import proj4 from 'proj4';
 import { appendUploadConvertHistory } from './fileManagerService';
 import { GGNR_DATA_PATHS } from '@/lib/ggnrDataPaths';
+import { resolveGgnrDataDir } from '@/lib/turbopackFsPath';
 
-const GGNR_DATA_DIR = process.env.GGNR_DATA_DIR ?? 'd:\\ggnr_data_dir';
+const GGNR_DATA_DIR = resolveGgnrDataDir();
 const OBJ_TO_B3DM_TIMEOUT_MS = 30 * 60 * 1000;
 const OBJ_CHUNK_TO_B3DM_TIMEOUT_MS = 60 * 60 * 1000;
 const OBJ_CHUNK_SIZE = 128;

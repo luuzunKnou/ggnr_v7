@@ -104,6 +104,7 @@ export async function getMyProfile(_params?: unknown) {
         usrMail: usr.usrMail,
         usrPwd: usr.usrPwd,
         usrIsManager: usr.usrIsManager,
+        usrPwdSkip: usr.usrPwdSkip,
       })
       .from(usr)
       .where(and(eq(usr.usrId, usrId), or(eq(usr.usrIsDel, false), isNull(usr.usrIsDel))))
@@ -111,7 +112,9 @@ export async function getMyProfile(_params?: unknown) {
 
     if (!row) return { success: false, error: '사용자를 찾을 수 없습니다.' };
 
-    const mustChangePassword = await isTemporaryPassword(row.usrPwd ?? null, row.usrId);
+    // 임시 비밀번호이면서 안내를 아직 넘기지 않은 계정만 변경 안내 대상
+    const mustChangePassword =
+      (await isTemporaryPassword(row.usrPwd ?? null, row.usrId)) && !row.usrPwdSkip;
     const ugName = String(row.ugName ?? '').trim();
     const isAdminDept = ugName === '관리자';
     const isManager = Boolean(row.usrIsManager);
@@ -131,6 +134,26 @@ export async function getMyProfile(_params?: unknown) {
     };
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : '내 정보 조회 실패';
+    return { success: false, error: message };
+  }
+}
+
+/**
+ * 임시 비밀번호 변경 안내에서 «현재 비밀번호 사용» — 본인 계정을 영구 넘김(usrPwdSkip = true) 처리한다.
+ * 비밀번호 자체는 바꾸지 않는다.
+ */
+export async function dismissOwnPasswordNotice(_params?: unknown) {
+  const usrId = await requireLoggedIn();
+  if (usrId === 'su') return { success: true };
+
+  try {
+    await db
+      .update(usr)
+      .set({ usrPwdSkip: true })
+      .where(eq(usr.usrId, usrId));
+    return { success: true };
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : '안내 넘김 저장 실패';
     return { success: false, error: message };
   }
 }
@@ -158,7 +181,10 @@ export async function changeOwnPassword(params: Record<string, unknown>) {
     if (!row) return { success: false, error: '사용자를 찾을 수 없습니다.' };
 
     const hashed = await hashPassword(nextPwd);
-    await db.update(usr).set({ usrPwd: hashed }).where(eq(usr.usrId, usrId));
+    await db
+      .update(usr)
+      .set({ usrPwd: hashed, usrPwdSkip: false })
+      .where(eq(usr.usrId, usrId));
     void recordUserLog({
       ulCat: UL_CAT_USER,
       ulContents: '비밀번호 변경',
@@ -851,7 +877,7 @@ export async function resetUserPassword(params: Record<string, unknown>) {
     const hashed = await hashPassword(tempPassword);
     await db
       .update(usr)
-      .set({ usrPwd: hashed, usrLoginFailCnt: 0 })
+      .set({ usrPwd: hashed, usrLoginFailCnt: 0, usrPwdSkip: false })
       .where(eq(usr.usrId, usrId));
 
     void recordUserLog({

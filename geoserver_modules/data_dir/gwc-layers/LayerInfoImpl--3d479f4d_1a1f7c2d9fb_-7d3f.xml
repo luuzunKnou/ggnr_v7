@@ -1,8 +1,8 @@
 <GeoServerTileLayer>
-  <id>LayerInfoImpl--210e710e:1a1f780e02f:-7f87</id>
+  <id>LayerInfoImpl--3d479f4d:1a1f7c2d9fb:-7d3f</id>
   <enabled>true</enabled>
   <inMemoryCached>true</inMemoryCached>
-  <name>ggnr:sd_heat_mitigation_facility</name>
+  <name>ggnr:a0070000_ls</name>
   <mimeFormats>
     <string>image/png</string>
     <string>image/jpeg</string>
@@ -12,10 +12,10 @@
       <gridSetName>EPSG:4326</gridSetName>
       <extent>
         <coords>
-          <double>128.32953590497206</double>
-          <double>36.30608633544393</double>
-          <double>128.79048024149247</double>
-          <double>36.42666223683584</double>
+          <double>129.26693190764686</double>
+          <double>36.691711892963426</double>
+          <double>129.4810922501542</double>
+          <double>37.1318275933263</double>
         </coords>
       </extent>
     </gridSubset>
@@ -42,7 +42,7 @@
       <key>STYLES</key>
       <defaultValue></defaultValue>
       <availableStyles class="sorted-set"/>
-      <defaultStyle>sd_heat_mitigation_facility</defaultStyle>
+      <defaultStyle>a0070000_ls</defaultStyle>
     </styleParameterFilter>
   </parameterFilters>
   <gutter>0</gutter>

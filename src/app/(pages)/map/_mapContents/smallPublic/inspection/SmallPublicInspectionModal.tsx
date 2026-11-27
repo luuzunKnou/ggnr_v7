@@ -6,6 +6,8 @@ import { X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { MAP_UI_Z_CLASS } from '@/lib/mapUiZIndex'
 import { SmallPublicCheckSheet } from '../SmallPublicCheckSheet'
+import { hydrateSmallPublicCheckForm } from '../smallPublicCheckForms'
+import type { SmallPublicFacType } from '../smallPublicConfig'
 import type { SmallPublicInspection } from '../smallPublicMock'
 import {
   SmallPublicAttrTable,
@@ -132,16 +134,23 @@ export function SmallPublicModalShell({
 /** 후보지 위험도평가 이력 → 점검 정보와 위험도 평가표 */
 export function SmallPublicInspectionViewModal({
   inspection,
+  facilityType,
   onEdit,
   onDelete,
   onClose,
   ...overlay
 }: SmallPublicModalOverlay & {
   inspection: SmallPublicInspection
+  facilityType?: SmallPublicFacType
   onEdit?: () => void
   onDelete?: () => void
   onClose: () => void
 }) {
+  const form = hydrateSmallPublicCheckForm(
+    inspection.form,
+    facilityType ?? inspection.form.facType,
+    inspection.date
+  )
   return (
     <SmallPublicModalShell
       {...overlay}
@@ -182,7 +191,7 @@ export function SmallPublicInspectionViewModal({
         ]}
       />
       <div className="mt-3">
-        <SmallPublicCheckSheet form={inspection.form} values={inspection.values} />
+        <SmallPublicCheckSheet form={form} values={inspection.values} />
       </div>
     </SmallPublicModalShell>
   )

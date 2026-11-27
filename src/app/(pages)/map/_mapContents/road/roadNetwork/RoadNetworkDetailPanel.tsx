@@ -132,7 +132,7 @@ const btnGhost =
 const btnDanger =
   "inline-flex h-7 items-center gap-1 rounded border border-destructive/30 bg-background px-2 text-[11px] font-medium text-destructive hover:bg-destructive/10 disabled:opacity-50";
 
-/** 반칸에서 한글 4~5자면 이미 넘침 → 그 이상이면 행 전체 */
+/** 조회 모드: 반칸에서 한글 4~5자면 이미 넘침 → 그 이상이면 행 전체 */
 const ATTR_FULL_ROW_VALUE_LEN = 4;
 
 function isLongAttrDisplayValue(value: unknown): boolean {
@@ -1905,7 +1905,8 @@ export function RoadNetworkDetailPanel({
         entries.push({
           fieldKey: "roadName",
           label: f.label,
-          fullWidth: isLongAttrDisplayValue(attrDraft.roadName),
+          // 작성 중 글자 수로 fullWidth가 바뀌면 포커스 끊김 → 처음부터 행 전체
+          fullWidth: true,
           value: (
             <input
               className={fieldClass}
@@ -2004,7 +2005,7 @@ export function RoadNetworkDetailPanel({
         entries.push({
           fieldKey: "roadNo",
           label: f.label,
-          fullWidth: isLongAttrDisplayValue(attrDraft.roadNo),
+          fullWidth: true,
           value: (
             <input
               className={fieldClass}
@@ -2025,7 +2026,7 @@ export function RoadNetworkDetailPanel({
         entries.push({
           fieldKey: "dept",
           label: f.label,
-          fullWidth: isLongAttrDisplayValue(attrDraft.dept),
+          fullWidth: true,
           value: (
             <input
               className={fieldClass}
@@ -2043,7 +2044,7 @@ export function RoadNetworkDetailPanel({
         entries.push({
           fieldKey: "lengthAttr",
           label: f.label,
-          fullWidth: isLongAttrDisplayValue(attrDraft.lengthAttr),
+          fullWidth: true,
           value: (
             <input
               className={fieldClass}
@@ -2060,7 +2061,7 @@ export function RoadNetworkDetailPanel({
         entries.push({
           fieldKey: "defense",
           label: f.label,
-          fullWidth: isLongAttrDisplayValue(attrDraft.defense),
+          fullWidth: true,
           value: (
             <input
               className={fieldClass}
@@ -2097,7 +2098,7 @@ export function RoadNetworkDetailPanel({
         entries.push({
           fieldKey: "detailReason",
           label: f.label,
-          fullWidth: isLongAttrDisplayValue(attrDraft.detailReason),
+          fullWidth: true,
           value: (
             <input
               className={fieldClass}
@@ -2115,7 +2116,7 @@ export function RoadNetworkDetailPanel({
         entries.push({
           fieldKey: "address",
           label: f.label,
-          fullWidth: isLongAttrDisplayValue(attrDraft.address),
+          fullWidth: true,
           value: (
             <input
               className={fieldClass}

@@ -34,6 +34,10 @@ import { getLegendGraphicUrl } from "../../../_mapComponents/layerFactory/servic
 import {
   ROAD_LEDGER_DOC_LAYERS,
   ROAD_LEDGER_DOC_LABELS_WITH_LAYER_COUNT,
+  isRoadLedgerDocLayerVisibleOnMap,
+  migrateRoadLedgerDocWmsAliasesInVisible,
+  resolveRoadLedgerDocWmsLayerIdWithFallback,
+  setRoadLedgerDocLayerVisibleOnMap,
   type RoadLedgerDocButtonKey,
 } from "../roadLedger/roadLedgerDocLayerMap";
 
@@ -300,6 +304,14 @@ export function RoadInfraPanel({
     };
   }, []);
 
+  /** 이미 켜져 있던 원본 교량 면형 → 선형 뷰로 교체 */
+  useEffect(() => {
+    if (!existingDocLayerIds || !setVisibleLayerNames) return;
+    setVisibleLayerNames((prev) =>
+      migrateRoadLedgerDocWmsAliasesInVisible(prev, existingDocLayerIds)
+    );
+  }, [existingDocLayerIds, setVisibleLayerNames]);
+
   useEffect(() => {
     let cancelled = false;
     fetch("/api/config/defineLayer")
@@ -346,10 +358,13 @@ export function RoadInfraPanel({
     [layerGroups]
   );
 
-  /** 통합·도형·행정경계 검색 — 체크된(지도에 켜진) 레이어만 대상 */
+  /** 통합·도형·행정경계 검색 — 체크된(지도에 켜진) 레이어만 대상(WMS 별칭 포함) */
   const visibleDefineTableNames = useMemo(
-    () => allDefineTableNames.filter((t) => visibleLayerNames.has(t)),
-    [allDefineTableNames, visibleLayerNames]
+    () =>
+      allDefineTableNames.filter((t) =>
+        isRoadLedgerDocLayerVisibleOnMap(visibleLayerNames, t, existingDocLayerIds)
+      ),
+    [allDefineTableNames, visibleLayerNames, existingDocLayerIds]
   );
   const visibleDefineTableNamesRef = useRef(visibleDefineTableNames);
   visibleDefineTableNamesRef.current = visibleDefineTableNames;
@@ -866,8 +881,13 @@ export function RoadInfraPanel({
       setIdentifyResultList?.(null);
       setSearchHadNoResults(false);
       onOpenDataPanelRef.current(t);
-      if (setVisibleLayerNames && !visibleLayerNames.has(t)) {
-        setVisibleLayerNames((prev) => new Set(prev).add(t));
+      if (
+        setVisibleLayerNames &&
+        !isRoadLedgerDocLayerVisibleOnMap(visibleLayerNames, t, existingDocLayerIds)
+      ) {
+        setVisibleLayerNames((prev) =>
+          setRoadLedgerDocLayerVisibleOnMap(prev, t, true, existingDocLayerIds)
+        );
       }
     }
   };
@@ -1190,7 +1210,9 @@ export function RoadInfraPanel({
           const filteredLayers = group.layers;
           if (filteredLayers.length === 0) return null;
           const groupCount = filteredLayers.length;
-          const groupVisibleCount = filteredLayers.filter((l) => visibleLayerNames.has(l.tableName)).length;
+          const groupVisibleCount = filteredLayers.filter((l) =>
+            isRoadLedgerDocLayerVisibleOnMap(visibleLayerNames, l.tableName, existingDocLayerIds)
+          ).length;
           const GroupIcon =
             ROAD_LEDGER_FACILITY_GROUP_ICONS[group.name as RoadLedgerDocButtonKey] ?? Building2;
           const isGroupOpen = expandedGroups.includes(group.id);
@@ -1228,10 +1250,14 @@ export function RoadInfraPanel({
                     if (!setVisibleLayerNames) return;
                     const checked = e.target.checked;
                     setVisibleLayerNames((prev) => {
-                      const next = new Set(prev);
+                      let next = new Set(prev);
                       filteredLayers.forEach((l) => {
-                        if (checked) next.add(l.tableName);
-                        else next.delete(l.tableName);
+                        next = setRoadLedgerDocLayerVisibleOnMap(
+                          next,
+                          l.tableName,
+                          checked,
+                          existingDocLayerIds
+                        );
                       });
                       return next;
                     });
@@ -1245,7 +1271,15 @@ export function RoadInfraPanel({
               {isGroupOpen && (
               <div className="bg-muted/50">
                   {filteredLayers.map((layer) => {
-                    const isVisible = visibleLayerNames.has(layer.tableName);
+                    const isVisible = isRoadLedgerDocLayerVisibleOnMap(
+                      visibleLayerNames,
+                      layer.tableName,
+                      existingDocLayerIds
+                    );
+                    const wmsTable = resolveRoadLedgerDocWmsLayerIdWithFallback(
+                      layer.tableName,
+                      existingDocLayerIds
+                    );
                     const totalCount = layerTotals[layer.tableName];
 
                     return (
@@ -1262,17 +1296,17 @@ export function RoadInfraPanel({
                         }}
                         className="flex w-full cursor-pointer items-center gap-1 border-b border-border py-1.5 pl-3.5 pr-2 transition-colors last:border-b-0 hover:bg-background"
                       >
-                        {failedLegendLayers.has(layer.tableName) ? (
+                        {failedLegendLayers.has(wmsTable) ? (
                           <span
                             className="h-5 w-5 shrink-0 rounded border border-border bg-muted"
                             aria-hidden
                           />
                         ) : (
                           <img
-                            src={getLegendGraphicUrl(layer.tableName, layer.tableName)}
+                            src={getLegendGraphicUrl(wmsTable, wmsTable)}
                             alt=""
                             className="h-5 w-5 shrink-0 rounded border border-border object-contain"
-                            onError={() => onLegendError(layer.tableName)}
+                            onError={() => onLegendError(wmsTable)}
                           />
                         )}
                         <div className="flex min-h-[1.0rem] min-w-0 flex-1 items-center gap-1 text-left">
@@ -1307,12 +1341,15 @@ export function RoadInfraPanel({
                             onChange={(e) => {
                               e.stopPropagation();
                               if (!setVisibleLayerNames) return;
-                              setVisibleLayerNames((prev) => {
-                                const next = new Set(prev);
-                                if (e.target.checked) next.add(layer.tableName);
-                                else next.delete(layer.tableName);
-                                return next;
-                              });
+                              const checked = e.target.checked;
+                              setVisibleLayerNames((prev) =>
+                                setRoadLedgerDocLayerVisibleOnMap(
+                                  prev,
+                                  layer.tableName,
+                                  checked,
+                                  existingDocLayerIds
+                                )
+                              );
                             }}
                             onClick={(e) => e.stopPropagation()}
                             className="h-3.5 w-3.5 shrink-0 cursor-pointer rounded border-border text-primary focus:ring-primary/30"

@@ -42,6 +42,10 @@ import {
   isNewBikeRoadRouteId,
   type BikeRoadRoute,
 } from "./_mapContents/road/bikeRoad/bikeRoadMock"
+import { SecurityLightListPanel } from "./_mapContents/road/securityLight/SecurityLightListPanel"
+import { SecurityLightSupplyDetailPanel } from "./_mapContents/road/securityLight/SecurityLightSupplyDetailPanel"
+import { SecurityLightPublicDetailPanel } from "./_mapContents/road/securityLight/SecurityLightPublicDetailPanel"
+import { parseSecurityLightKey } from "./_mapContents/road/securityLight/securityLightTypes"
 import { SafetyMapLayerPanel } from "./_mapContents/safty/safetyMap/SafetyMapLayerPanel"
 import { SafetyInfoLayerPanel } from "./_mapContents/safty/safetyInfo/SafetyInfoLayerPanel"
 import { SafetyWaterShell } from "./_mapContents/safty/safetyWater/SafetyWaterShell"
@@ -111,7 +115,6 @@ import { useShootingRequestUiEnabled } from "./_mapContents/shootingRequest/useS
 import {
   isUavAdminSystemKey,
   isUavFamilySystemKey,
-  isUavUsProject,
 } from "./_mapContents/shootingRequest/shootingRequestUiFlag"
 import {
   aerialKindToOpenedKey,
@@ -138,6 +141,28 @@ import { UnpaidLandCompensationListPanel } from "./_mapContents/road/unpaidLandC
 import { RoadFrontageBuildingListPanel } from "./_mapContents/road/roadFrontageBuilding/RoadFrontageBuildingListPanel"
 import { RoadFrontageBuildingDetailPanel } from "./_mapContents/road/roadFrontageBuilding/RoadFrontageBuildingDetailPanel"
 import { ROAD_FRONTAGE_BUILDING_NEW_ID } from "./_mapContents/road/roadFrontageBuilding/roadFrontageBuildingMock"
+import { SteepSlopeSafetyListPanel } from "./_mapContents/road/steepSlopeSafety/SteepSlopeSafetyListPanel"
+import { SteepSlopeSafetyDetailPanel } from "./_mapContents/road/steepSlopeSafety/SteepSlopeSafetyDetailPanel"
+import { PublicPropertyPermitListPanel } from "./_mapContents/road/publicPropertyPermit/PublicPropertyPermitListPanel"
+import { PublicPropertyPermitDetailPanel } from "./_mapContents/road/publicPropertyPermit/PublicPropertyPermitDetailPanel"
+import {
+  PUBLIC_PROPERTY_PERMIT_DETAIL_DEFAULT_WIDTH,
+  PUBLIC_PROPERTY_PERMIT_DETAIL_MAX_WIDTH,
+  PUBLIC_PROPERTY_PERMIT_DETAIL_MIN_WIDTH,
+  PUBLIC_PROPERTY_PERMIT_OPENED_KEY,
+  PUBLIC_PROPERTY_PERMIT_PANEL_DEFAULT_WIDTH,
+  PUBLIC_PROPERTY_PERMIT_PANEL_MAX_WIDTH,
+  PUBLIC_PROPERTY_PERMIT_PANEL_MIN_WIDTH,
+} from "./_mapContents/road/publicPropertyPermit/publicPropertyPermitConfig"
+import {
+  STEEP_SLOPE_SAFETY_DETAIL_DEFAULT_WIDTH,
+  STEEP_SLOPE_SAFETY_DETAIL_MAX_WIDTH,
+  STEEP_SLOPE_SAFETY_DETAIL_MIN_WIDTH,
+  STEEP_SLOPE_SAFETY_OPENED_KEY,
+  STEEP_SLOPE_SAFETY_PANEL_DEFAULT_WIDTH,
+  STEEP_SLOPE_SAFETY_PANEL_MAX_WIDTH,
+  STEEP_SLOPE_SAFETY_PANEL_MIN_WIDTH,
+} from "./_mapContents/road/steepSlopeSafety/steepSlopeSafetyConfig"
 import { RoadFrontageMarkerListPanel } from "./_mapContents/road/roadFrontageMarker/RoadFrontageMarkerListPanel"
 import { RoadFrontageMarkerDetailPanel } from "./_mapContents/road/roadFrontageMarker/RoadFrontageMarkerDetailPanel"
 import { ROAD_FRONTAGE_MARKER_NEW_ID } from "./_mapContents/road/roadFrontageMarker/roadFrontageMarkerMock"
@@ -215,12 +240,10 @@ import {
   SMALL_PUBLIC_CANDIDATE_OPENED_KEY,
   SMALL_PUBLIC_INSPECTION_OPENED_KEY,
   SMALL_PUBLIC_PLAN_OPENED_KEY,
-  SMALL_PUBLIC_BUDGET_OPENED_KEY,
 } from "./_mapContents/smallPublic/smallPublicConfig"
 import { SmallPublicCandidateShell } from "./_mapContents/smallPublic/candidate/SmallPublicCandidate.shell"
 import { SmallPublicInspectionShell } from "./_mapContents/smallPublic/inspection/SmallPublicInspection.shell"
 import { SmallPublicPlanShell } from "./_mapContents/smallPublic/plan/SmallPublicPlan.shell"
-import { SmallPublicBudgetShell } from "./_mapContents/smallPublic/budget/SmallPublicBudget.shell"
 import {
   WORKS_REGISTER_OPENED_KEY,
   WorksRegisterShell,
@@ -429,6 +452,12 @@ const BIKE_ROAD_LIST_MAX_WIDTH = 680
 const BIKE_ROAD_DETAIL_DEFAULT_WIDTH = 980
 const BIKE_ROAD_DETAIL_MIN_WIDTH = 800
 const BIKE_ROAD_DETAIL_MAX_WIDTH = 1200
+const SECURITY_LIGHT_LIST_DEFAULT_WIDTH = 420
+const SECURITY_LIGHT_LIST_MIN_WIDTH = 360
+const SECURITY_LIGHT_LIST_MAX_WIDTH = 560
+const SECURITY_LIGHT_DETAIL_DEFAULT_WIDTH = 360
+const SECURITY_LIGHT_DETAIL_MIN_WIDTH = 300
+const SECURITY_LIGHT_DETAIL_MAX_WIDTH = 480
 
 const SAFETY_MAP_PANEL_DEFAULT_WIDTH = 360
 const SAFETY_MAP_PANEL_MIN_WIDTH = 280
@@ -534,6 +563,7 @@ const RIVER_BASIC_PLAN_OPENED_KEY = "riverBasicPlan"
 const ROAD_LEDGER_OPENED_KEY = "roadLedger"
 const ROAD_NETWORK_OPENED_KEY = "roadNetwork"
 const BIKE_ROAD_OPENED_KEY = "bikeRoad"
+const SECURITY_LIGHT_OPENED_KEY = "securityLight"
 const SAFETY_MAP_OPENED_KEY = "safetyMap"
 const SAFETY_INFO_OPENED_KEY = "safetyInfo"
 const SAFETY_WATER_OPENED_KEY = "safetyWater"
@@ -666,7 +696,7 @@ const ROAD_REWARD_DETAIL_DEFAULT_WIDTH = 480
 const ROAD_REWARD_DETAIL_MIN_WIDTH = 380
 const ROAD_REWARD_DETAIL_MAX_WIDTH = 720
 
-/** serviceList `ser_eng`: unpaidLandCompensation — 미지급용지 보상 지급대장(목업) */
+/** serviceList `ser_eng`: unpaidLandCompensation — 미지급용지(목업) */
 const UNPAID_LAND_COMPENSATION_OPENED_KEY = "unpaidLandCompensation"
 const UNPAID_LAND_COMPENSATION_PANEL_DEFAULT_WIDTH = 1120
 const UNPAID_LAND_COMPENSATION_PANEL_MIN_WIDTH = 800
@@ -693,11 +723,10 @@ const ROAD_FRONTAGE_MARKER_DETAIL_MAX_WIDTH = 780
 function MapLayoutContent({
   children,
   indexLogoSrc,
-  projectName,
 }: {
   children: React.ReactNode
   indexLogoSrc: string
-  projectName: string
+  projectName?: string
 }) {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -729,6 +758,7 @@ function MapLayoutContent({
   const setRoadNetworkFocusedSitePointKey = mapContext?.setRoadNetworkFocusedSitePointKey
   const setRoadFrontageMarkerPanelOpen = mapContext?.setRoadFrontageMarkerPanelOpen
   const setRoadFrontageBuildingPanelOpen = mapContext?.setRoadFrontageBuildingPanelOpen
+  const setSteepSlopeSafetyPanelOpen = mapContext?.setSteepSlopeSafetyPanelOpen
   const setRiverIllegalOccupationPanelOpen = mapContext?.setRiverIllegalOccupationPanelOpen
   const setRoadFrontageMarkerPointPickActive = mapContext?.setRoadFrontageMarkerPointPickActive
   const setRoadFrontageMarkerDraftPoint = mapContext?.setRoadFrontageMarkerDraftPoint
@@ -806,6 +836,7 @@ function MapLayoutContent({
   const roadNetworkSelectedRow =
     mapContext?.roadNetworkRows?.find((r) => r.id === mapContext?.roadNetworkSelectedId) ?? null
   const bikeRoadOpen = openedWindows.includes(BIKE_ROAD_OPENED_KEY)
+  const securityLightOpen = openedWindows.includes(SECURITY_LIGHT_OPENED_KEY)
   const safetyMapOpen = openedWindows.includes(SAFETY_MAP_OPENED_KEY)
   const safetyInfoOpen = openedWindows.includes(SAFETY_INFO_OPENED_KEY)
   const safetyWaterOpen = openedWindows.includes(SAFETY_WATER_OPENED_KEY)
@@ -882,6 +913,8 @@ function MapLayoutContent({
   const roadRewardOpen = openedWindows.includes(ROAD_REWARD_OPENED_KEY)
   const unpaidLandCompensationOpen = openedWindows.includes(UNPAID_LAND_COMPENSATION_OPENED_KEY)
   const roadFrontageBuildingOpen = openedWindows.includes(ROAD_FRONTAGE_BUILDING_OPENED_KEY)
+  const steepSlopeSafetyOpen = openedWindows.includes(STEEP_SLOPE_SAFETY_OPENED_KEY)
+  const publicPropertyPermitOpen = openedWindows.includes(PUBLIC_PROPERTY_PERMIT_OPENED_KEY)
   const roadFrontageMarkerOpen = openedWindows.includes(ROAD_FRONTAGE_MARKER_OPENED_KEY)
   const useFeeSerEng = findOpenedUseFeeSerEng(openedWindows)
   const useFeeOpen = Boolean(useFeeSerEng)
@@ -1015,6 +1048,16 @@ function MapLayoutContent({
   const [roadFrontageBuildingListRefreshKey, setRoadFrontageBuildingListRefreshKey] = useState(0)
   const roadFrontageBuildingDetailOpen =
     roadFrontageBuildingOpen && Boolean(roadFrontageBuildingSelectedId)
+  const [steepSlopeSafetySelectedId, setSteepSlopeSafetySelectedId] = useState<string | null>(
+    null
+  )
+  const steepSlopeSafetyDetailOpen =
+    steepSlopeSafetyOpen && Boolean(steepSlopeSafetySelectedId)
+  const [publicPropertyPermitSelectedId, setPublicPropertyPermitSelectedId] = useState<
+    string | null
+  >(null)
+  const publicPropertyPermitDetailOpen =
+    publicPropertyPermitOpen && Boolean(publicPropertyPermitSelectedId)
   const [roadFrontageMarkerSelectedId, setRoadFrontageMarkerSelectedId] = useState<
     string | null
   >(null)
@@ -1114,6 +1157,15 @@ function MapLayoutContent({
   const [roadNetworkDetailWidth, setRoadNetworkDetailWidth] = useState(ROAD_NETWORK_DETAIL_DEFAULT_WIDTH)
   const [bikeRoadListWidth, setBikeRoadListWidth] = useState(BIKE_ROAD_LIST_DEFAULT_WIDTH)
   const [bikeRoadDetailWidth, setBikeRoadDetailWidth] = useState(BIKE_ROAD_DETAIL_DEFAULT_WIDTH)
+  const [securityLightListWidth, setSecurityLightListWidth] = useState(
+    SECURITY_LIGHT_LIST_DEFAULT_WIDTH
+  )
+  const [securityLightDetailWidth, setSecurityLightDetailWidth] = useState(
+    SECURITY_LIGHT_DETAIL_DEFAULT_WIDTH
+  )
+  const [securityLightSelectedKey, setSecurityLightSelectedKey] = useState<string | null>(null)
+  const securityLightParsed = parseSecurityLightKey(securityLightSelectedKey)
+  const securityLightDetailOpen = securityLightOpen && Boolean(securityLightParsed)
   const [bikeRoadSelectedId, setBikeRoadSelectedId] = useState<string | null>(null)
   const [bikeRoadRoutes, setBikeRoadRoutes] = useState<BikeRoadRoute[]>(() => [
     ...BIKE_ROAD_MOCK_ROUTES,
@@ -1218,6 +1270,18 @@ function MapLayoutContent({
   const [roadFrontageBuildingDetailWidth, setRoadFrontageBuildingDetailWidth] = useState(
     ROAD_FRONTAGE_BUILDING_DETAIL_DEFAULT_WIDTH
   )
+  const [steepSlopeSafetyPanelWidth, setSteepSlopeSafetyPanelWidth] = useState(
+    STEEP_SLOPE_SAFETY_PANEL_DEFAULT_WIDTH
+  )
+  const [steepSlopeSafetyDetailWidth, setSteepSlopeSafetyDetailWidth] = useState(
+    STEEP_SLOPE_SAFETY_DETAIL_DEFAULT_WIDTH
+  )
+  const [publicPropertyPermitPanelWidth, setPublicPropertyPermitPanelWidth] = useState(
+    PUBLIC_PROPERTY_PERMIT_PANEL_DEFAULT_WIDTH
+  )
+  const [publicPropertyPermitDetailWidth, setPublicPropertyPermitDetailWidth] = useState(
+    PUBLIC_PROPERTY_PERMIT_DETAIL_DEFAULT_WIDTH
+  )
   const [roadFrontageMarkerPanelWidth, setRoadFrontageMarkerPanelWidth] = useState(
     ROAD_FRONTAGE_MARKER_PANEL_DEFAULT_WIDTH
   )
@@ -1283,6 +1347,8 @@ function MapLayoutContent({
     (roadNetworkDetailOpen ? roadNetworkDetailWidth : 0) +
     (bikeRoadOpen ? bikeRoadListWidth : 0) +
     (bikeRoadDetailOpen ? bikeRoadDetailWidth : 0) +
+    (securityLightOpen ? securityLightListWidth : 0) +
+    (securityLightDetailOpen ? securityLightDetailWidth : 0) +
     (buildPublicLandOpen ? buildPublicLandPanelWidth : 0) +
     (buildPublicLandDetailOpen ? buildPublicLandDetailWidth : 0) +
     (roadUseLedgerOpen ? roadUseLedgerPanelWidth : 0) +
@@ -1306,8 +1372,13 @@ function MapLayoutContent({
     (unpaidLandCompensationOpen ? unpaidLandCompensationPanelWidth : 0) +
     (roadFrontageBuildingOpen ? roadFrontageBuildingPanelWidth : 0) +
     (roadFrontageBuildingDetailOpen ? roadFrontageBuildingDetailWidth : 0) +
+    (steepSlopeSafetyOpen ? steepSlopeSafetyPanelWidth : 0) +
+    (steepSlopeSafetyDetailOpen ? steepSlopeSafetyDetailWidth : 0) +
+    (publicPropertyPermitOpen ? publicPropertyPermitPanelWidth : 0) +
+    (publicPropertyPermitDetailOpen ? publicPropertyPermitDetailWidth : 0) +
     (roadFrontageMarkerOpen ? roadFrontageMarkerPanelWidth : 0) +
     (roadFrontageMarkerDetailOpen ? roadFrontageMarkerDetailWidth : 0) +
+
     (policyMapOpen ? policyMapPanelWidth : 0) +
     (memoManagementOpen ? memoPanelWidth : 0) +
     (complaintManagementOpen ? complaintPanelWidth : 0) +
@@ -1341,7 +1412,6 @@ function MapLayoutContent({
     (smallPublicCandidateOpen ? smallPublicCandidateTotalWidth : 0) +
     (smallPublicInspectionOpen ? smallPublicInspectionTotalWidth : 0) +
     (smallPublicPlanOpen ? smallPublicPlanTotalWidth : 0) +
-    (smallPublicBudgetOpen ? smallPublicBudgetTotalWidth : 0) +
     (worksRegisterOpen ? worksRegisterTotalWidth : 0) +
     (wtlAdminEmptyOpen ? wtlAdminEmptyTotalWidth : 0) +
     (fmsLinkageOpen ? fmsLinkagePanelWidth : 0) +
@@ -1402,8 +1472,12 @@ function MapLayoutContent({
     roadNetworkDetailLeftPx + (roadNetworkDetailOpen ? roadNetworkDetailWidth : 0)
   const bikeRoadDetailLeftPx =
     bikeRoadListLeftPx + (bikeRoadOpen ? bikeRoadListWidth : 0)
-  const buildPublicLandPanelLeftPx =
+  const securityLightListLeftPx =
     bikeRoadDetailLeftPx + (bikeRoadDetailOpen ? bikeRoadDetailWidth : 0)
+  const securityLightDetailLeftPx =
+    securityLightListLeftPx + (securityLightOpen ? securityLightListWidth : 0)
+  const buildPublicLandPanelLeftPx =
+    securityLightDetailLeftPx + (securityLightDetailOpen ? securityLightDetailWidth : 0)
   const buildPublicLandDetailLeftPx =
     buildPublicLandPanelLeftPx + (buildPublicLandOpen ? buildPublicLandPanelWidth : 0)
   const roadUseLedgerPanelLeftPx =
@@ -1453,9 +1527,21 @@ function MapLayoutContent({
   const roadFrontageBuildingDetailLeftPx =
     roadFrontageBuildingPanelLeftPx +
     (roadFrontageBuildingOpen ? roadFrontageBuildingPanelWidth : 0)
-  const roadFrontageMarkerPanelLeftPx =
+  const steepSlopeSafetyPanelLeftPx =
     roadFrontageBuildingDetailLeftPx +
     (roadFrontageBuildingDetailOpen ? roadFrontageBuildingDetailWidth : 0)
+  const steepSlopeSafetyDetailLeftPx =
+    steepSlopeSafetyPanelLeftPx +
+    (steepSlopeSafetyOpen ? steepSlopeSafetyPanelWidth : 0)
+  const publicPropertyPermitPanelLeftPx =
+    steepSlopeSafetyDetailLeftPx +
+    (steepSlopeSafetyDetailOpen ? steepSlopeSafetyDetailWidth : 0)
+  const publicPropertyPermitDetailLeftPx =
+    publicPropertyPermitPanelLeftPx +
+    (publicPropertyPermitOpen ? publicPropertyPermitPanelWidth : 0)
+  const roadFrontageMarkerPanelLeftPx =
+    publicPropertyPermitDetailLeftPx +
+    (publicPropertyPermitDetailOpen ? publicPropertyPermitDetailWidth : 0)
   const roadFrontageMarkerDetailLeftPx =
     roadFrontageMarkerPanelLeftPx +
     (roadFrontageMarkerOpen ? roadFrontageMarkerPanelWidth : 0)
@@ -1530,10 +1616,8 @@ function MapLayoutContent({
   const smallPublicPlanPanelLeftPx =
     smallPublicInspectionPanelLeftPx +
     (smallPublicInspectionOpen ? smallPublicInspectionTotalWidth : 0)
-  const smallPublicBudgetPanelLeftPx =
-    smallPublicPlanPanelLeftPx + (smallPublicPlanOpen ? smallPublicPlanTotalWidth : 0)
   const worksRegisterPanelLeftPx =
-    smallPublicBudgetPanelLeftPx + (smallPublicBudgetOpen ? smallPublicBudgetTotalWidth : 0)
+    smallPublicPlanPanelLeftPx + (smallPublicPlanOpen ? smallPublicPlanTotalWidth : 0)
   const wtlAdminEmptyPanelLeftPx =
     worksRegisterPanelLeftPx + (worksRegisterOpen ? worksRegisterTotalWidth : 0)
   const fmsLinkagePanelLeftPx =
@@ -2053,6 +2137,16 @@ function MapLayoutContent({
     }
   }, [bikeRoadOpen])
 
+  const handleCloseSecurityLight = () => {
+    setSecurityLightSelectedKey(null)
+    const next = openedWindows.filter((w) => w !== SECURITY_LIGHT_OPENED_KEY)
+    setOpened(next)
+  }
+
+  useEffect(() => {
+    if (!securityLightOpen) setSecurityLightSelectedKey(null)
+  }, [securityLightOpen])
+
   const handleAddBikeRoad = () => {
     const draft = createEmptyBikeRoadRoute()
     setBikeRoadRoutes((prev) => [
@@ -2158,6 +2252,18 @@ function MapLayoutContent({
   const handleCloseRoadFrontageBuilding = () => {
     setRoadFrontageBuildingSelectedId(null)
     const next = openedWindows.filter((w) => w !== ROAD_FRONTAGE_BUILDING_OPENED_KEY)
+    setOpened(next)
+  }
+
+  const handleCloseSteepSlopeSafety = () => {
+    setSteepSlopeSafetySelectedId(null)
+    const next = openedWindows.filter((w) => w !== STEEP_SLOPE_SAFETY_OPENED_KEY)
+    setOpened(next)
+  }
+
+  const handleClosePublicPropertyPermit = () => {
+    setPublicPropertyPermitSelectedId(null)
+    const next = openedWindows.filter((w) => w !== PUBLIC_PROPERTY_PERMIT_OPENED_KEY)
     setOpened(next)
   }
 
@@ -2268,11 +2374,6 @@ function MapLayoutContent({
   const handleCloseSmallPublicPlan = () => {
     setSmallPublicPlanTotalWidth(0)
     setOpened(openedWindows.filter((w) => w !== SMALL_PUBLIC_PLAN_OPENED_KEY))
-  }
-
-  const handleCloseSmallPublicBudget = () => {
-    setSmallPublicBudgetTotalWidth(0)
-    setOpened(openedWindows.filter((w) => w !== SMALL_PUBLIC_BUDGET_OPENED_KEY))
   }
 
   const handleCloseWorksRegister = () => {
@@ -2452,6 +2553,18 @@ function MapLayoutContent({
   }, [])
 
   useEffect(() => {
+    if (!steepSlopeSafetyOpen) setSteepSlopeSafetySelectedId(null)
+  }, [steepSlopeSafetyOpen])
+
+  useEffect(() => {
+    setSteepSlopeSafetyPanelOpen?.(steepSlopeSafetyOpen)
+  }, [steepSlopeSafetyOpen, setSteepSlopeSafetyPanelOpen])
+
+  useEffect(() => {
+    if (!publicPropertyPermitOpen) setPublicPropertyPermitSelectedId(null)
+  }, [publicPropertyPermitOpen])
+
+  useEffect(() => {
     if (!roadFrontageMarkerOpen) setRoadFrontageMarkerSelectedId(null)
   }, [roadFrontageMarkerOpen])
 
@@ -2522,10 +2635,6 @@ function MapLayoutContent({
   useEffect(() => {
     if (!smallPublicPlanOpen) setSmallPublicPlanTotalWidth(0)
   }, [smallPublicPlanOpen])
-
-  useEffect(() => {
-    if (!smallPublicBudgetOpen) setSmallPublicBudgetTotalWidth(0)
-  }, [smallPublicBudgetOpen])
 
   useEffect(() => {
     if (!worksRegisterOpen) setWorksRegisterTotalWidth(0)
@@ -2714,7 +2823,7 @@ function MapLayoutContent({
   }, [shootingPanelOpen, shootingApprovalOpen, shootingRequestOpen])
 
   useEffect(() => {
-    if (!isUavFamilySystemKey(systemKeyFromUrl) && !isUavUsProject(projectName)) return
+    if (!isUavFamilySystemKey(systemKeyFromUrl) && !shootingUiEnabled) return
     if (searchParams.get('shotForm') !== 'new') return
     const current = new URLSearchParams(Array.from(searchParams.entries()))
     current.delete('shotForm')
@@ -2728,7 +2837,7 @@ function MapLayoutContent({
       setShootingRequestDetailId(null)
     }
     router.replace(`/map?${current.toString()}`)
-  }, [systemKeyFromUrl, projectName, shootingRequestOpen, shootingApprovalOpen, searchParams, router])
+  }, [systemKeyFromUrl, shootingUiEnabled, shootingRequestOpen, shootingApprovalOpen, searchParams, router])
 
   const openShootingRequestForm = useCallback(() => {
     const current = new URLSearchParams(Array.from(searchParams.entries()))
@@ -3176,6 +3285,61 @@ function MapLayoutContent({
                   onClose={() => setBikeRoadSelectedId(null)}
                   onSave={handleSaveBikeRoad}
                   onDelete={handleDeleteBikeRoad}
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          {securityLightOpen && (
+            <div className="pointer-events-auto flex h-full shrink-0 flex-col">
+              <MapSideListPanel
+                width={securityLightListWidth}
+                minWidth={SECURITY_LIGHT_LIST_MIN_WIDTH}
+                maxWidth={SECURITY_LIGHT_LIST_MAX_WIDTH}
+                leftOffsetPx={securityLightListLeftPx}
+                onWidthChange={setSecurityLightListWidth}
+                contentClassName="overflow-hidden"
+                serEng="securityLight"
+              >
+                <SecurityLightListPanel
+                  onClose={handleCloseSecurityLight}
+                  selectedKey={securityLightSelectedKey}
+                  onSelectKey={setSecurityLightSelectedKey}
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          {securityLightDetailOpen && securityLightParsed?.source === "supply" && (
+            <div className="pointer-events-auto flex h-full shrink-0 flex-col">
+              <MapSideListPanel
+                width={securityLightDetailWidth}
+                minWidth={SECURITY_LIGHT_DETAIL_MIN_WIDTH}
+                maxWidth={SECURITY_LIGHT_DETAIL_MAX_WIDTH}
+                leftOffsetPx={securityLightDetailLeftPx}
+                onWidthChange={setSecurityLightDetailWidth}
+                contentClassName="overflow-hidden"
+                serEng="securityLight"
+              >
+                <SecurityLightSupplyDetailPanel
+                  id={securityLightParsed.id}
+                  onClose={() => setSecurityLightSelectedKey(null)}
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          {securityLightDetailOpen && securityLightParsed?.source === "public" && (
+            <div className="pointer-events-auto flex h-full shrink-0 flex-col">
+              <MapSideListPanel
+                width={securityLightDetailWidth}
+                minWidth={SECURITY_LIGHT_DETAIL_MIN_WIDTH}
+                maxWidth={SECURITY_LIGHT_DETAIL_MAX_WIDTH}
+                leftOffsetPx={securityLightDetailLeftPx}
+                onWidthChange={setSecurityLightDetailWidth}
+                contentClassName="overflow-hidden"
+                serEng="securityLight"
+              >
+                <SecurityLightPublicDetailPanel
+                  id={securityLightParsed.id}
+                  onClose={() => setSecurityLightSelectedKey(null)}
                 />
               </MapSideListPanel>
             </div>
@@ -3703,6 +3867,82 @@ function MapLayoutContent({
                     roadFrontageBuildingPanelWidth +
                     (roadFrontageBuildingDetailOpen ? roadFrontageBuildingDetailWidth : 0)
                   }
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          {steepSlopeSafetyOpen && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={steepSlopeSafetyPanelWidth}
+                minWidth={STEEP_SLOPE_SAFETY_PANEL_MIN_WIDTH}
+                maxWidth={STEEP_SLOPE_SAFETY_PANEL_MAX_WIDTH}
+                leftOffsetPx={steepSlopeSafetyPanelLeftPx}
+                onWidthChange={setSteepSlopeSafetyPanelWidth}
+                serEng={STEEP_SLOPE_SAFETY_OPENED_KEY}
+              >
+                <SteepSlopeSafetyListPanel
+                  selectedId={steepSlopeSafetySelectedId}
+                  onSelectId={setSteepSlopeSafetySelectedId}
+                  onClose={handleCloseSteepSlopeSafety}
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          {steepSlopeSafetyDetailOpen && steepSlopeSafetySelectedId && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={steepSlopeSafetyDetailWidth}
+                minWidth={STEEP_SLOPE_SAFETY_DETAIL_MIN_WIDTH}
+                maxWidth={STEEP_SLOPE_SAFETY_DETAIL_MAX_WIDTH}
+                leftOffsetPx={steepSlopeSafetyDetailLeftPx}
+                onWidthChange={setSteepSlopeSafetyDetailWidth}
+                contentClassName="overflow-hidden"
+                serEng={STEEP_SLOPE_SAFETY_OPENED_KEY}
+              >
+                <SteepSlopeSafetyDetailPanel
+                  key={steepSlopeSafetySelectedId}
+                  cardId={steepSlopeSafetySelectedId}
+                  onSelectId={setSteepSlopeSafetySelectedId}
+                  onClose={() => setSteepSlopeSafetySelectedId(null)}
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          {publicPropertyPermitOpen && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={publicPropertyPermitPanelWidth}
+                minWidth={PUBLIC_PROPERTY_PERMIT_PANEL_MIN_WIDTH}
+                maxWidth={PUBLIC_PROPERTY_PERMIT_PANEL_MAX_WIDTH}
+                leftOffsetPx={publicPropertyPermitPanelLeftPx}
+                onWidthChange={setPublicPropertyPermitPanelWidth}
+                serEng={PUBLIC_PROPERTY_PERMIT_OPENED_KEY}
+              >
+                <PublicPropertyPermitListPanel
+                  selectedId={publicPropertyPermitSelectedId}
+                  onSelectId={setPublicPropertyPermitSelectedId}
+                  onClose={handleClosePublicPropertyPermit}
+                />
+              </MapSideListPanel>
+            </div>
+          )}
+          {publicPropertyPermitDetailOpen && publicPropertyPermitSelectedId && (
+            <div className="pointer-events-auto shrink-0">
+              <MapSideListPanel
+                width={publicPropertyPermitDetailWidth}
+                minWidth={PUBLIC_PROPERTY_PERMIT_DETAIL_MIN_WIDTH}
+                maxWidth={PUBLIC_PROPERTY_PERMIT_DETAIL_MAX_WIDTH}
+                leftOffsetPx={publicPropertyPermitDetailLeftPx}
+                onWidthChange={setPublicPropertyPermitDetailWidth}
+                contentClassName="overflow-hidden"
+                serEng={PUBLIC_PROPERTY_PERMIT_OPENED_KEY}
+              >
+                <PublicPropertyPermitDetailPanel
+                  key={publicPropertyPermitSelectedId}
+                  permitId={publicPropertyPermitSelectedId}
+                  onSelectId={setPublicPropertyPermitSelectedId}
+                  onClose={() => setPublicPropertyPermitSelectedId(null)}
                 />
               </MapSideListPanel>
             </div>
@@ -4334,17 +4574,6 @@ function MapLayoutContent({
               leftOffsetPx={smallPublicPlanPanelLeftPx}
               onTotalWidthChange={setSmallPublicPlanTotalWidth}
               onClose={handleCloseSmallPublicPlan}
-              onOpenBudget={() => {
-                setSmallPublicPlanTotalWidth(0)
-                setOpened([SMALL_PUBLIC_BUDGET_OPENED_KEY])
-              }}
-            />
-          )}
-          {smallPublicBudgetOpen && (
-            <SmallPublicBudgetShell
-              leftOffsetPx={smallPublicBudgetPanelLeftPx}
-              onTotalWidthChange={setSmallPublicBudgetTotalWidth}
-              onClose={handleCloseSmallPublicBudget}
             />
           )}
           {worksRegisterOpen && (
