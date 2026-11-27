@@ -12,6 +12,7 @@ import { scrubOccupationLedgerFromMapSearchParams } from '@/lib/occupationLedger
 import { scrubUseFeeFromMapSearchParams } from '@/lib/useFeeBinding';
 import { scrubMapSearchParamsOnSystemSwitch } from '@/lib/mapSystemSwitch';
 import { useMapContext } from '@/app/(pages)/map/_mapComponents/MapContext';
+import { applyOdorSystemDefaultOpened } from '@/lib/odorSystemDefaultOpened';
 
 type SystemItem = {
   sys_key: string;
@@ -73,13 +74,17 @@ export function MapSystemList() {
       !currentMeta ||
       canAccessPrivateSystem(snapshot, systemKeyFromUrl, currentMeta.sys_is_private);
 
+    const currentQs = searchParams.toString();
     if (!systemKeyFromUrl && firstAllowed) {
       const current = new URLSearchParams(Array.from(searchParams.entries()));
       current.set('system', firstAllowed);
       const firstMeta = systemList.find((s) => s.sys_key === firstAllowed);
       scrubOccupationLedgerFromMapSearchParams(current, firstAllowed, firstMeta?.serviceList ?? []);
       scrubUseFeeFromMapSearchParams(current, firstAllowed, firstMeta?.serviceList ?? []);
-      router.replace(`/map?${current.toString()}`);
+      applyOdorSystemDefaultOpened(current, firstAllowed);
+      const nextQs = current.toString();
+      if (nextQs === currentQs) return;
+      router.replace(`/map?${nextQs}`);
       return;
     }
     if (systemKeyFromUrl && !urlAllowed && firstAllowed) {
@@ -88,10 +93,14 @@ export function MapSystemList() {
       current.delete('opened');
       current.delete('dataTable');
       current.delete('dataKey');
+      applyOdorSystemDefaultOpened(current, firstAllowed);
+      const nextQs = current.toString();
+      if (nextQs === currentQs) return;
       mapContext?.allLayersOffRef?.current?.();
-      router.replace(`/map?${current.toString()}`);
+      router.replace(`/map?${nextQs}`);
     }
-  }, [accessLoading, snapshot, systemList, systemKeyFromUrl, searchParams, router, mapContext]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mapContext identity churn
+  }, [accessLoading, snapshot, systemList, systemKeyFromUrl, searchParams, router]);
 
   useEffect(() => {
     const onVisible = () => {
@@ -112,6 +121,7 @@ export function MapSystemList() {
     if (systemChanged) {
       const target = systemList.find((s) => s.sys_key === sysKey);
       scrubMapSearchParamsOnSystemSwitch(current, sysKey, target?.serviceList ?? []);
+      applyOdorSystemDefaultOpened(current, sysKey);
       mapContext?.allLayersOffRef?.current?.();
     } else {
       const target = systemList.find((s) => s.sys_key === sysKey);

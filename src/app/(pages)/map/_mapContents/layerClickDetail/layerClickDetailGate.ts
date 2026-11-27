@@ -24,6 +24,12 @@ export const LAYER_CLICK_DETAIL_BLOCKED_OPENED = [
   // 민원·메모(공통)
   'complaintManagement',
   'memoManagement',
+  // 하수악취
+  'odorDashboard',
+  'odorControlMap',
+  'odorAlert',
+  'odorAlertView2',
+  'odorComplaint',
   // 도로·하천 — identify 가로채기 패널
   'riverBasicPlan',
   'roadLedger',

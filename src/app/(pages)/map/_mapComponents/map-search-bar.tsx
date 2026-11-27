@@ -36,6 +36,7 @@ import { ThemeToggle } from '@/app/(pages)/(index)/theme-toggle';
 import { scrubOccupationLedgerFromMapSearchParams } from '@/lib/occupationLedgerBinding';
 import { scrubUseFeeFromMapSearchParams } from '@/lib/useFeeBinding';
 import { scrubMapSearchParamsOnSystemSwitch } from '@/lib/mapSystemSwitch';
+import { applyOdorSystemDefaultOpened } from '@/lib/odorSystemDefaultOpened';
 import { MapAdminToolsMenu } from './mapAdminTools/MapAdminToolsMenu';
 import { scheduleAnimateMapToCenter3857 } from './config/mapAutoNavigation';
 import { MAP_LOCAL_VIEW_MIN_ZOOM } from './config/mapDefaults';
@@ -655,6 +656,7 @@ export function MapSearchBar({
     if (systemChanged) {
       const target = systemList.find((s) => s.sys_key === sysKey);
       scrubMapSearchParamsOnSystemSwitch(current, sysKey, target?.serviceList ?? []);
+      applyOdorSystemDefaultOpened(current, sysKey);
       mapContext?.allLayersOffRef?.current?.();
     } else {
       const target = systemList.find((s) => s.sys_key === sysKey);
