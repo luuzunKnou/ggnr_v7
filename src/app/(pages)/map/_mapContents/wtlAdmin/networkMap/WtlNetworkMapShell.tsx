@@ -12,6 +12,7 @@ import { useSession } from 'next-auth/react'
 import {
   ChevronDown,
   ChevronLeft,
+  ChevronRight,
   Loader2,
   RefreshCw,
   X,
@@ -2907,6 +2908,11 @@ export function WtlNetworkMapShell({ leftOffsetPx, onTotalWidthChange, onClose }
             : 'bg-[#d7ebf1] text-[#14607a] hover:bg-[#c5e3eb] dark:bg-[#14607a] dark:text-[#d7ebf1] dark:hover:bg-[#0f4d62]'
         )}
       >
+        {resultOpen ? (
+          <ChevronLeft className="h-3 w-3 shrink-0" aria-hidden />
+        ) : (
+          <ChevronRight className="h-3 w-3 shrink-0" aria-hidden />
+        )}
         시설목록
       </button>
     </div>
