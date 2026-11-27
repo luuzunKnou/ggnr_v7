@@ -8,6 +8,7 @@ import {
   writeSystemControl,
 } from '@/lib/systemControlStore';
 import { getOrthoZoomLimitEnabled } from '@/service/aerialOrthoService';
+import { isKrasPiiAllowedForSession } from '@/service/krasPiiPermissionService';
 
 export const SYSTEM_CONTROL_ITEMS = [
   {
@@ -39,7 +40,7 @@ function isKnownName(name: string): name is SystemControlName {
   return SYSTEM_CONTROL_ITEMS.some((item) => item.name === name);
 }
 
-/** 필지정보 소유자명 마스킹 여부 — 모든 사용자(su 포함) 동일 적용 */
+/** 통합제어 «개인정보 마스킹» ON 여부 (스냅샷·설정값) */
 export async function isPersonInfoMaskEnabled(): Promise<boolean> {
   try {
     return (await readSystemControl('personInfo')) === true;
@@ -48,8 +49,40 @@ export async function isPersonInfoMaskEnabled(): Promise<boolean> {
   }
 }
 
-export async function getPersonInfoMaskEnabled(_params?: unknown): Promise<{ enabled: boolean }> {
-  return { enabled: await isPersonInfoMaskEnabled() };
+/**
+ * 세션 기준 마스킹 플래그.
+ * - maskOwnerNm: 통합제어 ON 또는 KRAS 원문 권한 회수 → 소유자명
+ * - maskWide: KRAS 원문 권한 회수만 → 필지정보 등록번호·주소(v6 필지정보 범위). 통합제어는 적용하지 않음
+ */
+export async function getPersonInfoMaskFlagsForSession(): Promise<{
+  maskOwnerNm: boolean;
+  maskWide: boolean;
+}> {
+  const personInfoOn = await isPersonInfoMaskEnabled();
+  const krasDenied = !(await isKrasPiiAllowedForSession());
+  return {
+    maskOwnerNm: personInfoOn || krasDenied,
+    maskWide: krasDenied,
+  };
+}
+
+/** 화면·응답에 소유자명을 가릴지 */
+export async function shouldMaskPersonInfoForSession(): Promise<boolean> {
+  return (await getPersonInfoMaskFlagsForSession()).maskOwnerNm;
+}
+
+/** KRAS 원문 권한 회수 시 필지정보 등록번호·주소 마스킹 */
+export async function shouldMaskKrasPiiWideForSession(): Promise<boolean> {
+  return (await getPersonInfoMaskFlagsForSession()).maskWide;
+}
+
+/** 클라이언트 표시용 — 소유자명(enabled) + KRAS 광범위(maskWide) */
+export async function getPersonInfoMaskEnabled(_params?: unknown): Promise<{
+  enabled: boolean;
+  maskWide: boolean;
+}> {
+  const flags = await getPersonInfoMaskFlagsForSession();
+  return { enabled: flags.maskOwnerNm, maskWide: flags.maskWide };
 }
 
 export async function listSystemControls(_params?: unknown): Promise<{

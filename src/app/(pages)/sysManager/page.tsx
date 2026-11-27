@@ -16,6 +16,7 @@ import { DataHistoryManagerContent } from "@/app/(pages)/dev/_components/DataHis
 import { SignUpApprove } from "@/app/(pages)/dev/_components/SignUpApprove"
 import { UserMgmtHistory } from "@/app/(pages)/dev/_components/UserMgmtHistory"
 import { UserAccessStats } from "@/app/(pages)/dev/_components/UserAccessStats"
+import { KrasPiiAccessHub } from "@/app/(pages)/dev/_components/KrasPiiAccessHub"
 import {
   SYS_MANAGER_CONSOLE_MENUS,
   type SysManagerConsoleMenuId,
@@ -35,7 +36,7 @@ const SYS_MANAGER_MENU_GROUPS: readonly AdminConsoleMenuGroup[] = [
     id: "permissionManagement",
     label: "권한관리",
     icon: Shield,
-    menuIds: ["permissionFeature", "accessRequestQueue"],
+    menuIds: ["permissionFeature", "accessRequestQueue", "landLinkageQueryLog"],
   },
   {
     id: "dataManagement",
@@ -93,6 +94,8 @@ function getSysAdminDescription(menuId: string): string {
       return "계정 생성·변경·삭제 등 사용자 관리 이력을 조회합니다."
     case "userPermHistory":
       return "권한 부여·변경 이력 조회 (구현 예정)"
+    case "landLinkageQueryLog":
+      return "KRAS 조회 이력과 사용자별 개인정보 원문 열람 권한을 관리합니다."
     default:
       return ""
   }
@@ -145,6 +148,12 @@ function renderSysAdminContent(menuId: string): ReactNode {
       return (
         <div className="flex min-h-0 flex-col">
           <UserMgmtHistory />
+        </div>
+      )
+    case "landLinkageQueryLog":
+      return (
+        <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
+          <KrasPiiAccessHub />
         </div>
       )
     default:

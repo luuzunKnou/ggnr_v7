@@ -25,6 +25,8 @@ export * from './fms_inspection';
 export * from './fms_query_table';
 export * from './gp_map';
 export * from './integration_job_log';
+export * from './kras_pii_perm';
+export * from './land_linkage_query_log';
 export * from './land_price_memo';
 export * from './layer_control';
 export * from './layer_detail_history';

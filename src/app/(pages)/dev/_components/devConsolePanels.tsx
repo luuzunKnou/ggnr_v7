@@ -21,6 +21,7 @@ import { UserManager } from "./UserManager"
 import { SignUpApprove } from "./SignUpApprove"
 import { UserMgmtHistory } from "./UserMgmtHistory"
 import { UserAccessStats } from "./UserAccessStats"
+import { KrasPiiAccessHub } from "./KrasPiiAccessHub"
 import { RuntimeEnvEditor } from "./RuntimeEnvEditor"
 import { SystemControlContent } from "./SystemControlContent"
 import { ProjectComposeManager } from "./ProjectComposeManager"
@@ -49,6 +50,7 @@ export const DEV_MENU_GROUPS: readonly AdminConsoleMenuGroup[] = [
       "userManager",
       "permissionFeature",
       "accessRequestQueue",
+      "landLinkageQueryLog",
       "systemVar",
       "systemControl",
       "projectCompose",
@@ -167,6 +169,8 @@ export function getDevMenuDescription(menuId: string): string {
       return "계정 생성·변경·삭제 등 사용자 관리 이력을 조회합니다."
     case "userPermHistory":
       return "권한 부여·변경 이력 조회 (구현 예정)"
+    case "landLinkageQueryLog":
+      return "KRAS 조회 이력과 사용자별 개인정보 원문 열람 권한을 관리합니다."
     case "layerManager":
       return "레이어 목록·SHP/Excel 업데이트 이력·설정(Layer/Field/Code)·오류수정 및 SHP·Excel 업로드 진입 화면입니다."
     case "dataHistoryManager":
@@ -258,6 +262,12 @@ export function renderDevMenuContent(menuId: string): ReactNode {
       return (
         <div className="flex min-h-0 flex-col">
           <UserMgmtHistory />
+        </div>
+      )
+    case "landLinkageQueryLog":
+      return (
+        <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
+          <KrasPiiAccessHub />
         </div>
       )
     case "userManager":

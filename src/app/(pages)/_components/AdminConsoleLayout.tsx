@@ -154,7 +154,7 @@ export function AdminConsoleLayout({
         type="button"
         onClick={() => handleMenuClick(menu.id)}
         className={cn(
-          "flex w-full items-center gap-2 text-left text-sm font-medium transition-colors",
+          "flex w-full items-center gap-2 text-left text-sm font-medium",
           indent ? "px-6 py-2" : "px-4 py-2.5",
           selectedMenu === menu.id && !isBlock
             ? "bg-primary text-primary-foreground"
@@ -353,7 +353,7 @@ export function AdminConsoleLayout({
                 title={menu.label}
                 onClick={() => handleMenuClick(menu.id)}
                 className={cn(
-                  "flex h-8 w-8 items-center justify-center rounded-md text-[10px] font-semibold transition-colors",
+                  "flex h-8 w-8 items-center justify-center rounded-md text-[10px] font-semibold",
                   selectedMenu === menu.id && !isBlock
                     ? "bg-primary text-primary-foreground"
                     : "text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -386,7 +386,7 @@ export function AdminConsoleLayout({
               title={menu.label}
               onClick={() => handleMenuClick(menu.id)}
               className={cn(
-                "flex h-8 w-8 items-center justify-center rounded-md text-[10px] font-semibold transition-colors",
+                "flex h-8 w-8 items-center justify-center rounded-md text-[10px] font-semibold",
                 selectedMenu === menu.id && !isBlock
                   ? "bg-primary text-primary-foreground"
                   : "text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -425,7 +425,7 @@ export function AdminConsoleLayout({
                 aria-expanded={isFlyoutOpen}
                 aria-haspopup="menu"
                 className={cn(
-                  "flex h-8 w-8 items-center justify-center rounded-md transition-colors",
+                  "flex h-8 w-8 items-center justify-center rounded-md",
                   isActiveGroup || isFlyoutOpen
                     ? "bg-primary text-primary-foreground"
                     : "text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -481,7 +481,7 @@ export function AdminConsoleLayout({
                   role="menuitem"
                   onClick={() => handleMenuClick(menu.id)}
                   className={cn(
-                    "w-full cursor-pointer whitespace-nowrap px-3 py-1.5 text-left text-sm transition-colors",
+                    "w-full cursor-pointer whitespace-nowrap px-3 py-1.5 text-left text-sm",
                     selectedMenu === menu.id && !isBlock
                       ? "bg-primary text-primary-foreground"
                       : isBlock
@@ -624,7 +624,7 @@ export function AdminConsoleLayout({
                       <button
                         type="button"
                         className={cn(
-                          "flex w-full items-center justify-between gap-2 px-4 py-2.5 text-left text-sm font-semibold transition-colors",
+                          "flex w-full items-center justify-between gap-2 px-4 py-2.5 text-left text-sm font-semibold",
                           isOpen ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted/70 hover:text-foreground"
                         )}
                         onClick={() =>
