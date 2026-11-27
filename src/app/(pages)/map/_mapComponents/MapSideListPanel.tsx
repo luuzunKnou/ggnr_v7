@@ -82,6 +82,7 @@ export function MapSideListPanel({
   const panel = (
     <div
       ref={panelRef}
+      data-map-side-list-panel
       className={cn(
         'relative flex h-full shrink-0 flex-col overflow-hidden border-r border-border bg-background shadow-lg',
         className

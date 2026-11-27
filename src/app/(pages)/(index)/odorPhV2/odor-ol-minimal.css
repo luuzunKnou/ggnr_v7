@@ -1,0 +1,27 @@
+/* Index 미니맵용 — node_modules ol.css 청크 로드 회피 */
+.ol-viewport,
+.ol-unselectable {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: none;
+}
+.ol-viewport {
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+  height: 100%;
+}
+.ol-overlaycontainer,
+.ol-overlaycontainer-stopevent {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.ol-overlaycontainer-stopevent > * {
+  pointer-events: auto;
+}
+.ol-control,
+.ol-zoom,
+.ol-rotate,
+.ol-compass {
+  display: none !important;
+}

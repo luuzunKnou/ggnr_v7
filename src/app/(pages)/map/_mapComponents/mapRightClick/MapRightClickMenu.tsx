@@ -45,13 +45,13 @@ function measureVisibleMapCenter(leftPx: number): { x: number; y: number } {
 }
 
 const ROW_HOVER =
-  'w-full cursor-pointer border-b border-[#e6e6e6] text-left hover:bg-primary/5';
+  'w-full cursor-pointer border-b border-border text-left hover:bg-primary/5';
 
 const ICON_BTN =
   'flex h-11 min-w-0 flex-1 basis-0 items-center justify-center hover:bg-primary/5 disabled:opacity-40';
 
 const COORD_LABEL_BADGE =
-  'inline-flex h-5 shrink-0 items-center px-2.5 text-[12px] font-normal';
+  'inline-flex h-5 shrink-0 items-center border border-border bg-muted px-2.5 text-[12px] font-normal text-muted-foreground dark:bg-zinc-700 dark:text-zinc-100';
 
 export default function MapRightClickMenu() {
   const mapContext = useMapContext();
@@ -210,7 +210,7 @@ export default function MapRightClickMenu() {
           data-map-right-click-menu=""
           className={cn(
             MAP_UI_Z_CLASS.addressInfo,
-            'pointer-events-auto fixed flex items-start overflow-visible text-[12px] text-[#333]'
+            'pointer-events-auto fixed flex items-start overflow-visible text-[12px] text-foreground'
           )}
           style={{ left: pos.left, top: pos.top, fontSize: 12 }}
           onContextMenu={(e) => e.preventDefault()}
@@ -218,15 +218,14 @@ export default function MapRightClickMenu() {
           <button
             type="button"
             onClick={closeMenu}
-            className="mt-0 flex h-[32px] w-[30px] shrink-0 items-center justify-center bg-[#8B8B8B] hover:bg-[#B7B7B7]"
-            style={{ backgroundColor: '#8B8B8B', color: '#fff' }}
+            className="mt-0 flex h-[32px] w-[30px] shrink-0 items-center justify-center bg-muted-foreground text-primary-foreground hover:bg-zinc-400 dark:hover:bg-zinc-300"
             aria-label="닫기"
             title="닫기"
           >
-            <X className="w-[20px]" color="#fff" strokeWidth={1.5} />
+            <X className="w-[20px]" strokeWidth={1.5} />
           </button>
 
-          <div className="w-[min(460px,calc(100vw-48px))] overflow-hidden rounded-[5px] border border-[#c8c8c8] bg-white shadow-[2px_4px_6px_rgba(0,0,0,0.2)]">
+          <div className="w-[min(460px,calc(100vw-48px))] overflow-hidden rounded-[5px] border border-border bg-card text-card-foreground shadow-[2px_4px_6px_rgba(0,0,0,0.2)] dark:shadow-[2px_4px_6px_rgba(0,0,0,0.45)]">
             {/* 1. 주소정보 + 상세보기 */}
             <button
               type="button"
@@ -235,12 +234,9 @@ export default function MapRightClickMenu() {
             >
               <span className="flex min-w-0 items-center gap-1">
                 <MapPin className="h-5 w-5 shrink-0 text-muted-foreground" strokeWidth={1.75} aria-hidden />
-                <span className="font-medium text-[#333]">주소정보</span>
+                <span className="font-medium text-foreground">주소정보</span>
               </span>
-              <span
-                className="inline-flex shrink-0 items-center px-2.5 py-1 text-[12px] font-medium"
-                style={{ backgroundColor: '#043E6C', color: '#fff' }}
-              >
+              <span className="inline-flex shrink-0 items-center bg-primary px-2.5 py-1 text-[12px] font-medium text-primary-foreground">
                 상세보기
               </span>
             </button>
@@ -252,18 +248,18 @@ export default function MapRightClickMenu() {
                 onClick={() => void copyAndClose(jibun)}
                 className={cn(ROW_HOVER, 'flex items-center gap-2 border-b-0 px-2.5 py-2')}
               >
-                <span className="shrink-0 rounded bg-emerald-100 px-1.5 py-0.5 text-[12px] font-semibold text-emerald-700">
+                <span className="shrink-0 rounded bg-emerald-100 px-1.5 py-0.5 text-[12px] font-semibold text-emerald-700 dark:bg-emerald-800 dark:text-emerald-100">
                   지번
                 </span>
                 <span className="min-w-0 flex-1 break-all font-medium">{jibun}</span>
-                <span className="shrink-0 text-[12px] text-[#767676]">{COPY_LABEL}</span>
+                <span className="shrink-0 text-[12px] text-muted-foreground">{COPY_LABEL}</span>
               </button>
             ) : (
               <div className="flex w-full items-center gap-2 border-b-0 px-2.5 py-2 text-left">
-                <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[12px] font-semibold text-muted-foreground">
+                <span className="shrink-0 rounded border border-border bg-muted px-1.5 py-0.5 text-[12px] font-semibold text-muted-foreground dark:bg-muted/80">
                   지번
                 </span>
-                <span className="min-w-0 flex-1 break-all font-medium text-muted-foreground">
+                <span className="min-w-0 flex-1 break-all text-muted-foreground">
                   {addressError ? ADDRESS_FETCH_ERROR_MSG : '해당 위치에 지번 주소가 없습니다.'}
                 </span>
               </div>
@@ -274,20 +270,20 @@ export default function MapRightClickMenu() {
               <button
                 type="button"
                 onClick={() => void copyAndClose(road)}
-                className={cn(ROW_HOVER, 'flex items-center gap-2 border-[#c8c8c8] px-2.5 py-2')}
+                className={cn(ROW_HOVER, 'flex items-center gap-2 border-border px-2.5 py-2')}
               >
-                <span className="shrink-0 rounded bg-blue-100 px-1.5 py-0.5 text-[12px] font-semibold text-blue-700">
+                <span className="shrink-0 rounded bg-blue-100 px-1.5 py-0.5 text-[12px] font-semibold text-blue-700 dark:bg-blue-800 dark:text-blue-100">
                   도로명
                 </span>
                 <span className="min-w-0 flex-1 break-all font-medium">{road}</span>
-                <span className="shrink-0 text-[12px] text-[#767676]">{COPY_LABEL}</span>
+                <span className="shrink-0 text-[12px] text-muted-foreground">{COPY_LABEL}</span>
               </button>
             ) : (
-              <div className="flex w-full items-center gap-2 border-b border-[#c8c8c8] px-2.5 py-2 text-left">
-                <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[12px] font-semibold text-muted-foreground">
+              <div className="flex w-full items-center gap-2 border-b border-border px-2.5 py-2 text-left">
+                <span className="shrink-0 rounded border border-border bg-muted px-1.5 py-0.5 text-[12px] font-semibold text-muted-foreground dark:bg-muted/80">
                   도로명
                 </span>
-                <span className="min-w-0 flex-1 break-all font-medium text-muted-foreground">
+                <span className="min-w-0 flex-1 break-all text-muted-foreground">
                   {addressError ? ADDRESS_FETCH_ERROR_MSG : ROAD_MISSING_MSG}
                 </span>
               </div>
@@ -311,18 +307,18 @@ export default function MapRightClickMenu() {
               }}
               className={cn(
                 ROW_HOVER,
-                'block border-[#c8c8c8]',
+                'block border-border',
                 !canCopyText(coordText) && 'cursor-default hover:bg-transparent'
               )}
             >
               <div className="flex items-center justify-between gap-6 px-2.5 py-2.5">
                 <div className="flex min-w-0 items-center gap-1 pr-4">
                   <MapPin className="h-5 w-5 shrink-0 text-muted-foreground" strokeWidth={1.75} aria-hidden />
-                  <span className="shrink-0 font-medium text-[#333]">위치정보</span>
+                  <span className="shrink-0 font-medium text-foreground">위치정보</span>
                   <select
                     value={selectedCrs}
                     onChange={(e) => setSelectedCrs(e.target.value)}
-                    className="ml-1 w-[270px] shrink-0 truncate border border-[#c8c8c8] bg-white px-1.5 py-0.5 text-[12px] leading-normal focus-visible:outline-none"
+                    className="ml-1 w-[270px] shrink-0 truncate border border-border bg-background px-1.5 py-0.5 text-[12px] leading-normal text-foreground focus-visible:outline-none"
                     title="좌표계"
                     onClick={(e) => e.stopPropagation()}
                     onMouseDown={(e) => e.stopPropagation()}
@@ -334,23 +330,17 @@ export default function MapRightClickMenu() {
                     ))}
                   </select>
                 </div>
-                <span className="shrink-0 pl-2 text-[12px] text-[#767676]">{COPY_LABEL}</span>
+                <span className="shrink-0 pl-2 text-[12px] text-muted-foreground">{COPY_LABEL}</span>
               </div>
               <div className="pb-1">
                 <div className="flex items-center gap-2.5 px-2.5 py-1.5 font-medium">
-                  <span
-                    className={COORD_LABEL_BADGE}
-                    style={{ backgroundColor: '#b7b7b7', color: '#fff' }}
-                  >
+                  <span className={COORD_LABEL_BADGE}>
                     X 좌표
                   </span>
                   <span className="tabular-nums text-[12px]">{xy ? String(xy.x) : '-'}</span>
                 </div>
                 <div className="flex items-center gap-2.5 px-2.5 py-1.5 font-medium">
-                  <span
-                    className={COORD_LABEL_BADGE}
-                    style={{ backgroundColor: '#b7b7b7', color: '#fff' }}
-                  >
+                  <span className={COORD_LABEL_BADGE}>
                     Y 좌표
                   </span>
                   <span className="tabular-nums text-[12px]">{xy ? String(xy.y) : '-'}</span>

@@ -163,7 +163,10 @@ export function MapControlPanel({
                 </div>
               )
             })}
-            <div className="flex w-full flex-col overflow-hidden rounded-[5px] border border-slate-200 bg-white/95 text-foreground shadow-lg backdrop-blur-sm dark:border-white/10 dark:bg-black/95 dark:text-white/90">
+            <div
+              data-map-control-rail
+              className="flex w-full flex-col overflow-hidden rounded-[5px] border border-slate-200 bg-white/95 text-foreground shadow-lg backdrop-blur-sm dark:border-white/10 dark:bg-black/95 dark:text-white/90"
+            >
               {items.map((item, itemIndex) => {
                 const isActive = activeIds.includes(item.id)
                 const isFirst = itemIndex === 0
